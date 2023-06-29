@@ -1,0 +1,7 @@
+prefix=/mingw64
+includedir=${prefix}/include
+
+Name: nlohmann_json
+Description: JSON for Modern C++
+Version: 3.11.2
+Cflags: -I${includedir}

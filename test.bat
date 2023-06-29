@@ -1,0 +1,1 @@
+Tnn-miner.exe test

@@ -1,0 +1,1 @@
+  -LC:/ming64/lib  -lwsock32 -lws2_32 -lmingw32 -lfmt -llibtomcrypt -lboost_context-mt -lboost_thread-mt -lboost_atomic-mt -lssl -lcrypto -lgmp -lgmpxx -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 

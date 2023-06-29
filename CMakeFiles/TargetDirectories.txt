@@ -1,0 +1,3 @@
+C:/Users/Tritonn/git/Tnn-miner/CMakeFiles/Tnn-miner.dir
+C:/Users/Tritonn/git/Tnn-miner/CMakeFiles/edit_cache.dir
+C:/Users/Tritonn/git/Tnn-miner/CMakeFiles/rebuild_cache.dir
