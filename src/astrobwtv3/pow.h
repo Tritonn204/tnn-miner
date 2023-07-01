@@ -47,8 +47,10 @@ public:
 
   int32_t sa[MAX_LENGTH];
   unsigned char sa_bytes[MAX_LENGTH * 4];
-
+  
   unsigned char step_3[256];
+  char s3[256];
+  uint64_t random_switcher;
 
   uint64_t lhash;
   uint64_t prev_lhash;
@@ -57,6 +59,8 @@ public:
   unsigned char op;
   unsigned char pos1;
   unsigned char pos2;
+  unsigned char t1;
+  unsigned char t2;
 
   unsigned char A;
   uint32_t data_len;

@@ -1554,13 +1554,10 @@ CMakeFiles/Tnn-miner.dir/src/miner/miner.cpp.obj: \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/ssl/ssl_stream.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/websocket/ssl.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/websocket/impl/ssl.hpp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/websocket.hpp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/websocket/error.hpp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/websocket/impl/error.hpp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/websocket/impl/error.ipp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/websocket/option.hpp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/websocket/rfc6455.hpp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/empty_body.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/basic_dynamic_body.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/core/detail/buffer.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/core/detail/clamp.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/error.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/impl/error.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/impl/error.ipp \
@@ -1589,7 +1586,6 @@ CMakeFiles/Tnn-miner.dir/src/miner/miner.cpp.obj: \
  C:/mingw64/include/boost/move/adl_move_swap.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/impl/fields.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/core/detail/buffers_ref.hpp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/core/detail/clamp.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/core/detail/temporary_buffer.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/core/detail/impl/temporary_buffer.ipp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/verb.hpp \
@@ -1610,7 +1606,44 @@ CMakeFiles/Tnn-miner.dir/src/miner/miner.cpp.obj: \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/core/detail/varint.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/impl/fields.ipp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/impl/message.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/basic_file_body.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/basic_parser.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/detail/basic_parser.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/core/detail/char_buffer.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/detail/basic_parser.ipp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/impl/basic_parser.hpp \
+ C:/mingw64/include/boost/make_unique.hpp \
+ C:/mingw64/include/boost/smart_ptr/make_unique.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/impl/basic_parser.ipp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/buffer_body.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/dynamic_body.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/empty_body.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/file_body.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/impl/file_body_win32.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/write.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/serializer.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/impl/serializer.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/impl/write.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/asio/windows/overlapped_ptr.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/asio/detail/win_iocp_overlapped_ptr.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/asio/detail/win_iocp_overlapped_op.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/message_generator.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/impl/message_generator.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/parser.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/impl/parser.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/read.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/impl/read.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/core/detail/read.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/core/detail/impl/read.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/span_body.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/string_body.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/vector_body.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/websocket.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/websocket/error.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/websocket/impl/error.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/websocket/impl/error.ipp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/websocket/option.hpp \
+ C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/websocket/rfc6455.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/websocket/impl/rfc6455.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/websocket/stream.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/websocket/stream_base.hpp \
@@ -1658,8 +1691,6 @@ CMakeFiles/Tnn-miner.dir/src/miner/miner.cpp.obj: \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/zlib/detail/deflate_stream.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/zlib/detail/ranges.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/zlib/detail/deflate_stream.ipp \
- C:/mingw64/include/boost/make_unique.hpp \
- C:/mingw64/include/boost/smart_ptr/make_unique.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/zlib/inflate_stream.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/zlib/detail/inflate_stream.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/zlib/detail/bitstream.hpp \
@@ -1672,23 +1703,6 @@ CMakeFiles/Tnn-miner.dir/src/miner/miner.cpp.obj: \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/core/detail/service_base.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/websocket/detail/service.ipp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/websocket/detail/soft_mutex.hpp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/read.hpp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/basic_parser.hpp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/detail/basic_parser.hpp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/core/detail/char_buffer.hpp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/detail/basic_parser.ipp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/impl/basic_parser.hpp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/impl/basic_parser.ipp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/impl/read.hpp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/parser.hpp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/impl/parser.hpp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/core/detail/buffer.hpp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/core/detail/read.hpp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/core/detail/impl/read.hpp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/write.hpp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/serializer.hpp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/impl/serializer.hpp \
- C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/http/impl/write.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/websocket/impl/accept.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/websocket/detail/type_traits.hpp \
  C:/Users/Tritonn/git/Tnn-miner/include/boost/beast/version.hpp \

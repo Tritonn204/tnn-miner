@@ -29,7 +29,7 @@
                 "-lmingw32",
                 "-lfmt",
                 "-ltomcrypt",
-                "-lws2_32",
+                "-lws2_32"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"

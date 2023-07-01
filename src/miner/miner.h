@@ -32,9 +32,13 @@ const char *devWallet = "dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw
 const int MINIBLOCK_SIZE = 48;
 mpz_class oneLsh256;
 
-void getWork(bool devMine);
+void getWork(bool isDev);
+void sendWork();
+void devWork();
 
 void mineBlock(int i);
+void benchmark(int i);
+void logSeconds(int duration);
 
 inline mpz_class ConvertDifficultyToBig(int64_t d)
 {

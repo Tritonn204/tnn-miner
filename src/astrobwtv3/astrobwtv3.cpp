@@ -153,13 +153,13 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &scratch
     while (true)
     {
       scratch.tries++;
-      uint64_t random_switcher = scratch.prev_lhash ^ scratch.lhash ^ scratch.tries;
-      // printf("%d random_switcher %d %08jx\n", scratch.tries, random_switcher, random_switcher);
+      scratch.random_switcher = scratch.prev_lhash ^ scratch.lhash ^ scratch.tries;
+      // printf("%d scratch.random_switcher %d %08jx\n", scratch.tries, scratch.random_switcher, scratch.random_switcher);
 
-      scratch.op = static_cast<byte>(random_switcher);
+      scratch.op = static_cast<byte>(scratch.random_switcher);
 
-      scratch.pos1 = static_cast<byte>(random_switcher >> 8);
-      scratch.pos2 = static_cast<byte>(random_switcher >> 16);
+      scratch.pos1 = static_cast<byte>(scratch.random_switcher >> 8);
+      scratch.pos2 = static_cast<byte>(scratch.random_switcher >> 16);
 
       if (scratch.pos1 > scratch.pos2)
       {
@@ -185,10 +185,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &scratch
           scratch.step_3[i] *= scratch.step_3[i];                                 // *
           scratch.step_3[i] = leftRotate8(scratch.step_3[i], scratch.step_3[i]);  // rotate  bits by random
           // INSERT_RANDOM_CODE_END
-          byte t1 = scratch.step_3[scratch.pos1];
-          byte t2 = scratch.step_3[scratch.pos2];
-          scratch.step_3[scratch.pos1] = reverse8(t2);
-          scratch.step_3[scratch.pos2] = reverse8(t1);
+          scratch.t1 = scratch.step_3[scratch.pos1];
+          scratch.t2 = scratch.step_3[scratch.pos2];
+          scratch.step_3[scratch.pos1] = reverse8(scratch.t2);
+          scratch.step_3[scratch.pos2] = reverse8(scratch.t1);
         }
         break;
       case 1:
@@ -3026,12 +3026,12 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &scratch
 
       if (scratch.A < 0x30)
       { // 18.75 % probability
-        char s3[scratch.pos2];
-        std::copy(scratch.step_3, scratch.step_3 + scratch.pos2, s3);
+        memcpy(scratch.s3, scratch.step_3, scratch.pos2);
+        // std::copy(scratch.step_3, scratch.step_3 + scratch.pos2, s3);
         scratch.prev_lhash = scratch.lhash + scratch.prev_lhash;
         HH_ALIGNAS(16)
         const highwayhash::HH_U64 key2[2] = {scratch.tries, scratch.prev_lhash};
-        scratch.lhash = highwayhash::SipHash(key2, s3, scratch.pos2); // more deviations
+        scratch.lhash = highwayhash::SipHash(key2, scratch.s3, scratch.pos2); // more deviations
         // printf("new scratch.lhash: %08jx\n", scratch.lhash);
       }
 
@@ -3042,7 +3042,8 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &scratch
 
       scratch.step_3[255] = scratch.step_3[255] ^ scratch.step_3[scratch.pos1] ^ scratch.step_3[scratch.pos2];
 
-      std::copy(scratch.step_3, scratch.step_3 + 256, &scratch.sData[(scratch.tries - 1) * 256]);
+      memcpy(&scratch.sData[(scratch.tries - 1) * 256], scratch.step_3, 256);
+      // std::copy(scratch.step_3, scratch.step_3 + 256, &scratch.sData[(scratch.tries - 1) * 256]);
 
       // memcpy(&scratch->data.data()[(scratch.tries - 1) * 256], scratch.step_3, 256);
 
@@ -3084,7 +3085,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &scratch
       delete[] s;
     }
     // scratch.sHash = hashSHA256(scratch.sHash, 0);
-    std::memcpy(outputhash, scratch.sHash, 32);
+    memcpy(outputhash, scratch.sHash, 32);
   }
   catch (const std::exception &ex)
   {

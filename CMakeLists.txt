@@ -36,7 +36,7 @@ file(GLOB all_SRCS
 )
 
 link_directories(
-  "C:/ming64/lib"
+  "C:/mingw64/lib"
 )
 
 add_executable(${PROJECT_NAME} ${all_SRCS})
