@@ -26,6 +26,7 @@
 /hooks
 /info
 /CMakeFiles
+/vscode
 
 # Misc
 **.txt
