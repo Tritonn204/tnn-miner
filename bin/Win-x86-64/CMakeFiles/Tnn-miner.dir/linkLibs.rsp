@@ -1,1 +1,0 @@
-  -L"C:/Users/Tritonn/git/Tnn-miner/lib/Win32"  -lmingw32 -lboost_context-mt -lboost_json-mt -lboost_thread-mt -lboost_atomic-mt -lwsock32 -lws2_32 -lssl C:/mingw64/lib/libcrypto.a -lfmt -lgmp -lgmpxx -ldivsufsort -lws2_32 -lcrypt32 -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 

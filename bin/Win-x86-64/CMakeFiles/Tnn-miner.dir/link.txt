@@ -1,3 +1,0 @@
-"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\Tnn-miner.dir/objects.a
-C:\mingw64\bin\ar.exe qc CMakeFiles\Tnn-miner.dir/objects.a @CMakeFiles\Tnn-miner.dir\objects1.rsp
-C:\mingw64\bin\c++.exe -O3 -DNDEBUG -static -m64 -Wall -O3 -fopenmp -funroll-all-loops -march=x86-64 -ftree-vectorize -std=c++2a -Wa,-mbig-obj -Wl,--whole-archive CMakeFiles\Tnn-miner.dir/objects.a -Wl,--no-whole-archive -o Tnn-miner.exe -Wl,--out-implib,libTnn-miner.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\Tnn-miner.dir\linkLibs.rsp

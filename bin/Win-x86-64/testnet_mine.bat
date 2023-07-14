@@ -1,1 +1,0 @@
-Tnn-miner.exe 127.0.0.1 40400 deto1qywafwyax4ly707yty9gkrkkl9ru4a4tje5f3hf6rqeazugk3cjdwqgnxh5ul 8

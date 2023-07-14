@@ -1,3 +1,0 @@
-C:/Users/Tritonn/git/Tnn-miner/bin/Win-x86-64/CMakeFiles/Tnn-miner.dir
-C:/Users/Tritonn/git/Tnn-miner/bin/Win-x86-64/CMakeFiles/edit_cache.dir
-C:/Users/Tritonn/git/Tnn-miner/bin/Win-x86-64/CMakeFiles/rebuild_cache.dir
