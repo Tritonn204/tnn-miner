@@ -1,7 +1,3 @@
-#define FMT_HEADER_ONLY
-#include <fmt/format.h>
-#include <fmt/printf.h>
-
 #include <endian.h>
 #include <inttypes.h>
 

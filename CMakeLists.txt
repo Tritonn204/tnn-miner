@@ -30,21 +30,9 @@ endif()
 
 
 if(UNIX)
-  set(Boost_NO_SYSTEM_PATHS TRUE)
-  if (Boost_NO_SYSTEM_PATHS)
-    set(Boost_NO_BOOST_CMAKE TRUE)
-    set(BOOST_ROOT "/opt/boost")
-    set(BOOST_INCLUDE_DIRS "${BOOST_ROOT}/include")
-    set(BOOST_LIBRARY_DIRS "${BOOST_ROOT}/lib")
-  endif (Boost_NO_SYSTEM_PATHS)
   set(Boost_USE_STATIC_LIBS   ON)
   set(Boost_USE_MULTITHREADED ON)
-  find_package( 
-    Boost 1.82 REQUIRED 
-    COMPONENTS context json thread atomic
-  )
   link_directories(
-    "/opt/boost/lib"
     "${PROJECT_SOURCE_DIR}/lib/Linux"
   )
 endif()
@@ -76,7 +64,7 @@ add_executable(${PROJECT_NAME} ${all_SRCS})
 if(WIN32)
   target_link_libraries(${PROJECT_NAME} mingw32 boost_context-mt boost_json-mt boost_thread-mt boost_atomic-mt wsock32 ws2_32 ssl OpenSSL::Crypto)
 else()
-  target_link_libraries(${PROJECT_NAME} ssl crypto pthread Boost::context Boost::json Boost::thread Boost::atomic)
+  target_link_libraries(${PROJECT_NAME} ssl crypto pthread boost_chrono boost_context boost_json boost_thread boost_atomic)
 endif()
 
 target_link_libraries(${PROJECT_NAME} fmt gmp gmpxx divsufsort)
