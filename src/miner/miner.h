@@ -10,11 +10,15 @@
 #include <gmpxx.h>
 #include <boost/thread.hpp>
 
-const char *consoleLine = " TNN-MINER V1 || ";
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
+const char *consoleLine = " TNN-MINER 0.1 | ";
 
 const int workerThreads = 2;
 
-const int reportInterval = 4;
+const int reportInterval = 1;
 
 const char *host;
 const char *port;
@@ -38,7 +42,7 @@ void devWork();
 
 void mineBlock(int i);
 void benchmark(int i);
-void logSeconds(int duration);
+void logSeconds(std::chrono::_V2::system_clock::time_point start_time, int duration, bool *stop);
 
 inline mpz_class ConvertDifficultyToBig(int64_t d)
 {
@@ -55,15 +59,12 @@ inline mpz_class ConvertDifficultyToBig(mpz_class d)
   return res;
 }
 
-inline mpz_class bytesToMpz(unsigned char *data, int len)
-{
-  return mpz_class(hexStr(data, len).c_str(), 16);
-}
-
 inline bool CheckHash(unsigned char *hash, int64_t diff)
 {
-  int cmp = mpz_cmp(bytesToMpz(hash, 32).get_mpz_t(), ConvertDifficultyToBig(diff).get_mpz_t());
-  return (cmp < 0);
+  if (littleEndian) std::reverse(hash, hash+32);
+  int cmp = mpz_cmp(mpz_class(hexStr(hash, 32).c_str(), 16).get_mpz_t(), ConvertDifficultyToBig(diff).get_mpz_t());
+  if (littleEndian) std::reverse(hash, hash+32);
+  return (cmp <= 0);
 }
 
 void setPriorityClass(boost::thread::native_handle_type t, int priority);
@@ -73,5 +74,35 @@ void setPriority(boost::thread::native_handle_type t, int priority);
 void setAffinity(boost::thread::native_handle_type t, int core);
 
 void update(std::chrono::_V2::system_clock::time_point startTime);
+
+#if defined(_WIN32)
+inline void setcolor(WORD color)
+{
+    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE),color);
+    return;
+}
+#else
+inline void setcolor(int color)
+{
+  switch(color)
+  {
+    case 3:
+    {
+      printf("\e[0;36m");
+      break;
+    }
+    case 14:
+    {
+      printf("\x1b[1;93m");
+      break;
+    }
+    case 15:
+    {
+      printf("\e[0;37m");
+      break;
+    }
+  }
+}
+#endif
 
 #endif

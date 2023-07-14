@@ -1,1 +1,0 @@
-Tnn-miner.exe derotest.friendspool.club 10300 dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw4wjqqp6y2n7 14

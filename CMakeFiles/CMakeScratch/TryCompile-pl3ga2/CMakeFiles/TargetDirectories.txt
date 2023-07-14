@@ -1,0 +1,2 @@
+C:/Users/Tritonn/git/Tnn-miner/CMakeFiles/CMakeScratch/TryCompile-pl3ga2/CMakeFiles/cmTC_5d58f.dir
+C:/Users/Tritonn/git/Tnn-miner/CMakeFiles/CMakeScratch/TryCompile-pl3ga2/CMakeFiles/ALL_BUILD.dir

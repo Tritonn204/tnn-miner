@@ -1,0 +1,1 @@
+Tnn-miner.exe benchmark 14 30

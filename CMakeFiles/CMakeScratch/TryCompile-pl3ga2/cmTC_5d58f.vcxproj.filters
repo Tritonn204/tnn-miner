@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="16.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Program Files\CMake\share\cmake-3.27\Modules\CMakeCCompilerABI.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{030C4C37-A21A-399B-BA64-A8DD8FD73709}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

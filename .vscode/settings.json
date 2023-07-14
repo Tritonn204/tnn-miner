@@ -71,5 +71,6 @@
       "cassert": "cpp",
       "regex": "cpp"
     },
-    "editor.tabSize": 2
+    "editor.tabSize": 2,
+    "C_Cpp.default.cppStandard": "c++20"
 }

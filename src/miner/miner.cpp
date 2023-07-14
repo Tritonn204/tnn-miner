@@ -13,6 +13,8 @@
 //
 //------------------------------------------------------------------------------
 
+#define FMT_HEADER_ONLY
+
 #include "rootcert.h"
 
 #include <boost/beast/core.hpp>
@@ -21,6 +23,7 @@
 #include <boost/beast/websocket.hpp>
 #include <boost/beast/websocket/ssl.hpp>
 #include <boost/asio/spawn.hpp>
+#include <boost/json.hpp>
 
 #include <boost/thread.hpp>
 #include <boost/atomic.hpp>
@@ -44,10 +47,16 @@
 #include <fmt/format.h>
 #include <fmt/printf.h>
 
+#include <omp.h>
+#include <hugepages.h>
+
 #if defined(_WIN32)
 #include <Windows.h>
-#elif defined(linux)
+#else
 #include <sched.h>
+#define THREAD_PRIORITY_ABOVE_NORMAL -1
+#define THREAD_PRIORITY_HIGHEST -2
+#define THREAD_PRIORITY_TIME_CRITICAL -15
 #endif
 
 #if defined(_WIN32)
@@ -70,14 +79,18 @@ boost::mutex wsMutex;
 
 json job;
 json devJob;
-json share;
-json devShare;
+boost::json::object share;
+boost::json::object devShare;
+
+std::string currentBlob;
+std::string devBlob;
 
 bool submitting = false;
 bool submittingDev = false;
 
 int jobCounter;
 boost::atomic<int64_t> counter = 0;
+boost::atomic<int64_t> benchCounter = 0;
 
 int blockCounter;
 int miniBlockCounter;
@@ -93,6 +106,7 @@ int64_t difficultyDev;
 
 std::vector<int64_t> rate5min;
 std::vector<int64_t> rate1min;
+std::vector<int64_t> rate30sec;
 
 bool isConnected = false;
 bool devConnected = false;
@@ -192,56 +206,86 @@ void do_session(
 
   while (true)
   {
-    buffer.clear();
-    workInfo.str("");
-    workInfo.clear();
-    ws.read(buffer);
-
-    // hand getwork feed
-
-    workInfo << beast::make_printable(buffer.data());
-    json workData = json::parse(workInfo.str().c_str());
-    if ((isDev ? (workData.at("height") != devHeight) : (workData.at("height") != ourHeight)))
+    try
     {
-      json *J = isDev ? &devJob : &job;
-      *J = workData;
-      if (!isDev)
-        jobCounter++;
+      buffer.clear();
+      workInfo.str("");
+      workInfo.clear();
 
-      if ((*J).at("lasterror") != "")
+      bool *B = isDev ? &submittingDev : &submitting;
+
+      if (*B)
       {
-        std::cerr << "received error: " << (*J).at("lasterror") << std::endl
-                  << consoleLine;
+        boost::json::object *S = isDev ? &devShare : &share;
+        std::string msg = boost::json::serialize(*S);
+        // mutex.lock();
+        // std::cout << msg;
+        // mutex.unlock();
+        ws.async_write(boost::asio::buffer(msg), yield[ec]);
+        *B = false;
       }
 
-      if (!isDev)
+      ws.async_read(buffer, yield[ec]);
+
+      // hand getwork feed
+
+      workInfo << beast::make_printable(buffer.data());
+      if (json::accept(workInfo.str()))
       {
-        mutex.lock();
-        blockCounter = (*J).at("blocks");
-        miniBlockCounter = (*J).at("miniblocks");
-        rejected = (*J).at("rejected");
-        hashrate = (*J).at("difficultyuint64");
-        ourHeight = (*J).at("height");
-        difficulty = (*J).at("difficultyuint64");
-        printf("NEW JOB RECEIVED | Height: %d | Difficulty %" PRIu64 "\n", ourHeight, difficulty);
-        rejected = (*J).at("rejected");
-        if (!isConnected)
-          firstRejected = rejected;
-        isConnected = isConnected || true;
-        mutex.unlock();
-      }
-      else
-      {
-        mutex.lock();
-        difficultyDev = (*J).at("difficultyuint64");
-        devHeight = (*J).at("height");
-        if (!devConnected)
-          std::cout << "Connected to dev pool\n";
-        devConnected = devConnected || true;
-        mutex.unlock();
+        json workData = json::parse(workInfo.str());
+        if ((isDev ? (workData.at("height") != devHeight) : (workData.at("height") != ourHeight)))
+        {
+          // mutex.lock();
+          if (isDev)
+            devJob = workData;
+          else
+            job = workData;
+          json *J = isDev ? &devJob : &job;
+          // mutex.unlock();
+
+          if ((*J).at("lasterror") != "")
+          {
+            std::cerr << "received error: " << (*J).at("lasterror") << std::endl
+                      << consoleLine;
+          }
+
+          if (!isDev)
+          {
+            // mutex.lock();
+            currentBlob = (*J).at("blockhashing_blob");
+            blockCounter = (*J).at("blocks");
+            miniBlockCounter = (*J).at("miniblocks");
+            rejected = (*J).at("rejected");
+            hashrate = (*J).at("difficultyuint64");
+            ourHeight = (*J).at("height");
+            difficulty = (*J).at("difficultyuint64");
+            // printf("NEW JOB RECEIVED | Height: %d | Difficulty %" PRIu64 "\n", ourHeight, difficulty);
+            accepted = (*J).at("miniblocks");
+            rejected = (*J).at("rejected");
+            isConnected = isConnected || true;
+            jobCounter++;
+            // mutex.unlock();
+          }
+          else
+          {
+            // mutex.lock();
+            difficultyDev = (*J).at("difficultyuint64");
+            devBlob = (*J).at("blockhashing_blob");
+            devHeight = (*J).at("height");
+            if (!devConnected)
+              std::cout << "Connected to dev pool\n";
+            devConnected = devConnected || true;
+            jobCounter++;
+            // mutex.unlock();
+          }
+        }
       }
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
+    catch (...)
+    {
+    }
+
+    std::this_thread::yield();
   }
 
   // // Close the WebSocket connection
@@ -255,94 +299,33 @@ void do_session(
   // std::cout << beast::make_printable(buffer.data()) << std::endl;
 }
 
-void rpc_session(
-    std::string host,
-    std::string const &port,
-    std::string const &wallet,
-    net::io_context &ioc,
-    net::yield_context yield,
-    bool isDev)
-{
-  beast::error_code ec;
-  // These objects perform our I/O
-  tcp::resolver resolver(ioc);
-  beast::tcp_stream stream(ioc);
-
-  // Look up the domain name
-  auto const results = resolver.resolve(host, port);
-
-  // Make the connection on the IP address we get from a lookup
-  stream.connect(results);
-
-  std::cout << "RPC connect" << std::endl;
-
-  while (true)
-  {
-    if (isDev ? submittingDev : submitting)
-    {
-      std::cout << "submitting" << std::endl;
-      // Set up an HTTP GET request message
-      std::stringstream ss;
-      
-      json *SHARE = isDev ? &devShare : &share;
-      json params = {{"jobid", (*SHARE).at("jobid")},
-               {"mbl_blob", (*SHARE).at("mbl_blob")}};
-
-      json BODY = {
-          {"jsonrpc", "2.0"},
-          {"id", "1"},
-          {"method", "DERO.SubmitBlock"},
-          {"params:", params},
-        };
-
-      ss << std::quoted(BODY.dump(-1, ' ', false));
-      std::string d = ss.str().c_str();
-
-      http::request<http::string_body> req{http::verb::post, "/json_rpc", 11};
-      req.set(http::field::host, host);
-      req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-      req.body() = d.c_str();
-      req.prepare_payload();
-      req.set(http::field::content_type, "application/json");
-
-      std::cout << req.body() << std::endl;
-
-      // Send the HTTP request to the remote host
-      http::write(stream, req);
-
-      bool *flag = isDev ? &submittingDev : &submitting;
-      *flag = false;
-
-      // This buffer is used for reading and must be persisted
-      beast::flat_buffer buffer;
-
-      // Declare a container to hold the response
-      http::response<http::dynamic_body> res;
-      // Receive the HTTP response
-      http::read(stream, buffer, res);
-
-      // Write the message to standard out
-      mutex.lock();
-      std::cout << res << " " << beast::make_printable(buffer.data()) << std::endl;
-      mutex.unlock();
-    }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(25));
-  }
-}
 //------------------------------------------------------------------------------
 
 int main(int argc, char **argv)
 {
-  auto start_time = std::chrono::high_resolution_clock::now();
+  omp_set_num_threads(1);
+#if defined(_WIN32)
+  HANDLE hSelfToken = NULL;
 
+  ::OpenProcessToken(::GetCurrentProcess(), TOKEN_ALL_ACCESS, &hSelfToken);
+  if (SetPrivilege(hSelfToken, SE_LOCK_MEMORY_NAME, true))
+    std::cout << "Permission Granted for Huge Pages!" << std::endl;
+  else
+    std::cout << "Huge Pages: Permission Failed..." << std::endl;
+#endif
   // Check command line arguments.
-  mpz_pow_ui(oneLsh256.get_mpz_t(), mpz_class(2).get_mpz_t(), 255);
+  mpz_pow_ui(oneLsh256.get_mpz_t(), mpz_class(2).get_mpz_t(), 256);
   if (argc < 5)
   {
     std::string command(argv[1]);
     if (command == "test")
     {
+      mpz_class diffTest("20000", 10);
+
+      workerData *WORKER = new workerData;
+
       TestAstroBWTv3();
+      TestAstroBWTv3repeattest();
       boost::this_thread::sleep_for(boost::chrono::seconds(30));
       return 0;
     }
@@ -359,14 +342,26 @@ int main(int argc, char **argv)
         winMask += 1 << i;
       }
 
+      host = devPool;
+      port = devPort;
+      wallet = devWallet;
+
+      boost::thread GETWORK(getWork, false);
+      setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+
       winMask = std::max(1, winMask);
 
+      auto start_time = std::chrono::high_resolution_clock::now();
       // Create worker threads and set CPU affinity
       for (int i = 0; i < threads; i++)
       {
-        boost::thread t(benchmark, i + 1);
+        boost::thread t(mineBlock, i + 1);
+#if defined(_WIN32)
         setAffinity(t.native_handle(), 1 << (i % n));
-        if (threads == 1 || (n > 2 && i < n - 2))
+#else
+        setAffinity(t.native_handle(), i);
+#endif
+        if (threads == 1 || (n > 2 && i <= n - 2))
           setPriority(t.native_handle(), THREAD_PRIORITY_HIGHEST);
 
         mutex.lock();
@@ -374,11 +369,20 @@ int main(int argc, char **argv)
         mutex.unlock();
       }
 
-      boost::thread t2(logSeconds, duration);
-      setPriority(t2.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+      boost::thread t2(logSeconds, start_time, duration, &stopBenchmark);
+      setPriority(t2.native_handle(), THREAD_PRIORITY_TIME_CRITICAL);
 
-      boost::this_thread::sleep_for(boost::chrono::seconds(duration));
-      stopBenchmark = true;
+      while (true)
+      {
+        auto now = std::chrono::system_clock::now();
+        auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count();
+        if (milliseconds >= duration * 1000)
+        {
+          stopBenchmark = true;
+          break;
+        }
+        std::this_thread::yield();
+      }
 
       int64_t hashrate = counter / duration;
       std::string intro = fmt::sprintf("Mined for %d seconds, average rate of ", duration);
@@ -400,7 +404,7 @@ int main(int argc, char **argv)
         std::string hrate = fmt::sprintf("%.2f H/s", (double)hashrate);
         std::cout << hrate << std::endl;
       }
-      boost::this_thread::sleep_for(boost::chrono::seconds(30));
+      std::this_thread::yield();
       return 0;
     }
   }
@@ -415,21 +419,11 @@ int main(int argc, char **argv)
   port = argv[2];
   wallet = argv[3];
 
-  // #if defined(_WIN32)
-  // if(!SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS))
-  // {
-  //   printf("Failed to end background mode (%d)\n", GetLastError());
-  // }
-  // #endif
-
   boost::thread GETWORK(getWork, false);
   setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
-  boost::thread SENDWORK(sendWork);
-  setPriority(SENDWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
-
-  boost::thread DEVWORK(devWork);
-  setPriority(DEVWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+  // boost::thread GETWORKDEV(getWork, true);
+  // setPriority(GETWORKDEV.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
   threads = 1;
   if (argc >= 5 && argv[4] != NULL)
@@ -450,91 +444,144 @@ int main(int argc, char **argv)
   for (int i = 0; i < threads; i++)
   {
     boost::thread t(mineBlock, i + 1);
+#if defined(_WIN32)
     setAffinity(t.native_handle(), 1 << (i % n));
-    if (threads == 1 || (n > 2 && i < n - 2))
-      setPriority(t.native_handle(), THREAD_PRIORITY_HIGHEST);
+#else
+    setAffinity(t.native_handle(), i);
+#endif
+    // if (threads == 1 || (n > 2 && i <= n - 2))
+    setPriority(t.native_handle(), THREAD_PRIORITY_HIGHEST);
 
     mutex.lock();
-    std::cout << "Worker " << i + 1 << " created" << std::endl;
+    std::cout << "Thread " << i + 1 << " started" << std::endl;
     mutex.unlock();
   }
 
-  boost::thread reporter(update, start_time);
-  setPriority(reporter.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+  auto start_time = std::chrono::high_resolution_clock::now();
+  // update(start_time);
 
-  std::string input;
-  while (getline(std::cin, input) && input != "quit")
+  boost::thread reporter(update, start_time);
+  setPriority(reporter.native_handle(), THREAD_PRIORITY_TIME_CRITICAL);
+
+  while (true)
   {
-    if (input == "hello")
-      std::cout << "Hello world!\n";
-    else
-      std::cout << "Unrecognized command: " << input << "\n";
-    std::cout << consoleLine;
+    std::this_thread::yield();
   }
+
+  // std::string input;
+  // while (getline(std::cin, input) && input != "quit")
+  // {
+  //   if (input == "hello")
+  //     std::cout << "Hello world!\n";
+  //   else
+  //     std::cout << "Unrecognized command: " << input << "\n";
+  //   std::cout << consoleLine;
+  // }
 
   return EXIT_SUCCESS;
 }
 
-void logSeconds(int duration)
+void logSeconds(std::chrono::_V2::system_clock::time_point start_time, int duration, bool *stop)
 {
   int i = 0;
   while (true)
   {
-    if (i == duration)
-      break;
-    mutex.lock();
-    std::cout << "\r" << std::flush;
-    printf("BENCHMARKING: %d/%d seconds elapsed...", i, duration);
-    mutex.unlock();
-    boost::this_thread::sleep_for(boost::chrono::seconds(1));
-    i++;
+    auto now = std::chrono::system_clock::now();
+    auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count();
+    if (milliseconds >= 1000)
+    {
+      start_time = now;
+      mutex.lock();
+      // std::cout << "\n" << std::flush;
+      printf("\rBENCHMARKING: %d/%d seconds elapsed...", i, duration);
+      mutex.unlock();
+      if (i == duration || *stop)
+        break;
+      i++;
+    }
+    std::this_thread::yield();
   }
 }
 
 void update(std::chrono::_V2::system_clock::time_point start_time)
 {
+  auto beginning = start_time;
   boost::this_thread::sleep_for(boost::chrono::milliseconds(50));
   while (true)
   {
-    mutex.lock();
-    int64_t currentHashes = counter.load();
-    counter = 0;
-    mutex.unlock();
+    auto now = std::chrono::system_clock::now();
+    auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count();
 
-    if (rate1min.size() <= 60 / reportInterval)
-    {
-      rate1min.push_back(currentHashes);
-    }
-    else
-    {
-      rate1min.erase(rate1min.begin());
-      rate1min.push_back(currentHashes);
-    }
+    auto daysUp = std::chrono::duration_cast<std::chrono::hours>(now - beginning).count() / 24;
+    auto hoursUp = std::chrono::duration_cast<std::chrono::hours>(now - beginning).count() % 24;
+    auto minutesUp = std::chrono::duration_cast<std::chrono::minutes>(now - beginning).count() % 60;
+    auto secondsUp = std::chrono::duration_cast<std::chrono::seconds>(now - beginning).count() % 60;
 
-    int64_t hashrate = 1.0 * std::accumulate(rate1min.begin(), rate1min.end(), 0LL) / (rate1min.size() * 5);
+    if (milliseconds >= reportInterval * 1000)
+    {
+      start_time = now;
+      int64_t currentHashes = counter.load();
+      counter.store(0);
 
-    mutex.lock();
-    if (hashrate >= 1000000)
-    {
-      double rate = (double)(hashrate / 1000000.0);
-      std::string hrate = fmt::sprintf("HASHRATE (1 min) | %.2f MH/s", rate);
-      std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine << std::setw(2) << hrate << " | " << std::flush;
-    }
-    else if (hashrate >= 1000)
-    {
-      double rate = (double)(hashrate / 1000.0);
-      std::string hrate = fmt::sprintf("HASHRATE (1 min) | %.2f KH/s", rate);
-      std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine << std::setw(2) << hrate << " | " << std::flush;
-    }
-    else
-    {
-      std::string hrate = fmt::sprintf("HASHRATE (1 min) | %.2f H/s", (double)hashrate, hrate);
-      std::cout << "\r" << std::setw(2) << std::setfill('0') << std::setw(2) << consoleLine << std::setw(2) << hrate << " | " << std::flush;
-    }
+      // if (rate1min.size() <= 60 / reportInterval)
+      // {
+      //   rate1min.push_back(currentHashes);
+      // }
+      // else
+      // {
+      //   rate1min.erase(rate1min.begin());
+      //   rate1min.push_back(currentHashes);
+      // }
 
-    std::cout << std::setw(2) << "ACCEPTED " << accepted << std::setw(2) << " | REJECTED " << (rejected - firstRejected) << " >> " << std::flush;
-    mutex.unlock();
-    boost::this_thread::sleep_for(boost::chrono::seconds(reportInterval));
+      if (rate30sec.size() <= 30 / reportInterval)
+      {
+        rate30sec.push_back(currentHashes);
+      }
+      else
+      {
+        rate30sec.erase(rate30sec.begin());
+        rate30sec.push_back(currentHashes);
+      }
+
+      int64_t hashrate = 1.0 * std::accumulate(rate30sec.begin(), rate30sec.end(), 0LL) / (rate30sec.size() * reportInterval);
+
+      if (hashrate >= 1000000)
+      {
+        double rate = (double)(hashrate / 1000000.0);
+        std::string hrate = fmt::sprintf("HASHRATE %.2f MH/s", rate);
+        mutex.lock();
+        setcolor(15);
+        std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine;
+        setcolor(3);
+        std::cout << std::setw(2) << std::setfill('0') << consoleLine << std::setw(2) << hrate << " | " << std::flush;
+      }
+      else if (hashrate >= 1000)
+      {
+        double rate = (double)(hashrate / 1000.0);
+        std::string hrate = fmt::sprintf("HASHRATE %.2f KH/s", rate);
+        mutex.lock();
+        setcolor(15);
+        std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine;
+        setcolor(3);
+        std::cout << std::setw(2) << hrate << " | " << std::flush;
+      }
+      else
+      {
+        std::string hrate = fmt::sprintf("HASHRATE %.2f H/s", (double)hashrate, hrate);
+        mutex.lock();
+        setcolor(15);
+        std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine;
+        setcolor(3);
+        std::cout << std::setw(2) << hrate << " | " << std::flush;
+      }
+
+      std::string uptime = fmt::sprintf("%dd-%dh-%dm-%ds >> ", daysUp, hoursUp, minutesUp, secondsUp);
+      std::cout << std::setw(2) << "ACCEPTED " << accepted << std::setw(2) << " | REJECTED " << rejected
+                << std::setw(2) << " | DIFFICULTY " << (difficulty) << std::setw(2) << " | UPTIME " << uptime << std::flush;
+      setcolor(15);
+      mutex.unlock();
+    }
+    std::this_thread::yield();
   }
 }
 
@@ -554,7 +601,7 @@ void setAffinity(boost::thread::native_handle_type t, int core)
     std::cerr << "Failed to set CPU affinity for thread. Error code: " << error << std::endl;
   }
 
-#elif defined(linux)
+#else
   // Get the native handle of the thread
   pthread_t threadHandle = t;
 
@@ -587,86 +634,15 @@ void setPriority(boost::thread::native_handle_type t, int priority)
     std::cerr << "Failed to set thread priority. Error code: " << error << std::endl;
   }
 
-#elif defined(linux)
+#else
   // Get the native handle of the thread
   pthread_t threadHandle = t;
 
   // Set the thread priority
   int threadPriority = priority;
-  BOOL success = SetThreadPriority(threadHandle, threadPriority);
-  if (!success)
-  {
-    DWORD error = GetLastError();
-    std::cerr << "Failed to set thread priority. Error code: " << error << std::endl;
-  }
+  // do nothing
 
 #endif
-}
-
-void sendWork()
-{
-  net::io_context ioc;
-  ssl::context ctx = ssl::context{ssl::context::tlsv12_client};
-  load_root_certificates(ctx);
-
-connectionAttempt:
-  // Launch the asynchronous operation
-  bool err = false;
-  boost::asio::spawn(ioc, std::bind(&rpc_session, std::string(host), std::string("10102"), std::string(wallet), std::ref(ioc), std::placeholders::_1, false),
-                     // on completion, spawn will call this function
-                     [&](std::exception_ptr ex)
-                     {
-                       if (ex)
-                       {
-                         std::rethrow_exception(ex);
-                         err = true;
-                       }
-                     });
-  ioc.run();
-  if (err)
-  {
-    if (err)
-    {
-      std::cerr << "RPC connection error" << std::endl
-                << "Will try again in 10 seconds";
-    }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(10000));
-    ioc.reset();
-    goto connectionAttempt;
-  }
-}
-
-void devWork()
-{
-  net::io_context ioc;
-  ssl::context ctx = ssl::context{ssl::context::tlsv12_client};
-  load_root_certificates(ctx);
-
-connectionAttempt:
-  // Launch the asynchronous operation
-  bool err = false;
-  boost::asio::spawn(ioc, std::bind(&rpc_session, std::string(devPool), std::string("10102"), std::string(devWallet), std::ref(ioc), std::placeholders::_1, true),
-                     // on completion, spawn will call this function
-                     [&](std::exception_ptr ex)
-                     {
-                       if (ex)
-                       {
-                         std::rethrow_exception(ex);
-                         err = true;
-                       }
-                     });
-  ioc.run();
-  if (err)
-  {
-    if (err)
-    {
-      std::cerr << "(DEV) RPC connection error" << std::endl
-                << "Will try again in 10 seconds";
-    }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(10000));
-    ioc.reset();
-    goto connectionAttempt;
-  }
 }
 
 void getWork(bool isDev)
@@ -678,6 +654,7 @@ void getWork(bool isDev)
 connectionAttempt:
   // Launch the asynchronous operation
   bool err = false;
+  // if (isDev)
   boost::asio::spawn(ioc, std::bind(&do_session, std::string(devPool), std::string(devPort), std::string(devWallet), std::ref(ioc), std::ref(ctx), std::placeholders::_1, true),
                      // on completion, spawn will call this function
                      [&](std::exception_ptr ex)
@@ -688,6 +665,7 @@ connectionAttempt:
                          err = true;
                        }
                      });
+  // else
   boost::asio::spawn(ioc, std::bind(&do_session, std::string(host), std::string(port), std::string(wallet), std::ref(ioc), std::ref(ctx), std::placeholders::_1, false),
                      // on completion, spawn will call this function
                      [&](std::exception_ptr ex)
@@ -714,6 +692,7 @@ connectionAttempt:
 
 void benchmark(int tid)
 {
+
   bigint diff;
   byte work[MINIBLOCK_SIZE];
 
@@ -727,36 +706,54 @@ void benchmark(int tid)
 
   boost::this_thread::sleep_for(boost::chrono::milliseconds(50));
 
+  int64_t localJobCounter;
+
   int32_t i = 0;
 
   byte powHash[32];
+  // workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
   workerData *worker = new workerData();
 
-#if defined(_WIN32)
-  LPVOID lpvBase;       // Base address of the test memory
-  LPTSTR lpPtr;         // Generic character pointer
-  BOOL bSuccess;        // Flag
-  DWORD iCount;         // Generic counter
-  SYSTEM_INFO sSysInfo; // Useful information about the system
-  GetSystemInfo(&sSysInfo);
-  dwPageSize = sSysInfo.dwPageSize;
-
-  void *DATA = VirtualAlloc(NULL, 2048 * dwPageSize, MEM_LARGE_PAGES | MEM_COMMIT, PAGE_READWRITE);
-#endif
+  while (!isConnected)
+  {
+    std::this_thread::yield();
+  }
 
   work[MINIBLOCK_SIZE - 1] = (byte)tid;
   while (true)
   {
-    i++;
-    std::memcpy(&work[MINIBLOCK_SIZE - 5], &i, sizeof(i));
-    // swap endianness
-    if (littleEndian)
+    json myJob = job;
+    json myJobDev = devJob;
+    localJobCounter = jobCounter;
+
+    byte *b2 = new byte[MINIBLOCK_SIZE];
+    hexstr_to_bytes(myJob.at("blockhashing_blob"), b2);
+    memcpy(work, b2, MINIBLOCK_SIZE);
+    delete[] b2;
+
+    byte *b3 = new byte[MINIBLOCK_SIZE];
+    hexstr_to_bytes(myJob.at("blockhashing_blob"), b3);
+    memcpy(work, b3, MINIBLOCK_SIZE);
+    delete[] b3;
+
+    while (localJobCounter == jobCounter)
     {
-      std::swap(work[MINIBLOCK_SIZE - 5], work[MINIBLOCK_SIZE - 2]);
-      std::swap(work[MINIBLOCK_SIZE - 4], work[MINIBLOCK_SIZE - 3]);
+      i++;
+      double which = (double)(rand() % 10000);
+      bool devMine = (devConnected && which < devFee * 100.0);
+      std::memcpy(&work[MINIBLOCK_SIZE - 5], &i, sizeof(i));
+      // swap endianness
+      if (littleEndian())
+      {
+        std::swap(work[MINIBLOCK_SIZE - 5], work[MINIBLOCK_SIZE - 2]);
+        std::swap(work[MINIBLOCK_SIZE - 4], work[MINIBLOCK_SIZE - 3]);
+      }
+      AstroBWTv3(work, MINIBLOCK_SIZE, powHash, *worker);
+      counter.store(counter + 1);
+      benchCounter.store(benchCounter + 1);
+      if (stopBenchmark)
+        break;
     }
-    AstroBWTv3(work, MINIBLOCK_SIZE, powHash, *worker);
-    counter.store(counter + 1);
     if (stopBenchmark)
       break;
   }
@@ -779,135 +776,120 @@ void mineBlock(int tid)
   boost::this_thread::sleep_for(boost::chrono::milliseconds(50));
 
   int64_t localJobCounter;
-  int32_t i = 0;
-
   byte powHash[32];
-  workerData *worker = new workerData();
   byte devWork[MINIBLOCK_SIZE];
+
+  mutex.lock();
+  workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
+  mutex.unlock();
+
+  (*worker).init();
 
   while (!isConnected)
   {
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(50));
+    std::this_thread::yield();
   }
-
-#if defined(_WIN32)
-  LPVOID lpvBase;       // Base address of the test memory
-  LPTSTR lpPtr;         // Generic character pointer
-  BOOL bSuccess;        // Flag
-  DWORD iCount;         // Generic counter
-  SYSTEM_INFO sSysInfo; // Useful information about the system
-  GetSystemInfo(&sSysInfo);
-
-  printf("This computer has page size %d.\n", sSysInfo.dwPageSize);
-  dwPageSize = sSysInfo.dwPageSize;
-
-  void *DATA = VirtualAlloc(NULL, 2048 * dwPageSize, MEM_LARGE_PAGES | MEM_COMMIT, PAGE_READWRITE);
-#endif
 
   while (true)
   {
-    json myJob = job;
-    json myJobDev = devJob;
-    localJobCounter = jobCounter;
-
-    byte *b2 = new byte[MINIBLOCK_SIZE];
-    hexstr_to_bytes(myJob.at("blockhashing_blob"), b2);
-    std::copy(b2, b2 + MINIBLOCK_SIZE, work);
-
-    if (devConnected)
+    try
     {
-      byte *b2d = new byte[MINIBLOCK_SIZE];
-      hexstr_to_bytes(myJobDev.at("blockhashing_blob"), b2d);
-      std::copy(b2d, b2d + MINIBLOCK_SIZE, devWork);
-    }
-
-    std::copy(random_buf, random_buf + 12, work + MINIBLOCK_SIZE - 12);
-    std::copy(random_buf, random_buf + 12, devWork + MINIBLOCK_SIZE - 12);
-
-    work[MINIBLOCK_SIZE - 1] = (byte)tid;
-    devWork[MINIBLOCK_SIZE - 1] = (byte)tid;
-
-    if ((work[0] & 0xf) != 1)
-    { // check  version
       mutex.lock();
-      std::cerr << "Unknown version, please check for updates: "
-                << "version" << (work[0] & 0x1f) << std::endl;
+      json myJob = job;
+      json myJobDev = devJob;
+      localJobCounter = jobCounter;
       mutex.unlock();
-      boost::this_thread::sleep_for(boost::chrono::milliseconds(500));
-      continue;
+
+      byte *b2 = new byte[MINIBLOCK_SIZE];
+      hexstr_to_bytes(myJob.at("blockhashing_blob"), b2);
+      memcpy(work, b2, MINIBLOCK_SIZE);
+      delete[] b2;
+
+      if (devConnected)
+      {
+        byte *b2d = new byte[MINIBLOCK_SIZE];
+        hexstr_to_bytes(myJobDev.at("blockhashing_blob"), b2d);
+        memcpy(devWork, b2d, MINIBLOCK_SIZE);
+        delete[] b2d;
+      }
+
+      memcpy(&work[MINIBLOCK_SIZE - 12], random_buf, 12);
+      memcpy(&devWork[MINIBLOCK_SIZE - 12], random_buf, 12);
+
+      work[MINIBLOCK_SIZE - 1] = (byte)tid;
+      devWork[MINIBLOCK_SIZE - 1] = (byte)tid;
+
+      if ((work[0] & 0xf) != 1)
+      { // check  version
+        mutex.lock();
+        std::cerr << "Unknown version, please check for updates: "
+                  << "version" << (work[0] & 0x1f) << std::endl;
+        mutex.unlock();
+        boost::this_thread::sleep_for(boost::chrono::milliseconds(500));
+        continue;
+      }
+      double which;
+      bool devMine = false;
+      bool submit = false;
+      uint64_t DIFF = devMine ? difficultyDev : difficulty;
+      // DIFF = 5000;
+
+      std::string hex;
+      int32_t i = 0;
+      while (localJobCounter == jobCounter)
+      {
+        which = (double)(rand() % 10000);
+        devMine = (devConnected && which < devFee * 100.0);
+        i++;
+        byte *WORK = devMine ? &devWork[0] : &work[0];
+        memcpy(&WORK[MINIBLOCK_SIZE - 5], &i, sizeof(i));
+
+        // swap endianness
+        if (littleEndian())
+        {
+          std::swap(WORK[MINIBLOCK_SIZE - 5], WORK[MINIBLOCK_SIZE - 2]);
+          std::swap(WORK[MINIBLOCK_SIZE - 4], WORK[MINIBLOCK_SIZE - 3]);
+        }
+
+        // hex = hexStr(&WORK[0], MINIBLOCK_SIZE);
+        // memcpy(B, hex.c_str(), hex.size());
+        AstroBWTv3(&WORK[0], MINIBLOCK_SIZE, powHash, *worker);
+        counter.store(counter + 1);
+        // std::cout << hexStr(powHash, 32) << std::endl;
+        submit = devMine ? !submittingDev : !submitting;
+        if (submit && CheckHash(powHash, DIFF))
+        { // note we are doing a local, NW might have moved meanwhile
+          // std::cout << hexStr(powHash, 32) << std::endl
+          //           << std::endl;
+          if (devMine)
+          {
+            mutex.lock();
+            submittingDev = true;
+            setcolor(14);
+            std::cout << "\n(DEV) Thread " << tid << " found a dev nonce\n";
+            setcolor(15);
+            mutex.unlock();
+            devShare = {
+                {"jobid", myJobDev.at("jobid")},
+                {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
+          }
+          else
+          {
+            mutex.lock();
+            submitting = true;
+            setcolor(14);
+            std::cout << "\nThread " << tid << " found a nonce!\n";
+            setcolor(15);
+            mutex.unlock();
+            share = {
+                {"jobid", myJob.at("jobid")},
+                {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
+          }
+        }
+      }
     }
-    double which;
-    bool devMine = false;
-    bool submit = false;
-
-    auto submit_share = [&]()
+    catch (...)
     {
-      try
-      {
-        if (devMine)
-        {
-          mutex.lock();
-          devShare = {
-              {"jobid", myJobDev.at("jobid")},
-              {"mbl_blob", hexStr(devWork, MINIBLOCK_SIZE).c_str()}};
-          mutex.unlock();
-        }
-        else
-        {
-          mutex.lock();
-          share = {
-              {"jobid", myJob.at("jobid")},
-              {"mbl_blob", hexStr(work, MINIBLOCK_SIZE).c_str()}};
-          mutex.unlock();
-        }
-        // if (auto err = c.stratum.SubmitShare(share); err != nullptr)
-        // {
-        //   c.logger.Error(err, "Failed to submit share");
-        // }
-      }
-      catch (...)
-      {
-        std::cout << "failed to submit share" << std::endl;
-      }
-    };
-
-    uint64_t DIFF = devMine ? difficultyDev : difficulty;
-    // DIFF = 5000;
-
-    while (localJobCounter == jobCounter)
-    {
-      which = (double)(rand() % 1000);
-      devMine = (devConnected && which < devFee * 10.0);
-      i++;
-      byte *WORK = devMine ? &devWork[0] : &work[0];
-      std::memcpy(&WORK[MINIBLOCK_SIZE - 5], &i, sizeof(i));
-      // swap endianness
-      if (littleEndian)
-      {
-        std::swap(WORK[MINIBLOCK_SIZE - 5], WORK[MINIBLOCK_SIZE - 2]);
-        std::swap(WORK[MINIBLOCK_SIZE - 4], WORK[MINIBLOCK_SIZE - 3]);
-      }
-      AstroBWTv3(WORK, MINIBLOCK_SIZE, powHash, *worker);
-      counter.store(counter + 1);
-      submit = devMine ? !submittingDev : !submitting;
-      if (submit && CheckHash(powHash, DIFF))
-      { // note we are doing a local, NW might have moved meanwhile
-        if (devMine)
-        {
-          mutex.lock();
-          submittingDev = true;
-          std::cout << "\nFound dev share... ";
-          mutex.unlock();
-        }
-        else
-        {
-          mutex.lock();
-          submitting = true;
-          std::cout << "\nThread " << tid << " found a nonce... ";
-          mutex.unlock();
-        }
-        submit_share();
-      }
     }
   }
 }
