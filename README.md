@@ -7,8 +7,7 @@ Dependencies are as follows:
   - GMP (with C++ support enabled)
   - divsufsort
 
-## This repo can be built from source via cmake once these libraries are installed on your system. 
-### (cmake & mingw32-make on Windows)
+## This repo can be built from source via cmake once these libraries are installed on your system
 ```
 git clone https://github.com/Tritonn204/tnn-miner.git
 cd tnn-miner
@@ -17,3 +16,4 @@ cd build
 cmake ..
 make
 ```
+MinGW will work, just swap "make" with "mingw32-make.
