@@ -17,7 +17,8 @@ cd build
 cmake ..
 make
 ```
-MinGW will work, just swap "make" with "mingw32-make". 
+### MinGW will work, just swap "make" with "mingw32-make".
+
 Do note that CMakeLists.txt will need to be altered if your libraries are not installed at C:/mingw64 on Windows.
 
 # USAGE
