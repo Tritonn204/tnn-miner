@@ -17,4 +17,4 @@ cd build
 cmake ..
 make
 ```
-MinGW will work, just swap "make" with "mingw32-make.
+MinGW will work, just swap "make" with "mingw32-make".
