@@ -17,7 +17,8 @@ cd build
 cmake ..
 make
 ```
-MinGW will work, just swap "make" with "mingw32-make".
+MinGW will work, just swap "make" with "mingw32-make". 
+Do note that CMakeLists.txt will need to be altered if your libraries are not installed at C:/mingw64 on Windows.
 
 # USAGE
 This miner can be activated from the command line with the following parameters in the same order. Simply adjust the syntax for use with your shell or terminal of choice!
