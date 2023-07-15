@@ -9,7 +9,7 @@ Dependencies are as follows:
 
 ### This repo can be built from source once these are installed with cmake. (cmake & mingw32-make on Windows)
 ```
-git clone https://github.com/Tritonn204/tnn-miner
+git clone https://github.com/Tritonn204/tnn-miner.git
 cd tnn-miner
 mkdir build
 cd build
