@@ -1,6 +1,11 @@
 #ifndef MINER
 #define MINER
 
+#define CYAN 3
+#define RED 4
+#define BRIGHT_YELLOW 14
+#define BRIGHT_WHITE 15
+
 #include <bigint.h>
 #include <stdint.h>
 #include <chrono>
@@ -14,7 +19,7 @@
 #include <windows.h>
 #endif
 
-const char *consoleLine = " TNN-MINER v0.1.1 | ";
+const char *consoleLine = " TNN-MINER v0.1.2 ";
 
 const int workerThreads = 2;
 
@@ -27,7 +32,8 @@ int threads;
 
 // Dev fee config
 // Dev fee is a % of hashrate
-const double devFee = 2.5;
+double minFee = 1;
+double devFee = 2.5;
 const char *devPool = "community-pools.mysrv.cloud";
 const char *devPort = "10300";
 // @ tritonn on Dero Name Service

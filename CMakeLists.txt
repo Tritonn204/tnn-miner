@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16.3)
 
 set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -m64 -Wall -O3 -fopenmp -funroll-all-loops -march=x86-64 -ftree-vectorize -std=c++2a")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -m64 -Wall -O3 -fopenmp -funroll-all-loops -march=x86-64-v3 -ftree-vectorize -std=c++2a")
 
 if(WIN32)
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wa,-mbig-obj")
@@ -9,7 +9,7 @@ endif()
 
 project(
   Tnn-miner
-  VERSION 0.1.1
+  VERSION 0.1.2
   DESCRIPTION "Open Source Astrobwt Miner"
 )
 
