@@ -19,7 +19,7 @@ make
 ```
 ### MinGW will work, just swap "make" with "mingw32-make".
 
-Do note that CMakeLists.txt will need to be altered if your libraries are installed at neither C:/mingw64 nor the root dir of this project on Windows.
+Do note that CMakeLists.txt will need to be altered if your libraries are installed at neither **C:/mingw64** nor the **root dir** of this project on Windows.
 
 # USAGE
 This miner can be activated from the command line with the following parameters in the same order. Simply adjust the syntax for use with your shell or terminal of choice!
