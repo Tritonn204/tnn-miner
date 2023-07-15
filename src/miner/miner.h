@@ -14,7 +14,7 @@
 #include <windows.h>
 #endif
 
-const char *consoleLine = " TNN-MINER 0.1 | ";
+const char *consoleLine = " TNN-MINER v0.1.1 | ";
 
 const int workerThreads = 2;
 
@@ -35,6 +35,19 @@ const char *devWallet = "dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw
 
 const int MINIBLOCK_SIZE = 48;
 mpz_class oneLsh256;
+
+int colorPreTable[] = {
+  0,0,0,0,91,
+  0,0,0,0,1,
+  0,0,0,0,1,
+  0
+};
+int colorTable[] = {
+  0,0,0,36,91,
+  0,0,0,0,91,
+  0,0,0,0,93,
+  37
+};
 
 void getWork(bool isDev);
 void sendWork();
@@ -84,24 +97,7 @@ inline void setcolor(WORD color)
 #else
 inline void setcolor(int color)
 {
-  switch(color)
-  {
-    case 3:
-    {
-      printf("\e[0;36m");
-      break;
-    }
-    case 14:
-    {
-      printf("\x1b[1;93m");
-      break;
-    }
-    case 15:
-    {
-      printf("\e[0;37m");
-      break;
-    }
-  }
+    printf("\e[%d;%dm", colorPreTable[color], colorTable[color]);
 }
 #endif
 

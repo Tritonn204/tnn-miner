@@ -149,7 +149,7 @@ void do_session(
 
   // Make the connection on the IP address we get from a lookup
   auto ep = beast::get_lowest_layer(ws).connect(results);
-  
+
   // Set SNI Hostname (many hosts need this to handshake successfully)
   if (!SSL_set_tlsext_host_name(
           ws.next_layer().native_handle(),
@@ -661,39 +661,55 @@ void getWork(bool isDev)
   ssl::context ctx = ssl::context{ssl::context::tlsv12_client};
   load_root_certificates(ctx);
 
+  setcolor(3);
+  std::cout << "Connecting...\n";
+  setcolor(15);
+
 connectionAttempt:
-  // Launch the asynchronous operation
-  bool err = false;
-  // if (isDev)
-  boost::asio::spawn(ioc, std::bind(&do_session, std::string(devPool), std::string(devPort), std::string(devWallet), std::ref(ioc), std::ref(ctx), std::placeholders::_1, true),
-                     // on completion, spawn will call this function
-                     [&](std::exception_ptr ex)
-                     {
-                       if (ex)
-                       {
-                         std::rethrow_exception(ex);
-                         err = true;
-                       }
-                     });
-  // else
-  boost::asio::spawn(ioc, std::bind(&do_session, std::string(host), std::string(port), std::string(wallet), std::ref(ioc), std::ref(ctx), std::placeholders::_1, false),
-                     // on completion, spawn will call this function
-                     [&](std::exception_ptr ex)
-                     {
-                       if (ex)
-                       {
-                         std::rethrow_exception(ex);
-                         err = true;
-                       }
-                     });
-  ioc.run();
-  if (err)
+  try
   {
+    // Launch the asynchronous operation
+    bool err = false;
+    // if (isDev)
+    boost::asio::spawn(ioc, std::bind(&do_session, std::string(devPool), std::string(devPort), std::string(devWallet), std::ref(ioc), std::ref(ctx), std::placeholders::_1, true),
+                       // on completion, spawn will call this function
+                       [&](std::exception_ptr ex)
+                       {
+                         if (ex)
+                         {
+                           std::rethrow_exception(ex);
+                           err = true;
+                         }
+                       });
+    // else
+    boost::asio::spawn(ioc, std::bind(&do_session, std::string(host), std::string(port), std::string(wallet), std::ref(ioc), std::ref(ctx), std::placeholders::_1, false),
+                       // on completion, spawn will call this function
+                       [&](std::exception_ptr ex)
+                       {
+                         if (ex)
+                         {
+                           std::rethrow_exception(ex);
+                           err = true;
+                         }
+                       });
+    ioc.run();
     if (err)
     {
-      std::cerr << "Error establishing connections" << std::endl
-                << "Will try again in 10 seconds";
+      setcolor(4);
+      std::cerr << "\nError establishing connections" << std::endl
+                << "Will try again in 10 seconds...\n";
+      setcolor(15);
+      boost::this_thread::sleep_for(boost::chrono::milliseconds(10000));
+      ioc.reset();
+      goto connectionAttempt;
     }
+  }
+  catch (...)
+  {
+    setcolor(4);
+    std::cerr << "\nError establishing connections" << std::endl
+              << "Will try again in 10 seconds...\n";
+              setcolor(15);
     boost::this_thread::sleep_for(boost::chrono::milliseconds(10000));
     ioc.reset();
     goto connectionAttempt;

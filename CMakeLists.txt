@@ -9,7 +9,7 @@ endif()
 
 project(
   Tnn-miner
-  VERSION 0.1
+  VERSION 0.1.1
   DESCRIPTION "Open Source Astrobwt Miner"
 )
 
