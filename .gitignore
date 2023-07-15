@@ -23,6 +23,7 @@
 
 # Directories
 /bin
+/lib
 /hooks
 /info
 /CMakeFiles

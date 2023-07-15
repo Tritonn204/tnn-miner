@@ -22,7 +22,6 @@ if(WIN32)
   )
   link_directories(
     "C:/mingw64/lib"
-    "${PROJECT_SOURCE_DIR}/lib/Win32"
   )
   set(OPENSSL_USE_STATIC_LIBS TRUE)
   find_package(OpenSSL REQUIRED)
@@ -32,9 +31,6 @@ endif()
 if(UNIX)
   set(Boost_USE_STATIC_LIBS   ON)
   set(Boost_USE_MULTITHREADED ON)
-  link_directories(
-    "${PROJECT_SOURCE_DIR}/lib/Linux"
-  )
 endif()
 
 include_directories(
