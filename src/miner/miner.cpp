@@ -148,10 +148,8 @@ void do_session(
   beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(30));
 
   // Make the connection on the IP address we get from a lookup
-  auto ep = beast::get_lowest_layer(ws).async_connect(results, yield[ec]);
-  if (ec)
-    return fail(ec, "connect");
-
+  auto ep = beast::get_lowest_layer(ws).connect(results);
+  
   // Set SNI Hostname (many hosts need this to handshake successfully)
   if (!SSL_set_tlsext_host_name(
           ws.next_layer().native_handle(),
@@ -355,7 +353,7 @@ int main(int argc, char **argv)
       // Create worker threads and set CPU affinity
       for (int i = 0; i < threads; i++)
       {
-        boost::thread t(mineBlock, i + 1);
+        boost::thread t(benchmark, i + 1);
 #if defined(_WIN32)
         setAffinity(t.native_handle(), 1 << (i % n));
 #else
@@ -367,6 +365,11 @@ int main(int argc, char **argv)
         mutex.lock();
         std::cout << "(Benchmark) Worker " << i + 1 << " created" << std::endl;
         mutex.unlock();
+      }
+
+      while (!isConnected)
+      {
+        std::this_thread::yield();
       }
 
       boost::thread t2(logSeconds, start_time, duration, &stopBenchmark);
@@ -384,8 +387,10 @@ int main(int argc, char **argv)
         std::this_thread::yield();
       }
 
+      auto now = std::chrono::system_clock::now();
+      auto seconds = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
       int64_t hashrate = counter / duration;
-      std::string intro = fmt::sprintf("Mined for %d seconds, average rate of ", duration);
+      std::string intro = fmt::sprintf("Mined for %d seconds, average rate of ", seconds);
       std::cout << intro << std::flush;
       if (hashrate >= 1000000)
       {
@@ -459,6 +464,11 @@ int main(int argc, char **argv)
 
   auto start_time = std::chrono::high_resolution_clock::now();
   // update(start_time);
+
+  while (!isConnected)
+  {
+    std::this_thread::yield();
+  }
 
   boost::thread reporter(update, start_time);
   setPriority(reporter.native_handle(), THREAD_PRIORITY_TIME_CRITICAL);
@@ -731,11 +741,6 @@ void benchmark(int tid)
     memcpy(work, b2, MINIBLOCK_SIZE);
     delete[] b2;
 
-    byte *b3 = new byte[MINIBLOCK_SIZE];
-    hexstr_to_bytes(myJob.at("blockhashing_blob"), b3);
-    memcpy(work, b3, MINIBLOCK_SIZE);
-    delete[] b3;
-
     while (localJobCounter == jobCounter)
     {
       i++;
@@ -779,9 +784,7 @@ void mineBlock(int tid)
   byte powHash[32];
   byte devWork[MINIBLOCK_SIZE];
 
-  mutex.lock();
-  workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
-  mutex.unlock();
+  workerData *worker = new workerData();
 
   (*worker).init();
 
@@ -890,6 +893,7 @@ void mineBlock(int tid)
     }
     catch (...)
     {
+      std::cerr << "Error in POW Function" << std::endl;
     }
   }
 }
