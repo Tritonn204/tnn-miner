@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16.3)
 
 set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -m64 -Wall -O3 -fopenmp -funroll-all-loops -march=x86-64 -ftree-vectorize -std=c++2a")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -Wall -O3 -fopenmp -march=native -funroll-all-loops -ftree-vectorize -std=c++2a")
 
 if(WIN32)
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wa,-mbig-obj")
@@ -57,4 +57,4 @@ else()
   target_link_libraries(${PROJECT_NAME} ssl atomic crypto pthread boost_chrono boost_context boost_json boost_thread boost_atomic)
 endif()
 
-target_link_libraries(${PROJECT_NAME} fmt gmp gmpxx divsufsort)
+target_link_libraries(${PROJECT_NAME} gmp gmpxx divsufsort)
