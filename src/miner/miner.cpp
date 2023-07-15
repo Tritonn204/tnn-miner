@@ -273,6 +273,7 @@ void do_session(
               {
                 setcolor(BRIGHT_YELLOW);
                 printf("Mining at: %s/ws/%s\n", host.c_str(), wallet.c_str());
+                setcolor(CYAN);
                 printf("Dev fee: %.2f", devFee);
                 std::cout << "%" << std::endl;
                 setcolor(BRIGHT_WHITE);
