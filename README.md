@@ -3,9 +3,9 @@
 
 Dependencies are as follows:
   - OpenSSL v3.0.2
-  - Boost v1.8.2
+  - Boost v1.8.2 (b2 with link=static)
   - GMP (with C++ support enabled)
-  - divsufsort
+  - divsufsort (with build_shared turned off)
   - FMT (header only)
 
 ## This repo can be built from source via cmake once these libraries are installed on your system
