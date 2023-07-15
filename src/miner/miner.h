@@ -19,7 +19,7 @@
 #include <windows.h>
 #endif
 
-const char *consoleLine = " TNN-MINER v0.1.2 ";
+const char *consoleLine = " TNN-MINER v0.1.3 ";
 
 const int workerThreads = 2;
 

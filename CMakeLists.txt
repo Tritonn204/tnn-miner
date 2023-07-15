@@ -9,7 +9,7 @@ endif()
 
 project(
   Tnn-miner
-  VERSION 0.1.2
+  VERSION 0.1.3
   DESCRIPTION "Open Source Astrobwt Miner"
 )
 
@@ -25,12 +25,6 @@ if(WIN32)
   )
   set(OPENSSL_USE_STATIC_LIBS TRUE)
   find_package(OpenSSL REQUIRED)
-endif()
-
-
-if(UNIX)
-  set(Boost_USE_STATIC_LIBS   ON)
-  set(Boost_USE_MULTITHREADED ON)
 endif()
 
 include_directories(
@@ -60,7 +54,7 @@ add_executable(${PROJECT_NAME} ${all_SRCS})
 if(WIN32)
   target_link_libraries(${PROJECT_NAME} mingw32 boost_context-mt boost_json-mt boost_thread-mt boost_atomic-mt wsock32 ws2_32 ssl OpenSSL::Crypto)
 else()
-  target_link_libraries(${PROJECT_NAME} ssl crypto pthread boost_chrono boost_context boost_json boost_thread boost_atomic)
+  target_link_libraries(${PROJECT_NAME} ssl atomic crypto pthread boost_chrono boost_context boost_json boost_thread boost_atomic)
 endif()
 
 target_link_libraries(${PROJECT_NAME} fmt gmp gmpxx divsufsort)
