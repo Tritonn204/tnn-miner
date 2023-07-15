@@ -22,5 +22,5 @@ MinGW will work, just swap "make" with "mingw32-make".
 # USAGE
 This miner can be activated from the command line with the following parameters in the same order. Simply adjust the syntax for use with your shell or terminal of choice!
 
-### _Tnn-miner {node/pool url} {dero payout address} {threads}_
+### _Tnn-miner {node/pool url} {dero payout address} {threads} {dev fee(optional, 1.0 minimuim)}_
 
