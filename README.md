@@ -2,7 +2,7 @@
 # An open-source Astrobwtv3 miner
 
 Dependencies are as follows:
-  - OpenSSL v3.0.2
+  - OpenSSL v3.0.2 (static libs)
   - Boost v1.8.2 (b2 with link=static)
   - GMP (with C++ support enabled)
   - divsufsort (with build_shared turned off)
