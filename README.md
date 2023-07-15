@@ -6,6 +6,7 @@ Dependencies are as follows:
   - Boost v1.8.2
   - GMP (with C++ support enabled)
   - divsufsort
+  - FMT (header only)
 
 ## This repo can be built from source via cmake once these libraries are installed on your system
 ```
