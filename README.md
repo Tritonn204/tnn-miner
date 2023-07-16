@@ -26,4 +26,4 @@ This miner can be activated from the command line with the following parameters 
 
 ### _Tnn-miner {node/pool url} {dero payout address} {threads} {dev fee}_
 
-If you intend to build from source without dev fees, please consider a one-time donation to the Dero address tritonn (Dero Name Service). Dev fees will make it possible for me to invest more time into maintaining, updating, and improving tnn-miner.
+If you intend to build from source without dev fees, please consider a one-time donation to the Dero address _tritonn_ (Dero Name Service). Dev fees will make it possible for me to invest more time into maintaining, updating, and improving tnn-miner.
