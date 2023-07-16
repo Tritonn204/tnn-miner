@@ -949,7 +949,7 @@ waitForJob:
       double which;
       bool devMine = false;
       bool submit = false;
-      uint64_t DIFF = devMine ? difficultyDev : difficulty;
+      uint64_t DIFF;
       // DIFF = 5000;
 
       std::string hex;
@@ -959,6 +959,7 @@ waitForJob:
         which = (double)(rand() % 10000);
         devMine = (devConnected && which < devFee * 100.0);
         i++;
+        DIFF = devMine ? difficultyDev : difficulty;
         byte *WORK = devMine ? &devWork[0] : &work[0];
         memcpy(&WORK[MINIBLOCK_SIZE - 5], &i, sizeof(i));
 
