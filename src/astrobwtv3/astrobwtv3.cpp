@@ -1,6 +1,11 @@
 #include <endian.h>
 #include <inttypes.h>
 
+#define FMT_HEADER_ONLY
+
+#include <fmt/format.h>
+#include <fmt/printf.h>
+
 #include <bitset>
 #include <iostream>
 
@@ -8,6 +13,8 @@
 #include <xxhash64.h>
 #include "pow.h"
 #include "powtest.h"
+
+// #include <gsaca-double-sort.hpp>
 
 #include <unordered_map>
 #include <array>
@@ -52,7 +59,7 @@ void TestAstroBWTv3()
   workerData *worker = new workerData;
   for (PowTest t : random_pow_tests)
   {
-    byte buf[t.in.size()];
+    byte *buf = new byte[t.in.size()];
     memcpy(buf, t.in.c_str(), t.in.size());
     byte res[32];
     AstroBWTv3(buf, (int)t.in.size(), res, *worker);
@@ -65,6 +72,7 @@ void TestAstroBWTv3()
     {
       printf("SUCCESS! pow(%s) = %s want %s\n", t.in.c_str(), s.c_str(), t.out.c_str());
     }
+    delete [] buf;
   }
 }
 
@@ -3138,34 +3146,27 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
     // text_32_0alloc(worker.sData, worker.sa, data_len, data_len);
     // libsais_omp(worker.sData, worker.sa, worker.data_len, 0, NULL, 8);
     divsufsort(worker.sData, worker.sa, worker.data_len);
+
     // std::string_view S(hexStr(worker.sData, worker.data_len));
     // auto SA2 = psais::suffix_array<uint32_t>(S);
     // std::vector<byte> I;
     // worker.enCompute();
 
     // the current implementation relies on these sentinels!
-    // std::string input = fmt::sprintf("!%s!", hexStr(worker.sData, worker.data_len));
 
-    // size_t n = input.size()
-    // the current implementation relies on these sentinels!
-    // std::string I2(worker.data_len+2, '\0');
-    // memcpy(&I2[1], &worker.sData[0], worker.data_len);
-    // byte *T = (unsigned char *) I2.data();
-    // size_t n = I2.size();  
-
-    // unsigned int *SAH = (unsigned int *) malloc(n * sizeof(unsigned int));
+    // unsigned int *SAH = (unsigned int *) malloc(MAX_LENGTH * sizeof(unsigned int));
+    // byte *D = new byte[worker.data_len+2];
+    // memcpy(&D[1], worker.sData, worker.data_len);
+    // D[0] = D[worker.data_len + 1] = 0;
 
     // // gsaca_ds1(T, SA1, n);
     // // gsaca_ds2(T, SA2, n);
     // // gsaca_ds3(T, SA3, n);
-    // gsaca_dsh(T, SAH, n);
+    // gsaca_dsh(D, SAH, worker.data_len+2);
+
+    // std::cout << worker.sa[0] << " : " << SAH[0] << std::endl;
 
     // worker.enCompute();
-
-    // byte *D = new byte[worker.data_len+2];
-    // memcpy(&D[1], worker.sData, worker.data_len);
-    // D[0] = 0;
-    // D[worker.data_len] = 0;
 
     // // fgsaca<uint32_t>((const uint8_t*)D, worker.sa, worker.data_len+2, 256);
     // gsaca_dsh(D, worker.sa, worker.data_len+2);
@@ -3210,7 +3211,6 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
       // worker.sHash = nHash;
       delete[] s;
     }
-    // worker.sHash = hashSHA256(worker.sHash, 0);
     memcpy(outputhash, worker.sHash, 32);
   }
   catch (const std::exception &ex)

@@ -17,7 +17,7 @@ inline std::string hexStr(const unsigned char *data, int len)
     ss << std::setw(2) << std::setfill('0') << (int)data[i];
 
   return ss.str();
-};
+}
 
 inline void hexstr_to_bytes(std::string s, unsigned char *&b)
 {

@@ -47,16 +47,15 @@
 #include <fmt/format.h>
 #include <fmt/printf.h>
 
-#include <omp.h>
 #include <hugepages.h>
 
 #if defined(_WIN32)
 #include <Windows.h>
 #else
 #include <sched.h>
-#define THREAD_PRIORITY_ABOVE_NORMAL -1
-#define THREAD_PRIORITY_HIGHEST -2
-#define THREAD_PRIORITY_TIME_CRITICAL -15
+#define THREAD_PRIORITY_ABOVE_NORMAL -5
+#define THREAD_PRIORITY_HIGHEST -20
+#define THREAD_PRIORITY_TIME_CRITICAL -20
 #endif
 
 #if defined(_WIN32)
@@ -92,6 +91,7 @@ int jobCounter;
 boost::atomic<int64_t> counter = 0;
 boost::atomic<int64_t> benchCounter = 0;
 
+
 int blockCounter;
 int miniBlockCounter;
 int rejected;
@@ -116,7 +116,7 @@ bool stopBenchmark = false;
 //------------------------------------------------------------------------------
 
 // Report a failure
-void fail(beast::error_code ec, char const *what)
+void fail(beast::error_code ec, char const *what) noexcept
 {
   setcolor(RED);
   std::cerr << what << ": " << ec.message() << "\n";
@@ -288,7 +288,8 @@ void do_session(
               difficultyDev = (*J).at("difficultyuint64");
               devBlob = (*J).at("blockhashing_blob");
               devHeight = (*J).at("height");
-              if (!devConnected){
+              if (!devConnected)
+              {
                 setcolor(CYAN);
                 printf("Connected to dev node: %s\n", devPool);
                 setcolor(BRIGHT_WHITE);
@@ -331,7 +332,6 @@ void do_session(
 
 int main(int argc, char **argv)
 {
-  omp_set_num_threads(1);
 #if defined(_WIN32)
   HANDLE hSelfToken = NULL;
 
@@ -477,11 +477,15 @@ int main(int argc, char **argv)
     }
   }
 
+  mutex.lock();
+  printSupported();
+  mutex.unlock();
+
   boost::thread GETWORK(getWork, false);
   setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
-  // boost::thread GETWORKDEV(getWork, true);
-  // setPriority(GETWORKDEV.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+  boost::thread DEVWORK(getWork, true);
+  setPriority(DEVWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
   threads = 1;
   if (argc >= 5 && argv[4] != NULL)
@@ -499,6 +503,7 @@ int main(int argc, char **argv)
   winMask = std::max(1, winMask);
 
   // Create worker threads and set CPU affinity
+      mutex.lock();
   for (int i = 0; i < threads; i++)
   {
     boost::thread t(mineBlock, i + 1);
@@ -510,10 +515,9 @@ int main(int argc, char **argv)
     // if (threads == 1 || (n > 2 && i <= n - 2))
     setPriority(t.native_handle(), THREAD_PRIORITY_HIGHEST);
 
-    mutex.lock();
     std::cout << "Thread " << i + 1 << " started" << std::endl;
-    mutex.unlock();
   }
+  mutex.unlock();
 
   auto start_time = std::chrono::high_resolution_clock::now();
   // update(start_time);
@@ -735,8 +739,8 @@ void getWork(bool isDev)
   bool caughtDisconnect = false;
 
 connectionAttempt:
-  isConnected = false;
-  devConnected = false;
+  bool *B = isDev ? &devConnected : &isConnected;
+  *B = false;
   mutex.lock();
   setcolor(BRIGHT_YELLOW);
   std::cout << "Connecting...\n";
@@ -746,35 +750,40 @@ connectionAttempt:
   {
     // Launch the asynchronous operation
     bool err = false;
-    // if (isDev)
-    boost::asio::spawn(ioc, std::bind(&do_session, std::string(devPool), std::string(devPort), std::string(devWallet), std::ref(ioc), std::ref(ctx), std::placeholders::_1, true),
-                       // on completion, spawn will call this function
-                       [&](std::exception_ptr ex)
-                       {
-                         if (ex)
+    if (isDev)
+      boost::asio::spawn(ioc, std::bind(&do_session, std::string(devPool), std::string(devPort), std::string(devWallet), std::ref(ioc), std::ref(ctx), std::placeholders::_1, true),
+                         // on completion, spawn will call this function
+                         [&](std::exception_ptr ex)
                          {
-                           std::rethrow_exception(ex);
-                           err = true;
-                         }
-                       });
-    // else
-    boost::asio::spawn(ioc, std::bind(&do_session, std::string(host), std::string(port), std::string(wallet), std::ref(ioc), std::ref(ctx), std::placeholders::_1, false),
-                       // on completion, spawn will call this function
-                       [&](std::exception_ptr ex)
-                       {
-                         if (ex)
+                           if (ex)
+                           {
+                             std::rethrow_exception(ex);
+                             err = true;
+                           }
+                         });
+    else
+      boost::asio::spawn(ioc, std::bind(&do_session, std::string(host), std::string(port), std::string(wallet), std::ref(ioc), std::ref(ctx), std::placeholders::_1, false),
+                         // on completion, spawn will call this function
+                         [&](std::exception_ptr ex)
                          {
-                           std::rethrow_exception(ex);
-                           err = true;
-                         }
-                       });
+                           if (ex)
+                           {
+                             std::rethrow_exception(ex);
+                             err = true;
+                           }
+                         });
     ioc.run();
     if (err)
     {
-      setcolor(RED);
-      std::cerr << "\nError establishing connections" << std::endl
-                << "Will try again in 10 seconds...\n\n";
-      setcolor(BRIGHT_WHITE);
+      if (!isDev)
+      {
+        mutex.lock();
+        setcolor(RED);
+        std::cerr << "\nError establishing connections" << std::endl
+                  << "Will try again in 10 seconds...\n\n";
+        setcolor(BRIGHT_WHITE);
+        mutex.unlock();
+      }
       boost::this_thread::sleep_for(boost::chrono::milliseconds(10000));
       ioc.reset();
       goto connectionAttempt;
@@ -786,27 +795,37 @@ connectionAttempt:
   }
   catch (...)
   {
-    setcolor(RED);
-    std::cerr << "\nError establishing connections" << std::endl
-              << "Will try again in 10 seconds...\n\n";
-    setcolor(BRIGHT_WHITE);
+    if (!isDev)
+    {
+      mutex.lock();
+      setcolor(RED);
+      std::cerr << "\nError establishing connections" << std::endl
+                << "Will try again in 10 seconds...\n\n";
+      setcolor(BRIGHT_WHITE);
+      mutex.unlock();
+    }
     boost::this_thread::sleep_for(boost::chrono::milliseconds(10000));
     ioc.reset();
     goto connectionAttempt;
   }
-  while (isConnected)
+  while (*B)
   {
     caughtDisconnect = false;
     boost::this_thread::yield();
   }
   setcolor(RED);
-  if (!caughtDisconnect)
-    std::cerr << "ERROR: lost connection" << std::endl
-              << "Will try to reconnect in 10 seconds...\n\n";
-  else
-    std::cerr << "\nError establishing connections" << std::endl
-              << "Will try again in 10 seconds...\n\n";
-  setcolor(BRIGHT_WHITE);
+  if (!isDev)
+  {
+    mutex.lock();
+    if (!caughtDisconnect)
+      std::cerr << "ERROR: lost connection" << std::endl
+                << "Will try to reconnect in 10 seconds...\n\n";
+    else
+      std::cerr << "\nError establishing connections" << std::endl
+                << "Will try again in 10 seconds...\n\n";
+    setcolor(BRIGHT_WHITE);
+    mutex.unlock();
+  }
   caughtDisconnect = true;
   boost::this_thread::sleep_for(boost::chrono::milliseconds(10000));
   ioc.reset();
@@ -834,8 +853,9 @@ void benchmark(int tid)
   int32_t i = 0;
 
   byte powHash[32];
-  // workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
-  workerData *worker = new workerData();
+  workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
+  worker->init();
+  // workerData *worker = new workerData();
 
   while (!isConnected)
   {
@@ -898,8 +918,6 @@ void mineBlock(int tid)
   byte devWork[MINIBLOCK_SIZE];
 
   workerData *worker = new workerData();
-
-  (*worker).init();
 
 waitForJob:
 
