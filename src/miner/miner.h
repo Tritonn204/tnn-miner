@@ -97,6 +97,9 @@ inline void pSupport(const char *check, bool res)
 
 inline void printSupported()
 {
+#if defined(__aarch64__) || defined(_M_ARM64)
+  //do nothing
+#else
   setcolor(BRIGHT_WHITE);
   printf("Supported SIMD Suites\n\n");
   setcolor(CYAN);
@@ -110,6 +113,7 @@ inline void printSupported()
   pSupport("AVX512", __builtin_cpu_supports("avx512f"));
   setcolor(BRIGHT_WHITE);
   printf("\n");
+#endif
 }
 
 inline mpz_class ConvertDifficultyToBig(mpz_class d)
