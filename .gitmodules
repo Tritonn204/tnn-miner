@@ -1,0 +1,3 @@
+[submodule "cpp_modules/cpp-dns"]
+	path = cpp_modules/cpp-dns
+	url = https://github.com/YukiWorkshop/cpp-dns

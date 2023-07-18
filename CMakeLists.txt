@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.16.3)
 
 set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -pthread -std=c++2a -march=native -m64 -Wall -Wuninitialized -funroll-all-loops -ftree-vectorize")
+set(CMAKE_C_FLAGS_RELEASE "-static")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -pthread -O3 -march=native -m64 -Wall -Wuninitialized -funroll-all-loops -ftree-vectorize")
 
 if(WIN32)
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wa,-mbig-obj")
@@ -12,9 +13,11 @@ endif()
 # set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -pthread -Wl,--whole-archive -lpthread -Wl,--no-whole-archive")
 # endif()
 
+set (CMAKE_CXX_STANDARD 20)
+
 project(
   Tnn-miner
-  VERSION 0.1.4
+  VERSION 0.1.5
   DESCRIPTION "Open Source Astrobwt Miner"
 )
 
@@ -29,10 +32,15 @@ if(WIN32)
   )
 endif()
 
-set(OPENSSL_USE_STATIC_LIBS ON)
+if (UNIX)
+add_subdirectory(cpp_modules/cpp-dns)
+include_directories(cpp_modules/cpp-dns)
+endif()
+
+set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL REQUIRED)
 
-set(Boost_USE_STATIC_LIBS   ON)
+set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_MULTITHREADED ON)
 find_package(Boost 1.82 REQUIRED
   chrono
@@ -65,6 +73,9 @@ file(GLOB all_SRCS
 add_executable(${PROJECT_NAME} ${all_SRCS})
 
 if(WIN32)
-  target_link_libraries(${PROJECT_NAME} mingw32 wsock32 ws2_32)
+  target_link_libraries(${PROJECT_NAME} mingw32 wsock32 ws2_32 winpthread)
 endif()
-target_link_libraries(${PROJECT_NAME} ssl ${Boost_LIBRARIES} OpenSSL::Crypto gmp gmpxx divsufsort)
+if(UNIX)
+  target_link_libraries(${PROJECT_NAME} cpp-dns)
+endif()
+target_link_libraries(${PROJECT_NAME} OpenSSL::SSL ${Boost_LIBRARIES} OpenSSL::Crypto gmp gmpxx divsufsort)
