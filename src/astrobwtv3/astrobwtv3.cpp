@@ -33,7 +33,6 @@
 #include <hex.h>
 #include <openssl/rc4.h>
 
-#define LIBSAIS_OPENMP
 
 // #include <gsaca-double-sort-main/gsaca-double-sort.hpp>
 
@@ -3144,7 +3143,6 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
     // fmt::printf("data_len: %d\n" , data_len);
 
     // text_32_0alloc(worker.sData, worker.sa, data_len, data_len);
-    // libsais_omp(worker.sData, worker.sa, worker.data_len, 0, NULL, 8);
     divsufsort(worker.sData, worker.sa, worker.data_len);
 
     // std::string_view S(hexStr(worker.sData, worker.data_len));

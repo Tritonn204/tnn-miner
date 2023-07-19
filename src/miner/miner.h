@@ -14,6 +14,7 @@
 #include <endian.h>
 #include <gmpxx.h>
 #include <boost/thread.hpp>
+#include <vector>
 
 #ifdef _WIN32
 #include <windows.h>

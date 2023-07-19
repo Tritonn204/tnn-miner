@@ -119,9 +119,11 @@ bool stopBenchmark = false;
 // Report a failure
 void fail(beast::error_code ec, char const *what) noexcept
 {
+  mutex.lock();
   setcolor(RED);
   std::cerr << what << ": " << ec.message() << "\n";
   setcolor(BRIGHT_WHITE);
+  mutex.unlock();
 }
 
 // Sends a WebSocket message and prints the response
@@ -365,8 +367,8 @@ void do_session(
       }
       else
       {
-        isConnected = false;
-        devConnected = false;
+        bool *B = isDev ? &devConnected : &isConnected;
+        (*B) = false;
         fail(ec, "async_read");
         ws.close(websocket::close_code::service_restart, ec);
         return;
