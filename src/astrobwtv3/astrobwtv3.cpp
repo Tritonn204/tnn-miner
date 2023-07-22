@@ -3158,8 +3158,8 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
     // myfile << worker.sData;
     // myfile.close();
 
-    // divsufsort(worker.sData, worker.sa, worker.data_len);
-    sais_u8(worker.sData, worker.sa, (sa_int32_t)worker.data_len, 256);
+    divsufsort(worker.sData, worker.sa, worker.data_len);
+    // sais_u8(worker.sData, worker.sa, (sa_int32_t)worker.data_len, 256);
 
     // byte T[worker.data_len + 1];
     // T[0] = 0;
