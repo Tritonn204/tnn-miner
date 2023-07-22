@@ -55,6 +55,8 @@ public:
   RC4_KEY key;
 
   int32_t sa[MAX_LENGTH];
+  uint32_t sa2[MAX_LENGTH];
+  int32_t sa3[MAX_LENGTH];
   unsigned char sa_bytes[MAX_LENGTH * 4];
 
   int bitTable[256];

@@ -11,7 +11,7 @@
 #include <chrono>
 #include <inttypes.h>
 #include <hex.h>
-#include <endian.h>
+#include <endian.hpp>
 #include <gmpxx.h>
 #include <boost/thread.hpp>
 #include <vector>

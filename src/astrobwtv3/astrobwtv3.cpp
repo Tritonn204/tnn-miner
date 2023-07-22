@@ -1,4 +1,4 @@
-#include <endian.h>
+#include <endian.hpp>
 #include <inttypes.h>
 
 #define FMT_HEADER_ONLY
@@ -14,7 +14,7 @@
 #include "pow.h"
 #include "powtest.h"
 
-// #include <gsaca-double-sort.hpp>
+#include "gsaca.h"
 
 #include <unordered_map>
 #include <array>
@@ -33,10 +33,11 @@
 #include <hex.h>
 #include <openssl/rc4.h>
 
-
-// #include <gsaca-double-sort-main/gsaca-double-sort.hpp>
+#include <fstream>
 
 #include <bit>
+#include "archon.h"
+#include <sais.h>
 
 using byte = unsigned char;
 
@@ -71,7 +72,7 @@ void TestAstroBWTv3()
     {
       printf("SUCCESS! pow(%s) = %s want %s\n", t.in.c_str(), s.c_str(), t.out.c_str());
     }
-    delete [] buf;
+    delete[] buf;
   }
 }
 
@@ -192,8 +193,8 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                 // rotate  bits by 5
-          worker.step_3[i] *= worker.step_3[i];                              // *
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+          worker.step_3[i] *= worker.step_3[i];                             // *
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
           // INSERT_RANDOM_CODE_END
           worker.t1 = worker.step_3[worker.pos1];
@@ -206,11 +207,11 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);     // shift left
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                  // rotate  bits by 1
+          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] += worker.step_3[i];                               // +
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] += worker.step_3[i];                             // +
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 2:
@@ -218,10 +219,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];   // ones count bits
-          worker.step_3[i] = reverse8(worker.step_3[i]);                  // reverse bits
+          worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];   // ones count bits
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 3:
@@ -229,21 +230,21 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                 // rotate  bits by 3
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                // rotate  bits by 3
           worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                 // rotate  bits by 1
-                                                                               // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 4:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = ~worker.step_3[i];                              // binary NOT operator
+          worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);    // shift right
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                       // XOR and -
-                                                                               // INSERT_RANDOM_CODE_END
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                      // XOR and -
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 5:
@@ -266,9 +267,9 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);              // rotate  bits by 3
-          worker.step_3[i] = ~worker.step_3[i];                           // binary NOT operator
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                    // XOR and -
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);             // rotate  bits by 3
+          worker.step_3[i] = ~worker.step_3[i];                          // binary NOT operator
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                   // XOR and -
 
           // INSERT_RANDOM_CODE_END
         }
@@ -277,11 +278,11 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] += worker.step_3[i];                              // +
+          worker.step_3[i] += worker.step_3[i];                             // +
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
-          worker.step_3[i] = ~worker.step_3[i];                              // binary NOT operator
-                                                                               // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 8:
@@ -292,7 +293,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] = std::rotl(worker.step_3[i], 10); // rotate  bits by 5
           // worker.step_3[i] = std::rotl(worker.step_3[i], 5);// rotate  bits by 5
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 9:
@@ -301,10 +302,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= worker.step_3[worker.pos2]; // XOR
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                                 // rotate  bits by 4
+          ;                                                              // rotate  bits by 4
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);             // rotate  bits by 2
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 10:
@@ -315,7 +316,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] *= worker.step_3[i];              // *
           worker.step_3[i] = std::rotl(worker.step_3[i], 3); // rotate  bits by 3
           worker.step_3[i] *= worker.step_3[i];              // *
-                                                               // INSERT_RANDOM_CODE_END
+                                                             // INSERT_RANDOM_CODE_END
         }
         break;
       case 11:
@@ -325,8 +326,8 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] = std::rotl(worker.step_3[i], 6); // rotate  bits by 1
           // worker.step_3[i] = std::rotl(worker.step_3[i], 5);            // rotate  bits by 5
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]);  // rotate  bits by random
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 12:
@@ -337,18 +338,18 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] *= worker.step_3[i];               // *
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
           worker.step_3[i] = ~worker.step_3[i];               // binary NOT operator
-                                                                // INSERT_RANDOM_CODE_END
+                                                              // INSERT_RANDOM_CODE_END
         }
         break;
       case 13:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);              // rotate  bits by 1
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);             // rotate  bits by 1
           worker.step_3[i] ^= worker.step_3[worker.pos2];                // XOR
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);              // rotate  bits by 5
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);             // rotate  bits by 5
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 14:
@@ -357,20 +358,20 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] *= worker.step_3[i];                           // *
+          worker.step_3[i] *= worker.step_3[i];                          // *
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 15:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                 // rotate  bits by 2
-          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);     // shift left
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                        // XOR and -
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                      // XOR and -
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 16:
@@ -378,22 +379,22 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                    // rotate  bits by 4
+          ;                                                  // rotate  bits by 4
           worker.step_3[i] *= worker.step_3[i];              // *
           worker.step_3[i] = std::rotl(worker.step_3[i], 1); // rotate  bits by 1
           worker.step_3[i] = ~worker.step_3[i];              // binary NOT operator
-                                                               // INSERT_RANDOM_CODE_END
+                                                             // INSERT_RANDOM_CODE_END
         }
         break;
       case 17:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] ^= worker.step_3[worker.pos2];     // XOR
+          worker.step_3[i] ^= worker.step_3[worker.pos2];      // XOR
           worker.step_3[i] *= worker.step_3[i];                // *
           worker.step_3[i] = leftRotate8(worker.step_3[i], 5); // rotate  bits by 5
           worker.step_3[i] = ~worker.step_3[i];                // binary NOT operator
-                                                                 // INSERT_RANDOM_CODE_END
+                                                               // INSERT_RANDOM_CODE_END
         }
         break;
       case 18:
@@ -401,7 +402,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                      // rotate  bits by 4
+          ;                                                    // rotate  bits by 4
           worker.step_3[i] = leftRotate8(worker.step_3[i], 9); // rotate  bits by 3
           // worker.step_3[i] = std::rotl(worker.step_3[i], 1);             // rotate  bits by 1
           // worker.step_3[i] = std::rotl(worker.step_3[i], 5);         // rotate  bits by 5
@@ -412,11 +413,11 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                    // XOR and -
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);              // rotate  bits by 5
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                   // XOR and -
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);             // rotate  bits by 5
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] += worker.step_3[i];                           // +
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] += worker.step_3[i];                          // +
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 20:
@@ -424,21 +425,21 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] ^= worker.step_3[worker.pos2];                    // XOR
-          worker.step_3[i] = reverse8(worker.step_3[i]);                      // reverse bits
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                 // rotate  bits by 2
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
+          worker.step_3[i] = reverse8(worker.step_3[i]);                    // reverse bits
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 21:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                  // rotate  bits by 1
-          worker.step_3[i] ^= worker.step_3[worker.pos2];                    // XOR
-          worker.step_3[i] += worker.step_3[i];                               // +
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
+          worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
+          worker.step_3[i] += worker.step_3[i];                             // +
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-                                                                                // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 22:
@@ -446,10 +447,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] = reverse8(worker.step_3[i]);                  // reverse bits
-          worker.step_3[i] *= worker.step_3[i];                           // *
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);              // rotate  bits by 1
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+          worker.step_3[i] *= worker.step_3[i];                          // *
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);             // rotate  bits by 1
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 23:
@@ -459,21 +460,21 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] = std::rotl(worker.step_3[i], 4);
           ; // rotate  bits by 3
           // worker.step_3[i] = std::rotl(worker.step_3[i], 1);                           // rotate  bits by 1
-          worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];       // ones count bits
+          worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-                                                                                // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 24:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] += worker.step_3[i];                           // +
+          worker.step_3[i] += worker.step_3[i];                          // +
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                    // rotate  bits by 4
+          ;                                                  // rotate  bits by 4
           worker.step_3[i] = std::rotl(worker.step_3[i], 5); // rotate  bits by 5
-                                                               // INSERT_RANDOM_CODE_END
+                                                             // INSERT_RANDOM_CODE_END
         }
         break;
       case 25:
@@ -481,33 +482,33 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                 // rotate  bits by 3
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                // rotate  bits by 3
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                       // XOR and -
-                                                                               // INSERT_RANDOM_CODE_END
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                      // XOR and -
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 26:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] *= worker.step_3[i];                         // *
+          worker.step_3[i] *= worker.step_3[i];                        // *
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-          worker.step_3[i] += worker.step_3[i];                         // +
-          worker.step_3[i] = reverse8(worker.step_3[i]);                // reverse bits
-                                                                          // INSERT_RANDOM_CODE_END
+          worker.step_3[i] += worker.step_3[i];                        // +
+          worker.step_3[i] = reverse8(worker.step_3[i]);               // reverse bits
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 27:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                  // rotate  bits by 5
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                    // rotate  bits by 4
+          ;                                                  // rotate  bits by 4
           worker.step_3[i] = std::rotl(worker.step_3[i], 5); // rotate  bits by 5
-                                                               // INSERT_RANDOM_CODE_END
+                                                             // INSERT_RANDOM_CODE_END
         }
         break;
       case 28:
@@ -515,21 +516,21 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] += worker.step_3[i];                           // +
-          worker.step_3[i] += worker.step_3[i];                           // +
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);              // rotate  bits by 5
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] += worker.step_3[i];                          // +
+          worker.step_3[i] += worker.step_3[i];                          // +
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);             // rotate  bits by 5
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 29:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] *= worker.step_3[i];                           // *
+          worker.step_3[i] *= worker.step_3[i];                          // *
           worker.step_3[i] ^= worker.step_3[worker.pos2];                // XOR
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-          worker.step_3[i] += worker.step_3[i];                           // +
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] += worker.step_3[i];                          // +
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 30:
@@ -538,21 +539,21 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                                 // rotate  bits by 4
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);              // rotate  bits by 5
+          ;                                                              // rotate  bits by 4
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);             // rotate  bits by 5
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 31:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = ~worker.step_3[i];                           // binary NOT operator
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);             // rotate  bits by 2
+          worker.step_3[i] = ~worker.step_3[i];                          // binary NOT operator
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] *= worker.step_3[i];                           // *
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] *= worker.step_3[i];                          // *
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 32:
@@ -563,7 +564,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] = reverse8(worker.step_3[i]);      // reverse bits
           worker.step_3[i] = std::rotl(worker.step_3[i], 3);  // rotate  bits by 3
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
-                                                                // INSERT_RANDOM_CODE_END
+                                                              // INSERT_RANDOM_CODE_END
         }
         break;
       case 33:
@@ -572,21 +573,21 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                // rotate  bits by 4
+          ;                                              // rotate  bits by 4
           worker.step_3[i] = reverse8(worker.step_3[i]); // reverse bits
           worker.step_3[i] *= worker.step_3[i];          // *
-                                                           // INSERT_RANDOM_CODE_END
+                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 34:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                    // XOR and -
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                   // XOR and -
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                    // XOR and -
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                   // XOR and -
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 35:
@@ -596,8 +597,8 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] += worker.step_3[i];              // +
           worker.step_3[i] = ~worker.step_3[i];              // binary NOT operator
           worker.step_3[i] = std::rotl(worker.step_3[i], 1); // rotate  bits by 1
-          worker.step_3[i] ^= worker.step_3[worker.pos2];   // XOR
-                                                               // INSERT_RANDOM_CODE_END
+          worker.step_3[i] ^= worker.step_3[worker.pos2];    // XOR
+                                                             // INSERT_RANDOM_CODE_END
         }
         break;
       case 36:
@@ -605,10 +606,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);            // rotate  bits by 1
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);           // rotate  bits by 2
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);            // rotate  bits by 1
-                                                                          // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);           // rotate  bits by 1
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);          // rotate  bits by 2
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);           // rotate  bits by 1
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 37:
@@ -618,8 +619,8 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);    // shift right
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);    // shift right
-          worker.step_3[i] *= worker.step_3[i];                              // *
-                                                                               // INSERT_RANDOM_CODE_END
+          worker.step_3[i] *= worker.step_3[i];                             // *
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 38:
@@ -627,21 +628,21 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);    // shift right
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                 // rotate  bits by 3
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                // rotate  bits by 3
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-                                                                               // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 39:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                 // rotate  bits by 2
-          worker.step_3[i] ^= worker.step_3[worker.pos2];                    // XOR
-          worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);     // shift right
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+          worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
+          worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);    // shift right
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-                                                                                // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 40:
@@ -652,7 +653,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
           worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
-                                                                               // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 41:
@@ -674,9 +675,9 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] = std::rotl(worker.step_3[i], 4);
           ; // rotate  bits by 1
           // worker.step_3[i] = std::rotl(worker.step_3[i], 3);                // rotate  bits by 3
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                // rotate  bits by 2
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-                                                                               // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 43:
@@ -684,10 +685,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] += worker.step_3[i];                               // +
+          worker.step_3[i] += worker.step_3[i];                             // +
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                        // XOR and -
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                      // XOR and -
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 44:
@@ -696,9 +697,9 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                 // rotate  bits by 3
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                // rotate  bits by 3
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-                                                                               // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 45:
@@ -708,8 +709,8 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] = std::rotl(worker.step_3[i], 10); // rotate  bits by 5
           // worker.step_3[i] = std::rotl(worker.step_3[i], 5);                       // rotate  bits by 5
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];       // ones count bits
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 46:
@@ -717,8 +718,8 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-          worker.step_3[i] += worker.step_3[i];                         // +
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);            // rotate  bits by 5
+          worker.step_3[i] += worker.step_3[i];                        // +
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);           // rotate  bits by 5
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
           ; // rotate  bits by 4
             // INSERT_RANDOM_CODE_END
@@ -728,11 +729,11 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                  // rotate  bits by 5
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                  // rotate  bits by 5
-          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);     // shift left
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 48:
@@ -743,7 +744,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // worker.step_3[i] = ~worker.step_3[i];                    // binary NOT operator
           // worker.step_3[i] = ~worker.step_3[i];                    // binary NOT operator
           worker.step_3[i] = leftRotate8(worker.step_3[i], 5); // rotate  bits by 5
-                                                                 // INSERT_RANDOM_CODE_END
+                                                               // INSERT_RANDOM_CODE_END
         }
         break;
       case 49:
@@ -751,8 +752,8 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-          worker.step_3[i] += worker.step_3[i];                         // +
-          worker.step_3[i] = reverse8(worker.step_3[i]);                // reverse bits
+          worker.step_3[i] += worker.step_3[i];                        // +
+          worker.step_3[i] = reverse8(worker.step_3[i]);               // reverse bits
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
           ; // rotate  bits by 4
             // INSERT_RANDOM_CODE_END
@@ -766,7 +767,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] = std::rotl(worker.step_3[i], 3); // rotate  bits by 3
           worker.step_3[i] += worker.step_3[i];              // +
           worker.step_3[i] = std::rotl(worker.step_3[i], 1); // rotate  bits by 1
-                                                               // INSERT_RANDOM_CODE_END
+                                                             // INSERT_RANDOM_CODE_END
         }
         break;
       case 51:
@@ -777,9 +778,9 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
           ; // rotate  bits by 4
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                      // rotate  bits by 4
+          ;                                                    // rotate  bits by 4
           worker.step_3[i] = leftRotate8(worker.step_3[i], 5); // rotate  bits by 5
-                                                                 // INSERT_RANDOM_CODE_END
+                                                               // INSERT_RANDOM_CODE_END
         }
         break;
       case 52:
@@ -788,16 +789,16 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);    // shift right
-          worker.step_3[i] = ~worker.step_3[i];                              // binary NOT operator
+          worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
-                                                                               // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 53:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] += worker.step_3[i];                         // +
+          worker.step_3[i] += worker.step_3[i];                        // +
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
           ; // rotate  bits by 4
@@ -811,7 +812,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = reverse8(worker.step_3[i]);   // reverse bits
+          worker.step_3[i] = reverse8(worker.step_3[i]);  // reverse bits
           worker.step_3[i] ^= worker.step_3[worker.pos2]; // XOR
           // worker.step_3[i] = ~worker.step_3[i];    // binary NOT operator
           // worker.step_3[i] = ~worker.step_3[i];    // binary NOT operator
@@ -827,9 +828,9 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
           ; // rotate  bits by 4
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                    // rotate  bits by 4
+          ;                                                  // rotate  bits by 4
           worker.step_3[i] = std::rotl(worker.step_3[i], 1); // rotate  bits by 1
-                                                               // INSERT_RANDOM_CODE_END
+                                                             // INSERT_RANDOM_CODE_END
         }
         break;
       case 56:
@@ -840,7 +841,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] *= worker.step_3[i];               // *
           worker.step_3[i] = ~worker.step_3[i];               // binary NOT operator
           worker.step_3[i] = std::rotl(worker.step_3[i], 1);  // rotate  bits by 1
-                                                                // INSERT_RANDOM_CODE_END
+                                                              // INSERT_RANDOM_CODE_END
         }
         break;
       case 57:
@@ -848,52 +849,52 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-          worker.step_3[i] = leftRotate8(worker.step_3[i], 8);               // rotate  bits by 5
+          worker.step_3[i] = leftRotate8(worker.step_3[i], 8);              // rotate  bits by 5
           // worker.step_3[i] = std::rotl(worker.step_3[i], 3);                // rotate  bits by 3
           worker.step_3[i] = reverse8(worker.step_3[i]); // reverse bits
-                                                           // INSERT_RANDOM_CODE_END
+                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 58:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = reverse8(worker.step_3[i]);                      // reverse bits
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                 // rotate  bits by 2
+          worker.step_3[i] = reverse8(worker.step_3[i]);                    // reverse bits
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] += worker.step_3[i];                               // +
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] += worker.step_3[i];                             // +
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 59:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                 // rotate  bits by 1
-          worker.step_3[i] *= worker.step_3[i];                              // *
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
+          worker.step_3[i] *= worker.step_3[i];                             // *
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-          worker.step_3[i] = ~worker.step_3[i];                              // binary NOT operator
-                                                                               // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 60:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] ^= worker.step_3[worker.pos2];   // XOR
+          worker.step_3[i] ^= worker.step_3[worker.pos2];    // XOR
           worker.step_3[i] = ~worker.step_3[i];              // binary NOT operator
           worker.step_3[i] *= worker.step_3[i];              // *
           worker.step_3[i] = std::rotl(worker.step_3[i], 3); // rotate  bits by 3
-                                                               // INSERT_RANDOM_CODE_END
+                                                             // INSERT_RANDOM_CODE_END
         }
         break;
       case 61:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);              // rotate  bits by 5
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);             // rotate  bits by 5
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] = leftRotate8(worker.step_3[i], 8);            // rotate  bits by 3
+          worker.step_3[i] = leftRotate8(worker.step_3[i], 8);           // rotate  bits by 3
           // worker.step_3[i] = std::rotl(worker.step_3[i], 5);// rotate  bits by 5
           // INSERT_RANDOM_CODE_END
         }
@@ -903,21 +904,21 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] = ~worker.step_3[i];                               // binary NOT operator
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                 // rotate  bits by 2
-          worker.step_3[i] += worker.step_3[i];                               // +
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+          worker.step_3[i] += worker.step_3[i];                             // +
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 63:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);            // rotate  bits by 5
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);           // rotate  bits by 5
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                  // XOR and -
-          worker.step_3[i] += worker.step_3[i];                         // +
-                                                                          // INSERT_RANDOM_CODE_END
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                 // XOR and -
+          worker.step_3[i] += worker.step_3[i];                        // +
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 64:
@@ -925,11 +926,11 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= worker.step_3[worker.pos2]; // XOR
-          worker.step_3[i] = reverse8(worker.step_3[i]);   // reverse bits
+          worker.step_3[i] = reverse8(worker.step_3[i]);  // reverse bits
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                       // rotate  bits by 4
+          ;                                     // rotate  bits by 4
           worker.step_3[i] *= worker.step_3[i]; // *
-                                                  // INSERT_RANDOM_CODE_END
+                                                // INSERT_RANDOM_CODE_END
         }
         break;
       case 65:
@@ -940,7 +941,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // worker.step_3[i] = std::rotl(worker.step_3[i], 3);             // rotate  bits by 3
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
           worker.step_3[i] *= worker.step_3[i];               // *
-                                                                // INSERT_RANDOM_CODE_END
+                                                              // INSERT_RANDOM_CODE_END
         }
         break;
       case 66:
@@ -950,20 +951,20 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
           worker.step_3[i] = reverse8(worker.step_3[i]);      // reverse bits
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                    // rotate  bits by 4
+          ;                                                  // rotate  bits by 4
           worker.step_3[i] = std::rotl(worker.step_3[i], 1); // rotate  bits by 1
-                                                               // INSERT_RANDOM_CODE_END
+                                                             // INSERT_RANDOM_CODE_END
         }
         break;
       case 67:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);            // rotate  bits by 1
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);           // rotate  bits by 1
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);           // rotate  bits by 2
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);            // rotate  bits by 5
-                                                                          // INSERT_RANDOM_CODE_END
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);          // rotate  bits by 2
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);           // rotate  bits by 5
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 68:
@@ -971,22 +972,22 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] = ~worker.step_3[i];                               // binary NOT operator
+          worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                  // rotate  bits by 4
+          ;                                               // rotate  bits by 4
           worker.step_3[i] ^= worker.step_3[worker.pos2]; // XOR
-                                                             // INSERT_RANDOM_CODE_END
+                                                          // INSERT_RANDOM_CODE_END
         }
         break;
       case 69:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] += worker.step_3[i];                           // +
-          worker.step_3[i] *= worker.step_3[i];                           // *
-          worker.step_3[i] = reverse8(worker.step_3[i]);                  // reverse bits
+          worker.step_3[i] += worker.step_3[i];                          // +
+          worker.step_3[i] *= worker.step_3[i];                          // *
+          worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 70:
@@ -994,7 +995,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= worker.step_3[worker.pos2];                // XOR
-          worker.step_3[i] *= worker.step_3[i];                           // *
+          worker.step_3[i] *= worker.step_3[i];                          // *
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
           ; // rotate  bits by 4
@@ -1005,22 +1006,22 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);              // rotate  bits by 5
-          worker.step_3[i] = ~worker.step_3[i];                           // binary NOT operator
-          worker.step_3[i] *= worker.step_3[i];                           // *
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);             // rotate  bits by 5
+          worker.step_3[i] = ~worker.step_3[i];                          // binary NOT operator
+          worker.step_3[i] *= worker.step_3[i];                          // *
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 72:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = reverse8(worker.step_3[i]);                  // reverse bits
+          worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];   // ones count bits
           worker.step_3[i] ^= worker.step_3[worker.pos2];                // XOR
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 73:
@@ -1028,29 +1029,29 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-          worker.step_3[i] = reverse8(worker.step_3[i]);                // reverse bits
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);            // rotate  bits by 5
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                  // XOR and -
-                                                                          // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = reverse8(worker.step_3[i]);               // reverse bits
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);           // rotate  bits by 5
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                 // XOR and -
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 74:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] *= worker.step_3[i];                               // *
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                  // rotate  bits by 3
-          worker.step_3[i] = reverse8(worker.step_3[i]);                      // reverse bits
+          worker.step_3[i] *= worker.step_3[i];                             // *
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                // rotate  bits by 3
+          worker.step_3[i] = reverse8(worker.step_3[i]);                    // reverse bits
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-                                                                                // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 75:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] *= worker.step_3[i];                               // *
-          worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];       // ones count bits
+          worker.step_3[i] *= worker.step_3[i];                             // *
+          worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
           ; // rotate  bits by 4
@@ -1062,21 +1063,21 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                // rotate  bits by 2
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                 // rotate  bits by 5
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);    // shift right
-                                                                               // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 77:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);              // rotate  bits by 3
-          worker.step_3[i] += worker.step_3[i];                           // +
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);             // rotate  bits by 3
+          worker.step_3[i] += worker.step_3[i];                          // +
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];   // ones count bits
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 78:
@@ -1084,10 +1085,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-          worker.step_3[i] = reverse8(worker.step_3[i]);                     // reverse bits
-          worker.step_3[i] *= worker.step_3[i];                              // *
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                       // XOR and -
-                                                                               // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = reverse8(worker.step_3[i]);                    // reverse bits
+          worker.step_3[i] *= worker.step_3[i];                             // *
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                      // XOR and -
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 79:
@@ -1095,22 +1096,22 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                     // rotate  bits by 4
+          ;                                                   // rotate  bits by 4
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
           worker.step_3[i] += worker.step_3[i];               // +
           worker.step_3[i] *= worker.step_3[i];               // *
-                                                                // INSERT_RANDOM_CODE_END
+                                                              // INSERT_RANDOM_CODE_END
         }
         break;
       case 80:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]);  // rotate  bits by random
-          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);     // shift left
-          worker.step_3[i] += worker.step_3[i];                               // +
+          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+          worker.step_3[i] += worker.step_3[i];                             // +
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-                                                                                // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 81:
@@ -1118,11 +1119,11 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                                    // rotate  bits by 4
+          ;                                                                 // rotate  bits by 4
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
-                                                                               // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 82:
@@ -1133,7 +1134,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // worker.step_3[i] = ~worker.step_3[i];        // binary NOT operator
           // worker.step_3[i] = ~worker.step_3[i];        // binary NOT operator
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 83:
@@ -1141,21 +1142,21 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] = reverse8(worker.step_3[i]);                  // reverse bits
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);              // rotate  bits by 3
-          worker.step_3[i] = reverse8(worker.step_3[i]);                  // reverse bits
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);             // rotate  bits by 3
+          worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 84:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                    // XOR and -
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);              // rotate  bits by 1
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                   // XOR and -
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);             // rotate  bits by 1
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] += worker.step_3[i];                           // +
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] += worker.step_3[i];                          // +
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 85:
@@ -1166,7 +1167,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
-                                                                               // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 86:
@@ -1174,12 +1175,12 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                                    // rotate  bits by 4
+          ;                                                                 // rotate  bits by 4
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                       // rotate  bits by 4
+          ;                                     // rotate  bits by 4
           worker.step_3[i] = ~worker.step_3[i]; // binary NOT operator
-                                                  // INSERT_RANDOM_CODE_END
+                                                // INSERT_RANDOM_CODE_END
         }
         break;
       case 87:
@@ -1189,9 +1190,9 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] += worker.step_3[i];              // +
           worker.step_3[i] = std::rotl(worker.step_3[i], 3); // rotate  bits by 3
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                       // rotate  bits by 4
+          ;                                     // rotate  bits by 4
           worker.step_3[i] += worker.step_3[i]; // +
-                                                  // INSERT_RANDOM_CODE_END
+                                                // INSERT_RANDOM_CODE_END
         }
         break;
       case 88:
@@ -1202,7 +1203,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] = std::rotl(worker.step_3[i], 1);  // rotate  bits by 1
           worker.step_3[i] *= worker.step_3[i];               // *
           worker.step_3[i] = ~worker.step_3[i];               // binary NOT operator
-                                                                // INSERT_RANDOM_CODE_END
+                                                              // INSERT_RANDOM_CODE_END
         }
         break;
       case 89:
@@ -1213,7 +1214,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] *= worker.step_3[i];               // *
           worker.step_3[i] = ~worker.step_3[i];               // binary NOT operator
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
-                                                                // INSERT_RANDOM_CODE_END
+                                                              // INSERT_RANDOM_CODE_END
         }
         break;
       case 90:
@@ -1224,52 +1225,52 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] = std::rotl(worker.step_3[i], 6); // rotate  bits by 5
           // worker.step_3[i] = std::rotl(worker.step_3[i], 1);    // rotate  bits by 1
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 91:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];       // ones count bits
+          worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                // rotate  bits by 4
+          ;                                              // rotate  bits by 4
           worker.step_3[i] = reverse8(worker.step_3[i]); // reverse bits
-                                                           // INSERT_RANDOM_CODE_END
+                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 92:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];       // ones count bits
-          worker.step_3[i] = ~worker.step_3[i];                               // binary NOT operator
-          worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];       // ones count bits
+          worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
+          worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
+          worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-                                                                                // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 93:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                 // rotate  bits by 2
-          worker.step_3[i] *= worker.step_3[i];                               // *
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+          worker.step_3[i] *= worker.step_3[i];                             // *
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] += worker.step_3[i];                               // +
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] += worker.step_3[i];                             // +
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 94:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                  // rotate  bits by 1
-          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]);  // rotate  bits by random
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
+          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);     // shift left
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 95:
@@ -1287,22 +1288,22 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);           // rotate  bits by 2
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);           // rotate  bits by 2
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);          // rotate  bits by 2
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);          // rotate  bits by 2
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);            // rotate  bits by 1
-                                                                          // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);           // rotate  bits by 1
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 97:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);              // rotate  bits by 1
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);             // rotate  bits by 1
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];   // ones count bits
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 98:
@@ -1310,7 +1311,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                                 // rotate  bits by 4
+          ;                                                              // rotate  bits by 4
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
@@ -1323,11 +1324,11 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                                 // rotate  bits by 4
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                    // XOR and -
-          worker.step_3[i] = reverse8(worker.step_3[i]);                  // reverse bits
+          ;                                                              // rotate  bits by 4
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                   // XOR and -
+          worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 100:
@@ -1336,9 +1337,9 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
-          worker.step_3[i] = reverse8(worker.step_3[i]);                     // reverse bits
+          worker.step_3[i] = reverse8(worker.step_3[i]);                    // reverse bits
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
-                                                                               // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 101:
@@ -1348,8 +1349,8 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];   // ones count bits
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-          worker.step_3[i] = ~worker.step_3[i];                           // binary NOT operator
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = ~worker.step_3[i];                          // binary NOT operator
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 102:
@@ -1360,29 +1361,29 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] -= (worker.step_3[i] ^ 97);       // XOR and -
           worker.step_3[i] += worker.step_3[i];              // +
           worker.step_3[i] = std::rotl(worker.step_3[i], 3); // rotate  bits by 3
-                                                               // INSERT_RANDOM_CODE_END
+                                                             // INSERT_RANDOM_CODE_END
         }
         break;
       case 103:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                 // rotate  bits by 1
-          worker.step_3[i] = reverse8(worker.step_3[i]);                     // reverse bits
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
+          worker.step_3[i] = reverse8(worker.step_3[i]);                    // reverse bits
           worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-                                                                               // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 104:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = reverse8(worker.step_3[i]);                // reverse bits
+          worker.step_3[i] = reverse8(worker.step_3[i]);               // reverse bits
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);            // rotate  bits by 5
-          worker.step_3[i] += worker.step_3[i];                         // +
-                                                                          // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);           // rotate  bits by 5
+          worker.step_3[i] += worker.step_3[i];                        // +
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 105:
@@ -1390,10 +1391,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                 // rotate  bits by 3
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                // rotate  bits by 3
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                // rotate  bits by 2
-                                                                               // INSERT_RANDOM_CODE_END
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 106:
@@ -1402,10 +1403,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = reverse8(worker.step_3[i]); // reverse bits
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                    // rotate  bits by 4
+          ;                                                  // rotate  bits by 4
           worker.step_3[i] = std::rotl(worker.step_3[i], 1); // rotate  bits by 1
           worker.step_3[i] *= worker.step_3[i];              // *
-                                                               // INSERT_RANDOM_CODE_END
+                                                             // INSERT_RANDOM_CODE_END
         }
         break;
       case 107:
@@ -1413,8 +1414,8 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);             // rotate  bits by 2
-          worker.step_3[i] = std::rotl(worker.step_3[i], 6);              // rotate  bits by 5
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
+          worker.step_3[i] = std::rotl(worker.step_3[i], 6);             // rotate  bits by 5
           // worker.step_3[i] = std::rotl(worker.step_3[i], 1);             // rotate  bits by 1
           // INSERT_RANDOM_CODE_END
         }
@@ -1423,44 +1424,44 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] ^= worker.step_3[worker.pos2];                    // XOR
-          worker.step_3[i] = ~worker.step_3[i];                               // binary NOT operator
+          worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
+          worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                 // rotate  bits by 2
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 109:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] *= worker.step_3[i];                              // *
+          worker.step_3[i] *= worker.step_3[i];                             // *
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
           worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                // rotate  bits by 2
-                                                                               // INSERT_RANDOM_CODE_END
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 110:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] += worker.step_3[i];                           // +
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);             // rotate  bits by 2
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);             // rotate  bits by 2
+          worker.step_3[i] += worker.step_3[i];                          // +
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 111:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] *= worker.step_3[i];                           // *
-          worker.step_3[i] = reverse8(worker.step_3[i]);                  // reverse bits
-          worker.step_3[i] *= worker.step_3[i];                           // *
+          worker.step_3[i] *= worker.step_3[i];                          // *
+          worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+          worker.step_3[i] *= worker.step_3[i];                          // *
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 112:
@@ -1471,7 +1472,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] = ~worker.step_3[i];                // binary NOT operator
           worker.step_3[i] = leftRotate8(worker.step_3[i], 5); // rotate  bits by 5
           worker.step_3[i] -= (worker.step_3[i] ^ 97);         // XOR and -
-                                                                 // INSERT_RANDOM_CODE_END
+                                                               // INSERT_RANDOM_CODE_END
         }
         break;
       case 113:
@@ -1481,30 +1482,30 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] = std::rotl(worker.step_3[i], 6); // rotate  bits by 5
           // worker.step_3[i] = std::rotl(worker.step_3[i], 1);                           // rotate  bits by 1
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-          worker.step_3[i] = ~worker.step_3[i];                         // binary NOT operator
-                                                                          // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = ~worker.step_3[i];                        // binary NOT operator
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 114:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                 // rotate  bits by 1
-          worker.step_3[i] = reverse8(worker.step_3[i]);                     // reverse bits
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
+          worker.step_3[i] = reverse8(worker.step_3[i]);                    // reverse bits
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-          worker.step_3[i] = ~worker.step_3[i];                              // binary NOT operator
-                                                                               // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 115:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]);  // rotate  bits by random
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                  // rotate  bits by 5
+          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                  // rotate  bits by 3
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                // rotate  bits by 3
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 116:
@@ -1512,21 +1513,21 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] ^= worker.step_3[worker.pos2];                    // XOR
-          worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];       // ones count bits
-          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);     // shift left
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
+          worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
+          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 117:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);     // shift left
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                  // rotate  bits by 3
-          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);     // shift left
+          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                // rotate  bits by 3
+          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-                                                                                // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 118:
@@ -1534,10 +1535,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-          worker.step_3[i] += worker.step_3[i];                           // +
+          worker.step_3[i] += worker.step_3[i];                          // +
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);              // rotate  bits by 5
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);             // rotate  bits by 5
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 119:
@@ -1547,8 +1548,8 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] = reverse8(worker.step_3[i]);      // reverse bits
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
           worker.step_3[i] = ~worker.step_3[i];               // binary NOT operator
-          worker.step_3[i] ^= worker.step_3[worker.pos2];    // XOR
-                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] ^= worker.step_3[worker.pos2];     // XOR
+                                                              // INSERT_RANDOM_CODE_END
         }
         break;
       case 120:
@@ -1557,9 +1558,9 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
           worker.step_3[i] *= worker.step_3[i];               // *
-          worker.step_3[i] ^= worker.step_3[worker.pos2];    // XOR
+          worker.step_3[i] ^= worker.step_3[worker.pos2];     // XOR
           worker.step_3[i] = reverse8(worker.step_3[i]);      // reverse bits
-                                                                // INSERT_RANDOM_CODE_END
+                                                              // INSERT_RANDOM_CODE_END
         }
         break;
       case 121:
@@ -1567,10 +1568,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-          worker.step_3[i] += worker.step_3[i];                           // +
+          worker.step_3[i] += worker.step_3[i];                          // +
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];   // ones count bits
-          worker.step_3[i] *= worker.step_3[i];                           // *
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] *= worker.step_3[i];                          // *
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 122:
@@ -1578,11 +1579,11 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                                    // rotate  bits by 4
+          ;                                                                 // rotate  bits by 4
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                 // rotate  bits by 5
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                // rotate  bits by 2
-                                                                               // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 123:
@@ -1590,8 +1591,8 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] = ~worker.step_3[i];                               // binary NOT operator
-          worker.step_3[i] = std::rotl(worker.step_3[i], 6);                  // rotate  bits by 3
+          worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
+          worker.step_3[i] = std::rotl(worker.step_3[i], 6);                // rotate  bits by 3
           // worker.step_3[i] = std::rotl(worker.step_3[i], 3); // rotate  bits by 3
           // INSERT_RANDOM_CODE_END
         }
@@ -1602,20 +1603,20 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
-          worker.step_3[i] ^= worker.step_3[worker.pos2];    // XOR
+          worker.step_3[i] ^= worker.step_3[worker.pos2];     // XOR
           worker.step_3[i] = ~worker.step_3[i];               // binary NOT operator
-                                                                // INSERT_RANDOM_CODE_END
+                                                              // INSERT_RANDOM_CODE_END
         }
         break;
       case 125:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = reverse8(worker.step_3[i]);                  // reverse bits
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);             // rotate  bits by 2
-          worker.step_3[i] += worker.step_3[i];                           // +
+          worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
+          worker.step_3[i] += worker.step_3[i];                          // +
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 126:
@@ -1626,18 +1627,18 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // worker.step_3[i] = std::rotl(worker.step_3[i], 1); // rotate  bits by 1
           // worker.step_3[i] = leftRotate8(worker.step_3[i], 5); // rotate  bits by 5
           worker.step_3[i] = reverse8(worker.step_3[i]); // reverse bits
-                                                           // INSERT_RANDOM_CODE_END
+                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 127:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);     // shift left
-          worker.step_3[i] *= worker.step_3[i];                               // *
+          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+          worker.step_3[i] *= worker.step_3[i];                             // *
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] ^= worker.step_3[worker.pos2];                    // XOR
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 128:
@@ -1645,21 +1646,21 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                // rotate  bits by 2
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                // rotate  bits by 2
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                 // rotate  bits by 5
-                                                                               // INSERT_RANDOM_CODE_END
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 129:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = ~worker.step_3[i];                           // binary NOT operator
+          worker.step_3[i] = ~worker.step_3[i];                          // binary NOT operator
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];   // ones count bits
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];   // ones count bits
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 130:
@@ -1668,7 +1669,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);    // shift right
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                 // rotate  bits by 1
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
           ; // rotate  bits by 4
             // INSERT_RANDOM_CODE_END
@@ -1678,11 +1679,11 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                  // XOR and -
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);            // rotate  bits by 1
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                 // XOR and -
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);           // rotate  bits by 1
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-          worker.step_3[i] *= worker.step_3[i];                         // *
-                                                                          // INSERT_RANDOM_CODE_END
+          worker.step_3[i] *= worker.step_3[i];                        // *
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 132:
@@ -1690,10 +1691,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] = reverse8(worker.step_3[i]);                      // reverse bits
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                  // rotate  bits by 5
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                 // rotate  bits by 2
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = reverse8(worker.step_3[i]);                    // reverse bits
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 133:
@@ -1701,10 +1702,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= worker.step_3[worker.pos2];                // XOR
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);              // rotate  bits by 5
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);             // rotate  bits by 2
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);             // rotate  bits by 5
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 134:
@@ -1713,10 +1714,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = ~worker.step_3[i]; // binary NOT operator
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                                     // rotate  bits by 4
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                  // rotate  bits by 1
+          ;                                                                 // rotate  bits by 4
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-                                                                                // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 135:
@@ -1724,10 +1725,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);             // rotate  bits by 2
-          worker.step_3[i] += worker.step_3[i];                           // +
-          worker.step_3[i] = reverse8(worker.step_3[i]);                  // reverse bits
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
+          worker.step_3[i] += worker.step_3[i];                          // +
+          worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 136:
@@ -1735,21 +1736,21 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                    // XOR and -
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                   // XOR and -
           worker.step_3[i] ^= worker.step_3[worker.pos2];                // XOR
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);              // rotate  bits by 5
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);             // rotate  bits by 5
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 137:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                 // rotate  bits by 5
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);    // shift right
-          worker.step_3[i] = reverse8(worker.step_3[i]);                     // reverse bits
+          worker.step_3[i] = reverse8(worker.step_3[i]);                    // reverse bits
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-                                                                               // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 138:
@@ -1758,9 +1759,9 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= worker.step_3[worker.pos2]; // XOR
           worker.step_3[i] ^= worker.step_3[worker.pos2]; // XOR
-          worker.step_3[i] += worker.step_3[i];            // +
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);     // XOR and -
-                                                             // INSERT_RANDOM_CODE_END
+          worker.step_3[i] += worker.step_3[i];           // +
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);    // XOR and -
+                                                          // INSERT_RANDOM_CODE_END
         }
         break;
       case 139:
@@ -1771,7 +1772,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // worker.step_3[i] = std::rotl(worker.step_3[i], 3);             // rotate  bits by 3
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
           worker.step_3[i] = std::rotl(worker.step_3[i], 3);  // rotate  bits by 3
-                                                                // INSERT_RANDOM_CODE_END
+                                                              // INSERT_RANDOM_CODE_END
         }
         break;
       case 140:
@@ -1780,20 +1781,20 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = std::rotl(worker.step_3[i], 1);   // rotate  bits by 1
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);  // rotate  bits by 2
-          worker.step_3[i] ^= worker.step_3[worker.pos2];     // XOR
+          worker.step_3[i] ^= worker.step_3[worker.pos2];      // XOR
           worker.step_3[i] = leftRotate8(worker.step_3[i], 5); // rotate  bits by 5
-                                                                 // INSERT_RANDOM_CODE_END
+                                                               // INSERT_RANDOM_CODE_END
         }
         break;
       case 141:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);            // rotate  bits by 1
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                  // XOR and -
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);           // rotate  bits by 1
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                 // XOR and -
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-          worker.step_3[i] += worker.step_3[i];                         // +
-                                                                          // INSERT_RANDOM_CODE_END
+          worker.step_3[i] += worker.step_3[i];                        // +
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 142:
@@ -1801,10 +1802,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                  // rotate  bits by 5
-          worker.step_3[i] = reverse8(worker.step_3[i]);                      // reverse bits
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                 // rotate  bits by 2
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+          worker.step_3[i] = reverse8(worker.step_3[i]);                    // reverse bits
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 143:
@@ -1812,10 +1813,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                  // rotate  bits by 3
-          worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);     // shift right
-          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);     // shift left
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                // rotate  bits by 3
+          worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);    // shift right
+          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 144:
@@ -1824,9 +1825,9 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
-          worker.step_3[i] = ~worker.step_3[i];                              // binary NOT operator
+          worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-                                                                               // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 145:
@@ -1835,7 +1836,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = reverse8(worker.step_3[i]); // reverse bits
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                     // rotate  bits by 4
+          ;                                                   // rotate  bits by 4
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
           ; // rotate  bits by 4
@@ -1847,22 +1848,22 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);     // shift left
+          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];       // ones count bits
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 147:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = ~worker.step_3[i];                           // binary NOT operator
+          worker.step_3[i] = ~worker.step_3[i];                          // binary NOT operator
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                       // rotate  bits by 4
+          ;                                     // rotate  bits by 4
           worker.step_3[i] *= worker.step_3[i]; // *
-                                                  // INSERT_RANDOM_CODE_END
+                                                // INSERT_RANDOM_CODE_END
         }
         break;
       case 148:
@@ -1870,10 +1871,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                  // rotate  bits by 5
-          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);     // shift left
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                        // XOR and -
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                      // XOR and -
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 149:
@@ -1882,32 +1883,32 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= worker.step_3[worker.pos2]; // XOR
           worker.step_3[i] = reverse8(worker.step_3[i]);
-          ;                                              // reverse bits
+          ;                                            // reverse bits
           worker.step_3[i] -= (worker.step_3[i] ^ 97); // XOR and -
           worker.step_3[i] += worker.step_3[i];        // +
-                                                         // INSERT_RANDOM_CODE_END
+                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 150:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);     // shift left
-          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);     // shift left
-          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);     // shift left
+          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-                                                                                // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 151:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] += worker.step_3[i];                           // +
+          worker.step_3[i] += worker.step_3[i];                          // +
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] *= worker.step_3[i];                           // *
+          worker.step_3[i] *= worker.step_3[i];                          // *
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 152:
@@ -1915,10 +1916,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-          worker.step_3[i] = ~worker.step_3[i];                           // binary NOT operator
+          worker.step_3[i] = ~worker.step_3[i];                          // binary NOT operator
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);             // rotate  bits by 2
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 153:
@@ -1937,22 +1938,22 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);            // rotate  bits by 5
-          worker.step_3[i] = ~worker.step_3[i];                         // binary NOT operator
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);           // rotate  bits by 5
+          worker.step_3[i] = ~worker.step_3[i];                        // binary NOT operator
           worker.step_3[i] ^= worker.step_3[worker.pos2];              // XOR
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-                                                                          // INSERT_RANDOM_CODE_END
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 155:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                  // XOR and -
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                 // XOR and -
           worker.step_3[i] ^= worker.step_3[worker.pos2];              // XOR
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
           worker.step_3[i] ^= worker.step_3[worker.pos2];              // XOR
-                                                                          // INSERT_RANDOM_CODE_END
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 156:
@@ -1974,8 +1975,8 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);    // shift right
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                 // rotate  bits by 1
-                                                                               // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 158:
@@ -1983,21 +1984,21 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);            // rotate  bits by 3
-          worker.step_3[i] += worker.step_3[i];                         // +
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);            // rotate  bits by 1
-                                                                          // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);           // rotate  bits by 3
+          worker.step_3[i] += worker.step_3[i];                        // +
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);           // rotate  bits by 1
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 159:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                       // XOR and -
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                      // XOR and -
           worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
           worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
-                                                                               // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 160:
@@ -2005,7 +2006,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-          worker.step_3[i] = reverse8(worker.step_3[i]);                  // reverse bits
+          worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
           worker.step_3[i] = std::rotl(worker.step_3[i], 4);
           ; // rotate  bits by 1
           // worker.step_3[i] = std::rotl(worker.step_3[i], 3);    // rotate  bits by 3
@@ -2018,9 +2019,9 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
           worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                 // rotate  bits by 5
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-                                                                               // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 162:
@@ -2031,7 +2032,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] = reverse8(worker.step_3[i]);      // reverse bits
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
           worker.step_3[i] -= (worker.step_3[i] ^ 97);        // XOR and -
-                                                                // INSERT_RANDOM_CODE_END
+                                                              // INSERT_RANDOM_CODE_END
         }
         break;
       case 163:
@@ -2039,22 +2040,22 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                    // XOR and -
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                   // XOR and -
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                    // rotate  bits by 4
+          ;                                                  // rotate  bits by 4
           worker.step_3[i] = std::rotl(worker.step_3[i], 1); // rotate  bits by 1
-                                                               // INSERT_RANDOM_CODE_END
+                                                             // INSERT_RANDOM_CODE_END
         }
         break;
       case 164:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] *= worker.step_3[i];                         // *
+          worker.step_3[i] *= worker.step_3[i];                        // *
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                  // XOR and -
-          worker.step_3[i] = ~worker.step_3[i];                         // binary NOT operator
-                                                                          // INSERT_RANDOM_CODE_END
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                 // XOR and -
+          worker.step_3[i] = ~worker.step_3[i];                        // binary NOT operator
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 165:
@@ -2062,11 +2063,11 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                                 // rotate  bits by 4
+          ;                                                              // rotate  bits by 4
           worker.step_3[i] ^= worker.step_3[worker.pos2];                // XOR
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] += worker.step_3[i];                           // +
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] += worker.step_3[i];                          // +
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 166:
@@ -2077,7 +2078,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] += worker.step_3[i];               // +
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
           worker.step_3[i] = ~worker.step_3[i];               // binary NOT operator
-                                                                // INSERT_RANDOM_CODE_END
+                                                              // INSERT_RANDOM_CODE_END
         }
         break;
       case 167:
@@ -2086,32 +2087,32 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           // worker.step_3[i] = ~worker.step_3[i];        // binary NOT operator
           // worker.step_3[i] = ~worker.step_3[i];        // binary NOT operator
-          worker.step_3[i] *= worker.step_3[i];                           // *
+          worker.step_3[i] *= worker.step_3[i];                          // *
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 168:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]);  // rotate  bits by random
+          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]);  // rotate  bits by random
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                  // rotate  bits by 1
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 169:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);              // rotate  bits by 1
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);             // rotate  bits by 1
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                                     // rotate  bits by 4
+          ;                                                                 // rotate  bits by 4
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-                                                                                // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 170:
@@ -2122,18 +2123,18 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] = reverse8(worker.step_3[i]); // reverse bits
           worker.step_3[i] -= (worker.step_3[i] ^ 97);   // XOR and -
           worker.step_3[i] *= worker.step_3[i];          // *
-                                                           // INSERT_RANDOM_CODE_END
+                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 171:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);            // rotate  bits by 3
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                  // XOR and -
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);           // rotate  bits by 3
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                 // XOR and -
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-          worker.step_3[i] = reverse8(worker.step_3[i]);                // reverse bits
-                                                                          // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = reverse8(worker.step_3[i]);               // reverse bits
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 172:
@@ -2141,33 +2142,33 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                                 // rotate  bits by 4
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                    // XOR and -
+          ;                                                              // rotate  bits by 4
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                   // XOR and -
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);              // rotate  bits by 1
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);             // rotate  bits by 1
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 173:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = ~worker.step_3[i];                           // binary NOT operator
+          worker.step_3[i] = ~worker.step_3[i];                          // binary NOT operator
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] *= worker.step_3[i];                           // *
-          worker.step_3[i] += worker.step_3[i];                           // +
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] *= worker.step_3[i];                          // *
+          worker.step_3[i] += worker.step_3[i];                          // +
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 174:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = ~worker.step_3[i];                              // binary NOT operator
+          worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
-                                                                               // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 175:
@@ -2178,29 +2179,29 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] -= (worker.step_3[i] ^ 97);         // XOR and -
           worker.step_3[i] *= worker.step_3[i];                // *
           worker.step_3[i] = leftRotate8(worker.step_3[i], 5); // rotate  bits by 5
-                                                                 // INSERT_RANDOM_CODE_END
+                                                               // INSERT_RANDOM_CODE_END
         }
         break;
       case 176:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] ^= worker.step_3[worker.pos2];     // XOR
+          worker.step_3[i] ^= worker.step_3[worker.pos2];      // XOR
           worker.step_3[i] *= worker.step_3[i];                // *
-          worker.step_3[i] ^= worker.step_3[worker.pos2];     // XOR
+          worker.step_3[i] ^= worker.step_3[worker.pos2];      // XOR
           worker.step_3[i] = leftRotate8(worker.step_3[i], 5); // rotate  bits by 5
-                                                                 // INSERT_RANDOM_CODE_END
+                                                               // INSERT_RANDOM_CODE_END
         }
         break;
       case 177:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];       // ones count bits
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                 // rotate  bits by 2
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                 // rotate  bits by 2
+          worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-                                                                                // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 178:
@@ -2208,21 +2209,21 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] += worker.step_3[i];                               // +
-          worker.step_3[i] = ~worker.step_3[i];                               // binary NOT operator
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                  // rotate  bits by 1
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] += worker.step_3[i];                             // +
+          worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 179:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);             // rotate  bits by 2
-          worker.step_3[i] += worker.step_3[i];                           // +
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
+          worker.step_3[i] += worker.step_3[i];                          // +
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-          worker.step_3[i] = reverse8(worker.step_3[i]);                  // reverse bits
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 180:
@@ -2231,28 +2232,28 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                  // rotate  bits by 4
+          ;                                               // rotate  bits by 4
           worker.step_3[i] ^= worker.step_3[worker.pos2]; // XOR
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);     // XOR and -
-                                                             // INSERT_RANDOM_CODE_END
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);    // XOR and -
+                                                          // INSERT_RANDOM_CODE_END
         }
         break;
       case 181:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = ~worker.step_3[i];                           // binary NOT operator
+          worker.step_3[i] = ~worker.step_3[i];                          // binary NOT operator
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);             // rotate  bits by 2
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);              // rotate  bits by 5
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);             // rotate  bits by 5
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 182:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] ^= worker.step_3[worker.pos2];   // XOR
+          worker.step_3[i] ^= worker.step_3[worker.pos2];    // XOR
           worker.step_3[i] = std::rotl(worker.step_3[i], 6); // rotate  bits by 1
           // worker.step_3[i] = std::rotl(worker.step_3[i], 5);         // rotate  bits by 5
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
@@ -2268,7 +2269,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] -= (worker.step_3[i] ^ 97); // XOR and -
           worker.step_3[i] -= (worker.step_3[i] ^ 97); // XOR and -
           worker.step_3[i] *= worker.step_3[i];        // *
-                                                         // INSERT_RANDOM_CODE_END
+                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 184:
@@ -2276,10 +2277,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] *= worker.step_3[i];                           // *
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);              // rotate  bits by 5
+          worker.step_3[i] *= worker.step_3[i];                          // *
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);             // rotate  bits by 5
           worker.step_3[i] ^= worker.step_3[worker.pos2];                // XOR
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 185:
@@ -2288,10 +2289,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = ~worker.step_3[i]; // binary NOT operator
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                                 // rotate  bits by 4
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);              // rotate  bits by 5
+          ;                                                              // rotate  bits by 4
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);             // rotate  bits by 5
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 186:
@@ -2300,21 +2301,21 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                                 // rotate  bits by 4
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                    // XOR and -
+          ;                                                              // rotate  bits by 4
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                   // XOR and -
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 187:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] ^= worker.step_3[worker.pos2];   // XOR
+          worker.step_3[i] ^= worker.step_3[worker.pos2];    // XOR
           worker.step_3[i] = ~worker.step_3[i];              // binary NOT operator
           worker.step_3[i] += worker.step_3[i];              // +
           worker.step_3[i] = std::rotl(worker.step_3[i], 3); // rotate  bits by 3
-                                                               // INSERT_RANDOM_CODE_END
+                                                             // INSERT_RANDOM_CODE_END
         }
         break;
       case 188:
@@ -2322,7 +2323,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                               // rotate  bits by 4
+          ;                                                            // rotate  bits by 4
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
           ; // rotate  bits by 4
@@ -2337,43 +2338,43 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = leftRotate8(worker.step_3[i], 5); // rotate  bits by 5
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                  // rotate  bits by 4
+          ;                                               // rotate  bits by 4
           worker.step_3[i] ^= worker.step_3[worker.pos2]; // XOR
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);     // XOR and -
-                                                             // INSERT_RANDOM_CODE_END
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);    // XOR and -
+                                                          // INSERT_RANDOM_CODE_END
         }
         break;
       case 190:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                  // rotate  bits by 5
-          worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);     // shift right
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+          worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);    // shift right
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                 // rotate  bits by 2
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 191:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] += worker.step_3[i];                              // +
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                 // rotate  bits by 3
+          worker.step_3[i] += worker.step_3[i];                             // +
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                // rotate  bits by 3
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);    // shift right
-                                                                               // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 192:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] += worker.step_3[i];                           // +
+          worker.step_3[i] += worker.step_3[i];                          // +
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] += worker.step_3[i];                           // +
-          worker.step_3[i] *= worker.step_3[i];                           // *
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] += worker.step_3[i];                          // +
+          worker.step_3[i] *= worker.step_3[i];                          // *
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 193:
@@ -2381,10 +2382,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);     // shift left
-          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]);  // rotate  bits by random
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                  // rotate  bits by 1
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 194:
@@ -2392,10 +2393,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]);  // rotate  bits by random
-          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);     // shift left
+          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-                                                                                // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 195:
@@ -2403,7 +2404,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);           // rotate  bits by 2
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);          // rotate  bits by 2
           worker.step_3[i] ^= worker.step_3[worker.pos2];              // XOR
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
           ; // rotate  bits by 4
@@ -2414,11 +2415,11 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);              // rotate  bits by 3
-          worker.step_3[i] = reverse8(worker.step_3[i]);                  // reverse bits
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);             // rotate  bits by 3
+          worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);              // rotate  bits by 1
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);             // rotate  bits by 1
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 197:
@@ -2426,11 +2427,11 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                                    // rotate  bits by 4
+          ;                                                                 // rotate  bits by 4
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-          worker.step_3[i] *= worker.step_3[i];                              // *
-          worker.step_3[i] *= worker.step_3[i];                              // *
-                                                                               // INSERT_RANDOM_CODE_END
+          worker.step_3[i] *= worker.step_3[i];                             // *
+          worker.step_3[i] *= worker.step_3[i];                             // *
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 198:
@@ -2439,20 +2440,20 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-          worker.step_3[i] = reverse8(worker.step_3[i]);                  // reverse bits
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);              // rotate  bits by 1
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);             // rotate  bits by 1
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 199:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = ~worker.step_3[i];            // binary NOT operator
-          worker.step_3[i] += worker.step_3[i];            // +
-          worker.step_3[i] *= worker.step_3[i];            // *
+          worker.step_3[i] = ~worker.step_3[i];           // binary NOT operator
+          worker.step_3[i] += worker.step_3[i];           // +
+          worker.step_3[i] *= worker.step_3[i];           // *
           worker.step_3[i] ^= worker.step_3[worker.pos2]; // XOR
-                                                             // INSERT_RANDOM_CODE_END
+                                                          // INSERT_RANDOM_CODE_END
         }
         break;
       case 200:
@@ -2461,9 +2462,9 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];   // ones count bits
-          worker.step_3[i] = reverse8(worker.step_3[i]);                  // reverse bits
-          worker.step_3[i] = reverse8(worker.step_3[i]);                  // reverse bits
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+          worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 201:
@@ -2473,9 +2474,9 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] = std::rotl(worker.step_3[i], 3);  // rotate  bits by 3
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                       // rotate  bits by 4
+          ;                                     // rotate  bits by 4
           worker.step_3[i] = ~worker.step_3[i]; // binary NOT operator
-                                                  // INSERT_RANDOM_CODE_END
+                                                // INSERT_RANDOM_CODE_END
         }
         break;
       case 202:
@@ -2483,32 +2484,32 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
-          worker.step_3[i] = ~worker.step_3[i];                              // binary NOT operator
+          worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                 // rotate  bits by 5
-                                                                               // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 203:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] ^= worker.step_3[worker.pos2];                    // XOR
+          worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                  // rotate  bits by 1
-          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]);  // rotate  bits by random
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
+          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 204:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                 // rotate  bits by 5
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                // rotate  bits by 2
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
           worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
-                                                                               // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 205:
@@ -2517,10 +2518,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                                 // rotate  bits by 4
+          ;                                                              // rotate  bits by 4
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] += worker.step_3[i];                           // +
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] += worker.step_3[i];                          // +
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 206:
@@ -2528,11 +2529,11 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                               // rotate  bits by 4
-          worker.step_3[i] = reverse8(worker.step_3[i]);                // reverse bits
-          worker.step_3[i] = reverse8(worker.step_3[i]);                // reverse bits
+          ;                                                            // rotate  bits by 4
+          worker.step_3[i] = reverse8(worker.step_3[i]);               // reverse bits
+          worker.step_3[i] = reverse8(worker.step_3[i]);               // reverse bits
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-                                                                          // INSERT_RANDOM_CODE_END
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 207:
@@ -2543,40 +2544,40 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // worker.step_3[i] = std::rotl(worker.step_3[i], 3);                           // rotate  bits by 3
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-                                                                          // INSERT_RANDOM_CODE_END
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 208:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] += worker.step_3[i];                           // +
-          worker.step_3[i] += worker.step_3[i];                           // +
+          worker.step_3[i] += worker.step_3[i];                          // +
+          worker.step_3[i] += worker.step_3[i];                          // +
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);              // rotate  bits by 3
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);             // rotate  bits by 3
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 209:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);            // rotate  bits by 5
-          worker.step_3[i] = reverse8(worker.step_3[i]);                // reverse bits
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);           // rotate  bits by 5
+          worker.step_3[i] = reverse8(worker.step_3[i]);               // reverse bits
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                  // XOR and -
-                                                                          // INSERT_RANDOM_CODE_END
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                 // XOR and -
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 210:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                // rotate  bits by 2
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                 // rotate  bits by 5
-          worker.step_3[i] = ~worker.step_3[i];                              // binary NOT operator
-                                                                               // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+          worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 211:
@@ -2584,11 +2585,11 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                                    // rotate  bits by 4
-          worker.step_3[i] += worker.step_3[i];                              // +
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                       // XOR and -
+          ;                                                                 // rotate  bits by 4
+          worker.step_3[i] += worker.step_3[i];                             // +
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                      // XOR and -
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-                                                                               // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 212:
@@ -2596,21 +2597,21 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                // rotate  bits by 2
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
           worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
           worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
-                                                                               // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 213:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] += worker.step_3[i];                           // +
+          worker.step_3[i] += worker.step_3[i];                          // +
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);              // rotate  bits by 3
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                    // XOR and -
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);             // rotate  bits by 3
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                   // XOR and -
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 214:
@@ -2618,32 +2619,32 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= worker.step_3[worker.pos2];                // XOR
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                    // XOR and -
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                   // XOR and -
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-          worker.step_3[i] = ~worker.step_3[i];                           // binary NOT operator
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = ~worker.step_3[i];                          // binary NOT operator
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 215:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] ^= worker.step_3[worker.pos2];                    // XOR
+          worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);     // shift left
-          worker.step_3[i] *= worker.step_3[i];                               // *
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+          worker.step_3[i] *= worker.step_3[i];                             // *
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 216:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]);  // rotate  bits by random
-          worker.step_3[i] = ~worker.step_3[i];                               // binary NOT operator
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                        // XOR and -
+          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+          worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                      // XOR and -
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-                                                                                // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 217:
@@ -2666,7 +2667,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] = ~worker.step_3[i];          // binary NOT operator
           worker.step_3[i] *= worker.step_3[i];          // *
           worker.step_3[i] -= (worker.step_3[i] ^ 97);   // XOR and -
-                                                           // INSERT_RANDOM_CODE_END
+                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 219:
@@ -2674,22 +2675,22 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                                     // rotate  bits by 4
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                  // rotate  bits by 3
+          ;                                                                 // rotate  bits by 4
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                // rotate  bits by 3
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] = reverse8(worker.step_3[i]);                      // reverse bits
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = reverse8(worker.step_3[i]);                    // reverse bits
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 220:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);              // rotate  bits by 1
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);             // rotate  bits by 1
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] = reverse8(worker.step_3[i]);                  // reverse bits
+          worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 221:
@@ -2697,10 +2698,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = leftRotate8(worker.step_3[i], 5); // rotate  bits by 5
-          worker.step_3[i] ^= worker.step_3[worker.pos2];     // XOR
+          worker.step_3[i] ^= worker.step_3[worker.pos2];      // XOR
           worker.step_3[i] = ~worker.step_3[i];                // binary NOT operator
           worker.step_3[i] = reverse8(worker.step_3[i]);       // reverse bits
-                                                                 // INSERT_RANDOM_CODE_END
+                                                               // INSERT_RANDOM_CODE_END
         }
         break;
       case 222:
@@ -2710,19 +2711,19 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
           worker.step_3[i] ^= worker.step_3[worker.pos2];                // XOR
-          worker.step_3[i] *= worker.step_3[i];                           // *
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] *= worker.step_3[i];                          // *
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 223:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                 // rotate  bits by 3
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                // rotate  bits by 3
           worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                       // XOR and -
-                                                                               // INSERT_RANDOM_CODE_END
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                      // XOR and -
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 224:
@@ -2734,84 +2735,84 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           ; // rotate  bits by 1
           // worker.step_3[i] = std::rotl(worker.step_3[i], 3);             // rotate  bits by 3
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 225:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = ~worker.step_3[i];                           // binary NOT operator
+          worker.step_3[i] = ~worker.step_3[i];                          // binary NOT operator
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-          worker.step_3[i] = reverse8(worker.step_3[i]);                  // reverse bits
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);              // rotate  bits by 3
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);             // rotate  bits by 3
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 226:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = reverse8(worker.step_3[i]);   // reverse bits
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);     // XOR and -
-          worker.step_3[i] *= worker.step_3[i];            // *
+          worker.step_3[i] = reverse8(worker.step_3[i]);  // reverse bits
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);    // XOR and -
+          worker.step_3[i] *= worker.step_3[i];           // *
           worker.step_3[i] ^= worker.step_3[worker.pos2]; // XOR
-                                                             // INSERT_RANDOM_CODE_END
+                                                          // INSERT_RANDOM_CODE_END
         }
         break;
       case 227:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = ~worker.step_3[i];                               // binary NOT operator
-          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);     // shift left
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                        // XOR and -
+          worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
+          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                      // XOR and -
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-                                                                                // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 228:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] += worker.step_3[i];                           // +
+          worker.step_3[i] += worker.step_3[i];                          // +
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-          worker.step_3[i] += worker.step_3[i];                           // +
+          worker.step_3[i] += worker.step_3[i];                          // +
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];   // ones count bits
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 229:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                 // rotate  bits by 3
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);                // rotate  bits by 3
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                // rotate  bits by 2
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
-                                                                               // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 230:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] *= worker.step_3[i];                               // *
+          worker.step_3[i] *= worker.step_3[i];                             // *
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]);  // rotate  bits by random
-          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]);  // rotate  bits by random
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 231:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);              // rotate  bits by 3
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);             // rotate  bits by 3
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
           worker.step_3[i] ^= worker.step_3[worker.pos2];                // XOR
-          worker.step_3[i] = reverse8(worker.step_3[i]);                  // reverse bits
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 232:
@@ -2821,20 +2822,20 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] *= worker.step_3[i]; // *
           worker.step_3[i] *= worker.step_3[i]; // *
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                      // rotate  bits by 4
+          ;                                                    // rotate  bits by 4
           worker.step_3[i] = leftRotate8(worker.step_3[i], 5); // rotate  bits by 5
-                                                                 // INSERT_RANDOM_CODE_END
+                                                               // INSERT_RANDOM_CODE_END
         }
         break;
       case 233:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);            // rotate  bits by 1
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);           // rotate  bits by 1
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);            // rotate  bits by 3
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);           // rotate  bits by 3
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-                                                                          // INSERT_RANDOM_CODE_END
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 234:
@@ -2842,10 +2843,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] *= worker.step_3[i];                               // *
-          worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);     // shift right
-          worker.step_3[i] ^= worker.step_3[worker.pos2];                    // XOR
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] *= worker.step_3[i];                             // *
+          worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);    // shift right
+          worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 235:
@@ -2856,29 +2857,29 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] *= worker.step_3[i];               // *
           worker.step_3[i] = std::rotl(worker.step_3[i], 3);  // rotate  bits by 3
           worker.step_3[i] = ~worker.step_3[i];               // binary NOT operator
-                                                                // INSERT_RANDOM_CODE_END
+                                                              // INSERT_RANDOM_CODE_END
         }
         break;
       case 236:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] ^= worker.step_3[worker.pos2];                    // XOR
-          worker.step_3[i] += worker.step_3[i];                               // +
+          worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
+          worker.step_3[i] += worker.step_3[i];                             // +
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                        // XOR and -
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                      // XOR and -
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 237:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);              // rotate  bits by 5
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);             // rotate  bits by 5
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);             // rotate  bits by 2
-          worker.step_3[i] = std::rotl(worker.step_3[i], 3);              // rotate  bits by 3
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
+          worker.step_3[i] = std::rotl(worker.step_3[i], 3);             // rotate  bits by 3
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 238:
@@ -2889,7 +2890,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] += worker.step_3[i];              // +
           worker.step_3[i] = std::rotl(worker.step_3[i], 3); // rotate  bits by 3
           worker.step_3[i] -= (worker.step_3[i] ^ 97);       // XOR and -
-                                                               // INSERT_RANDOM_CODE_END
+                                                             // INSERT_RANDOM_CODE_END
         }
         break;
       case 239:
@@ -2898,20 +2899,20 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = std::rotl(worker.step_3[i], 6); // rotate  bits by 5
           // worker.step_3[i] = std::rotl(worker.step_3[i], 1); // rotate  bits by 1
-          worker.step_3[i] *= worker.step_3[i];                               // *
+          worker.step_3[i] *= worker.step_3[i];                             // *
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-                                                                                // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 240:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = ~worker.step_3[i];                               // binary NOT operator
-          worker.step_3[i] += worker.step_3[i];                               // +
+          worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
+          worker.step_3[i] += worker.step_3[i];                             // +
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);     // shift left
-                                                                                // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 241:
@@ -2919,33 +2920,33 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                               // rotate  bits by 4
+          ;                                                            // rotate  bits by 4
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
           worker.step_3[i] ^= worker.step_3[worker.pos2];              // XOR
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);            // rotate  bits by 1
-                                                                          // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);           // rotate  bits by 1
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 242:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] += worker.step_3[i];            // +
-          worker.step_3[i] += worker.step_3[i];            // +
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);     // XOR and -
+          worker.step_3[i] += worker.step_3[i];           // +
+          worker.step_3[i] += worker.step_3[i];           // +
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);    // XOR and -
           worker.step_3[i] ^= worker.step_3[worker.pos2]; // XOR
-                                                             // INSERT_RANDOM_CODE_END
+                                                          // INSERT_RANDOM_CODE_END
         }
         break;
       case 243:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);            // rotate  bits by 5
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);           // rotate  bits by 2
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);           // rotate  bits by 5
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);          // rotate  bits by 2
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);            // rotate  bits by 1
-                                                                          // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);           // rotate  bits by 1
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 244:
@@ -2956,29 +2957,29 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);  // rotate  bits by 2
           worker.step_3[i] = reverse8(worker.step_3[i]);       // reverse bits
           worker.step_3[i] = leftRotate8(worker.step_3[i], 5); // rotate  bits by 5
-                                                                 // INSERT_RANDOM_CODE_END
+                                                               // INSERT_RANDOM_CODE_END
         }
         break;
       case 245:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                    // XOR and -
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);              // rotate  bits by 5
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);             // rotate  bits by 2
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                   // XOR and -
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);             // rotate  bits by 5
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 246:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] += worker.step_3[i];                           // +
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);              // rotate  bits by 1
+          worker.step_3[i] += worker.step_3[i];                          // +
+          worker.step_3[i] = std::rotl(worker.step_3[i], 1);             // rotate  bits by 1
           worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
-          worker.step_3[i] += worker.step_3[i];                           // +
-                                                                            // INSERT_RANDOM_CODE_END
+          worker.step_3[i] += worker.step_3[i];                          // +
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 247:
@@ -2989,18 +2990,18 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);  // rotate  bits by 2
           worker.step_3[i] = leftRotate8(worker.step_3[i], 5); // rotate  bits by 5
           worker.step_3[i] = ~worker.step_3[i];                // binary NOT operator
-                                                                 // INSERT_RANDOM_CODE_END
+                                                               // INSERT_RANDOM_CODE_END
         }
         break;
       case 248:
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = ~worker.step_3[i];                         // binary NOT operator
-          worker.step_3[i] -= (worker.step_3[i] ^ 97);                  // XOR and -
+          worker.step_3[i] = ~worker.step_3[i];                        // binary NOT operator
+          worker.step_3[i] -= (worker.step_3[i] ^ 97);                 // XOR and -
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);            // rotate  bits by 5
-                                                                          // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = std::rotl(worker.step_3[i], 5);           // rotate  bits by 5
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 249:
@@ -3011,9 +3012,9 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
           ; // rotate  bits by 4
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                                    // rotate  bits by 4
+          ;                                                                 // rotate  bits by 4
           worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-                                                                               // INSERT_RANDOM_CODE_END
+                                                                            // INSERT_RANDOM_CODE_END
         }
         break;
       case 250:
@@ -3021,8 +3022,8 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         {
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]);  // rotate  bits by random
-          worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];       // ones count bits
+          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+          worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]];      // ones count bits
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
           ; // rotate  bits by 4
             // INSERT_RANDOM_CODE_END
@@ -3032,11 +3033,11 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
           // INSERT_RANDOM_CODE_START
-          worker.step_3[i] += worker.step_3[i];                         // +
+          worker.step_3[i] += worker.step_3[i];                        // +
           worker.step_3[i] ^= (byte)worker.bitTable[worker.step_3[i]]; // ones count bits
-          worker.step_3[i] = reverse8(worker.step_3[i]);                // reverse bits
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);           // rotate  bits by 2
-                                                                          // INSERT_RANDOM_CODE_END
+          worker.step_3[i] = reverse8(worker.step_3[i]);               // reverse bits
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);          // rotate  bits by 2
+                                                                       // INSERT_RANDOM_CODE_END
         }
         break;
       case 252:
@@ -3045,10 +3046,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = reverse8(worker.step_3[i]); // reverse bits
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);
-          ;                                                                 // rotate  bits by 4
-          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);             // rotate  bits by 2
+          ;                                                              // rotate  bits by 4
+          worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
           worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-                                                                            // INSERT_RANDOM_CODE_END
+                                                                         // INSERT_RANDOM_CODE_END
         }
         break;
       case 253:
@@ -3057,7 +3058,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           // INSERT_RANDOM_CODE_START
           worker.step_3[i] = std::rotl(worker.step_3[i], 3);  // rotate  bits by 3
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
-          worker.step_3[i] ^= worker.step_3[worker.pos2];    // XOR
+          worker.step_3[i] ^= worker.step_3[worker.pos2];     // XOR
           worker.step_3[i] = std::rotl(worker.step_3[i], 3);  // rotate  bits by 3
           // INSERT_RANDOM_CODE_END
 
@@ -3076,7 +3077,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
           worker.step_3[i] = std::rotl(worker.step_3[i], 3);                                  // rotate  bits by 3
           worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                                 // rotate  bits by 2
           worker.step_3[i] = std::rotl(worker.step_3[i], 3);                                  // rotate  bits by 3
-                                                                                                // INSERT_RANDOM_CODE_END
+                                                                                              // INSERT_RANDOM_CODE_END
         }
         break;
       default:
@@ -3143,7 +3144,55 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
     // fmt::printf("data_len: %d\n" , data_len);
 
     // text_32_0alloc(worker.sData, worker.sa, data_len, data_len);
-    divsufsort(worker.sData, worker.sa, worker.data_len);
+    // std::fill(worker.sa, worker.sa + MAX_LENGTH, 0);
+    // std::fill(worker.sa2, worker.sa2 + MAX_LENGTH, 0);
+
+    // std::ofstream myfile;
+    // const char * extension = ".txt";
+    // char DATA[worker.data_len];
+    // memcpy(DATA, worker.sData, worker.data_len);
+
+    // std::string fullPath = "./tests/";
+    // fullPath = fullPath + hexStr(input, inputLen) + extension;
+    // myfile.open(fullPath);
+    // myfile << worker.sData;
+    // myfile.close();
+
+    // divsufsort(worker.sData, worker.sa, worker.data_len);
+    sais_u8(worker.sData, worker.sa, (sa_int32_t)worker.data_len, 256);
+
+    // byte T[worker.data_len + 1];
+    // T[0] = 0;
+    // T[worker.data_len] = 0;
+    // memcpy(T, worker.sData, worker.data_len);
+    // int SA2[worker.data_len + 1];
+    // int err = gsaca(T, SA2, worker.data_len + 1);
+    // libsais_ctx(worker.sais, worker.sData, worker.sa, worker.data_len, MAX_LENGTH-worker.data_len, NULL);
+    // Archon A(worker.data_len);
+    // A.saca(worker.sData, worker.sa2, worker.data_len);
+
+    // printf("Validating...");
+    // const bool rez = A.validate(worker.sData, worker.sa2, worker.data_len);
+    // printf("%s\n", rez?"OK":"Fail");
+
+    // std::cout << worker.sData[0] << std::endl;
+    // std::cout << err << std::endl;
+
+    // int D = 0;
+    // int F = 0;
+    // bool set1 = false, set2 = false;
+    // for (int H = 0; H < MAX_LENGTH; H++) {
+    //   if (H < 15) printf("DSS: %d, ARC: %d\n", worker.sa[H], worker.sa2[H]);
+    //   if (worker.sa[H] != 0) {
+    //     D++;
+    //   }
+    //   if (worker.sa2[H] != 0) {
+    //     F++;
+    //   }
+    // }
+
+    // printf("count dss: %d, count arc: %d\n", D, F);
+    // printf("DSS: %d, ARC: %d\n", worker.sa[0], SA2[0]);
 
     // std::string_view S(hexStr(worker.sData, worker.data_len));
     // auto SA2 = psais::suffix_array<uint32_t>(S);
@@ -3172,7 +3221,6 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
     // free(SAH);
 
     // printf("divsufsort result at index 5: %d\ngsaca result at index 5: %d\n\n", worker.sa[5], SA3[5]);
-
 
     // for (unsigned int i = 0; i < n; ++i)
     //   std::cout << SA1[i] << " ";

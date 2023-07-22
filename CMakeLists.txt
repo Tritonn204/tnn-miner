@@ -52,20 +52,23 @@ endif()
 
 include(${CPM_DOWNLOAD_LOCATION})
 
-
 CPMAddPackage("gh:nlohmann/json@3.10.5")
 
-if (UNIX)
-add_subdirectory(cpp_modules/cpp-dns)
-include_directories(cpp_modules/cpp-dns)
-endif()
+CPMAddPackage(
+  NAME divsufsort
+  GITHUB_REPOSITORY y-256/libdivsufsort
+  GIT_TAG 2.0.1
+  OPTIONS
+    "BUILD_SHARED_LIBS OFF"
+    "USE_OPENMP OFF"
+)
 
 set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL REQUIRED)
 
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_MULTITHREADED ON)
-find_package(Boost 1.82 REQUIRED
+find_package(Boost 1.80 REQUIRED
   chrono
   context
   json
@@ -99,6 +102,6 @@ if(WIN32)
   target_link_libraries(${PROJECT_NAME} mingw32 wsock32 ws2_32 winpthread)
 endif()
 if(UNIX)
-  target_link_libraries(${PROJECT_NAME} cpp-dns)
+  target_link_libraries(${PROJECT_NAME} udns)
 endif()
-target_link_libraries(${PROJECT_NAME} nlohmann_json::nlohmann_json OpenSSL::SSL ${Boost_LIBRARIES} OpenSSL::Crypto gmp gmpxx divsufsort)
+target_link_libraries(${PROJECT_NAME} nlohmann_json::nlohmann_json OpenSSL::SSL ${Boost_LIBRARIES} OpenSSL::Crypto gmp gmpxx sais divsufsort)

@@ -1,0 +1,43 @@
+-- INSTALL for sais library
+
+
+Requirements:
+=============
+
+  * CMake version 2.4.2 or newer (http://www.cmake.org/)
+  * An ANSI C compiler
+  * GNU Make
+
+
+Compilation and Installation (with Unix Makefiles):
+===================================================
+
+  1. Create a 'build' directory in the package source directory.
+
+    $ unzip sais-2.4.0.zip
+    $ cd sais-2.4.0
+    $ mkdir build
+    $ cd build
+
+  2. Configure the package for your system.
+
+    $ cmake -DCMAKE_BUILD_TYPE="Release" -DCMAKE_INSTALL_PREFIX="/usr/local" ..
+
+  3. Compile the package.
+
+    $ make
+
+  4. Install the library and header files.
+
+    # make install
+
+
+Build options:
+==============
+
+  CMAKE_INSTALL_PREFIX    : the installation path
+  CMAKE_BUILD_TYPE        : default 'Release', can include debug symbols
+                            with either 'Debug' or 'RelWithDebInfo'.
+  BUILD_EXAMPLES          : default 'ON', compiles additional examples
+  BUILD_SAIS64            : default 'OFF', set to 'ON' to build sais64 library
+  BUILD_SHARED_LIBS       : default 'OFF', set to 'ON' to build shared library

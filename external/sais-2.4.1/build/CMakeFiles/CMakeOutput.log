@@ -1,0 +1,914 @@
+The system is: Windows - 10.0.22621 - AMD64
+Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
+Compiler: C:/mingw64/bin/gcc.exe 
+Build flags: 
+Id flags:  
+
+The output was:
+0
+
+
+Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "a.exe"
+
+The C compiler identification is GNU, found in "C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/3.25.0/CompilerIdC/a.exe"
+
+Detecting C compiler ABI info compiled with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-y4ciba
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_497df/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_497df.dir\build.make CMakeFiles/cmTC_497df.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-y4ciba'
+Building C object CMakeFiles/cmTC_497df.dir/CMakeCCompilerABI.c.obj
+C:\mingw64\bin\gcc.exe   -v -o CMakeFiles\cmTC_497df.dir\CMakeCCompilerABI.c.obj -c "C:\Program Files\CMake\share\cmake-3.25\Modules\CMakeCCompilerABI.c"
+Using built-in specs.
+COLLECT_GCC=C:\mingw64\bin\gcc.exe
+OFFLOAD_TARGET_NAMES=nvptx-none
+Target: x86_64-w64-mingw32
+Configured with: ../configure --prefix=/R/winlibs64ucrt_stage/inst_gcc-12.1.0/share/gcc --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --enable-offload-targets=nvptx-none --with-pkgversion='MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders' --with-tune=generic --enable-checking=release --enable-threads=posix --disable-sjlj-exceptions --disable-libunwind-exceptions --disable-serial-configure --disable-bootstrap --enable-host-shared --enable-plugin --disable-default-ssp --disable-rpath --disable-libstdcxx-debug --disable-version-specific-runtime-libs --with-stabs --disable-symvers --enable-languages=c,c++,fortran,lto,objc,obj-c++,jit --disable-gold --disable-nls --disable-stage1-checking --disable-win32-registry --disable-multilib --enable-ld --enable-libquadmath --enable-libada --enable-libssp --enable-libstdcxx --enable-lto --enable-fully-dynamic-string --enable-libgomp --enable-graphite --enable-mingw-wildcard --enable-libstdcxx-time --disable-libstdcxx-pch --with-mpc=/d/Prog/winlibs64ucrt_stage/custombuilt --with-mpfr=/d/Prog/winlibs64ucrt_stage/custombuilt --with-gmp=/d/Prog/winlibs64ucrt_stage/custombuilt --with-isl=/d/Prog/winlibs64ucrt_stage/custombuilt --enable-libstdcxx-backtrace --enable-install-libiberty --enable-__cxa_atexit --without-included-gettext --with-diagnostics-color=auto --enable-clocale=generic --with-libiconv --with-system-zlib --with-build-sysroot=/R/winlibs64ucrt_stage/gcc-12.1.0/build_mingw/mingw-w64 CFLAGS='-I/d/Prog/winlibs64ucrt_stage/custombuilt/include/libdl-win32 -D__USE_MINGW_ACCESS' CXXFLAGS=-D__USE_MINGW_ACCESS LDFLAGS='-Wl,--disable-nxcompat -Wl,--disable-high-entropy-va -Wl,--disable-dynamicbase'
+Thread model: posix
+Supported LTO compression algorithms: zlib zstd
+gcc version 12.1.0 (MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders) 
+COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles\cmTC_497df.dir\CMakeCCompilerABI.c.obj' '-c' '-mtune=generic' '-march=x86-64' '-dumpdir' 'CMakeFiles\cmTC_497df.dir\'
+ c:/mingw64/bin/../libexec/gcc/x86_64-w64-mingw32/12.1.0/cc1.exe -quiet -v -iprefix c:\mingw64\bin\../lib/gcc/x86_64-w64-mingw32/12.1.0/ -D_REENTRANT C:\Program Files\CMake\share\cmake-3.25\Modules\CMakeCCompilerABI.c -quiet -dumpdir CMakeFiles\cmTC_497df.dir\ -dumpbase CMakeCCompilerABI.c.c -dumpbase-ext .c -mtune=generic -march=x86-64 -version -o C:\Users\trito\AppData\Local\Temp\ccPNUXaB.s
+GNU C17 (MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders) version 12.1.0 (x86_64-w64-mingw32)
+	compiled by GNU C version 12.1.0, GMP version 6.2.1, MPFR version 4.1.0, MPC version 1.2.1, isl version UNKNOWN-GMP
+
+GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+ignoring duplicate directory "c:/mingw64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/12.1.0/include"
+ignoring nonexistent directory "R:/winlibs64ucrt_stage/inst_gcc-12.1.0/share/gcc/include"
+ignoring nonexistent directory "/R/winlibs64ucrt_stage/inst_gcc-12.1.0/share/gcc/include"
+ignoring duplicate directory "c:/mingw64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/12.1.0/include-fixed"
+ignoring duplicate directory "c:/mingw64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/include"
+#include "..." search starts here:
+#include <...> search starts here:
+ c:\mingw64\bin\../lib/gcc/x86_64-w64-mingw32/12.1.0/include
+ c:\mingw64\bin\../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../include
+ c:\mingw64\bin\../lib/gcc/x86_64-w64-mingw32/12.1.0/include-fixed
+ c:\mingw64\bin\../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/include
+ /mingw/include
+End of search list.
+GNU C17 (MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders) version 12.1.0 (x86_64-w64-mingw32)
+	compiled by GNU C version 12.1.0, GMP version 6.2.1, MPFR version 4.1.0, MPC version 1.2.1, isl version UNKNOWN-GMP
+
+GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+Compiler executable checksum: 9893bce8113c061eee80950cdd0885b0
+COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles\cmTC_497df.dir\CMakeCCompilerABI.c.obj' '-c' '-mtune=generic' '-march=x86-64' '-dumpdir' 'CMakeFiles\cmTC_497df.dir\'
+ c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/bin/as.exe -v -o CMakeFiles\cmTC_497df.dir\CMakeCCompilerABI.c.obj C:\Users\trito\AppData\Local\Temp\ccPNUXaB.s
+GNU assembler version 2.38 (x86_64-w64-mingw32) using BFD version (Binutils for MinGW-W64 x86_64, built by Brecht Sanders) 2.38
+COMPILER_PATH=c:/mingw64/bin/../libexec/gcc/x86_64-w64-mingw32/12.1.0/;c:/mingw64/bin/../libexec/gcc/;c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/bin/
+LIBRARY_PATH=c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/;c:/mingw64/bin/../lib/gcc/;c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib/../lib/;c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../lib/;/mingw/lib/../lib/;c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib/;c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../;/mingw/lib/
+COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles\cmTC_497df.dir\CMakeCCompilerABI.c.obj' '-c' '-mtune=generic' '-march=x86-64' '-dumpdir' 'CMakeFiles\cmTC_497df.dir\CMakeCCompilerABI.c.'
+Linking C executable cmTC_497df.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_497df.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_497df.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_497df.dir/objects.a @CMakeFiles\cmTC_497df.dir\objects1
+C:\mingw64\bin\gcc.exe  -v -Wl,--whole-archive CMakeFiles\cmTC_497df.dir/objects.a -Wl,--no-whole-archive -o cmTC_497df.exe -Wl,--out-implib,libcmTC_497df.dll.a -Wl,--major-image-version,0,--minor-image-version,0 
+Using built-in specs.
+COLLECT_GCC=C:\mingw64\bin\gcc.exe
+COLLECT_LTO_WRAPPER=c:/mingw64/bin/../libexec/gcc/x86_64-w64-mingw32/12.1.0/lto-wrapper.exe
+OFFLOAD_TARGET_NAMES=nvptx-none
+Target: x86_64-w64-mingw32
+Configured with: ../configure --prefix=/R/winlibs64ucrt_stage/inst_gcc-12.1.0/share/gcc --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --enable-offload-targets=nvptx-none --with-pkgversion='MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders' --with-tune=generic --enable-checking=release --enable-threads=posix --disable-sjlj-exceptions --disable-libunwind-exceptions --disable-serial-configure --disable-bootstrap --enable-host-shared --enable-plugin --disable-default-ssp --disable-rpath --disable-libstdcxx-debug --disable-version-specific-runtime-libs --with-stabs --disable-symvers --enable-languages=c,c++,fortran,lto,objc,obj-c++,jit --disable-gold --disable-nls --disable-stage1-checking --disable-win32-registry --disable-multilib --enable-ld --enable-libquadmath --enable-libada --enable-libssp --enable-libstdcxx --enable-lto --enable-fully-dynamic-string --enable-libgomp --enable-graphite --enable-mingw-wildcard --enable-libstdcxx-time --disable-libstdcxx-pch --with-mpc=/d/Prog/winlibs64ucrt_stage/custombuilt --with-mpfr=/d/Prog/winlibs64ucrt_stage/custombuilt --with-gmp=/d/Prog/winlibs64ucrt_stage/custombuilt --with-isl=/d/Prog/winlibs64ucrt_stage/custombuilt --enable-libstdcxx-backtrace --enable-install-libiberty --enable-__cxa_atexit --without-included-gettext --with-diagnostics-color=auto --enable-clocale=generic --with-libiconv --with-system-zlib --with-build-sysroot=/R/winlibs64ucrt_stage/gcc-12.1.0/build_mingw/mingw-w64 CFLAGS='-I/d/Prog/winlibs64ucrt_stage/custombuilt/include/libdl-win32 -D__USE_MINGW_ACCESS' CXXFLAGS=-D__USE_MINGW_ACCESS LDFLAGS='-Wl,--disable-nxcompat -Wl,--disable-high-entropy-va -Wl,--disable-dynamicbase'
+Thread model: posix
+Supported LTO compression algorithms: zlib zstd
+gcc version 12.1.0 (MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders) 
+COMPILER_PATH=c:/mingw64/bin/../libexec/gcc/x86_64-w64-mingw32/12.1.0/;c:/mingw64/bin/../libexec/gcc/;c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/bin/
+LIBRARY_PATH=c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/;c:/mingw64/bin/../lib/gcc/;c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib/../lib/;c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../lib/;/mingw/lib/../lib/;c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib/;c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../;/mingw/lib/
+COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_497df.exe' '-mtune=generic' '-march=x86-64' '-dumpdir' 'cmTC_497df.'
+ c:/mingw64/bin/../libexec/gcc/x86_64-w64-mingw32/12.1.0/collect2.exe -plugin c:/mingw64/bin/../libexec/gcc/x86_64-w64-mingw32/12.1.0/liblto_plugin.dll -plugin-opt=c:/mingw64/bin/../libexec/gcc/x86_64-w64-mingw32/12.1.0/lto-wrapper.exe -plugin-opt=-fresolution=C:\Users\trito\AppData\Local\Temp\cchKf9ZQ.res -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_eh -plugin-opt=-pass-through=-lmoldname -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lpthread -plugin-opt=-pass-through=-ladvapi32 -plugin-opt=-pass-through=-lshell32 -plugin-opt=-pass-through=-luser32 -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_eh -plugin-opt=-pass-through=-lmoldname -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 -m i386pep -Bdynamic -o cmTC_497df.exe c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib/../lib/crt2.o c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/crtbegin.o -Lc:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0 -Lc:/mingw64/bin/../lib/gcc -Lc:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib/../lib -Lc:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../lib -L/mingw/lib/../lib -Lc:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib -Lc:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../.. -L/mingw/lib --whole-archive CMakeFiles\cmTC_497df.dir/objects.a --no-whole-archive --out-implib libcmTC_497df.dll.a --major-image-version 0 --minor-image-version 0 -lmingw32 -lgcc -lgcc_eh -lmoldname -lmingwex -lmsvcrt -lkernel32 -lpthread -ladvapi32 -lshell32 -luser32 -lkernel32 -lmingw32 -lgcc -lgcc_eh -lmoldname -lmingwex -lmsvcrt -lkernel32 c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/crtend.o
+COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_497df.exe' '-mtune=generic' '-march=x86-64' '-dumpdir' 'cmTC_497df.'
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-y4ciba'
+
+
+
+Parsed C implicit include dir info from above output: rv=done
+  found start of include info
+  found start of implicit include info
+    add: [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/include]
+    add: [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../include]
+    add: [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/include-fixed]
+    add: [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/include]
+    add: [/mingw/include]
+  end of search list found
+  collapse include dir [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/include] ==> [C:/mingw64/lib/gcc/x86_64-w64-mingw32/12.1.0/include]
+  collapse include dir [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../include] ==> [C:/mingw64/include]
+  collapse include dir [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/include-fixed] ==> [C:/mingw64/lib/gcc/x86_64-w64-mingw32/12.1.0/include-fixed]
+  collapse include dir [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/include] ==> [C:/mingw64/x86_64-w64-mingw32/include]
+  collapse include dir [/mingw/include] ==> [/MinGW/include]
+  implicit include dirs: [C:/mingw64/lib/gcc/x86_64-w64-mingw32/12.1.0/include;C:/mingw64/include;C:/mingw64/lib/gcc/x86_64-w64-mingw32/12.1.0/include-fixed;C:/mingw64/x86_64-w64-mingw32/include;/MinGW/include]
+
+
+Parsed C implicit link information from above output:
+  link line regex: [^( *|.*[/\])(ld\.exe|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\]+-)?ld|collect2)[^/\]*( |$)]
+  ignore line: [Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-y4ciba]
+  ignore line: []
+  ignore line: [Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_497df/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_497df.dir\build.make CMakeFiles/cmTC_497df.dir/build]
+  ignore line: [mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-y4ciba']
+  ignore line: [Building C object CMakeFiles/cmTC_497df.dir/CMakeCCompilerABI.c.obj]
+  ignore line: [C:\mingw64\bin\gcc.exe   -v -o CMakeFiles\cmTC_497df.dir\CMakeCCompilerABI.c.obj -c "C:\Program Files\CMake\share\cmake-3.25\Modules\CMakeCCompilerABI.c"]
+  ignore line: [Using built-in specs.]
+  ignore line: [COLLECT_GCC=C:\mingw64\bin\gcc.exe]
+  ignore line: [OFFLOAD_TARGET_NAMES=nvptx-none]
+  ignore line: [Target: x86_64-w64-mingw32]
+  ignore line: [Configured with: ../configure --prefix=/R/winlibs64ucrt_stage/inst_gcc-12.1.0/share/gcc --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --enable-offload-targets=nvptx-none --with-pkgversion='MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders' --with-tune=generic --enable-checking=release --enable-threads=posix --disable-sjlj-exceptions --disable-libunwind-exceptions --disable-serial-configure --disable-bootstrap --enable-host-shared --enable-plugin --disable-default-ssp --disable-rpath --disable-libstdcxx-debug --disable-version-specific-runtime-libs --with-stabs --disable-symvers --enable-languages=c,c++,fortran,lto,objc,obj-c++,jit --disable-gold --disable-nls --disable-stage1-checking --disable-win32-registry --disable-multilib --enable-ld --enable-libquadmath --enable-libada --enable-libssp --enable-libstdcxx --enable-lto --enable-fully-dynamic-string --enable-libgomp --enable-graphite --enable-mingw-wildcard --enable-libstdcxx-time --disable-libstdcxx-pch --with-mpc=/d/Prog/winlibs64ucrt_stage/custombuilt --with-mpfr=/d/Prog/winlibs64ucrt_stage/custombuilt --with-gmp=/d/Prog/winlibs64ucrt_stage/custombuilt --with-isl=/d/Prog/winlibs64ucrt_stage/custombuilt --enable-libstdcxx-backtrace --enable-install-libiberty --enable-__cxa_atexit --without-included-gettext --with-diagnostics-color=auto --enable-clocale=generic --with-libiconv --with-system-zlib --with-build-sysroot=/R/winlibs64ucrt_stage/gcc-12.1.0/build_mingw/mingw-w64 CFLAGS='-I/d/Prog/winlibs64ucrt_stage/custombuilt/include/libdl-win32 -D__USE_MINGW_ACCESS' CXXFLAGS=-D__USE_MINGW_ACCESS LDFLAGS='-Wl,--disable-nxcompat -Wl,--disable-high-entropy-va -Wl,--disable-dynamicbase']
+  ignore line: [Thread model: posix]
+  ignore line: [Supported LTO compression algorithms: zlib zstd]
+  ignore line: [gcc version 12.1.0 (MinGW-W64 x86_64-ucrt-posix-seh  built by Brecht Sanders) ]
+  ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles\cmTC_497df.dir\CMakeCCompilerABI.c.obj' '-c' '-mtune=generic' '-march=x86-64' '-dumpdir' 'CMakeFiles\cmTC_497df.dir\']
+  ignore line: [ c:/mingw64/bin/../libexec/gcc/x86_64-w64-mingw32/12.1.0/cc1.exe -quiet -v -iprefix c:\mingw64\bin\../lib/gcc/x86_64-w64-mingw32/12.1.0/ -D_REENTRANT C:\Program Files\CMake\share\cmake-3.25\Modules\CMakeCCompilerABI.c -quiet -dumpdir CMakeFiles\cmTC_497df.dir\ -dumpbase CMakeCCompilerABI.c.c -dumpbase-ext .c -mtune=generic -march=x86-64 -version -o C:\Users\trito\AppData\Local\Temp\ccPNUXaB.s]
+  ignore line: [GNU C17 (MinGW-W64 x86_64-ucrt-posix-seh  built by Brecht Sanders) version 12.1.0 (x86_64-w64-mingw32)]
+  ignore line: [	compiled by GNU C version 12.1.0  GMP version 6.2.1  MPFR version 4.1.0  MPC version 1.2.1  isl version UNKNOWN-GMP]
+  ignore line: []
+  ignore line: [GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072]
+  ignore line: [ignoring duplicate directory "c:/mingw64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/12.1.0/include"]
+  ignore line: [ignoring nonexistent directory "R:/winlibs64ucrt_stage/inst_gcc-12.1.0/share/gcc/include"]
+  ignore line: [ignoring nonexistent directory "/R/winlibs64ucrt_stage/inst_gcc-12.1.0/share/gcc/include"]
+  ignore line: [ignoring duplicate directory "c:/mingw64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/12.1.0/include-fixed"]
+  ignore line: [ignoring duplicate directory "c:/mingw64/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/include"]
+  ignore line: [#include "..." search starts here:]
+  ignore line: [#include <...> search starts here:]
+  ignore line: [ c:\mingw64\bin\../lib/gcc/x86_64-w64-mingw32/12.1.0/include]
+  ignore line: [ c:\mingw64\bin\../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../include]
+  ignore line: [ c:\mingw64\bin\../lib/gcc/x86_64-w64-mingw32/12.1.0/include-fixed]
+  ignore line: [ c:\mingw64\bin\../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/include]
+  ignore line: [ /mingw/include]
+  ignore line: [End of search list.]
+  ignore line: [GNU C17 (MinGW-W64 x86_64-ucrt-posix-seh  built by Brecht Sanders) version 12.1.0 (x86_64-w64-mingw32)]
+  ignore line: [	compiled by GNU C version 12.1.0  GMP version 6.2.1  MPFR version 4.1.0  MPC version 1.2.1  isl version UNKNOWN-GMP]
+  ignore line: []
+  ignore line: [GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072]
+  ignore line: [Compiler executable checksum: 9893bce8113c061eee80950cdd0885b0]
+  ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles\cmTC_497df.dir\CMakeCCompilerABI.c.obj' '-c' '-mtune=generic' '-march=x86-64' '-dumpdir' 'CMakeFiles\cmTC_497df.dir\']
+  ignore line: [ c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/bin/as.exe -v -o CMakeFiles\cmTC_497df.dir\CMakeCCompilerABI.c.obj C:\Users\trito\AppData\Local\Temp\ccPNUXaB.s]
+  ignore line: [GNU assembler version 2.38 (x86_64-w64-mingw32) using BFD version (Binutils for MinGW-W64 x86_64  built by Brecht Sanders) 2.38]
+  ignore line: [COMPILER_PATH=c:/mingw64/bin/../libexec/gcc/x86_64-w64-mingw32/12.1.0/]
+  ignore line: [c:/mingw64/bin/../libexec/gcc/]
+  ignore line: [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/bin/]
+  ignore line: [LIBRARY_PATH=c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/]
+  ignore line: [c:/mingw64/bin/../lib/gcc/]
+  ignore line: [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib/../lib/]
+  ignore line: [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../lib/]
+  ignore line: [/mingw/lib/../lib/]
+  ignore line: [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib/]
+  ignore line: [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../]
+  ignore line: [/mingw/lib/]
+  ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles\cmTC_497df.dir\CMakeCCompilerABI.c.obj' '-c' '-mtune=generic' '-march=x86-64' '-dumpdir' 'CMakeFiles\cmTC_497df.dir\CMakeCCompilerABI.c.']
+  ignore line: [Linking C executable cmTC_497df.exe]
+  ignore line: ["C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_497df.dir\link.txt --verbose=1]
+  ignore line: ["C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_497df.dir/objects.a]
+  ignore line: [C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_497df.dir/objects.a @CMakeFiles\cmTC_497df.dir\objects1]
+  ignore line: [C:\mingw64\bin\gcc.exe  -v -Wl --whole-archive CMakeFiles\cmTC_497df.dir/objects.a -Wl --no-whole-archive -o cmTC_497df.exe -Wl --out-implib libcmTC_497df.dll.a -Wl --major-image-version 0 --minor-image-version 0 ]
+  ignore line: [Using built-in specs.]
+  ignore line: [COLLECT_GCC=C:\mingw64\bin\gcc.exe]
+  ignore line: [COLLECT_LTO_WRAPPER=c:/mingw64/bin/../libexec/gcc/x86_64-w64-mingw32/12.1.0/lto-wrapper.exe]
+  ignore line: [OFFLOAD_TARGET_NAMES=nvptx-none]
+  ignore line: [Target: x86_64-w64-mingw32]
+  ignore line: [Configured with: ../configure --prefix=/R/winlibs64ucrt_stage/inst_gcc-12.1.0/share/gcc --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --enable-offload-targets=nvptx-none --with-pkgversion='MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders' --with-tune=generic --enable-checking=release --enable-threads=posix --disable-sjlj-exceptions --disable-libunwind-exceptions --disable-serial-configure --disable-bootstrap --enable-host-shared --enable-plugin --disable-default-ssp --disable-rpath --disable-libstdcxx-debug --disable-version-specific-runtime-libs --with-stabs --disable-symvers --enable-languages=c,c++,fortran,lto,objc,obj-c++,jit --disable-gold --disable-nls --disable-stage1-checking --disable-win32-registry --disable-multilib --enable-ld --enable-libquadmath --enable-libada --enable-libssp --enable-libstdcxx --enable-lto --enable-fully-dynamic-string --enable-libgomp --enable-graphite --enable-mingw-wildcard --enable-libstdcxx-time --disable-libstdcxx-pch --with-mpc=/d/Prog/winlibs64ucrt_stage/custombuilt --with-mpfr=/d/Prog/winlibs64ucrt_stage/custombuilt --with-gmp=/d/Prog/winlibs64ucrt_stage/custombuilt --with-isl=/d/Prog/winlibs64ucrt_stage/custombuilt --enable-libstdcxx-backtrace --enable-install-libiberty --enable-__cxa_atexit --without-included-gettext --with-diagnostics-color=auto --enable-clocale=generic --with-libiconv --with-system-zlib --with-build-sysroot=/R/winlibs64ucrt_stage/gcc-12.1.0/build_mingw/mingw-w64 CFLAGS='-I/d/Prog/winlibs64ucrt_stage/custombuilt/include/libdl-win32 -D__USE_MINGW_ACCESS' CXXFLAGS=-D__USE_MINGW_ACCESS LDFLAGS='-Wl,--disable-nxcompat -Wl,--disable-high-entropy-va -Wl,--disable-dynamicbase']
+  ignore line: [Thread model: posix]
+  ignore line: [Supported LTO compression algorithms: zlib zstd]
+  ignore line: [gcc version 12.1.0 (MinGW-W64 x86_64-ucrt-posix-seh  built by Brecht Sanders) ]
+  ignore line: [COMPILER_PATH=c:/mingw64/bin/../libexec/gcc/x86_64-w64-mingw32/12.1.0/]
+  ignore line: [c:/mingw64/bin/../libexec/gcc/]
+  ignore line: [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/bin/]
+  ignore line: [LIBRARY_PATH=c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/]
+  ignore line: [c:/mingw64/bin/../lib/gcc/]
+  ignore line: [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib/../lib/]
+  ignore line: [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../lib/]
+  ignore line: [/mingw/lib/../lib/]
+  ignore line: [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib/]
+  ignore line: [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../]
+  ignore line: [/mingw/lib/]
+  ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_497df.exe' '-mtune=generic' '-march=x86-64' '-dumpdir' 'cmTC_497df.']
+  link line: [ c:/mingw64/bin/../libexec/gcc/x86_64-w64-mingw32/12.1.0/collect2.exe -plugin c:/mingw64/bin/../libexec/gcc/x86_64-w64-mingw32/12.1.0/liblto_plugin.dll -plugin-opt=c:/mingw64/bin/../libexec/gcc/x86_64-w64-mingw32/12.1.0/lto-wrapper.exe -plugin-opt=-fresolution=C:\Users\trito\AppData\Local\Temp\cchKf9ZQ.res -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_eh -plugin-opt=-pass-through=-lmoldname -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lpthread -plugin-opt=-pass-through=-ladvapi32 -plugin-opt=-pass-through=-lshell32 -plugin-opt=-pass-through=-luser32 -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_eh -plugin-opt=-pass-through=-lmoldname -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 -m i386pep -Bdynamic -o cmTC_497df.exe c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib/../lib/crt2.o c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/crtbegin.o -Lc:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0 -Lc:/mingw64/bin/../lib/gcc -Lc:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib/../lib -Lc:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../lib -L/mingw/lib/../lib -Lc:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib -Lc:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../.. -L/mingw/lib --whole-archive CMakeFiles\cmTC_497df.dir/objects.a --no-whole-archive --out-implib libcmTC_497df.dll.a --major-image-version 0 --minor-image-version 0 -lmingw32 -lgcc -lgcc_eh -lmoldname -lmingwex -lmsvcrt -lkernel32 -lpthread -ladvapi32 -lshell32 -luser32 -lkernel32 -lmingw32 -lgcc -lgcc_eh -lmoldname -lmingwex -lmsvcrt -lkernel32 c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/crtend.o]
+    arg [c:/mingw64/bin/../libexec/gcc/x86_64-w64-mingw32/12.1.0/collect2.exe] ==> ignore
+    arg [-plugin] ==> ignore
+    arg [c:/mingw64/bin/../libexec/gcc/x86_64-w64-mingw32/12.1.0/liblto_plugin.dll] ==> ignore
+    arg [-plugin-opt=c:/mingw64/bin/../libexec/gcc/x86_64-w64-mingw32/12.1.0/lto-wrapper.exe] ==> ignore
+    arg [-plugin-opt=-fresolution=C:\Users\trito\AppData\Local\Temp\cchKf9ZQ.res] ==> ignore
+    arg [-plugin-opt=-pass-through=-lmingw32] ==> ignore
+    arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+    arg [-plugin-opt=-pass-through=-lgcc_eh] ==> ignore
+    arg [-plugin-opt=-pass-through=-lmoldname] ==> ignore
+    arg [-plugin-opt=-pass-through=-lmingwex] ==> ignore
+    arg [-plugin-opt=-pass-through=-lmsvcrt] ==> ignore
+    arg [-plugin-opt=-pass-through=-lkernel32] ==> ignore
+    arg [-plugin-opt=-pass-through=-lpthread] ==> ignore
+    arg [-plugin-opt=-pass-through=-ladvapi32] ==> ignore
+    arg [-plugin-opt=-pass-through=-lshell32] ==> ignore
+    arg [-plugin-opt=-pass-through=-luser32] ==> ignore
+    arg [-plugin-opt=-pass-through=-lkernel32] ==> ignore
+    arg [-plugin-opt=-pass-through=-lmingw32] ==> ignore
+    arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+    arg [-plugin-opt=-pass-through=-lgcc_eh] ==> ignore
+    arg [-plugin-opt=-pass-through=-lmoldname] ==> ignore
+    arg [-plugin-opt=-pass-through=-lmingwex] ==> ignore
+    arg [-plugin-opt=-pass-through=-lmsvcrt] ==> ignore
+    arg [-plugin-opt=-pass-through=-lkernel32] ==> ignore
+    arg [-m] ==> ignore
+    arg [i386pep] ==> ignore
+    arg [-Bdynamic] ==> search dynamic
+    arg [-o] ==> ignore
+    arg [cmTC_497df.exe] ==> ignore
+    arg [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib/../lib/crt2.o] ==> obj [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib/../lib/crt2.o]
+    arg [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/crtbegin.o] ==> obj [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/crtbegin.o]
+    arg [-Lc:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0] ==> dir [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0]
+    arg [-Lc:/mingw64/bin/../lib/gcc] ==> dir [c:/mingw64/bin/../lib/gcc]
+    arg [-Lc:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib/../lib] ==> dir [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib/../lib]
+    arg [-Lc:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../lib] ==> dir [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../lib]
+    arg [-L/mingw/lib/../lib] ==> dir [/mingw/lib/../lib]
+    arg [-Lc:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib] ==> dir [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib]
+    arg [-Lc:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../..] ==> dir [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../..]
+    arg [-L/mingw/lib] ==> dir [/mingw/lib]
+    arg [--whole-archive] ==> ignore
+    arg [CMakeFiles\cmTC_497df.dir/objects.a] ==> ignore
+    arg [--no-whole-archive] ==> ignore
+    arg [--out-implib] ==> ignore
+    arg [libcmTC_497df.dll.a] ==> ignore
+    arg [--major-image-version] ==> ignore
+    arg [0] ==> ignore
+    arg [--minor-image-version] ==> ignore
+    arg [0] ==> ignore
+    arg [-lmingw32] ==> lib [mingw32]
+    arg [-lgcc] ==> lib [gcc]
+    arg [-lgcc_eh] ==> lib [gcc_eh]
+    arg [-lmoldname] ==> lib [moldname]
+    arg [-lmingwex] ==> lib [mingwex]
+    arg [-lmsvcrt] ==> lib [msvcrt]
+    arg [-lkernel32] ==> lib [kernel32]
+    arg [-lpthread] ==> lib [pthread]
+    arg [-ladvapi32] ==> lib [advapi32]
+    arg [-lshell32] ==> lib [shell32]
+    arg [-luser32] ==> lib [user32]
+    arg [-lkernel32] ==> lib [kernel32]
+    arg [-lmingw32] ==> lib [mingw32]
+    arg [-lgcc] ==> lib [gcc]
+    arg [-lgcc_eh] ==> lib [gcc_eh]
+    arg [-lmoldname] ==> lib [moldname]
+    arg [-lmingwex] ==> lib [mingwex]
+    arg [-lmsvcrt] ==> lib [msvcrt]
+    arg [-lkernel32] ==> lib [kernel32]
+    arg [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/crtend.o] ==> obj [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/crtend.o]
+  remove lib [gcc_eh]
+  remove lib [msvcrt]
+  remove lib [gcc_eh]
+  remove lib [msvcrt]
+  collapse obj [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib/../lib/crt2.o] ==> [C:/mingw64/x86_64-w64-mingw32/lib/crt2.o]
+  collapse obj [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/crtbegin.o] ==> [C:/mingw64/lib/gcc/x86_64-w64-mingw32/12.1.0/crtbegin.o]
+  collapse obj [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/crtend.o] ==> [C:/mingw64/lib/gcc/x86_64-w64-mingw32/12.1.0/crtend.o]
+  collapse library dir [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0] ==> [C:/mingw64/lib/gcc/x86_64-w64-mingw32/12.1.0]
+  collapse library dir [c:/mingw64/bin/../lib/gcc] ==> [C:/mingw64/lib/gcc]
+  collapse library dir [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib/../lib] ==> [C:/mingw64/x86_64-w64-mingw32/lib]
+  collapse library dir [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../lib] ==> [C:/mingw64/lib]
+  collapse library dir [/mingw/lib/../lib] ==> [/MinGW/lib]
+  collapse library dir [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../../../x86_64-w64-mingw32/lib] ==> [C:/mingw64/x86_64-w64-mingw32/lib]
+  collapse library dir [c:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/12.1.0/../../..] ==> [C:/mingw64/lib]
+  collapse library dir [/mingw/lib] ==> [/MinGW/lib]
+  implicit libs: [mingw32;gcc;moldname;mingwex;kernel32;pthread;advapi32;shell32;user32;kernel32;mingw32;gcc;moldname;mingwex;kernel32]
+  implicit objs: [C:/mingw64/x86_64-w64-mingw32/lib/crt2.o;C:/mingw64/lib/gcc/x86_64-w64-mingw32/12.1.0/crtbegin.o;C:/mingw64/lib/gcc/x86_64-w64-mingw32/12.1.0/crtend.o]
+  implicit dirs: [C:/mingw64/lib/gcc/x86_64-w64-mingw32/12.1.0;C:/mingw64/lib/gcc;C:/mingw64/x86_64-w64-mingw32/lib;C:/mingw64/lib;/MinGW/lib]
+  implicit fwks: []
+
+
+Performing C SOURCE FILE Test HAVE_GCC_WALL succeeded with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-l2hgdb
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_07ef7/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_07ef7.dir\build.make CMakeFiles/cmTC_07ef7.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-l2hgdb'
+Building C object CMakeFiles/cmTC_07ef7.dir/src.c.obj
+C:\mingw64\bin\gcc.exe -DHAVE_GCC_WALL  -Wall -o CMakeFiles\cmTC_07ef7.dir\src.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-l2hgdb\src.c
+Linking C executable cmTC_07ef7.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_07ef7.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_07ef7.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_07ef7.dir/objects.a @CMakeFiles\cmTC_07ef7.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall -Wl,--whole-archive CMakeFiles\cmTC_07ef7.dir/objects.a -Wl,--no-whole-archive -o cmTC_07ef7.exe -Wl,--out-implib,libcmTC_07ef7.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_07ef7.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-l2hgdb'
+
+
+Source file was:
+int main() { return 0; }
+
+Performing C SOURCE FILE Test HAVE_GCC_FOMIT_FRAME_POINTER succeeded with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-kjztf5
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_93d61/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_93d61.dir\build.make CMakeFiles/cmTC_93d61.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-kjztf5'
+Building C object CMakeFiles/cmTC_93d61.dir/src.c.obj
+C:\mingw64\bin\gcc.exe -DHAVE_GCC_FOMIT_FRAME_POINTER  -Wall -fomit-frame-pointer -o CMakeFiles\cmTC_93d61.dir\src.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-kjztf5\src.c
+Linking C executable cmTC_93d61.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_93d61.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_93d61.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_93d61.dir/objects.a @CMakeFiles\cmTC_93d61.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall -fomit-frame-pointer -Wl,--whole-archive CMakeFiles\cmTC_93d61.dir/objects.a -Wl,--no-whole-archive -o cmTC_93d61.exe -Wl,--out-implib,libcmTC_93d61.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_93d61.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-kjztf5'
+
+
+Source file was:
+int main() { return 0; }
+
+Determining if the include file inttypes.h exists passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-vwg1zr
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_2e5c0/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_2e5c0.dir\build.make CMakeFiles/cmTC_2e5c0.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-vwg1zr'
+Building C object CMakeFiles/cmTC_2e5c0.dir/CheckIncludeFile.c.obj
+C:\mingw64\bin\gcc.exe   -Wall  -o CMakeFiles\cmTC_2e5c0.dir\CheckIncludeFile.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-vwg1zr\CheckIncludeFile.c
+Linking C executable cmTC_2e5c0.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_2e5c0.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_2e5c0.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_2e5c0.dir/objects.a @CMakeFiles\cmTC_2e5c0.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_2e5c0.dir/objects.a -Wl,--no-whole-archive -o cmTC_2e5c0.exe -Wl,--out-implib,libcmTC_2e5c0.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_2e5c0.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-vwg1zr'
+
+
+
+Determining if the include file memory.h exists passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-vc1gp8
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_ef447/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_ef447.dir\build.make CMakeFiles/cmTC_ef447.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-vc1gp8'
+Building C object CMakeFiles/cmTC_ef447.dir/CheckIncludeFile.c.obj
+C:\mingw64\bin\gcc.exe   -Wall  -o CMakeFiles\cmTC_ef447.dir\CheckIncludeFile.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-vc1gp8\CheckIncludeFile.c
+Linking C executable cmTC_ef447.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_ef447.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_ef447.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_ef447.dir/objects.a @CMakeFiles\cmTC_ef447.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_ef447.dir/objects.a -Wl,--no-whole-archive -o cmTC_ef447.exe -Wl,--out-implib,libcmTC_ef447.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_ef447.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-vc1gp8'
+
+
+
+Determining if the include file stddef.h exists passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-fhz6r2
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_c6eae/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_c6eae.dir\build.make CMakeFiles/cmTC_c6eae.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-fhz6r2'
+Building C object CMakeFiles/cmTC_c6eae.dir/CheckIncludeFile.c.obj
+C:\mingw64\bin\gcc.exe   -Wall  -o CMakeFiles\cmTC_c6eae.dir\CheckIncludeFile.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-fhz6r2\CheckIncludeFile.c
+Linking C executable cmTC_c6eae.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_c6eae.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_c6eae.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_c6eae.dir/objects.a @CMakeFiles\cmTC_c6eae.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_c6eae.dir/objects.a -Wl,--no-whole-archive -o cmTC_c6eae.exe -Wl,--out-implib,libcmTC_c6eae.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_c6eae.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-fhz6r2'
+
+
+
+Determining if the include file stdint.h exists passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-kark9k
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_e1dbf/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_e1dbf.dir\build.make CMakeFiles/cmTC_e1dbf.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-kark9k'
+Building C object CMakeFiles/cmTC_e1dbf.dir/CheckIncludeFile.c.obj
+C:\mingw64\bin\gcc.exe   -Wall  -o CMakeFiles\cmTC_e1dbf.dir\CheckIncludeFile.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-kark9k\CheckIncludeFile.c
+Linking C executable cmTC_e1dbf.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_e1dbf.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_e1dbf.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_e1dbf.dir/objects.a @CMakeFiles\cmTC_e1dbf.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_e1dbf.dir/objects.a -Wl,--no-whole-archive -o cmTC_e1dbf.exe -Wl,--out-implib,libcmTC_e1dbf.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_e1dbf.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-kark9k'
+
+
+
+Determining if the include file stdlib.h exists passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-ogrs9u
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_8b5fd/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_8b5fd.dir\build.make CMakeFiles/cmTC_8b5fd.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-ogrs9u'
+Building C object CMakeFiles/cmTC_8b5fd.dir/CheckIncludeFile.c.obj
+C:\mingw64\bin\gcc.exe   -Wall  -o CMakeFiles\cmTC_8b5fd.dir\CheckIncludeFile.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-ogrs9u\CheckIncludeFile.c
+Linking C executable cmTC_8b5fd.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_8b5fd.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_8b5fd.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_8b5fd.dir/objects.a @CMakeFiles\cmTC_8b5fd.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_8b5fd.dir/objects.a -Wl,--no-whole-archive -o cmTC_8b5fd.exe -Wl,--out-implib,libcmTC_8b5fd.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_8b5fd.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-ogrs9u'
+
+
+
+Determining if the include file string.h exists passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-6ea0u6
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_37302/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_37302.dir\build.make CMakeFiles/cmTC_37302.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-6ea0u6'
+Building C object CMakeFiles/cmTC_37302.dir/CheckIncludeFile.c.obj
+C:\mingw64\bin\gcc.exe   -Wall  -o CMakeFiles\cmTC_37302.dir\CheckIncludeFile.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-6ea0u6\CheckIncludeFile.c
+Linking C executable cmTC_37302.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_37302.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_37302.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_37302.dir/objects.a @CMakeFiles\cmTC_37302.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_37302.dir/objects.a -Wl,--no-whole-archive -o cmTC_37302.exe -Wl,--out-implib,libcmTC_37302.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_37302.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-6ea0u6'
+
+
+
+Determining if the include file strings.h exists passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-ckol9w
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_c63c7/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_c63c7.dir\build.make CMakeFiles/cmTC_c63c7.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-ckol9w'
+Building C object CMakeFiles/cmTC_c63c7.dir/CheckIncludeFile.c.obj
+C:\mingw64\bin\gcc.exe   -Wall  -o CMakeFiles\cmTC_c63c7.dir\CheckIncludeFile.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-ckol9w\CheckIncludeFile.c
+Linking C executable cmTC_c63c7.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_c63c7.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_c63c7.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_c63c7.dir/objects.a @CMakeFiles\cmTC_c63c7.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_c63c7.dir/objects.a -Wl,--no-whole-archive -o cmTC_c63c7.exe -Wl,--out-implib,libcmTC_c63c7.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_c63c7.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-ckol9w'
+
+
+
+Determining if the include file sys/types.h exists passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-zqnd3o
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_884b5/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_884b5.dir\build.make CMakeFiles/cmTC_884b5.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-zqnd3o'
+Building C object CMakeFiles/cmTC_884b5.dir/CheckIncludeFile.c.obj
+C:\mingw64\bin\gcc.exe   -Wall  -o CMakeFiles\cmTC_884b5.dir\CheckIncludeFile.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-zqnd3o\CheckIncludeFile.c
+Linking C executable cmTC_884b5.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_884b5.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_884b5.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_884b5.dir/objects.a @CMakeFiles\cmTC_884b5.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_884b5.dir/objects.a -Wl,--no-whole-archive -o cmTC_884b5.exe -Wl,--out-implib,libcmTC_884b5.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_884b5.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-zqnd3o'
+
+
+
+Determining if the include file io.h exists passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-755zaq
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_f1149/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_f1149.dir\build.make CMakeFiles/cmTC_f1149.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-755zaq'
+Building C object CMakeFiles/cmTC_f1149.dir/CheckIncludeFile.c.obj
+C:\mingw64\bin\gcc.exe   -Wall  -o CMakeFiles\cmTC_f1149.dir\CheckIncludeFile.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-755zaq\CheckIncludeFile.c
+Linking C executable cmTC_f1149.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_f1149.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_f1149.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_f1149.dir/objects.a @CMakeFiles\cmTC_f1149.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_f1149.dir/objects.a -Wl,--no-whole-archive -o cmTC_f1149.exe -Wl,--out-implib,libcmTC_f1149.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_f1149.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-755zaq'
+
+
+
+Determining if the include file fcntl.h exists passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-buznsq
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_04174/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_04174.dir\build.make CMakeFiles/cmTC_04174.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-buznsq'
+Building C object CMakeFiles/cmTC_04174.dir/CheckIncludeFile.c.obj
+C:\mingw64\bin\gcc.exe   -Wall  -o CMakeFiles\cmTC_04174.dir\CheckIncludeFile.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-buznsq\CheckIncludeFile.c
+Linking C executable cmTC_04174.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_04174.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_04174.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_04174.dir/objects.a @CMakeFiles\cmTC_04174.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_04174.dir/objects.a -Wl,--no-whole-archive -o cmTC_04174.exe -Wl,--out-implib,libcmTC_04174.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_04174.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-buznsq'
+
+
+
+Determining if the _setmode exist passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-yakafg
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_51d44/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_51d44.dir\build.make CMakeFiles/cmTC_51d44.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-yakafg'
+Building C object CMakeFiles/cmTC_51d44.dir/CheckSymbolExists.c.obj
+C:\mingw64\bin\gcc.exe   -Wall  -o CMakeFiles\cmTC_51d44.dir\CheckSymbolExists.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-yakafg\CheckSymbolExists.c
+Linking C executable cmTC_51d44.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_51d44.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_51d44.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_51d44.dir/objects.a @CMakeFiles\cmTC_51d44.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_51d44.dir/objects.a -Wl,--no-whole-archive -o cmTC_51d44.exe -Wl,--out-implib,libcmTC_51d44.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_51d44.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-yakafg'
+
+
+File CheckSymbolExists.c:
+/* */
+#include <io.h>
+#include <fcntl.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef _setmode
+  return ((int*)(&_setmode))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the _fileno exist passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-hoyr5x
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_0f6a8/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_0f6a8.dir\build.make CMakeFiles/cmTC_0f6a8.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-hoyr5x'
+Building C object CMakeFiles/cmTC_0f6a8.dir/CheckSymbolExists.c.obj
+C:\mingw64\bin\gcc.exe   -Wall  -o CMakeFiles\cmTC_0f6a8.dir\CheckSymbolExists.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-hoyr5x\CheckSymbolExists.c
+Linking C executable cmTC_0f6a8.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_0f6a8.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_0f6a8.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_0f6a8.dir/objects.a @CMakeFiles\cmTC_0f6a8.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_0f6a8.dir/objects.a -Wl,--no-whole-archive -o cmTC_0f6a8.exe -Wl,--out-implib,libcmTC_0f6a8.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_0f6a8.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-hoyr5x'
+
+
+File CheckSymbolExists.c:
+/* */
+#include <stdio.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef _fileno
+  return ((int*)(&_fileno))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the fopen_s exist passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-61drs0
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_8c45e/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_8c45e.dir\build.make CMakeFiles/cmTC_8c45e.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-61drs0'
+Building C object CMakeFiles/cmTC_8c45e.dir/CheckSymbolExists.c.obj
+C:\mingw64\bin\gcc.exe   -Wall  -o CMakeFiles\cmTC_8c45e.dir\CheckSymbolExists.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-61drs0\CheckSymbolExists.c
+Linking C executable cmTC_8c45e.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_8c45e.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_8c45e.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_8c45e.dir/objects.a @CMakeFiles\cmTC_8c45e.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_8c45e.dir/objects.a -Wl,--no-whole-archive -o cmTC_8c45e.exe -Wl,--out-implib,libcmTC_8c45e.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_8c45e.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-61drs0'
+
+
+File CheckSymbolExists.c:
+/* */
+#include <stdio.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef fopen_s
+  return ((int*)(&fopen_s))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the _O_BINARY exist passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-8ybwje
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_c329b/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_c329b.dir\build.make CMakeFiles/cmTC_c329b.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-8ybwje'
+Building C object CMakeFiles/cmTC_c329b.dir/CheckSymbolExists.c.obj
+C:\mingw64\bin\gcc.exe   -Wall  -o CMakeFiles\cmTC_c329b.dir\CheckSymbolExists.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-8ybwje\CheckSymbolExists.c
+Linking C executable cmTC_c329b.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_c329b.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_c329b.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_c329b.dir/objects.a @CMakeFiles\cmTC_c329b.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_c329b.dir/objects.a -Wl,--no-whole-archive -o cmTC_c329b.exe -Wl,--out-implib,libcmTC_c329b.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_c329b.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-8ybwje'
+
+
+File CheckSymbolExists.c:
+/* */
+#include <fcntl.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef _O_BINARY
+  return ((int*)(&_O_BINARY))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining size of off_t passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-re3htj
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_869c8/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_869c8.dir\build.make CMakeFiles/cmTC_869c8.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-re3htj'
+Building C object CMakeFiles/cmTC_869c8.dir/SIZEOF_OFF_T.c.obj
+C:\mingw64\bin\gcc.exe -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGE_FILES -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS  -Wall  -o CMakeFiles\cmTC_869c8.dir\SIZEOF_OFF_T.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-re3htj\SIZEOF_OFF_T.c
+Linking C executable cmTC_869c8.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_869c8.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_869c8.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_869c8.dir/objects.a @CMakeFiles\cmTC_869c8.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_869c8.dir/objects.a -Wl,--no-whole-archive -o cmTC_869c8.exe -Wl,--out-implib,libcmTC_869c8.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_869c8.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-re3htj'
+
+
+
+Determining if the fseeko exist passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-g73pm6
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_bd366/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_bd366.dir\build.make CMakeFiles/cmTC_bd366.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-g73pm6'
+Building C object CMakeFiles/cmTC_bd366.dir/CheckSymbolExists.c.obj
+C:\mingw64\bin\gcc.exe -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGE_FILES -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS  -Wall  -o CMakeFiles\cmTC_bd366.dir\CheckSymbolExists.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-g73pm6\CheckSymbolExists.c
+Linking C executable cmTC_bd366.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_bd366.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_bd366.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_bd366.dir/objects.a @CMakeFiles\cmTC_bd366.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_bd366.dir/objects.a -Wl,--no-whole-archive -o cmTC_bd366.exe -Wl,--out-implib,libcmTC_bd366.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_bd366.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-g73pm6'
+
+
+File CheckSymbolExists.c:
+/* */
+#include <stdio.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef fseeko
+  return ((int*)(&fseeko))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the ftello exist passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-rjfsiv
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_66b06/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_66b06.dir\build.make CMakeFiles/cmTC_66b06.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-rjfsiv'
+Building C object CMakeFiles/cmTC_66b06.dir/CheckSymbolExists.c.obj
+C:\mingw64\bin\gcc.exe -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGE_FILES -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS  -Wall  -o CMakeFiles\cmTC_66b06.dir\CheckSymbolExists.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-rjfsiv\CheckSymbolExists.c
+Linking C executable cmTC_66b06.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_66b06.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_66b06.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_66b06.dir/objects.a @CMakeFiles\cmTC_66b06.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_66b06.dir/objects.a -Wl,--no-whole-archive -o cmTC_66b06.exe -Wl,--out-implib,libcmTC_66b06.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_66b06.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-rjfsiv'
+
+
+File CheckSymbolExists.c:
+/* */
+#include <stdio.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef ftello
+  return ((int*)(&ftello))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the PRIdMAX exist passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-c4lvpj
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_e8cfa/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_e8cfa.dir\build.make CMakeFiles/cmTC_e8cfa.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-c4lvpj'
+Building C object CMakeFiles/cmTC_e8cfa.dir/CheckSymbolExists.c.obj
+C:\mingw64\bin\gcc.exe -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGE_FILES -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS  -Wall  -o CMakeFiles\cmTC_e8cfa.dir\CheckSymbolExists.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-c4lvpj\CheckSymbolExists.c
+Linking C executable cmTC_e8cfa.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_e8cfa.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_e8cfa.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_e8cfa.dir/objects.a @CMakeFiles\cmTC_e8cfa.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_e8cfa.dir/objects.a -Wl,--no-whole-archive -o cmTC_e8cfa.exe -Wl,--out-implib,libcmTC_e8cfa.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_e8cfa.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-c4lvpj'
+
+
+File CheckSymbolExists.c:
+/* */
+#include <inttypes.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef PRIdMAX
+  return ((int*)(&PRIdMAX))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Performing C SOURCE FILE Test HAVE_INLINE succeeded with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-ihqlsl
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_3107c/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_3107c.dir\build.make CMakeFiles/cmTC_3107c.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-ihqlsl'
+Building C object CMakeFiles/cmTC_3107c.dir/src.c.obj
+C:\mingw64\bin\gcc.exe -DHAVE_INLINE  -Wall  -o CMakeFiles\cmTC_3107c.dir\src.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-ihqlsl\src.c
+Linking C executable cmTC_3107c.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_3107c.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_3107c.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_3107c.dir/objects.a @CMakeFiles\cmTC_3107c.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_3107c.dir/objects.a -Wl,--no-whole-archive -o cmTC_3107c.exe -Wl,--out-implib,libcmTC_3107c.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_3107c.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-ihqlsl'
+
+
+Source file was:
+inline void func(); void func() { } int main() { func(); return 0; }
+
+Performing C SOURCE FILE Test HAVE___INLINE succeeded with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-8ofaps
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_4f00b/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_4f00b.dir\build.make CMakeFiles/cmTC_4f00b.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-8ofaps'
+Building C object CMakeFiles/cmTC_4f00b.dir/src.c.obj
+C:\mingw64\bin\gcc.exe -DHAVE___INLINE  -Wall  -o CMakeFiles\cmTC_4f00b.dir\src.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-8ofaps\src.c
+Linking C executable cmTC_4f00b.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_4f00b.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_4f00b.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_4f00b.dir/objects.a @CMakeFiles\cmTC_4f00b.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_4f00b.dir/objects.a -Wl,--no-whole-archive -o cmTC_4f00b.exe -Wl,--out-implib,libcmTC_4f00b.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_4f00b.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-8ofaps'
+
+
+Source file was:
+__inline void func(); void func() { } int main() { func(); return 0; }
+
+Performing C SOURCE FILE Test HAVE___INLINE__ succeeded with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-1i241y
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_b3cb1/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_b3cb1.dir\build.make CMakeFiles/cmTC_b3cb1.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-1i241y'
+Building C object CMakeFiles/cmTC_b3cb1.dir/src.c.obj
+C:\mingw64\bin\gcc.exe -DHAVE___INLINE__  -Wall  -o CMakeFiles\cmTC_b3cb1.dir\src.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-1i241y\src.c
+Linking C executable cmTC_b3cb1.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_b3cb1.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_b3cb1.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_b3cb1.dir/objects.a @CMakeFiles\cmTC_b3cb1.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_b3cb1.dir/objects.a -Wl,--no-whole-archive -o cmTC_b3cb1.exe -Wl,--out-implib,libcmTC_b3cb1.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_b3cb1.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-1i241y'
+
+
+Source file was:
+__inline__ void func(); void func() { } int main() { func(); return 0; }
+
+Performing C SOURCE FILE Test HAVE___DECLSPEC_DLLEXPORT_ succeeded with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-580qej
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_e34dc/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_e34dc.dir\build.make CMakeFiles/cmTC_e34dc.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-580qej'
+Building C object CMakeFiles/cmTC_e34dc.dir/src.c.obj
+C:\mingw64\bin\gcc.exe -DHAVE___DECLSPEC_DLLEXPORT_  -Wall  -o CMakeFiles\cmTC_e34dc.dir\src.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-580qej\src.c
+Linking C executable cmTC_e34dc.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_e34dc.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_e34dc.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_e34dc.dir/objects.a @CMakeFiles\cmTC_e34dc.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_e34dc.dir/objects.a -Wl,--no-whole-archive -o cmTC_e34dc.exe -Wl,--out-implib,libcmTC_e34dc.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_e34dc.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-580qej'
+
+
+Source file was:
+__declspec(dllexport) void func(); void func() { } int main() { func(); return 0; }
+
+Performing C SOURCE FILE Test HAVE___DECLSPEC_DLLIMPORT_ succeeded with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-8aa7g2
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_b7bd4/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_b7bd4.dir\build.make CMakeFiles/cmTC_b7bd4.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-8aa7g2'
+Building C object CMakeFiles/cmTC_b7bd4.dir/src.c.obj
+C:\mingw64\bin\gcc.exe -DHAVE___DECLSPEC_DLLIMPORT_  -Wall  -o CMakeFiles\cmTC_b7bd4.dir\src.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-8aa7g2\src.c
+C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-8aa7g2\src.c:1:41: warning: 'func' redeclared without dllimport attribute: previous dllimport ignored [-Wattributes]
+    1 | __declspec(dllimport) void func(); void func() { } int main() { func(); return 0; }
+      |                                         ^~~~
+Linking C executable cmTC_b7bd4.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_b7bd4.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_b7bd4.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_b7bd4.dir/objects.a @CMakeFiles\cmTC_b7bd4.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_b7bd4.dir/objects.a -Wl,--no-whole-archive -o cmTC_b7bd4.exe -Wl,--out-implib,libcmTC_b7bd4.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_b7bd4.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-8aa7g2'
+
+
+Source file was:
+__declspec(dllimport) void func(); void func() { } int main() { func(); return 0; }
+
+Determining size of uint8_t passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-ob933n
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_56ce1/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_56ce1.dir\build.make CMakeFiles/cmTC_56ce1.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-ob933n'
+Building C object CMakeFiles/cmTC_56ce1.dir/SIZEOF_UINT8_T.c.obj
+C:\mingw64\bin\gcc.exe   -Wall  -o CMakeFiles\cmTC_56ce1.dir\SIZEOF_UINT8_T.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-ob933n\SIZEOF_UINT8_T.c
+Linking C executable cmTC_56ce1.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_56ce1.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_56ce1.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_56ce1.dir/objects.a @CMakeFiles\cmTC_56ce1.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_56ce1.dir/objects.a -Wl,--no-whole-archive -o cmTC_56ce1.exe -Wl,--out-implib,libcmTC_56ce1.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_56ce1.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-ob933n'
+
+
+
+Determining size of uint16_t passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-3xjkhn
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_54366/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_54366.dir\build.make CMakeFiles/cmTC_54366.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-3xjkhn'
+Building C object CMakeFiles/cmTC_54366.dir/SIZEOF_UINT16_T.c.obj
+C:\mingw64\bin\gcc.exe   -Wall  -o CMakeFiles\cmTC_54366.dir\SIZEOF_UINT16_T.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-3xjkhn\SIZEOF_UINT16_T.c
+Linking C executable cmTC_54366.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_54366.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_54366.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_54366.dir/objects.a @CMakeFiles\cmTC_54366.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_54366.dir/objects.a -Wl,--no-whole-archive -o cmTC_54366.exe -Wl,--out-implib,libcmTC_54366.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_54366.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-3xjkhn'
+
+
+
+Determining size of int32_t passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-8uqly3
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_27bb9/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_27bb9.dir\build.make CMakeFiles/cmTC_27bb9.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-8uqly3'
+Building C object CMakeFiles/cmTC_27bb9.dir/SIZEOF_INT32_T.c.obj
+C:\mingw64\bin\gcc.exe   -Wall  -o CMakeFiles\cmTC_27bb9.dir\SIZEOF_INT32_T.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-8uqly3\SIZEOF_INT32_T.c
+Linking C executable cmTC_27bb9.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_27bb9.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_27bb9.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_27bb9.dir/objects.a @CMakeFiles\cmTC_27bb9.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_27bb9.dir/objects.a -Wl,--no-whole-archive -o cmTC_27bb9.exe -Wl,--out-implib,libcmTC_27bb9.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_27bb9.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-8uqly3'
+
+
+
+Determining if the PRId32 exist passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-mj17ti
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_7a449/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_7a449.dir\build.make CMakeFiles/cmTC_7a449.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-mj17ti'
+Building C object CMakeFiles/cmTC_7a449.dir/CheckSymbolExists.c.obj
+C:\mingw64\bin\gcc.exe   -Wall  -o CMakeFiles\cmTC_7a449.dir\CheckSymbolExists.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-mj17ti\CheckSymbolExists.c
+Linking C executable cmTC_7a449.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_7a449.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_7a449.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_7a449.dir/objects.a @CMakeFiles\cmTC_7a449.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_7a449.dir/objects.a -Wl,--no-whole-archive -o cmTC_7a449.exe -Wl,--out-implib,libcmTC_7a449.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_7a449.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-mj17ti'
+
+
+File CheckSymbolExists.c:
+/* */
+#include <inttypes.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef PRId32
+  return ((int*)(&PRId32))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the INT32_C exist passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-i7i0p1
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_8b0fc/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_8b0fc.dir\build.make CMakeFiles/cmTC_8b0fc.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-i7i0p1'
+Building C object CMakeFiles/cmTC_8b0fc.dir/CheckSymbolExists.c.obj
+C:\mingw64\bin\gcc.exe   -Wall  -o CMakeFiles\cmTC_8b0fc.dir\CheckSymbolExists.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-i7i0p1\CheckSymbolExists.c
+Linking C executable cmTC_8b0fc.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_8b0fc.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_8b0fc.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_8b0fc.dir/objects.a @CMakeFiles\cmTC_8b0fc.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_8b0fc.dir/objects.a -Wl,--no-whole-archive -o cmTC_8b0fc.exe -Wl,--out-implib,libcmTC_8b0fc.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_8b0fc.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-i7i0p1'
+
+
+File CheckSymbolExists.c:
+/* */
+#include <stdint.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef INT32_C
+  return ((int*)(&INT32_C))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+Determining if the UINT32_C exist passed with the following output:
+Change Dir: C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-zaqwyl
+
+Run Build Command(s):C:/mingw64/bin/mingw32-make.exe -f Makefile cmTC_c5c24/fast && C:/mingw64/bin/mingw32-make.exe  -f CMakeFiles\cmTC_c5c24.dir\build.make CMakeFiles/cmTC_c5c24.dir/build
+mingw32-make[1]: Entering directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-zaqwyl'
+Building C object CMakeFiles/cmTC_c5c24.dir/CheckSymbolExists.c.obj
+C:\mingw64\bin\gcc.exe   -Wall  -o CMakeFiles\cmTC_c5c24.dir\CheckSymbolExists.c.obj -c C:\Users\trito\github\tnn-miner\bin\linux-amd64\external\sais-2.4.1\build\CMakeFiles\CMakeScratch\TryCompile-zaqwyl\CheckSymbolExists.c
+Linking C executable cmTC_c5c24.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_link_script CMakeFiles\cmTC_c5c24.dir\link.txt --verbose=1
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cmTC_c5c24.dir/objects.a
+C:\mingw64\bin\ar.exe qc CMakeFiles\cmTC_c5c24.dir/objects.a @CMakeFiles\cmTC_c5c24.dir\objects1
+C:\mingw64\bin\gcc.exe  -Wall  -Wl,--whole-archive CMakeFiles\cmTC_c5c24.dir/objects.a -Wl,--no-whole-archive -o cmTC_c5c24.exe -Wl,--out-implib,libcmTC_c5c24.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cmTC_c5c24.dir\linkLibs.rsp
+mingw32-make[1]: Leaving directory 'C:/Users/trito/github/tnn-miner/bin/linux-amd64/external/sais-2.4.1/build/CMakeFiles/CMakeScratch/TryCompile-zaqwyl'
+
+
+File CheckSymbolExists.c:
+/* */
+#include <stdint.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef UINT32_C
+  return ((int*)(&UINT32_C))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}

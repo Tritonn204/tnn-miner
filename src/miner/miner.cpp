@@ -53,7 +53,7 @@
 #if defined(_WIN32)
 #include <Windows.h>
 #else
-#include <cpp-dns.hpp>
+#include "cpp-dns.hpp"
 #include <sched.h>
 #define THREAD_PRIORITY_ABOVE_NORMAL -5
 #define THREAD_PRIORITY_HIGHEST -20
@@ -625,6 +625,7 @@ void logSeconds(std::chrono::_V2::system_clock::time_point start_time, int durat
       mutex.lock();
       // std::cout << "\n" << std::flush;
       printf("\rBENCHMARKING: %d/%d seconds elapsed...", i, duration);
+      std::cout << std::flush;
       mutex.unlock();
       if (i == duration || *stop)
         break;
