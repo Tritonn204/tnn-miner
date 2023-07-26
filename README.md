@@ -26,6 +26,7 @@ Do note that CMakeLists.txt will need to be altered if your libraries are instal
 This miner can be activated from the command line with the following parameters in the same order. Simply adjust the syntax for use with your shell or terminal of choice!
 
 ### _Tnn-miner {node/pool url} {dero payout address} {threads} {dev fee}_
+Duly note that usage will be overhauled very soon.
 
 If you intend to build from source without dev fees, please consider a one-time donation to the Dero address **_tritonn_** (Dero Name Service). 
 
