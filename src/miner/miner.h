@@ -1,11 +1,6 @@
 #ifndef MINER
 #define MINER
 
-#define CYAN 3
-#define RED 4
-#define BRIGHT_YELLOW 14
-#define BRIGHT_WHITE 15
-
 #include <bigint.h>
 #include <stdint.h>
 #include <chrono>
@@ -15,21 +10,22 @@
 #include <gmpxx.h>
 #include <boost/thread.hpp>
 #include <vector>
+#include <terminal.h>
+#include <string>
 
 #ifdef _WIN32
 #include <windows.h>
 #endif
 
-const char *consoleLine = " TNN-MINER v0.1.5 ";
-
 const int workerThreads = 2;
 
 const int reportInterval = 1;
 
-const char *host;
-const char *port;
-const char *wallet;
-int threads;
+const char *nullArg = "NULL";
+std::string host = nullArg;
+std::string port = nullArg;
+std::string wallet = nullArg;
+int threads = 0;
 
 // Dev fee config
 // Dev fee is a % of hashrate
@@ -41,34 +37,7 @@ const char *devPort = "10300";
 const char *devWallet = "dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw4wjqqp6y2n7";
 
 const int MINIBLOCK_SIZE = 48;
-mpz_class oneLsh256;
-
-int colorPreTable[] = {
-  0,0,0,0,91,
-  0,0,0,0,1,
-  0,0,0,0,1,
-  0
-};
-int colorTable[] = {
-  0,0,0,36,91,
-  0,0,0,0,91,
-  0,0,0,0,93,
-  37
-};
-
-#if defined(_WIN32)
-inline void setcolor(WORD color)
-{
-    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE),color);
-    return;
-}
-#else
-inline void setcolor(int color)
-{
-    printf("\e[%d;%dm", colorPreTable[color], colorTable[color]);
-}
-#endif
-
+mpz_class oneLsh256;                                                   
 
 void getWork(bool isDev);
 void sendWork();

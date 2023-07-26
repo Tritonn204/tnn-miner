@@ -14,8 +14,6 @@
 #include "pow.h"
 #include "powtest.h"
 
-#include "gsaca.h"
-
 #include <unordered_map>
 #include <array>
 #include <algorithm>
@@ -36,8 +34,6 @@
 #include <fstream>
 
 #include <bit>
-#include "archon.h"
-#include <sais.h>
 
 using byte = unsigned char;
 
@@ -3140,26 +3136,8 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker)
 
     worker.data_len = static_cast<uint32_t>((worker.tries - 4) * 256 + (((static_cast<uint64_t>(worker.step_3[253]) << 8) | static_cast<uint64_t>(worker.step_3[254])) & 0x3ff));
 
-    // fmt::printf("worker.tries: %d\n" , worker.tries);
-    // fmt::printf("data_len: %d\n" , data_len);
-
-    // text_32_0alloc(worker.sData, worker.sa, data_len, data_len);
-    // std::fill(worker.sa, worker.sa + MAX_LENGTH, 0);
-    // std::fill(worker.sa2, worker.sa2 + MAX_LENGTH, 0);
-
-    // std::ofstream myfile;
-    // const char * extension = ".txt";
-    // char DATA[worker.data_len];
-    // memcpy(DATA, worker.sData, worker.data_len);
-
-    // std::string fullPath = "./tests/";
-    // fullPath = fullPath + hexStr(input, inputLen) + extension;
-    // myfile.open(fullPath);
-    // myfile << worker.sData;
-    // myfile.close();
 
     divsufsort(worker.sData, worker.sa, worker.data_len);
-    // sais_u8(worker.sData, worker.sa, (sa_int32_t)worker.data_len, 256);
 
     // byte T[worker.data_len + 1];
     // T[0] = 0;

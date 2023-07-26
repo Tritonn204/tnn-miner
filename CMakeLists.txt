@@ -2,22 +2,22 @@ cmake_minimum_required(VERSION 3.16.3)
 
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_C_FLAGS_RELEASE "-static")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -pthread -O3 -march=native -m64 -Wall -Wuninitialized -funroll-all-loops -ftree-vectorize")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -fopenmp -pthread -O3 -march=native -m64 -Wall -Wuninitialized -funroll-all-loops -ftree-vectorize")
 
 if(WIN32)
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wa,-mbig-obj")
 endif()
 
-# if(UNIX)
-# set(CMAKE_SYSTEM_NAME Linux)
-# set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -pthread -Wl,--whole-archive -lpthread -Wl,--no-whole-archive")
-# endif()
+if(UNIX)
+set(CMAKE_SYSTEM_NAME Linux)
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -pthread -Wl,--whole-archive -lpthread -Wl,--no-whole-archive")
+endif()
 
 set (CMAKE_CXX_STANDARD 20)
 
 project(
   Tnn-miner
-  VERSION 0.1.5
+  VERSION 0.1.6
   DESCRIPTION "Open Source Astrobwt Miner"
 )
 
@@ -53,15 +53,6 @@ endif()
 include(${CPM_DOWNLOAD_LOCATION})
 
 CPMAddPackage("gh:nlohmann/json@3.10.5")
-
-CPMAddPackage(
-  NAME divsufsort
-  GITHUB_REPOSITORY y-256/libdivsufsort
-  GIT_TAG 2.0.1
-  OPTIONS
-    "BUILD_SHARED_LIBS OFF"
-    "USE_OPENMP OFF"
-)
 
 set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL REQUIRED)
@@ -104,4 +95,4 @@ endif()
 if(UNIX)
   target_link_libraries(${PROJECT_NAME} udns)
 endif()
-target_link_libraries(${PROJECT_NAME} nlohmann_json::nlohmann_json OpenSSL::SSL ${Boost_LIBRARIES} OpenSSL::Crypto gmp gmpxx sais divsufsort)
+target_link_libraries(${PROJECT_NAME} nlohmann_json::nlohmann_json OpenSSL::SSL ${Boost_LIBRARIES} OpenSSL::Crypto gmp gmpxx divsufsort)
