@@ -72,6 +72,8 @@ OPTIONS
         Your desired dev fee percentage, default is 2.5, minimum is 1
     -no-lock: (optional) 
         Disables CPU affinity / CPU core binding
+    -help, -h: (must be first arg)
+        Shows help
 DEBUG
     -test: 
         Runs a set of tests to verify AstrobwtV3 is working, must be only argument/flag in run command
