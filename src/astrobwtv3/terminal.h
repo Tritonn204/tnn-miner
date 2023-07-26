@@ -75,9 +75,9 @@ OPTIONS
     -help, -h: (must be first arg)
         Shows help
 DEBUG
-    -test: 
-        Runs a set of tests to verify AstrobwtV3 is working, must be only argument/flag in run command
-    -benchmark <A> <B>: 
+    -test: (must be first arg)
+        Runs a set of tests to verify AstrobwtV3 is working
+    -benchmark <A> <B>:
         Runs a mining benchmark for <B> seconds with <A> threads for hashrate testing
         You may insert the -no-lock flag after <A> and <B> if desired. 
 )";
