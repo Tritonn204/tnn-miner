@@ -371,7 +371,6 @@ void do_session(
         bool *B = isDev ? &devConnected : &isConnected;
         (*B) = false;
         fail(ec, "async_read");
-        ws.close(websocket::close_code::service_restart, ec);
         return;
       }
     }
@@ -1019,6 +1018,12 @@ connectionAttempt:
                 << "Will try again in 10 seconds...\n\n";
       setcolor(BRIGHT_WHITE);
       mutex.unlock();
+    } else {
+      mutex.lock();
+      setcolor(RED);
+      std::cerr << "Dev connection error\n";
+      setcolor(BRIGHT_WHITE);
+      mutex.unlock();
     }
     boost::this_thread::sleep_for(boost::chrono::milliseconds(10000));
     ioc.reset();
@@ -1033,7 +1038,7 @@ connectionAttempt:
   if (!isDev)
   {
     mutex.lock();
-    if (caughtDisconnect)
+    if (!caughtDisconnect)
       std::cerr << "\nERROR: lost connection" << std::endl
                 << "Will try to reconnect in 10 seconds...\n\n";
     else
@@ -1044,7 +1049,7 @@ connectionAttempt:
   }
   else
   {
-    if (caughtDisconnect)
+    if (!caughtDisconnect)
       std::cerr << "\nERROR: lost connection to dev node (mining will continue)" << std::endl
                 << "Will try to reconnect in 10 seconds...\n\n";
     else
