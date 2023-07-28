@@ -323,7 +323,6 @@ void do_session(
 
             if (!isDev)
             {
-              // mutex.lock();
               currentBlob = (*J).at("blockhashing_blob");
               blockCounter = (*J).at("blocks");
               miniBlockCounter = (*J).at("miniblocks");
@@ -336,32 +335,34 @@ void do_session(
               rejected = (*J).at("rejected");
               if (!isConnected)
               {
+                mutex.lock();
                 setcolor(BRIGHT_YELLOW);
                 printf("Mining at: %s/ws/%s\n", host.c_str(), wallet.c_str());
                 setcolor(CYAN);
                 printf("Dev fee: %.2f", devFee);
                 std::cout << "%" << std::endl;
                 setcolor(BRIGHT_WHITE);
+                mutex.unlock();
               }
               isConnected = isConnected || true;
               jobCounter++;
-              // mutex.unlock();
             }
             else
             {
-              // mutex.lock();
               difficultyDev = (*J).at("difficultyuint64");
               devBlob = (*J).at("blockhashing_blob");
               devHeight = (*J).at("height");
               if (!devConnected)
               {
+                mutex.lock();
                 setcolor(CYAN);
                 printf("Connected to dev node: %s\n", devPool);
                 setcolor(BRIGHT_WHITE);
+                mutex.unlock();
               }
               devConnected = devConnected || true;
               jobCounter++;
-              // mutex.unlock();
+              mutex.unlock();
             }
           }
         }
@@ -396,10 +397,14 @@ void do_session(
 
 int main(int argc, char **argv)
 {
+#if defined(_WIN32)
+  SetConsoleOutputCP(CP_UTF8);
+#endif
   setcolor(BRIGHT_WHITE);
-  std::cout << TNN << std::endl;
+  printf(TNN);
   boost::this_thread::sleep_for(boost::chrono::seconds(1));
 #if defined(_WIN32)
+  SetConsoleOutputCP(CP_UTF8);
   HANDLE hSelfToken = NULL;
 
   ::OpenProcessToken(::GetCurrentProcess(), TOKEN_ALL_ACCESS, &hSelfToken);
@@ -423,7 +428,7 @@ int main(int argc, char **argv)
     goto fillBlanks;
 
   // Handle debug options
-  if (command == options[TNN_HELP] || command == options[TNN_HELP+1])
+  if (command == options[TNN_HELP] || command == options[TNN_HELP + 1])
   {
     setcolor(CYAN);
     std::cout << usage << std::endl;
@@ -1018,7 +1023,9 @@ connectionAttempt:
                 << "Will try again in 10 seconds...\n\n";
       setcolor(BRIGHT_WHITE);
       mutex.unlock();
-    } else {
+    }
+    else
+    {
       mutex.lock();
       setcolor(RED);
       std::cerr << "Dev connection error\n";
@@ -1034,10 +1041,10 @@ connectionAttempt:
     caughtDisconnect = false;
     boost::this_thread::yield();
   }
-  setcolor(RED);
   if (!isDev)
   {
     mutex.lock();
+    setcolor(RED);
     if (!caughtDisconnect)
       std::cerr << "\nERROR: lost connection" << std::endl
                 << "Will try to reconnect in 10 seconds...\n\n";
@@ -1049,6 +1056,8 @@ connectionAttempt:
   }
   else
   {
+    mutex.lock();
+    setcolor(RED);
     if (!caughtDisconnect)
       std::cerr << "\nERROR: lost connection to dev node (mining will continue)" << std::endl
                 << "Will try to reconnect in 10 seconds...\n\n";

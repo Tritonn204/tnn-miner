@@ -16,7 +16,10 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#ifndef _WIN32
+
 #include "DNSResolver.hpp"
+
 
 using namespace YukiWorkshop;
 
@@ -339,3 +342,4 @@ const std::string &DNSResolver::error_string(int __err) {
 	}
 }
 
+#endif
