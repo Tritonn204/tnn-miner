@@ -23,10 +23,15 @@
 #include <arpa/inet.h>
 #endif
 
+#include <libcubwt.cuh>
+#include <cuda.h>
+#include <cuda_runtime.h>
+
 #ifndef POW_CONST
 #define POW_CONST
 
 const uint32_t MAX_LENGTH = (256 * 384) - 1; // this is the maximum
+const int deviceAllocMB = 5;
 
 #endif
 
@@ -38,6 +43,7 @@ typedef unsigned int t_index;
 typedef unsigned char byte;
 typedef unsigned short dbyte;
 typedef unsigned long word;
+
 
 //--------------------------------------------------------//
 
@@ -55,11 +61,7 @@ public:
   RC4_KEY key;
 
   int32_t sa[MAX_LENGTH];
-  uint32_t sa2[MAX_LENGTH];
-  int32_t sa3[MAX_LENGTH];
   unsigned char sa_bytes[MAX_LENGTH * 4];
-
-  int bitTable[256];
 
   unsigned char step_3[256];
   char s3[256];
@@ -78,12 +80,20 @@ public:
   unsigned char A;
   uint32_t data_len;
 
+  void *GPUData[16];
+  void *cudaStore;
+
+  std::vector<std::vector<unsigned char>> workBlobs;
+  std::vector<std::vector<unsigned char>> saInputs;
+  std::vector<uint32_t> inputSizes;
+  std::vector<std::vector<uint32_t>> saResults2;
+  std::vector<std::vector<uint32_t>> saResults;
+  std::vector<std::vector<unsigned char>> outputHashes;
+  std::vector<std::vector<unsigned char>> refHashes;
+
   void init()
   {
-    for (int i = 0; i < 256; i++)
-    {
-      bitTable[i] = bitTable[i / 2] + (i & 1);
-    }
+    // do nothing
   }
 
   workerData()
@@ -147,7 +157,7 @@ inline void generateInitVector(std::uint8_t (&iv_buff)[N])
 }
 
 #if defined(__aarch64__) || defined(_M_ARM64)
-inline void  hashSHA256(SHA256_CTX &sha256, const unsigned char *input, unsigned char *digest, unsigned long inputSize)
+inline void hashSHA256(SHA256_CTX &sha256, const unsigned char *input, unsigned char *digest, unsigned long inputSize)
 {
   SHA256_Init(&sha256);
   SHA256_Update(&sha256, input, inputSize);
@@ -160,7 +170,6 @@ inline void __attribute__((target("avx512bw"))) hashSHA256(SHA256_CTX &sha256, c
   SHA256_Update(&sha256, input, inputSize);
   SHA256_Final(digest, &sha256);
 }
-
 
 inline void __attribute__((target("avx2"))) hashSHA256(SHA256_CTX &sha256, const unsigned char *input, unsigned char *digest, unsigned long inputSize)
 {
@@ -184,6 +193,8 @@ inline void __attribute__((target("sse"))) hashSHA256(SHA256_CTX &sha256, const 
 }
 #endif
 
-void AstroBWTv3(unsigned char *input, int inputLen, unsigned char *outputhash, workerData &scratch);
+void branchComputeCPU(workerData &worker);
+void AstroBWTv3(unsigned char *input, int inputLen, unsigned char *outputhash, workerData &scratch, bool gpuMine);
+void finishBatch(workerData &worker);
 
 #endif

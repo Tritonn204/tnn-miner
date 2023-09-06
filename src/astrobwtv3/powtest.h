@@ -1,3 +1,4 @@
+#pragma once
 #ifndef POWTEST
 #define POWTEST
 
@@ -32,10 +33,12 @@ inline PowTest random_pow_tests[] = {
 	{"f96191b7e39568301449d75d42d05090e41e3f79a462819473a62b1fcc2d0997", "abcdefgh"},
 	{"8c76af6a57dfed744d5b7467fa822d9eb8536a851884aa7d8e3657028d511322", "abcdefghi"},
 	{"f838568c38f83034b2ff679d5abf65245bd2be1b27c197ab5fbac285061cf0a7", "abcdefghij"},
-  {"00017c48ba235f82c2fa2b06993e9393fe9f629b4630f98c731abd5e4f08bcb9", "41a1dd0000229d3a47100c65000000005b4fd5bd674799179c3819a83d70a84600000000a1cc177b2f9fee0000000d01"}
+	{"ff9f23980870b4dd3521fcf6807b85d8bf70c5fbbd9736c87c23fac0114e2b8b", "4145bd000025fbf83b29cddc000000009b6d4f3ecaaaea9e99ff5630b7c9d01d000000000e326f0593a9000000339a10"}
 };
 
 void TestAstroBWTv3();
+void TestAstroBWTv3_cuda();
+void TestRace_cuda();
 void TestAstroBWTv3repeattest();
 
 #endif

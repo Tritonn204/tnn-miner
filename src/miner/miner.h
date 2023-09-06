@@ -26,9 +26,14 @@ std::string host = nullArg;
 std::string port = nullArg;
 std::string wallet = nullArg;
 int threads = 0;
+bool gpuMine = false;
+
+int cudaMemNumerator = 1000;
+int cudaMemDenominator = 750; //Kilobytes per worker in VRAM
 
 // Dev fee config
 // Dev fee is a % of hashrate
+int batchSize = 5000;
 double minFee = 1;
 double devFee = 2.5;
 const char *devPool = "community-pools.mysrv.cloud";
@@ -44,6 +49,8 @@ void sendWork();
 void devWork();
 
 void mineBlock(int i);
+void cudaMine();
+
 void benchmark(int i);
 void logSeconds(std::chrono::_V2::system_clock::time_point start_time, int duration, bool *stop);
 
@@ -97,6 +104,14 @@ inline bool CheckHash(unsigned char *hash, int64_t diff)
 {
   if (littleEndian()) std::reverse(hash, hash+32);
   int cmp = mpz_cmp(mpz_class(hexStr(hash, 32).c_str(), 16).get_mpz_t(), ConvertDifficultyToBig(diff).get_mpz_t());
+  if (littleEndian()) std::reverse(hash, hash+32);
+  return (cmp <= 0);
+}
+
+inline bool CheckHash(unsigned char *hash, mpz_class diff)
+{
+  if (littleEndian()) std::reverse(hash, hash+32);
+  int cmp = mpz_cmp(mpz_class(hexStr(hash, 32).c_str(), 16).get_mpz_t(), diff.get_mpz_t());
   if (littleEndian()) std::reverse(hash, hash+32);
   return (cmp <= 0);
 }
