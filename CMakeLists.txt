@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16.3)
 
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_C_FLAGS_RELEASE "-static")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -fopenmp -pthread -march=native -m64 -Wall -Wuninitialized -funroll-all-loops -ftree-vectorize")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -fopenmp -pthread -O3 -march=native -m64 -Wall -Wuninitialized -funroll-all-loops -ftree-vectorize")
 
 if(WIN32)
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wa,-mbig-obj")
@@ -14,16 +14,12 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -pthread -Wl,--whole-arc
 endif()
 
 set (CMAKE_CXX_STANDARD 20)
-set (CMAKE_CUDA_STANDARD 17)
 
 project(
   Tnn-miner
-  VERSION 0.2.0
+  VERSION 0.1.6
   DESCRIPTION "Open Source Astrobwt Miner"
 )
-
-enable_language(CUDA)
-find_package(CUDAToolkit REQUIRED)
 
 if(WIN32)
   include_directories(
@@ -35,8 +31,6 @@ if(WIN32)
     "C:/mingw64/lib"
   )
 endif()
-
-include_directories(${CUDAToolkit_INCLUDE_DIRS})
 
 set(CPM_DOWNLOAD_VERSION 0.34.0)
 
@@ -59,15 +53,6 @@ endif()
 include(${CPM_DOWNLOAD_LOCATION})
 
 CPMAddPackage("gh:nlohmann/json@3.10.5")
-CPMAddPackage(
-  NAME libsais
-  GITHUB_REPOSITORY IlyaGrebnov/libsais
-  GIT_TAG v2.7.3
-  OPTIONS
-    "LIBSAIS_USE_OPENMP OFF"
-    "LIBSAIS_BUILD_SHARED_LIB OFF"
-)
-
 
 set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL REQUIRED)
@@ -94,33 +79,20 @@ include_directories(
 file(GLOB all_SRCS
   "${PROJECT_SOURCE_DIR}/include/*.h"
   "${PROJECT_SOURCE_DIR}/include/*.hpp"
-  "${PROJECT_SOURCE_DIR}/include/*.cuh"
   "${PROJECT_SOURCE_DIR}/src/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/*.c"
   "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.c"
-  "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cu"
-  "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cuh"
   "${PROJECT_SOURCE_DIR}/src/miner/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/miner/*.c"
 )
 
-add_definitions(${GTK3_CFLAGS_OTHER})
 add_executable(${PROJECT_NAME} ${all_SRCS})
 
 if(WIN32)
   target_link_libraries(${PROJECT_NAME} mingw32 wsock32 ws2_32 winpthread)
 endif()
 if(UNIX)
-  target_link_libraries(${PROJECT_NAME} udns pthread)
+  target_link_libraries(${PROJECT_NAME} udns)
 endif()
-target_link_libraries(${PROJECT_NAME} nlohmann_json::nlohmann_json OpenSSL::SSL ${Boost_LIBRARIES} OpenSSL::Crypto gmp gmpxx divsufsort libsais ${CUDA_LIBRARIES})
-
-set_target_properties(${PROJECT_NAME} PROPERTIES CUDA_ARCHITECTURES "60;86" CUDA_SEPARABLE_COMPILATION ON)
-# set(CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS} "-g -G")  # enable cuda-gdb
-
-target_compile_options(${PROJECT_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-  -Xptxas -O3,-v;
-  --extended-lambda;
-  --use_fast_math;
->)
+target_link_libraries(${PROJECT_NAME} nlohmann_json::nlohmann_json OpenSSL::SSL ${Boost_LIBRARIES} OpenSSL::Crypto gmp gmpxx divsufsort)
