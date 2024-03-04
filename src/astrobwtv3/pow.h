@@ -23,21 +23,42 @@
 #include <arpa/inet.h>
 #endif
 
+#include <libcubwt.cuh>
+#include <cuda.h>
+#include <cuda_runtime.h>
+
+#include "immintrin.h"
+
 #ifndef POW_CONST
 #define POW_CONST
 
+#ifdef __GNUC__ 
+#if __GNUC__ < 8
+#define _mm256_set_m128i(xmm1, xmm2) _mm256_permute2f128_si256(_mm256_castsi128_si256(xmm1), _mm256_castsi128_si256(xmm2), 2)
+#define _mm256_set_m128f(xmm1, xmm2) _mm256_permute2f128_ps(_mm256_castps128_ps256(xmm1), _mm256_castps128_ps256(xmm2), 2)
+#endif
+#endif
+
 const uint32_t MAX_LENGTH = (256 * 384) - 1; // this is the maximum
+const int deviceAllocMB = 5;
 
 #endif
 
 static const bool sInduction = true;
 static const bool sTracking = true;
 
+template <unsigned int N>
+__m256i shiftRight256(__m256i a);
+
+template <unsigned int N> 
+__m256i shiftLeft256(__m256i a);
+
 typedef unsigned int suffix;
 typedef unsigned int t_index;
 typedef unsigned char byte;
 typedef unsigned short dbyte;
 typedef unsigned long word;
+
 
 //--------------------------------------------------------//
 
@@ -55,13 +76,10 @@ public:
   RC4_KEY key;
 
   int32_t sa[MAX_LENGTH];
-  uint32_t sa2[MAX_LENGTH];
-  int32_t sa3[MAX_LENGTH];
   unsigned char sa_bytes[MAX_LENGTH * 4];
 
-  int bitTable[256];
-
   unsigned char step_3[256];
+  unsigned char temp[64];
   char s3[256];
   uint64_t random_switcher;
 
@@ -78,12 +96,20 @@ public:
   unsigned char A;
   uint32_t data_len;
 
+  void *GPUData[16];
+  void *cudaStore;
+
+  std::vector<std::vector<unsigned char>> workBlobs;
+  std::vector<std::vector<unsigned char>> saInputs;
+  std::vector<uint32_t> inputSizes;
+  std::vector<std::vector<uint32_t>> saResults2;
+  std::vector<std::vector<uint32_t>> saResults;
+  std::vector<std::vector<unsigned char>> outputHashes;
+  std::vector<std::vector<unsigned char>> refHashes;
+
   void init()
   {
-    for (int i = 0; i < 256; i++)
-    {
-      bitTable[i] = bitTable[i / 2] + (i & 1);
-    }
+    // do nothing
   }
 
   workerData()
@@ -147,7 +173,7 @@ inline void generateInitVector(std::uint8_t (&iv_buff)[N])
 }
 
 #if defined(__aarch64__) || defined(_M_ARM64)
-inline void  hashSHA256(SHA256_CTX &sha256, const unsigned char *input, unsigned char *digest, unsigned long inputSize)
+inline void hashSHA256(SHA256_CTX &sha256, const unsigned char *input, unsigned char *digest, unsigned long inputSize)
 {
   SHA256_Init(&sha256);
   SHA256_Update(&sha256, input, inputSize);
@@ -160,7 +186,6 @@ inline void __attribute__((target("avx512bw"))) hashSHA256(SHA256_CTX &sha256, c
   SHA256_Update(&sha256, input, inputSize);
   SHA256_Final(digest, &sha256);
 }
-
 
 inline void __attribute__((target("avx2"))) hashSHA256(SHA256_CTX &sha256, const unsigned char *input, unsigned char *digest, unsigned long inputSize)
 {
@@ -184,6 +209,9 @@ inline void __attribute__((target("sse"))) hashSHA256(SHA256_CTX &sha256, const 
 }
 #endif
 
-void AstroBWTv3(unsigned char *input, int inputLen, unsigned char *outputhash, workerData &scratch);
+void branchComputeCPU(workerData &worker);
+void branchComputeCPU_optimized(workerData &worker);
+void AstroBWTv3(unsigned char *input, int inputLen, unsigned char *outputhash, workerData &scratch, bool gpuMine, bool simd=false);
+void finishBatch(workerData &worker);
 
 #endif
