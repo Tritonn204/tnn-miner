@@ -43,6 +43,7 @@ const char *TNN = R"(
 #define TNN_NO_LOCK 14
 #define TNN_GPUMINE 15
 #define TNN_BATCHSIZE 16
+#define TNN_SABENCH 18
 
 std::vector<std::string> options = {
     "-daemon-address",
@@ -62,7 +63,8 @@ std::vector<std::string> options = {
     "-no-lock",
     "-gpu",
     "-batch-size",
-    "-b"
+    "-b",
+    "-sabench"
 };
 
 const char* usage = R"(
@@ -85,6 +87,8 @@ OPTIONS
         Shows help
     -batch-size, -b: (GPU Setting)
         Sets batch size used for GPU mining
+    -sabench: (must be first arg)
+        Runs a benchmark for divsufsort on snapshot files in the 'tests' directory
 DEBUG
     -test: (must be first arg)
         Runs a set of tests to verify AstrobwtV3 is working

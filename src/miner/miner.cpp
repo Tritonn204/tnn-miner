@@ -367,7 +367,6 @@ void do_session(
               }
               devConnected = devConnected || true;
               jobCounter++;
-              mutex.unlock();
             }
           }
         }
@@ -432,6 +431,9 @@ int main(int argc, char **argv)
   else
     goto fillBlanks;
 
+  // std::cout << command << " ";
+  // std::cout << options[TNN_SABENCH] << '\n';
+
   // Handle debug options
   if (command == options[TNN_HELP] || command == options[TNN_HELP + 1])
   {
@@ -439,6 +441,11 @@ int main(int argc, char **argv)
     std::cout << usage << std::endl;
     boost::this_thread::sleep_for(boost::chrono::seconds(30));
     return 0;
+  } 
+  if (command == options[TNN_SABENCH]) {
+        runDivsufsortBenchmark();
+        boost::this_thread::sleep_for(boost::chrono::seconds(30));
+        return 0;
   }
   if (command == options[TNN_TEST])
     goto Testing;
@@ -475,6 +482,7 @@ int main(int argc, char **argv)
       {
         i++;
         batchSize = std::stoi(argv[i]);
+        // batchSize = (batchSize % 32 == 0) ? batchSize : (batchSize + 32 - batchSize % 32);
       }
       else if (index == TNN_FEE || index == TNN_FEE + 1)
       {
@@ -609,8 +617,7 @@ Testing:
   mpz_class diffTest("20000", 10);
 
   TestAstroBWTv3();
-  TestRace_cuda();
-  TestAstroBWTv3_cuda();
+  // TestAstroBWTv3_cuda();
   // TestAstroBWTv3repeattest();
   boost::this_thread::sleep_for(boost::chrono::seconds(30));
   return 0;
@@ -870,7 +877,7 @@ startReporting:
         setcolor(BRIGHT_WHITE);
         std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine;
         setcolor(CYAN);
-        std::cout << std::setw(2) << std::setfill('0') << consoleLine << std::setw(2) << hrate << " | " << std::flush;
+        std::cout << std::setw(2) << hrate << " | " << std::flush;
       }
       else if (hashrate >= 1000)
       {
@@ -1353,7 +1360,6 @@ void cudaMine()
   int blobArraySize = 0;
 
   workerData_cuda *workers_h;
-  workerData_cuda *cuda_workers;
 
   byte *cuda_output;
   byte *cuda_work;
@@ -1378,6 +1384,7 @@ void cudaMine()
   }
 
   workers_h = new workerData_cuda[workerArraySize];
+  workerData_cuda cuda_worker;
 
   byte work[workerArraySize * MINIBLOCK_SIZE];
   byte devWork[workerArraySize * MINIBLOCK_SIZE];
@@ -1389,7 +1396,9 @@ void cudaMine()
     cudaMalloc((void **)&cuda_output, workerArraySize * 32);
     cudaMalloc((void **)&cuda_work, workerArraySize * MINIBLOCK_SIZE);
     cudaMalloc((void **)&cuda_devWork, workerArraySize * MINIBLOCK_SIZE);
-    cudaMalloc((void **)&cuda_workers, sizeof(workerData_cuda) * workerArraySize);
+    // cudaMalloc((void **)&cuda_workers, sizeof(workerData_cuda) * workerArraySize);
+
+    workerMalloc(cuda_worker, batchSizes[d]);
   }
 
   boost::thread_group branchThreads;
@@ -1408,6 +1417,8 @@ waitForJob:
     json myJobDev = devJob;
     localJobCounter = jobCounter;
     mutex.unlock();
+
+    // myJob.at("blockhashing_blob") = "4145bd000025fbf83b29cddc000000009b6d4f3ecaaaea9e99ff5630b7c9d01d000000000e326f0593a9000000339a10";
 
     byte *b2 = new byte[MINIBLOCK_SIZE];
     hexstr_to_bytes(myJob.at("blockhashing_blob"), b2);
@@ -1455,6 +1466,7 @@ waitForJob:
     {
       which = (double)(rand() % 10000);
       devMine = (devConnected && which < devFee * 100.0);
+
       DIFF = devMine ? difficultyDev : difficulty;
 
       // printf("Difficulty: %" PRIx64 "\n", DIFF);
@@ -1466,7 +1478,7 @@ waitForJob:
       for (int d = 0; d < GPUbound; d++)
       {
         cudaSetDevice(d);
-        ASTRO_INIT(d, WORK, batchSizes[d], cudaWorkerStartIndexes[d], nonce);
+        ASTRO_CUDA(WORK, cuda_output, cuda_worker, MINIBLOCK_SIZE, batchSizes[d], d, 0, nonce);
         nonce += batchSizes[d];
       }
 
@@ -1477,24 +1489,6 @@ waitForJob:
         if (localJobCounter != jobCounter)
           break;
       }
-      if (localJobCounter != jobCounter)
-        break;
-
-      // printf("Init done\n");
-
-      for (int d = 0; d < GPUbound; d++)
-      {
-        cudaSetDevice(d);
-        ASTRO_CUDA(WORK, cuda_output, cuda_workers, MINIBLOCK_SIZE, batchSizes[d], d, 0);
-      }
-
-      // for (int d = 0; d < GPUbound; d++)
-      // {
-      //   cudaSetDevice(d);
-      //   cudaDeviceSynchronize();
-      //   if (localJobCounter != jobCounter)
-      //     break;
-      // }
 
       if (localJobCounter != jobCounter)
         break;
@@ -1535,31 +1529,32 @@ waitForJob:
       //   }
       // }
 
-      for (int d = 0; d < GPUbound; d++)
-      {
-        cudaSetDevice(d);
-        cudaMemcpy(work, cuda_work, workerArraySize * MINIBLOCK_SIZE, cudaMemcpyDeviceToHost);
-        cudaMemcpy(outputHashes, cuda_output, workerArraySize * 32, cudaMemcpyDeviceToHost);
+      // for (int d = 0; d < GPUbound; d++)
+      // {
+      //   cudaSetDevice(d);
+      //   cudaMemcpy(work, WORK, workerArraySize * MINIBLOCK_SIZE, cudaMemcpyDeviceToHost);
+      //   cudaMemcpy(outputHashes, cuda_output, workerArraySize * 32, cudaMemcpyDeviceToHost);
 
-        for(int i = 0; i < batchSizes[d]; i++) {
-          workerData W;
-          byte* ref = &work[i*MINIBLOCK_SIZE];
-          byte comp[32];
+      //   for(int i = 0; i < batchSizes[d]; i++) {
+      //     workerData W;
+      //     byte* ref = &work[i*MINIBLOCK_SIZE];
+      //     byte comp[32];
 
-          printf("\n");
+      //     AstroBWTv3(&work[i*MINIBLOCK_SIZE], MINIBLOCK_SIZE, comp, W, false);
 
-          AstroBWTv3(&work[i*MINIBLOCK_SIZE], MINIBLOCK_SIZE, comp, W, false);
-
-          bool same = true;
-          for (int j = 0; j < 32; j++) {
-            if (outputHashes[i*32 + j] != comp[j]) {
-              same = false;
-              break;
-            }
-          }
-          if (!same) printf("invalid POW at index %d\n GPU: %s, CPU: %s\n", i, hexStr(&outputHashes[i*32], 32).c_str(), hexStr(comp, 32).c_str());
-        }
-      }
+      //     bool same = true;
+      //     for (int j = 0; j < 32; j++) {
+      //       if (outputHashes[i*32 + j] != comp[j]) {
+      //         same = false;
+      //         break;
+      //       }
+      //     }
+      //     if (!same) {
+      //       printf("\n");
+      //       printf("invalid POW at index %d\n GPU: %s, CPU: %s\n", i, hexStr(&outputHashes[i*32], 32).c_str(), hexStr(comp, 32).c_str());
+      //     }
+      //   }
+      // }
 
       if (!isConnected)
         break;
@@ -1567,44 +1562,44 @@ waitForJob:
       counter.store(counter + workerArraySize - dupes);
       submit = devMine ? !submittingDev : !submitting;
       
-      for (int d = 0; d < GPUCount; d++)
-      {
-        cudaSetDevice(d);
-        cudaMemcpy(work, WORK, workerArraySize * MINIBLOCK_SIZE, cudaMemcpyDeviceToHost);
-        cudaMemcpy(outputHashes, cuda_output, workerArraySize * 32, cudaMemcpyDeviceToHost);
-        for (int h = 0; h < batchSizes[d]; h++) {
-          byte* tester = &outputHashes[cudaWorkerStartIndexes[d]*32 + h*32];
-          if (tester[31] == 0 && tester[30] <= 1) printf("should be valid\n hash: %s", hexStr(tester, 32).c_str());
-          if (submit && CheckHash(&outputHashes[cudaWorkerStartIndexes[d]*32 + h*32], cmpDiff))
-          {
-            printf("work: %s, hash: %s\n", hexStr(&work[cudaWorkerStartIndexes[d]*MINIBLOCK_SIZE + h*MINIBLOCK_SIZE], MINIBLOCK_SIZE).c_str(), hexStr(&outputHashes[cudaWorkerStartIndexes[d]*32 + h*32], 32).c_str());
-            if (devMine)
-            {
-              mutex.lock();
-              submittingDev = true;
-              setcolor(CYAN);
-              std::cout << "\n(DEV) GPU #" << d << " found a dev share\n";
-              setcolor(BRIGHT_WHITE);
-              mutex.unlock();
-              devShare = {
-                  {"jobid", myJobDev.at("jobid")},
-                  {"mbl_blob", hexStr(&work[cudaWorkerStartIndexes[d]*MINIBLOCK_SIZE + h*MINIBLOCK_SIZE], MINIBLOCK_SIZE).c_str()}};
-            }
-            else
-            {
-              mutex.lock();
-              submitting = true;
-              setcolor(BRIGHT_YELLOW);
-              std::cout << "\nGPU #" << d << " found a nonce!\n";
-              setcolor(BRIGHT_WHITE);
-              mutex.unlock();
-              share = {
-                  {"jobid", myJob.at("jobid")},
-                  {"mbl_blob", hexStr(&work[cudaWorkerStartIndexes[d]*MINIBLOCK_SIZE + h*MINIBLOCK_SIZE], MINIBLOCK_SIZE).c_str()}};
-            }
-          }
-        }
-      }
+      // for (int d = 0; d < GPUCount; d++)
+      // {
+      //   cudaSetDevice(d);
+      //   cudaMemcpy(work, WORK, workerArraySize * MINIBLOCK_SIZE, cudaMemcpyDeviceToHost);
+      //   cudaMemcpy(outputHashes, cuda_output, workerArraySize * 32, cudaMemcpyDeviceToHost);
+      //   for (int h = 0; h < batchSizes[d]; h++) {
+      //     // byte* tester = &outputHashes[cudaWorkerStartIndexes[d]*32 + h*32];
+      //     // if (tester[31] == 0 && tester[30] <= 1) printf("should be valid\n hash: %s", hexStr(tester, 32).c_str());
+      //     if (submit && CheckHash(&outputHashes[cudaWorkerStartIndexes[d]*32 + h*32], cmpDiff))
+      //     {
+      //       printf("work: %s, hash: %s\n", hexStr(&work[cudaWorkerStartIndexes[d]*MINIBLOCK_SIZE + h*MINIBLOCK_SIZE], MINIBLOCK_SIZE).c_str(), hexStr(&outputHashes[cudaWorkerStartIndexes[d]*32 + h*32], 32).c_str());
+      //       if (devMine)
+      //       {
+      //         mutex.lock();
+      //         submittingDev = true;
+      //         setcolor(CYAN);
+      //         std::cout << "\n(DEV) GPU #" << d << " found a dev share\n";
+      //         setcolor(BRIGHT_WHITE);
+      //         mutex.unlock();
+      //         devShare = {
+      //             {"jobid", myJobDev.at("jobid")},
+      //             {"mbl_blob", hexStr(&work[cudaWorkerStartIndexes[d]*MINIBLOCK_SIZE + h*MINIBLOCK_SIZE], MINIBLOCK_SIZE).c_str()}};
+      //       }
+      //       else
+      //       {
+      //         mutex.lock();
+      //         submitting = true;
+      //         setcolor(BRIGHT_YELLOW);
+      //         std::cout << "\nGPU #" << d << " found a nonce!\n";
+      //         setcolor(BRIGHT_WHITE);
+      //         mutex.unlock();
+      //         share = {
+      //             {"jobid", myJob.at("jobid")},
+      //             {"mbl_blob", hexStr(&work[cudaWorkerStartIndexes[d]*MINIBLOCK_SIZE + h*MINIBLOCK_SIZE], MINIBLOCK_SIZE).c_str()}};
+      //       }
+      //     }
+      //   }
+      // }
     }
     if (!isConnected)
       break;

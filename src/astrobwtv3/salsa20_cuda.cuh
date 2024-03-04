@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#include <cuda_runtime.h>
+
 /**
  * Return codes for s20_crypt
  */
@@ -61,6 +63,7 @@ __device__ s20_status_t s20_crypt(uint8_t *key,
                             s20_keylen_t keylen,
                             uint32_t si,
                             uint8_t *buf,
-                            uint32_t buflen);
+                            uint32_t buflen,
+                            uint8_t *keystream);
 
 #endif

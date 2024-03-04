@@ -59,18 +59,6 @@ static const WORD host_k[64] = {
 
 /*********************** FUNCTION DECLARATIONS **********************/
 
-__device__ void mycpy12(uint32_t *d, const uint32_t *s);
-
-__device__ void mycpy16(uint32_t *d, const uint32_t *s);
-
-__device__ void mycpy32(uint32_t *d, const uint32_t *s);
-
-__device__ void mycpy44(uint32_t *d, const uint32_t *s);
-
-__device__ void mycpy48(uint32_t *d, const uint32_t *s);
-
-__device__ void mycpy64(uint32_t *d, const uint32_t *s);
-
 __device__ void sha256_transform(struct SHA256_CTX_CUDA *ctx, const BYTE data[]);
 
 __device__ void sha256_init_cuda(struct SHA256_CTX_CUDA *ctx);

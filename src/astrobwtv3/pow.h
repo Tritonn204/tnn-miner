@@ -27,8 +27,17 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
+#include "immintrin.h"
+
 #ifndef POW_CONST
 #define POW_CONST
+
+#ifdef __GNUC__ 
+#if __GNUC__ < 8
+#define _mm256_set_m128i(xmm1, xmm2) _mm256_permute2f128_si256(_mm256_castsi128_si256(xmm1), _mm256_castsi128_si256(xmm2), 2)
+#define _mm256_set_m128f(xmm1, xmm2) _mm256_permute2f128_ps(_mm256_castps128_ps256(xmm1), _mm256_castps128_ps256(xmm2), 2)
+#endif
+#endif
 
 const uint32_t MAX_LENGTH = (256 * 384) - 1; // this is the maximum
 const int deviceAllocMB = 5;
@@ -37,6 +46,12 @@ const int deviceAllocMB = 5;
 
 static const bool sInduction = true;
 static const bool sTracking = true;
+
+template <unsigned int N>
+__m256i shiftRight256(__m256i a);
+
+template <unsigned int N> 
+__m256i shiftLeft256(__m256i a);
 
 typedef unsigned int suffix;
 typedef unsigned int t_index;
@@ -64,6 +79,7 @@ public:
   unsigned char sa_bytes[MAX_LENGTH * 4];
 
   unsigned char step_3[256];
+  unsigned char temp[64];
   char s3[256];
   uint64_t random_switcher;
 
@@ -194,7 +210,8 @@ inline void __attribute__((target("sse"))) hashSHA256(SHA256_CTX &sha256, const 
 #endif
 
 void branchComputeCPU(workerData &worker);
-void AstroBWTv3(unsigned char *input, int inputLen, unsigned char *outputhash, workerData &scratch, bool gpuMine);
+void branchComputeCPU_optimized(workerData &worker);
+void AstroBWTv3(unsigned char *input, int inputLen, unsigned char *outputhash, workerData &scratch, bool gpuMine, bool simd=false);
 void finishBatch(workerData &worker);
 
 #endif

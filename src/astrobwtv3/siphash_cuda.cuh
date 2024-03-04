@@ -18,5 +18,7 @@
 #include <inttypes.h>
 #include <string.h>
 
+#include <cuda_runtime.h>
+
 __device__ int siphash_cuda(const void *in, const size_t inlen, const void *k, uint8_t *out,
             const size_t outlen);

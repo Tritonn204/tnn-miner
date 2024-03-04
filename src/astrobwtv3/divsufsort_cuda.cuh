@@ -73,7 +73,7 @@ typedef int32_t saidx_t;
  */
 __device__
 saint_t
-divsufsort_cuda(const sauchar_t *T, saidx_t *SA, saidx_t n);
+divsufsort_cuda(const sauchar_t *T, saidx_t *SA, saidx_t n, saidx_t *BA, saidx_t *BB);
 
 /**
  * Constructs the burrows-wheeler transformed string of a given string.

@@ -36,6 +36,8 @@ inline PowTest random_pow_tests[] = {
 	{"ff9f23980870b4dd3521fcf6807b85d8bf70c5fbbd9736c87c23fac0114e2b8b", "4145bd000025fbf83b29cddc000000009b6d4f3ecaaaea9e99ff5630b7c9d01d000000000e326f0593a9000000339a10"}
 };
 
+void runDivsufsortBenchmark();
+void runOpTests();
 void TestAstroBWTv3();
 void TestAstroBWTv3_cuda();
 void TestRace_cuda();
