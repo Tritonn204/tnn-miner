@@ -24,8 +24,8 @@
 #endif
 
 #include <libcubwt.cuh>
-#include <cuda.h>
-#include <cuda_runtime.h>
+// #include <cuda.h>
+// #include <cuda_runtime.h>
 
 #include "immintrin.h"
 
@@ -97,7 +97,7 @@ public:
   uint32_t data_len;
 
   void *GPUData[16];
-  void *cudaStore;
+  // void *cudaStore;
 
   std::vector<std::vector<unsigned char>> workBlobs;
   std::vector<std::vector<unsigned char>> saInputs;

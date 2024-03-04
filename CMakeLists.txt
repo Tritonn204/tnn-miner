@@ -14,7 +14,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -pthread -Wl,--whole-arc
 endif()
 
 set (CMAKE_CXX_STANDARD 20)
-set (CMAKE_CUDA_STANDARD 17)
+# set (CMAKE_CUDA_STANDARD 17)
 
 project(
   Tnn-miner
@@ -22,8 +22,8 @@ project(
   DESCRIPTION "Open Source Astrobwt Miner"
 )
 
-enable_language(CUDA)
-find_package(CUDAToolkit REQUIRED)
+# enable_language(CUDA)
+# find_package(CUDAToolkit REQUIRED)
 
 if(WIN32)
   include_directories(
@@ -98,9 +98,9 @@ file(GLOB all_SRCS
   "${PROJECT_SOURCE_DIR}/src/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/*.c"
   "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cpp"
-  "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.c"
-  "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cu"
-  "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cuh"
+  # "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.c"
+  # "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cu"
+  # "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cuh"
   "${PROJECT_SOURCE_DIR}/src/miner/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/miner/*.c"
 )
@@ -116,11 +116,11 @@ if(UNIX)
 endif()
 target_link_libraries(${PROJECT_NAME} nlohmann_json::nlohmann_json OpenSSL::SSL ${Boost_LIBRARIES} OpenSSL::Crypto gmp gmpxx divsufsort libsais ${CUDA_LIBRARIES})
 
-set_target_properties(${PROJECT_NAME} PROPERTIES CUDA_ARCHITECTURES "60;86" CUDA_SEPARABLE_COMPILATION ON)
-# set(CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS} "-g -G")  # enable cuda-gdb
+# set_target_properties(${PROJECT_NAME} PROPERTIES CUDA_ARCHITECTURES "60;86" CUDA_SEPARABLE_COMPILATION ON)
+# # set(CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS} "-g -G")  # enable cuda-gdb
 
-target_compile_options(${PROJECT_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-  -Xptxas -O3,-v;
-  --extended-lambda;
-  --use_fast_math;
->)
+# target_compile_options(${PROJECT_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+#   -Xptxas -O3,-v;
+#   --extended-lambda;
+#   --use_fast_math;
+# >)

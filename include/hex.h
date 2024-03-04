@@ -8,10 +8,11 @@
 #include <sstream>
 #include <string>
 
-#include <cuda.h>
-#include <cuda_runtime.h>
+// #include <cuda.h>
+// #include <cuda_runtime.h>
 
-__host__ __forceinline__ std::string hexStr(const unsigned char *data, int len)
+// __host__ __forceinline__ 
+std::string hexStr(const unsigned char *data, int len)
 {
   static const char characters[] = "0123456789abcdef";
   std::string result(len * 2, ' ');
@@ -23,21 +24,23 @@ __host__ __forceinline__ std::string hexStr(const unsigned char *data, int len)
   return result;
 }
 
-__host__ __device__ __forceinline__  char* hexStr_cuda(const unsigned char *data, int len)
-{
-  static const char characters[] = "0123456789abcdef";
-  char *result = (char*)malloc(len*2 + 1);
-  memset(result, ' ', len*2);
-  result[len*2] = '\0';
-  for (int i = 0; i < len; i++)
-  {
-    result[2 * i] = characters[(unsigned int)data[i] >> 4];
-    result[2 * i + 1] = characters[(unsigned int)data[i] & 0x0F];
-  }
-  return result;
-}
+// __host__ __device__ __forceinline__  
+// char* hexStr_cuda(const unsigned char *data, int len)
+// {
+//   static const char characters[] = "0123456789abcdef";
+//   char *result = (char*)malloc(len*2 + 1);
+//   memset(result, ' ', len*2);
+//   result[len*2] = '\0';
+//   for (int i = 0; i < len; i++)
+//   {
+//     result[2 * i] = characters[(unsigned int)data[i] >> 4];
+//     result[2 * i + 1] = characters[(unsigned int)data[i] & 0x0F];
+//   }
+//   return result;
+// }
 
-__host__ __device__ __forceinline__ void hexstr_to_bytes(std::string s, unsigned char *&b)
+// __host__ __device__ __forceinline__ 
+void hexstr_to_bytes(std::string s, unsigned char *&b)
 {
   for (unsigned int i = 0; i < s.length(); i += 2)
   {

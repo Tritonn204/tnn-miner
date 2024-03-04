@@ -39,10 +39,10 @@
 #include <fstream>
 
 #include <bit>
-#include <libcubwt.cuh>
-#include <device_sa.cuh>
+// #include <libcubwt.cuh>
+// #include <device_sa.cuh>
 #include <lookup.h>
-#include <sacak-lcp.h>
+// #include <sacak-lcp.h>
 #include "immintrin.h"
 
 using byte = unsigned char;
@@ -698,25 +698,25 @@ void runDivsufsortBenchmark() {
     
     // Run libcubwt
     
-    byte* data = new byte[size];
-    memcpy(data, buffer, size); 
+    // byte* data = new byte[size];
+    // memcpy(data, buffer, size); 
     
-    auto timeincstart = std::chrono::steady_clock::now();
-    void* storage;
-    libcubwt_allocate_device_storage(&storage, MAX_LENGTH);
+    // auto timeincstart = std::chrono::steady_clock::now();
+    // void* storage;
+    // libcubwt_allocate_device_storage(&storage, MAX_LENGTH);
     
-    start = std::chrono::steady_clock::now(); 
-    libcubwt_sa(storage, data, sa2, size);
-    end = std::chrono::steady_clock::now();
+    // start = std::chrono::steady_clock::now(); 
+    // libcubwt_sa(storage, data, sa2, size);
+    // end = std::chrono::steady_clock::now();
     
-    time = end - start;
-    times2.push_back(time);
+    // time = end - start;
+    // times2.push_back(time);
 
-    libcubwt_free_device_storage(storage);
-    auto timeincend = std::chrono::steady_clock::now();
+    // libcubwt_free_device_storage(storage);
+    // auto timeincend = std::chrono::steady_clock::now();
 
-    time = timeincend - timeincstart;
-    times4.push_back(time);
+    // time = timeincend - timeincstart;
+    // times4.push_back(time);
 
     const int PREFETCH_DISTANCE = 256; // Adjust this value based on your CPU's cache line size
     const int PREFETCH_STEP = 64; // Ad64just this value based on your CPU's prefetch instructions
@@ -736,7 +736,7 @@ void runDivsufsortBenchmark() {
     times5.push_back(time);
     
     delete[] buffer;
-    delete[] data;
+    // delete[] data;
     
   }
   
@@ -772,9 +772,9 @@ void runDivsufsortBenchmark() {
 
   std::cout << "Average divsufsort time: " << divsufsortAverage << " seconds" << std::endl;
   std::cout << "Average libsais time: " << libsaisAverage << " seconds" << std::endl;
-  std::cout << "Average libcubwt time: " << libcubwtAverage << " seconds" << std::endl;
-  std::cout << "Average libcubwt time (inclusive): " << libcubwtInclusiveAverage << " seconds" << std::endl;
-  std::cout << "Average sacak time: " << naiveAverage << " seconds" << std::endl;
+  // std::cout << "Average libcubwt time: " << libcubwtAverage << " seconds" << std::endl;
+  // std::cout << "Average libcubwt time (inclusive): " << libcubwtInclusiveAverage << " seconds" << std::endl;
+  // std::cout << "Average sacak time: " << naiveAverage << " seconds" << std::endl;
   
 }
 
