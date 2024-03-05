@@ -27,6 +27,7 @@ std::string port = nullArg;
 std::string wallet = nullArg;
 int threads = 0;
 int testOp = -1;
+int testLen = -1;
 bool gpuMine = false;
 
 int cudaMemNumerator = 1000;

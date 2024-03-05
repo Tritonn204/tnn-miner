@@ -627,9 +627,18 @@ Testing:
         i++;
         testOp = std::stoi(argv[i]);
       }
+      else if (index == TNN_TLEN)
+      {
+        i++;
+        testLen = std::stoi(argv[i]);
+      }
     }
   }
-  if (testOp >= 0) runOpTests(testOp);
+  if (testOp >= 0) 
+    if (testLen >= 0) runOpTests(testOp, testLen);
+    else {
+      runOpTests(testOp);
+    }
   TestAstroBWTv3();
   // TestAstroBWTv3_cuda();
   // TestAstroBWTv3repeattest();
@@ -1172,7 +1181,7 @@ void benchmark(int tid)
         std::swap(work[MINIBLOCK_SIZE - 5], work[MINIBLOCK_SIZE - 2]);
         std::swap(work[MINIBLOCK_SIZE - 4], work[MINIBLOCK_SIZE - 3]);
       }
-      AstroBWTv3(work, MINIBLOCK_SIZE, powHash, *worker, false);
+      AstroBWTv3(work, MINIBLOCK_SIZE, powHash, *worker, true);
       counter.store(counter + 1);
       benchCounter.store(benchCounter + 1);
       if (stopBenchmark)
@@ -1282,7 +1291,7 @@ waitForJob:
         submit = devMine ? !submittingDev : !submitting;
         if (submit && CheckHash(powHash, cmpDiff))
         {
-          printf("work: %s, hash: %s\n", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str(), hexStr(powHash, 32).c_str());
+          // printf("work: %s, hash: %s\n", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str(), hexStr(powHash, 32).c_str());
           if (devMine)
           {
             mutex.lock();

@@ -59,6 +59,8 @@ typedef unsigned char byte;
 typedef unsigned short dbyte;
 typedef unsigned long word;
 
+const __m256i vec_3 = _mm256_set1_epi8(3);
+
 
 //--------------------------------------------------------//
 

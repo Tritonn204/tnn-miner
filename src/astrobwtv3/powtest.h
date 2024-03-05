@@ -37,7 +37,7 @@ inline PowTest random_pow_tests[] = {
 };
 
 void runDivsufsortBenchmark();
-void runOpTests(int op);
+void runOpTests(int op, int len=15);
 void TestAstroBWTv3();
 void TestAstroBWTv3_cuda();
 void TestRace_cuda();

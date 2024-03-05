@@ -45,6 +45,7 @@ const char *TNN = R"(
 #define TNN_BATCHSIZE 16
 #define TNN_SABENCH 18
 #define TNN_OP 19
+#define TNN_TLEN 20
 
 std::vector<std::string> options = {
     "-daemon-address",
@@ -66,7 +67,8 @@ std::vector<std::string> options = {
     "-batch-size",
     "-b",
     "-sabench",
-    "-o"
+    "-o",
+    "-l"
 };
 
 const char* usage = R"(
@@ -94,6 +96,9 @@ OPTIONS
 DEBUG
     -test: (must be first arg)
         Runs a set of tests to verify AstrobwtV3 is working
+        Params: (optional)
+          -o <num> : Sets which branch op to benchmark (0-255), benchmark will be skipped if unspecified
+          -l <num> : Sets length of the processed chunk in said benchmark (default 15) 
     -benchmark <A> <B>:
         Runs a mining benchmark for <B> seconds with <A> threads for hashrate testing
         You may insert the -no-lock flag after <A> and <B> if desired. 
