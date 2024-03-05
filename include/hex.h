@@ -1,5 +1,4 @@
-#ifndef HEX_H
-#define HEX_H
+#pragma once
 
 #include <iostream>
 #include <string>
@@ -11,8 +10,8 @@
 // #include <cuda.h>
 // #include <cuda_runtime.h>
 
-// __host__ __forceinline__ 
-std::string hexStr(const unsigned char *data, int len)
+// __host__ __forceinline__ CUDA hints
+inline std::string hexStr(const unsigned char *data, int len)
 {
   static const char characters[] = "0123456789abcdef";
   std::string result(len * 2, ' ');
@@ -24,7 +23,7 @@ std::string hexStr(const unsigned char *data, int len)
   return result;
 }
 
-// __host__ __device__ __forceinline__  
+// __host__ __device__ __forceinline__ CUDA hints
 // char* hexStr_cuda(const unsigned char *data, int len)
 // {
 //   static const char characters[] = "0123456789abcdef";
@@ -39,8 +38,8 @@ std::string hexStr(const unsigned char *data, int len)
 //   return result;
 // }
 
-// __host__ __device__ __forceinline__ 
-void hexstr_to_bytes(std::string s, unsigned char *&b)
+// __host__ __device__ __forceinline__ CUDA hints
+inline void hexstr_to_bytes(std::string s, unsigned char *&b)
 {
   for (unsigned int i = 0; i < s.length(); i += 2)
   {
@@ -49,5 +48,3 @@ void hexstr_to_bytes(std::string s, unsigned char *&b)
     b[i / 2] = byte;
   }
 }
-
-#endif

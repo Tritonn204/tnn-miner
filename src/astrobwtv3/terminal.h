@@ -44,6 +44,7 @@ const char *TNN = R"(
 #define TNN_GPUMINE 15
 #define TNN_BATCHSIZE 16
 #define TNN_SABENCH 18
+#define TNN_OP 19
 
 std::vector<std::string> options = {
     "-daemon-address",
@@ -64,7 +65,8 @@ std::vector<std::string> options = {
     "-gpu",
     "-batch-size",
     "-b",
-    "-sabench"
+    "-sabench",
+    "-o"
 };
 
 const char* usage = R"(

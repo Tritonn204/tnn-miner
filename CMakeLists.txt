@@ -13,6 +13,8 @@ set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -pthread -Wl,--whole-archive -lpthread -Wl,--no-whole-archive")
 endif()
 
+set(CMAKE_EXE_LINKER_FLAGS "-fstack-protector -lgcc_s -lssp")
+
 set (CMAKE_CXX_STANDARD 20)
 # set (CMAKE_CUDA_STANDARD 17)
 
@@ -94,7 +96,7 @@ include_directories(
 file(GLOB all_SRCS
   "${PROJECT_SOURCE_DIR}/include/*.h"
   "${PROJECT_SOURCE_DIR}/include/*.hpp"
-  "${PROJECT_SOURCE_DIR}/include/*.cuh"
+  # "${PROJECT_SOURCE_DIR}/include/*.cuh"
   "${PROJECT_SOURCE_DIR}/src/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/*.c"
   "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cpp"

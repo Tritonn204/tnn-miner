@@ -616,6 +616,20 @@ Testing:
 {
   mpz_class diffTest("20000", 10);
 
+  for (int i = 1; i < argc; i++)
+  {
+    std::vector<std::string>::iterator it = std::find(options.begin(), options.end(), argv[i]);
+    if (it != options.end())
+    {
+      int index = std::distance(options.begin(), it);
+      if (index == TNN_OP)
+      {
+        i++;
+        testOp = std::stoi(argv[i]);
+      }
+    }
+  }
+  if (testOp >= 0) runOpTests(testOp);
   TestAstroBWTv3();
   // TestAstroBWTv3_cuda();
   // TestAstroBWTv3repeattest();
