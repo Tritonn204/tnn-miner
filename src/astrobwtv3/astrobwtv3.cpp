@@ -1550,7 +1550,7 @@ void TestAstroBWTv3()
     byte *buf = new byte[t.in.size()];
     memcpy(buf, t.in.c_str(), t.in.size());
     byte res[32];
-    AstroBWTv3(buf, (int)t.in.size(), res, *worker, false);
+    // AstroBWTv3(buf, (int)t.in.size(), res, *worker, false);
     AstroBWTv3(buf, (int)t.in.size(), res, *worker2, false, true);
     std::string s = hexStr(res, 32);
     if (s.c_str() != t.out)

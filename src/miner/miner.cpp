@@ -1181,7 +1181,7 @@ void benchmark(int tid)
         std::swap(work[MINIBLOCK_SIZE - 5], work[MINIBLOCK_SIZE - 2]);
         std::swap(work[MINIBLOCK_SIZE - 4], work[MINIBLOCK_SIZE - 3]);
       }
-      AstroBWTv3(work, MINIBLOCK_SIZE, powHash, *worker, true);
+      AstroBWTv3(work, MINIBLOCK_SIZE, powHash, *worker, false, true);
       counter.store(counter + 1);
       benchCounter.store(benchCounter + 1);
       if (stopBenchmark)
@@ -1209,6 +1209,7 @@ void mineBlock(int tid)
 
   int64_t localJobCounter;
   byte powHash[32];
+  byte powHash2[32];
   byte devWork[MINIBLOCK_SIZE];
 
   workerData *worker = new workerData();
@@ -1286,7 +1287,8 @@ waitForJob:
           std::swap(WORK[MINIBLOCK_SIZE - 5], WORK[MINIBLOCK_SIZE - 2]);
           std::swap(WORK[MINIBLOCK_SIZE - 4], WORK[MINIBLOCK_SIZE - 3]);
         }
-        AstroBWTv3(&WORK[0], MINIBLOCK_SIZE, powHash, *worker, false);
+        AstroBWTv3(&WORK[0], MINIBLOCK_SIZE, powHash, *worker, false, true);
+        
         counter.store(counter + 1);
         submit = devMine ? !submittingDev : !submitting;
         if (submit && CheckHash(powHash, cmpDiff))

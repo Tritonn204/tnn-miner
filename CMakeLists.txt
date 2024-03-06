@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16.3)
 
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_C_FLAGS_RELEASE "-static")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -fopenmp -pthread -march=native -m64 -Wall -Wuninitialized -funroll-all-loops -ftree-vectorize")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -g -fopenmp -pthread -march=native -m64 -Wall -Wuninitialized -funroll-all-loops -ftree-vectorize")
 
 if(WIN32)
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wa,-mbig-obj")
@@ -13,7 +13,7 @@ set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -pthread -Wl,--whole-archive -lpthread -Wl,--no-whole-archive")
 endif()
 
-set(CMAKE_EXE_LINKER_FLAGS "-fstack-protector -lgcc_s -lssp")
+set(CMAKE_EXE_LINKER_FLAGS "-fstack-protector")
 
 set (CMAKE_CXX_STANDARD 20)
 # set (CMAKE_CUDA_STANDARD 17)
