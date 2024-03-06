@@ -109,6 +109,9 @@ public:
   std::vector<std::vector<unsigned char>> outputHashes;
   std::vector<std::vector<unsigned char>> refHashes;
 
+  std::vector<byte> opsA;
+  std::vector<byte> opsB;
+
   void init()
   {
     // do nothing

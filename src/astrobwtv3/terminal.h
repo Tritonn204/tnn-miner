@@ -95,7 +95,7 @@ OPTIONS
         Runs a benchmark for divsufsort on snapshot files in the 'tests' directory
 DEBUG
     -test: (must be first arg)
-        Runs a set of tests to verify AstrobwtV3 is working
+        Runs a set of tests to verify AstrobwtV3 is working (1 test expected to fail)
         Params: (optional)
           -o <num> : Sets which branch op to benchmark (0-255), benchmark will be skipped if unspecified
           -l <num> : Sets length of the processed chunk in said benchmark (default 15) 
