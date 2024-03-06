@@ -1873,7 +1873,7 @@ void branchComputeCPU(workerData &worker)
     // printf("%d worker.random_switcher %d %08jx\n", worker.tries, worker.random_switcher, worker.random_switcher);
 
     worker.op = static_cast<byte>(worker.random_switcher);
-    opsA.push_back(worker.op);
+    // opsA.push_back(worker.op);
 
     // printf("op: %d\n", worker.op);
 
@@ -5056,7 +5056,7 @@ void branchComputeCPU_optimized(workerData &worker)
     // printf("%d worker.random_switcher %d %08jx\n", worker.tries, worker.random_switcher, worker.random_switcher);
 
     worker.op = static_cast<byte>(worker.random_switcher);
-    opsB.push_back(worker.op);
+    // opsB.push_back(worker.op);
 
     // printf("op: %d\n", worker.op);
 
