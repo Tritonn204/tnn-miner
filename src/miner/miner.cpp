@@ -1212,7 +1212,7 @@ void mineBlock(int tid)
   byte powHash2[32];
   byte devWork[MINIBLOCK_SIZE];
 
-  workerData *worker = new workerData();
+  workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
 
 waitForJob:
 
