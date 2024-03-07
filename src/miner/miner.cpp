@@ -17,6 +17,7 @@
 
 #include "rootcert.h"
 
+#include <boost/program_options.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/ssl.hpp>
 #include <boost/beast/http.hpp>
@@ -77,6 +78,7 @@ namespace http = beast::http;           // from <boost/beast/http.hpp>
 namespace websocket = beast::websocket; // from <boost/beast/websocket.hpp>
 namespace net = boost::asio;            // from <boost/asio.hpp>
 namespace ssl = boost::asio::ssl;       // from <boost/asio/ssl.hpp>
+namespace po = boost::program_options;  // from <boost/program_options.hpp>
 using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
 
 using json = nlohmann::json;
@@ -423,6 +425,23 @@ int main(int argc, char **argv)
   // default values
   bool lockThreads = true;
   devFee = 2.5;
+
+  po::options_description opts = get_prog_opts();
+  int style = get_prog_style();
+  po::variables_map vm;
+  po::store(po::command_line_parser(argc, argv).options(opts).style(style).run(), vm);
+  po::notify(vm);
+
+  if (vm.count("help")) {
+    std::cout << opts << std::endl;
+    return 0;
+  }
+  if (vm.count("compression")) {
+      std::cout << "Compression level was set to "
+            << vm["compression"].as<double>() << ".\n";
+  } else {
+      std::cout << "Compression level was not set.\n";
+  }
 
   std::string command;
 

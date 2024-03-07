@@ -4,6 +4,8 @@
 #include <string>
 #include <algorithm>
 
+namespace po = boost::program_options;  // from <boost/program_options.hpp>
+
 const char *consoleLine = " TNN-MINER v0.2.0 ";
 const char *TNN = R"(
   
@@ -141,3 +143,40 @@ inline void setcolor(int color)
     printf("\e[%d;%dm", colorPreTable[color], colorTable[color]);
 }
 #endif
+
+inline po::options_description get_prog_opts()
+{
+  //po::command_line_parser parser = po::command_line_parser(argc, argv);
+
+  po::options_description general("General");
+  general.add_options()
+    ("help", "produce help message")
+    ("daemon-address", po::value<std::string>(), "Dero node/pool URL or IP address to mine to") // todo: parse out port and/or wss:// or ws://
+    ("port", po::value<int>(), "The port used to connect to the Dero node")
+    ("wallet", po::value<std::string>(), "Wallet address for receiving mining rewards")
+    ("threads", po::value<int>(), "The amount of mining threads to create, default is 1")
+    ("dev-fee", po::value<double>(), "Your desired dev fee percentage, default is 2.5, minimum is 1")
+    ("no-lock", po::value<bool>(), "Disables CPU affinity / CPU core binding")
+    ("batch-size", po::value<int>(), "(GPU Setting) Sets batch size used for GPU mining")
+    ("simd", "Mine with SIMD instead of regular C++")
+    ("compression", po::value<double>(), "set compression level")
+  ;
+
+  po::options_description debug("DEBUG");
+  debug.add_options()
+    ("test", "Runs a set of tests to verify AstrobwtV3 is working (1 test expected to fail)")
+    ("op", po::value<int>(), "Sets which branch op to benchmark (0-255), benchmark will be skipped if unspecified")
+    ("len", po::value<int>(), "Sets length of the processed chunk in said benchmark (default 15)")
+    ("sabench", "Runs a benchmark for divsufsort on snapshot files in the 'tests' directory")
+    ("benchmark", po::value<int>(), "Runs a mining benchmark for <arg> seconds (adheres to -t threads option)")
+    ("verify", "Verifies SIMD produces identical results to C++. Adheres to -op and -len options")
+  ;
+
+  return general.add(debug);
+}
+
+inline int get_prog_style()
+{
+    int style = (po::command_line_style::unix_style | po::command_line_style::allow_long_disguise);
+    return style;
+}
