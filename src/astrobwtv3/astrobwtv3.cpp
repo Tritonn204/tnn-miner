@@ -29,12 +29,16 @@
 #include <filesystem>
 #include <functional>
 
-#include <divsufsort.h>
+extern "C"
+{
+  #include "divsufsort.h"
+}
+
 #include <utility>
-#include <libsais.h>
 
 #include <hex.h>
 #include <openssl/rc4.h>
+// #include "sais2.h"
 
 #include <fstream>
 
@@ -44,6 +48,11 @@
 #include <lookup.h>
 // #include <sacak-lcp.h>
 #include "immintrin.h"
+#include "dc3.hpp"
+// #include "fgsaca.hpp"
+#include "libsais.h"
+
+#include <hugepages.h>
 
 using byte = unsigned char;
 
@@ -62,18 +71,18 @@ bool debugOpOrder = false;
 // }
 
 void saveBufferToFile(const std::string& filename, const byte* buffer, size_t size) {
-    // // Generate unique filename using timestamp
-    // std::string timestamp = std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(
-    //                                        std::chrono::steady_clock::now().time_since_epoch()).count());
-    // std::string unique_filename = "tests/worker_sData_snapshot_" + timestamp;
+    // Generate unique filename using timestamp
+    std::string timestamp = std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                           std::chrono::steady_clock::now().time_since_epoch()).count());
+    std::string unique_filename = "tests/worker_sData_snapshot_" + timestamp;
 
-    // std::ofstream file(unique_filename, std::ios::binary);
-    // if (file.is_open()) {
-    //     file.write(reinterpret_cast<const char*>(buffer), size);
-    //     file.close();
-    // } else {
-    //     std::cerr << "Unable to open file: " << filename << std::endl;
-    // }
+    std::ofstream file(unique_filename, std::ios::binary);
+    if (file.is_open()) {
+        file.write(reinterpret_cast<const char*>(buffer), size);
+        file.close();
+    } else {
+        std::cerr << "Unable to open file: " << filename << std::endl;
+    }
 }
 
 // void generateSuffixArray(const std::vector<unsigned char>& data, std::vector<uint32_t>& suffixArray, int size) {    
@@ -3184,8 +3193,35 @@ void runDivsufsortBenchmark() {
   int buckets[256];
   int sorted[MAX_LENGTH];
 
-  void * ctx = libsais_create_ctx();
   
+  int32_t *sa = reinterpret_cast<int32_t *>(malloc_huge_pages(MAX_LENGTH*sizeof(int32_t)));
+  uint32_t *sa2 = reinterpret_cast<uint32_t *>(malloc_huge_pages(MAX_LENGTH*sizeof(uint32_t)));
+  byte *buffer = reinterpret_cast<byte *>(malloc_huge_pages(MAX_LENGTH));
+
+  void * ctx = libsais_create_ctx();
+  workerData *worker = new workerData;
+  
+  for (const auto& file : snapshotFiles) {
+    // printf("enter\n");
+    // Load snapshot data from file
+    std::ifstream ifs(file, std::ios::binary);
+    ifs.seekg(0, ifs.end);
+    size_t size = ifs.tellg(); 
+    ifs.seekg(0, ifs.beg);
+    ifs.read(reinterpret_cast<char*>(buffer), size);
+    ifs.close();
+    
+    // Run divsufsort
+    
+    auto start = std::chrono::steady_clock::now();
+    divsufsort(buffer, sa, size); 
+    auto end = std::chrono::steady_clock::now();
+    
+    std::chrono::duration<double> time = end - start;
+    times.push_back(time);
+
+  }
+
   for (const auto& file : snapshotFiles) {
     // printf("enter\n");
     // Load snapshot data from file
@@ -3197,61 +3233,48 @@ void runDivsufsortBenchmark() {
     ifs.read(reinterpret_cast<char*>(buffer), size);
     ifs.close();
     
-    int32_t sa[MAX_LENGTH];
-    uint32_t sa2[MAX_LENGTH];
-    
-    // Run divsufsort
-    
-    auto start = std::chrono::steady_clock::now();
-    divsufsort(buffer, sa, size); 
-    auto end = std::chrono::steady_clock::now();
-    
-    std::chrono::duration<double> time = end - start;
-    times.push_back(time);
-    
     // Run libcubwt
     
-    // byte* data = new byte[size];
-    // memcpy(data, buffer, size); 
+    auto start = std::chrono::steady_clock::now(); 
+    libsais_ctx(ctx, buffer, sa, size, 0, NULL); 
+    auto end = std::chrono::steady_clock::now();
     
-    // auto timeincstart = std::chrono::steady_clock::now();
-    // void* storage;
-    // libcubwt_allocate_device_storage(&storage, MAX_LENGTH);
-    
-    // start = std::chrono::steady_clock::now(); 
-    // libcubwt_sa(storage, data, sa2, size);
-    // end = std::chrono::steady_clock::now();
-    
-    // time = end - start;
-    // times2.push_back(time);
-
-    // libcubwt_free_device_storage(storage);
-    // auto timeincend = std::chrono::steady_clock::now();
-
-    // time = timeincend - timeincstart;
-    // times4.push_back(time);
-
-    const int PREFETCH_DISTANCE = 256; // Adjust this value based on your CPU's cache line size
-    const int PREFETCH_STEP = 64; // Ad64just this value based on your CPU's prefetch instructions
-
-    start = std::chrono::steady_clock::now(); 
-    libsais_ctx(ctx, buffer, sa, size, 0, NULL);
-    end = std::chrono::steady_clock::now();
-    
-    time = end - start;
-    times3.push_back(time);
-
-    start = std::chrono::steady_clock::now(); 
-    // sacak(buffer, sa2, size);
-    end = std::chrono::steady_clock::now();
-    
-    time = end - start;
-    times5.push_back(time);
-    
-    delete[] buffer;
-    // delete[] data;
-    
+    auto time = end - start;
+    times2.push_back(time);
   }
+
+  // for (const auto& file : snapshotFiles) {
+  //   // printf("enter\n");
+  //   // Load snapshot data from file
+  //   std::ifstream ifs(file, std::ios::binary);
+  //   ifs.seekg(0, ifs.end);
+  //   size_t size = ifs.tellg(); 
+  //   ifs.seekg(0, ifs.beg);
+  //   ifs.read(reinterpret_cast<char*>(buffer), size);
+  //   ifs.close();
+
+  //   const int PREFETCH_DISTANCE = 256; // Adjust this value based on your CPU's cache line size
+  //   const int PREFETCH_STEP = 64; // Ad64just this value based on your CPU's prefetch instructions
+
+  //   auto start = std::chrono::steady_clock::now(); 
+  //   fgsaca<uint32_t, uint8_t>(buffer, sa2, size, 256);
+  //   auto end = std::chrono::steady_clock::now();
+    
+  //   auto time = end - start;
+  //   times3.push_back(time);
+
+  //   std::vector<byte> B(size);
+  //   memcpy(B.data(), buffer, size);
+
+  //   start = std::chrono::steady_clock::now(); 
+  //   // auto suffixArray = ::maniscalco::make_suffix_array(B.begin(), B.end(), 1);
+  //   end = std::chrono::steady_clock::now();
+    
+  //   time = end - start;
+  //   times5.push_back(time);
+    
+  //   // delete[] data;
+  // }
   
   // Calculate average times
   
@@ -3284,10 +3307,10 @@ void runDivsufsortBenchmark() {
   naiveAverage /= times5.size();
 
   std::cout << "Average divsufsort time: " << divsufsortAverage << " seconds" << std::endl;
-  std::cout << "Average libsais time: " << libsaisAverage << " seconds" << std::endl;
-  // std::cout << "Average libcubwt time: " << libcubwtAverage << " seconds" << std::endl;
+  // std::cout << "Average fgsaca time: " << libsaisAverage << " seconds" << std::endl;
+  std::cout << "Average sais time: " << libcubwtAverage << " seconds" << std::endl;
   // std::cout << "Average libcubwt time (inclusive): " << libcubwtInclusiveAverage << " seconds" << std::endl;
-  // std::cout << "Average sacak time: " << naiveAverage << " seconds" << std::endl;
+  // std::cout << "Average msufsort time: " << naiveAverage << " seconds" << std::endl;
   
 }
 
@@ -3331,6 +3354,8 @@ void TestAstroBWTv3()
   hexstr_to_bytes(c2, data2);
 
   printf("A: %s, B: %s\n", hexStr(data, 48).c_str(), hexStr(data2, 48).c_str());
+
+  TestAstroBWTv3repeattest();
 
   // for (int i = 0; i < 1024; i++)
   // {
@@ -3508,9 +3533,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
       return;
 
 
-    saveBufferToFile("worker_sData_snapshot.bin", worker.sData, worker.data_len);
+    // saveBufferToFile("worker_sData_snapshot.bin", worker.sData, worker.data_len);
     // printf("data length: %d\n", worker.data_len);
     divsufsort(worker.sData, worker.sa, worker.data_len);
+    // fgsaca<uint32_t, uint8_t>(worker.sData, worker.sa, worker.data_len, 256);
     // archonsort(worker.sData, worker.sa, worker.data_len);
     // worker.sa = Radix(worker.sData, worker.data_len).build();
     // memcpy(worker.sa, radixSA, worker.data_len);
@@ -6720,7 +6746,7 @@ void branchComputeCPU(workerData &worker)
         // INSERT_RANDOM_CODE_END
 
         worker.prev_lhash = worker.lhash + worker.prev_lhash;
-        worker.lhash = XXHash64::hash(&worker.step_3, worker.pos2, 0); // more deviations
+        worker.lhash = XXHash64::hash(&worker.step_3, worker.pos2,0);
       }
       break;
     case 254:

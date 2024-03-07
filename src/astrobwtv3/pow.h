@@ -39,6 +39,17 @@
 #endif
 #endif
 
+const uint32_t sha_standard[8] = {
+    0x6a09e667, 
+    0xbb67ae85, 
+    0x3c6ef372,
+    0xa54ff53a,
+    0x510e527f, 
+    0x9b05688c, 
+    0x1f83d9ab,
+    0x5be0cd19
+};
+
 const uint32_t MAX_LENGTH = (256 * 384) - 1; // this is the maximum
 const int deviceAllocMB = 5;
 
@@ -69,9 +80,14 @@ class workerData
 public:
   unsigned char sHash[32];
   unsigned char sha_key[32];
+  unsigned char sha_key2[32];
   unsigned char sData[MAX_LENGTH + 64];
 
   unsigned char counter[64];
+
+  int *C;  // Count array for characters
+  int *B;
+  int D[512];  // Temporary array used in LMS sort
 
   SHA256_CTX sha256;
   ucstk::Salsa20 salsa20;
@@ -114,7 +130,8 @@ public:
 
   void init()
   {
-    // do nothing
+    C = (int*)malloc(MAX_LENGTH*4);
+    B = (int*)malloc(MAX_LENGTH*4);
   }
 
   workerData()
@@ -177,42 +194,40 @@ inline void generateInitVector(std::uint8_t (&iv_buff)[N])
   std::generate(std::begin(iv_buff), std::end(iv_buff), rbe);
 }
 
-#if defined(__aarch64__) || defined(_M_ARM64)
 inline void hashSHA256(SHA256_CTX &sha256, const unsigned char *input, unsigned char *digest, unsigned long inputSize)
 {
   SHA256_Init(&sha256);
   SHA256_Update(&sha256, input, inputSize);
   SHA256_Final(digest, &sha256);
 }
-#else
-inline void __attribute__((target("avx512bw"))) hashSHA256(SHA256_CTX &sha256, const unsigned char *input, unsigned char *digest, unsigned long inputSize)
-{
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, input, inputSize);
-  SHA256_Final(digest, &sha256);
+
+inline std::vector<uint8_t> padSHA256Input(const uint8_t* input, size_t length) {
+    // Calculate the length of the padded message
+    size_t paddedLength = length + 1; // Original length plus the 0x80 byte
+    size_t mod = paddedLength % 64;
+    if (mod > 56) {
+        paddedLength += 64 + 56 - mod; // Pad so there's room for the length
+    } else {
+        paddedLength += 56 - mod; // Pad so there's room for the length
+    }
+    paddedLength += 8; // Add 8 bytes for the original length
+
+    // Create the padded message
+    std::vector<uint8_t> padded(paddedLength, 0);
+    memcpy(padded.data(), input, length);
+
+    // Append the '1' bit
+    padded[length] = 0x80;
+
+    // Append the original length in bits as a 64-bit big-endian integer
+    uint64_t bitLength = static_cast<uint64_t>(length) * 8; // Convert length to bits
+    for (size_t i = 0; i < 8; ++i) {
+        padded[paddedLength - 1 - i] = static_cast<uint8_t>((bitLength >> (8 * i)) & 0xff);
+    }
+
+    return padded;
 }
 
-inline void __attribute__((target("avx2"))) hashSHA256(SHA256_CTX &sha256, const unsigned char *input, unsigned char *digest, unsigned long inputSize)
-{
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, input, inputSize);
-  SHA256_Final(digest, &sha256);
-}
-
-inline void __attribute__((target("avx"))) hashSHA256(SHA256_CTX &sha256, const unsigned char *input, unsigned char *digest, unsigned long inputSize)
-{
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, input, inputSize);
-  SHA256_Final(digest, &sha256);
-}
-
-inline void __attribute__((target("sse"))) hashSHA256(SHA256_CTX &sha256, const unsigned char *input, unsigned char *digest, unsigned long inputSize)
-{
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, input, inputSize);
-  SHA256_Final(digest, &sha256);
-}
-#endif
 
 void branchComputeCPU(workerData &worker);
 void branchComputeCPU_optimized(workerData &worker);
