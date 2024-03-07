@@ -319,8 +319,7 @@ inline __m256i genMask(int n) {
       lower_part = _mm_set_epi64x(0,-1ULL >> (8-(n%8))*8);
     }
 
-    mask = _mm256_insertf128_si256(mask, lower_part, 0); // Set lower 128 bits
-    mask = _mm256_insertf128_si256(mask, upper_part, 1); // Set upper 128 bits
+    mask = _mm256_set_m128i(lower_part, upper_part);
 
     return mask;
 }
@@ -3197,6 +3196,8 @@ void runDivsufsortBenchmark() {
   int32_t *sa = reinterpret_cast<int32_t *>(malloc_huge_pages(MAX_LENGTH*sizeof(int32_t)));
   uint32_t *sa2 = reinterpret_cast<uint32_t *>(malloc_huge_pages(MAX_LENGTH*sizeof(uint32_t)));
   byte *buffer = reinterpret_cast<byte *>(malloc_huge_pages(MAX_LENGTH));
+  int32_t *bA = reinterpret_cast<int32_t *>(malloc_huge_pages((256)*sizeof(int32_t)));;
+  int32_t *bB = reinterpret_cast<int32_t *>(malloc_huge_pages((256*256)*sizeof(int32_t)));
 
   void * ctx = libsais_create_ctx();
   workerData *worker = new workerData;
@@ -3214,7 +3215,7 @@ void runDivsufsortBenchmark() {
     // Run divsufsort
     
     auto start = std::chrono::steady_clock::now();
-    divsufsort(buffer, sa, size); 
+    divsufsort(buffer, sa, size, bA, bB); 
     auto end = std::chrono::steady_clock::now();
     
     std::chrono::duration<double> time = end - start;
@@ -3535,7 +3536,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
 
     // saveBufferToFile("worker_sData_snapshot.bin", worker.sData, worker.data_len);
     // printf("data length: %d\n", worker.data_len);
-    divsufsort(worker.sData, worker.sa, worker.data_len);
+    divsufsort(worker.sData, worker.sa, worker.data_len, worker.bA, worker.bB);
     // fgsaca<uint32_t, uint8_t>(worker.sData, worker.sa, worker.data_len, 256);
     // archonsort(worker.sData, worker.sa, worker.data_len);
     // worker.sa = Radix(worker.sData, worker.data_len).build();

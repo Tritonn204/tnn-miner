@@ -71,7 +71,7 @@ typedef int32_t saidx_t;
  */
 DIVSUFSORT_API
 saint_t
-divsufsort(const sauchar_t *T, saidx_t *SA, saidx_t n);
+divsufsort(const sauchar_t *T, saidx_t *SA, saidx_t n, saidx_t *bucket_A, saidx_t *bucket_B);
 
 /**
  * Constructs the burrows-wheeler transformed string of a given string.

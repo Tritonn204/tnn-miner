@@ -24,6 +24,7 @@
 #endif
 
 #include <libcubwt.cuh>
+#include <hugepages.h>
 // #include <cuda.h>
 // #include <cuda_runtime.h>
 
@@ -78,12 +79,15 @@ const __m256i vec_3 = _mm256_set1_epi8(3);
 class workerData
 {
 public:
-  unsigned char sHash[32];
-  unsigned char sha_key[32];
-  unsigned char sha_key2[32];
-  unsigned char sData[MAX_LENGTH + 64];
+  unsigned char *sHash;
+  unsigned char *sha_key;
+  unsigned char *sha_key2;
+  unsigned char *sData;
 
-  unsigned char counter[64];
+  unsigned char *counter;
+
+  int *bA;
+  int *bB;
 
   int *C;  // Count array for characters
   int *B;
@@ -93,12 +97,9 @@ public:
   ucstk::Salsa20 salsa20;
   RC4_KEY key;
 
-  int32_t sa[MAX_LENGTH];
-  unsigned char sa_bytes[MAX_LENGTH * 4];
+  int32_t *sa;
 
-  unsigned char step_3[256];
-  unsigned char temp[64];
-  char s3[256];
+  unsigned char *step_3;
   uint64_t random_switcher;
 
   uint64_t lhash;
@@ -130,8 +131,21 @@ public:
 
   void init()
   {
-    C = (int*)malloc(MAX_LENGTH*4);
-    B = (int*)malloc(MAX_LENGTH*4);
+    sHash = (byte*)malloc_huge_pages(32);
+    sha_key = (byte*)malloc_huge_pages(32);
+    sha_key2 = (byte*)malloc_huge_pages(32);
+    sData = (byte*)malloc_huge_pages(MAX_LENGTH+64);
+
+    counter = (byte*)malloc_huge_pages(64);
+
+    bA = (int*)malloc_huge_pages(256*sizeof(int));
+    bB = (int*)malloc_huge_pages(256*256*sizeof(int));
+
+    sa = (int32_t *)malloc_huge_pages(MAX_LENGTH*sizeof(int32_t));
+    step_3 = (unsigned char *)malloc_huge_pages(256+32);
+
+    C = (int*)malloc_huge_pages(MAX_LENGTH*4);
+    B = (int*)malloc_huge_pages(MAX_LENGTH*4);
   }
 
   workerData()
@@ -139,16 +153,67 @@ public:
     init();
   }
 
-  int enCompute();
+  friend std::ostream& operator<<(std::ostream& os, const workerData& wd);
 };
 
-// inline int workerData::enCompute()
-// {
-//   {
-//     Constructor<byte>(sData, sa, data_len, 0x100, (uint32_t)(data_len*sizeof(uint32_t)));
-//     return 0;
-//   }
-// }
+inline std::ostream& operator<<(std::ostream& os, const workerData& wd) {
+    // Print values for dynamically allocated unsigned char arrays (assuming 32 bytes for demonstration)
+    auto printByteArray = [&os](const unsigned char* arr, size_t size) {
+        for (size_t i = 0; i < size; ++i) {
+            os << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(arr[i]) << " ";
+        }
+        os << std::dec << '\n'; // Switch back to decimal for other prints
+    };
+
+    os << "sHash: ";
+    printByteArray(wd.sHash, 32);
+    
+    os << "sha_key: ";
+    printByteArray(wd.sha_key, 32);
+    
+    os << "sha_key2: ";
+    printByteArray(wd.sha_key2, 32);
+    
+    // Assuming data_len is the length of sData you're interested in printing
+    os << "sData: ";
+    printByteArray(wd.sData, MAX_LENGTH + 64);
+
+    // For int arrays like bA, bB, C, and B, assuming lengths based on your constructor (example sizes)
+    auto printIntArray = [&os](const int* arr, size_t size) {
+        for (size_t i = 0; i < size; ++i) {
+            os << arr[i] << " ";
+        }
+        os << '\n';
+    };
+
+    // Example: Assuming sizes from your description
+    os << "bA: ";
+    printIntArray(wd.bA, 256); // Based on allocation in init
+
+    os << "bB: ";
+    printIntArray(wd.bB, 256*256); // Based on allocation in init
+
+    // Assuming similar allocation sizes for C and B as for bA for demonstration
+    os << "C: ";
+    printIntArray(wd.C, 256); // Adjust size as necessary
+
+    os << "B: ";
+    printIntArray(wd.B, 256); // Adjust size as necessary
+
+    // Directly contained int array D
+    os << "D: ";
+    for (int i = 0; i < 512; ++i) {
+        os << wd.D[i] << " ";
+    }
+    os << '\n';
+
+    // If you have other arrays or variables to print, follow the same pattern:
+    // 1. Use printByteArray for unsigned char* with known sizes
+    // 2. Use printIntArray for int* with known sizes
+    // 3. Directly iterate over and print contents of fixed-size arrays or std::vector
+
+    return os;
+}
 
 inline unsigned char
 leftRotate8(unsigned char n, unsigned d)

@@ -1149,7 +1149,7 @@ void benchmark(int tid)
   int32_t i = 0;
 
   byte powHash[32];
-  workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
+  workerData *worker = new workerData;
   // workerData *worker = new workerData();
 
   while (!isConnected)
@@ -1212,7 +1212,9 @@ void mineBlock(int tid)
   byte powHash2[32];
   byte devWork[MINIBLOCK_SIZE];
 
-  workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
+  workerData *worker = new workerData;
+
+  // std::cout << *worker << std::endl;
 
 waitForJob:
 
