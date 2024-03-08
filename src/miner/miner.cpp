@@ -121,6 +121,7 @@ bool isConnected = false;
 bool devConnected = false;
 
 using byte = unsigned char;
+int bench_duration = -1;
 bool stopBenchmark = false;
 //------------------------------------------------------------------------------
 
@@ -434,125 +435,78 @@ int main(int argc, char **argv)
 
   if (vm.count("help")) {
     std::cout << opts << std::endl;
+    boost::this_thread::sleep_for(boost::chrono::seconds(5));
     return 0;
   }
-  if (vm.count("compression")) {
-      std::cout << "Compression level was set to "
-            << vm["compression"].as<double>() << ".\n";
-  } else {
-      std::cout << "Compression level was not set.\n";
-  }
-
-  std::string command;
-
-  if (argc > 1)
-    command = argv[1];
-  else
-    goto fillBlanks;
-
-  // std::cout << command << " ";
-  // std::cout << options[TNN_SABENCH] << '\n';
-
-  // Handle debug options
-  if (command == options[TNN_HELP] || command == options[TNN_HELP + 1])
-  {
-    setcolor(CYAN);
-    std::cout << usage << std::endl;
-    boost::this_thread::sleep_for(boost::chrono::seconds(30));
+  if (vm.count("sabench")) {
+    runDivsufsortBenchmark();
     return 0;
-  } 
-  if (command == options[TNN_SABENCH]) {
-        runDivsufsortBenchmark();
-        boost::this_thread::sleep_for(boost::chrono::seconds(30));
-        return 0;
   }
-  if (command == options[TNN_TEST])
+
+  if (vm.count("daemon-address")) {
+    host = vm["daemon-address"].as<std::string>();
+    // TODO: Check if this contains a host:port... and then parse accordingly
+  }
+  if (vm.count("port")) {
+    port = vm["port"].as<std::string>();
+  }
+  if (vm.count("wallet")) {
+    wallet = vm["wallet"].as<std::string>();
+  }
+  if (vm.count("threads")) {
+    threads = vm["threads"].as<int>();
+  }
+  if (vm.count("dev-fee")) {
+    try
+    {
+      devFee = vm["dev-fee"].as<double>();
+      if (devFee < minFee)
+      {
+        setcolor(RED);
+        printf("ERROR: dev fee must be at least %.2f", minFee);
+        std::cout << "%" << std::endl;
+        setcolor(BRIGHT_WHITE);
+        boost::this_thread::sleep_for(boost::chrono::seconds(5));
+        return 1;
+      }
+    }
+    catch (...)
+    {
+      printf("ERROR: invalid dev fee parameter... format should be for example '1.0'");
+      boost::this_thread::sleep_for(boost::chrono::seconds(5));
+      return 1;
+    }
+  }
+  if (vm.count("no-lock")) {
+    lockThreads = false;
+  }
+  if (vm.count("gpu")) {
+    gpuMine = true;
+  }
+  // GPU-specific
+  if (vm.count("batch-size")) {
+    batchSize = vm["batch-size"].as<int>();
+  }
+
+  // Test-specific
+  if (vm.count("op")) {
+    testOp = vm["op"].as<int>();
+  }
+  if (vm.count("len")) {
+    testLen = vm["len"].as<int>();
+  }
+
+  // Ensure we capture *all* of the other options before we start using goto
+  if (vm.count("test")) {
     goto Testing;
-  if (command == options[TNN_BENCHMARK])
+  }
+  if (vm.count("benchmark")) {
+    bench_duration = vm["benchmark"].as<int>();
+    if(bench_duration <= 0) {
+      printf("ERROR: Invalid benchmark arguments. Use -h for assistance\n");
+      return 1;
+    }
     goto Benchmarking;
-
-  // Scan arguments
-  for (int i = 1; i < argc; i++)
-  {
-    std::vector<std::string>::iterator it = std::find(options.begin(), options.end(), argv[i]);
-    if (it != options.end())
-    {
-      int index = std::distance(options.begin(), it);
-      if (index == TNN_DAEMON || index == TNN_DAEMON + 1)
-      {
-        i++;
-        host = argv[i];
-      }
-      else if (index == TNN_PORT || index == TNN_PORT + 1)
-      {
-        i++;
-        port = argv[i];
-      }
-      else if (index == TNN_WALLET || index == TNN_WALLET + 1)
-      {
-        i++;
-        wallet = argv[i];
-      }
-      else if (index == TNN_GPUMINE)
-      {
-        gpuMine = true;
-      }
-      else if (index == TNN_BATCHSIZE || index == TNN_BATCHSIZE + 1)
-      {
-        i++;
-        batchSize = std::stoi(argv[i]);
-        // batchSize = (batchSize % 32 == 0) ? batchSize : (batchSize + 32 - batchSize % 32);
-      }
-      else if (index == TNN_FEE || index == TNN_FEE + 1)
-      {
-        try
-        {
-          i++;
-          devFee = std::stod(argv[i]);
-          if (devFee < minFee)
-          {
-            setcolor(RED);
-            printf("ERROR: dev fee must be at least %.2f", minFee);
-            std::cout << "%" << std::endl;
-            setcolor(BRIGHT_WHITE);
-            boost::this_thread::sleep_for(boost::chrono::seconds(30));
-            return 1;
-          }
-        }
-        catch (...)
-        {
-          printf("ERROR: invalid dev fee parameter... format should be for example '1.0'");
-          boost::this_thread::sleep_for(boost::chrono::seconds(30));
-          return 1;
-        }
-      }
-      else if ((!gpuMine && index == TNN_THREADS) || index == TNN_THREADS + 1)
-      {
-        try
-        {
-          i++;
-          threads = std::stoi(argv[i]);
-        }
-        catch (...)
-        {
-          printf("ERROR: invalid threads parameter... must be an integer");
-          boost::this_thread::sleep_for(boost::chrono::seconds(30));
-          return 1;
-        }
-      }
-      else if (index == TNN_NO_LOCK)
-      {
-        lockThreads = false;
-      }
-    }
-    else
-    {
-      setcolor(RED);
-      printf("ERROR: Unexpected argument '%s'\n", argv[i]);
-      setcolor(CYAN);
-      printf("%s\n", usage);
-      return 0;
-    }
   }
 
 fillBlanks:
@@ -635,29 +589,13 @@ Testing:
 {
   mpz_class diffTest("20000", 10);
 
-  for (int i = 1; i < argc; i++)
-  {
-    std::vector<std::string>::iterator it = std::find(options.begin(), options.end(), argv[i]);
-    if (it != options.end())
-    {
-      int index = std::distance(options.begin(), it);
-      if (index == TNN_OP)
-      {
-        i++;
-        testOp = std::stoi(argv[i]);
-      }
-      else if (index == TNN_TLEN)
-      {
-        i++;
-        testLen = std::stoi(argv[i]);
-      }
-    }
-  }
-  if (testOp >= 0) 
-    if (testLen >= 0) runOpTests(testOp, testLen);
-    else {
+  if (testOp >= 0) {
+    if (testLen >= 0) {
+      runOpTests(testOp, testLen);
+    } else {
       runOpTests(testOp);
     }
+  }
   TestAstroBWTv3();
   // TestAstroBWTv3_cuda();
   // TestAstroBWTv3repeattest();
@@ -666,17 +604,8 @@ Testing:
 }
 Benchmarking:
 {
-  if (argc < 4)
-  {
-    setcolor(RED);
-    printf("ERROR: Invalid benchmark arguments. Use %s for assistance", options[TNN_HELP]);
-  }
-  threads = 1;
-  threads = std::stoi(argv[2]);
-  int duration = std::stoi(argv[3]);
-  if (argc > 4 && argv[4] == options[TNN_NO_LOCK])
-  {
-    lockThreads = false;
+  if(threads <= 0) {
+    threads = 1;
   }
 
   unsigned int n = std::thread::hardware_concurrency();
@@ -722,14 +651,14 @@ Benchmarking:
     boost::this_thread::yield();
   }
 
-  boost::thread t2(logSeconds, start_time, duration, &stopBenchmark);
+  boost::thread t2(logSeconds, start_time, bench_duration, &stopBenchmark);
   setPriority(t2.native_handle(), THREAD_PRIORITY_TIME_CRITICAL);
 
   while (true)
   {
     auto now = std::chrono::system_clock::now();
     auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count();
-    if (milliseconds >= duration * 1000)
+    if (milliseconds >= bench_duration * 1000)
     {
       stopBenchmark = true;
       break;
@@ -739,7 +668,7 @@ Benchmarking:
 
   auto now = std::chrono::system_clock::now();
   auto seconds = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
-  int64_t hashrate = counter / duration;
+  int64_t hashrate = counter / bench_duration;
   std::string intro = fmt::sprintf("Mined for %d seconds, average rate of ", seconds);
   std::cout << intro << std::flush;
   if (hashrate >= 1000000)
@@ -827,16 +756,6 @@ Mining:
   {
     boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
   }
-
-  // std::string input;
-  // while (getline(std::cin, input) && input != "quit")
-  // {
-  //   if (input == "hello")
-  //     std::cout << "Hello world!\n";
-  //   else
-  //     std::cout << "Unrecognized command: " << input << "\n";
-  //   std::cout << consoleLine;
-  // }
 
   return EXIT_SUCCESS;
 }
