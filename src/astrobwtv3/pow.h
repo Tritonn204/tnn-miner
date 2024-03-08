@@ -40,6 +40,28 @@
 #endif
 #endif
 
+// const uint64_t maskTips[8] = {
+//   0x0000000000000000,
+//   0xFF00000000000000,
+//   0xFFFF000000000000,
+//   0xFFFFFF0000000000,
+//   0xFFFFFFFF00000000,
+//   0xFFFFFFFFFF000000,
+//   0xFFFFFFFFFFFF0000,
+//   0xFFFFFFFFFFFFFF00,
+// };
+
+const uint64_t maskTips[8] = {
+  0x00,         // n%8 = 0 
+  0xFF,         // n%8 = 1
+  0xFFFF,       // n%8 = 2 
+  0xFFFFFF,     // n%8 = 3
+  0xFFFFFFFF,   // n%8 = 4
+  0xFFFFFFFFFF, // n%8 = 5
+  0xFFFFFFFFFFFF, // n%8 = 6
+  0xFFFFFFFFFFFFFFF // n%8 = 7
+};
+
 const uint32_t sha_standard[8] = {
     0x6a09e667, 
     0xbb67ae85, 
@@ -79,27 +101,27 @@ const __m256i vec_3 = _mm256_set1_epi8(3);
 class workerData
 {
 public:
-  unsigned char *sHash;
-  unsigned char *sha_key;
-  unsigned char *sha_key2;
-  unsigned char *sData;
+  unsigned char sHash[32];
+  unsigned char sha_key[32];
+  unsigned char sha_key2[32];
+  unsigned char sData[MAX_LENGTH+64];
 
-  unsigned char *counter;
+  unsigned char counter[64];
 
-  int *bA;
-  int *bB;
+  int bA[256];
+  int bB[256*256];
 
-  int *C;  // Count array for characters
-  int *B;
+  int C[256];  // Count array for characters
+  int B[256];
   int D[512];  // Temporary array used in LMS sort
 
   SHA256_CTX sha256;
   ucstk::Salsa20 salsa20;
   RC4_KEY key;
 
-  int32_t *sa;
+  int32_t sa[MAX_LENGTH];
 
-  unsigned char *step_3;
+  unsigned char step_3[256];
   uint64_t random_switcher;
 
   uint64_t lhash;
@@ -115,6 +137,8 @@ public:
   unsigned char A;
   uint32_t data_len;
 
+  alignas(32) __m256i maskTable[32];
+
   void *GPUData[16];
   // void *cudaStore;
 
@@ -129,32 +153,37 @@ public:
   std::vector<byte> opsA;
   std::vector<byte> opsB;
 
-  void init()
-  {
-    sHash = (byte*)malloc_huge_pages(32);
-    sha_key = (byte*)malloc_huge_pages(32);
-    sha_key2 = (byte*)malloc_huge_pages(32);
-    sData = (byte*)malloc_huge_pages(MAX_LENGTH+64);
-
-    counter = (byte*)malloc_huge_pages(64);
-
-    bA = (int*)malloc_huge_pages(256*sizeof(int));
-    bB = (int*)malloc_huge_pages(256*256*sizeof(int));
-
-    sa = (int32_t *)malloc_huge_pages(MAX_LENGTH*sizeof(int32_t));
-    step_3 = (unsigned char *)malloc_huge_pages(256+32);
-
-    C = (int*)malloc_huge_pages(MAX_LENGTH*4);
-    B = (int*)malloc_huge_pages(MAX_LENGTH*4);
-  }
-
-  workerData()
-  {
-    init();
-  }
-
   friend std::ostream& operator<<(std::ostream& os, const workerData& wd);
 };
+
+inline void initWorker(workerData &worker) {
+  __m256i temp[32];
+  for(int i = 0; i < 32; i++) {
+    temp[i] = _mm256_setzero_si256(); // Initialize mask with all zeros
+
+    __m128i lower_part = _mm_set1_epi64x(0);
+    __m128i upper_part = _mm_set1_epi64x(0);
+
+    if (i > 24) {
+
+      lower_part = _mm_set1_epi64x(-1ULL);
+      upper_part = _mm_set_epi64x(-1ULL >> (8-(i%8))*8,-1ULL);
+    } else if (i > 16) {
+
+      lower_part = _mm_set_epi64x(-1ULL,-1ULL);
+      upper_part = _mm_set_epi64x(0,-1ULL >> (8-(i%8))*8);
+    } else if (i > 8) {
+
+      lower_part = _mm_set_epi64x(-1ULL >> (8-(i%8))*8,-1ULL);
+    } else {
+      lower_part = _mm_set_epi64x(0,-1ULL >> (8-(i%8))*8);
+    }
+
+    temp[i] = _mm256_insertf128_si256(temp[i], lower_part, 0); // Set lower 128 bits
+    temp[i] = _mm256_insertf128_si256(temp[i], upper_part, 1); // Set upper 128 bits
+  }
+  memcpy(worker.maskTable, temp, 32*sizeof(__m256i));
+}
 
 inline std::ostream& operator<<(std::ostream& os, const workerData& wd) {
     // Print values for dynamically allocated unsigned char arrays (assuming 32 bytes for demonstration)
@@ -259,6 +288,16 @@ inline void generateInitVector(std::uint8_t (&iv_buff)[N])
   std::generate(std::begin(iv_buff), std::end(iv_buff), rbe);
 }
 
+template <typename T>
+inline void prefetch(T *data, int size, int hint) {
+  const size_t prefetch_distance = 256; // Prefetch 8 cache lines ahead
+  const size_t cache_line_size = 64; // Assuming a 64-byte cache line
+
+  for (size_t i = 0; i < size; i += prefetch_distance * cache_line_size) {
+      __builtin_prefetch(&data[i], 0, hint);
+  }
+}
+
 inline void hashSHA256(SHA256_CTX &sha256, const unsigned char *input, unsigned char *digest, unsigned long inputSize)
 {
   SHA256_Init(&sha256);
@@ -293,10 +332,10 @@ inline std::vector<uint8_t> padSHA256Input(const uint8_t* input, size_t length) 
     return padded;
 }
 
-
 void branchComputeCPU(workerData &worker);
 void branchComputeCPU_optimized(workerData &worker);
 void AstroBWTv3(unsigned char *input, int inputLen, unsigned char *outputhash, workerData &scratch, bool gpuMine, bool simd=false);
+
 void finishBatch(workerData &worker);
 
 #endif
