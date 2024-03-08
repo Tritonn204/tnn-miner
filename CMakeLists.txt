@@ -1,8 +1,11 @@
 cmake_minimum_required(VERSION 3.16.3)
 
 set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_C_FLAGS_RELEASE "-static")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -fopenmp -pthread -march=native -m64 -Wall -Wuninitialized -funroll-all-loops -ftree-vectorize")
+set(CMAKE_C_FLAGS_RELEASE "-static -O3 -fPIE -ftree-vectorize -mtune=znver4")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -fopenmp -pthread -m64 -Wall -Wuninitialized -funroll-all-loops -ftree-vectorize -march=x86-64-v3 -mtune=znver4")
+
+set(CMAKE_C_COMPILER clang)
+set(CMAKE_CXX_COMPILER g++)
 
 if(WIN32)
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wa,-mbig-obj")
@@ -15,7 +18,7 @@ endif()
 
 set(CMAKE_EXE_LINKER_FLAGS "-fstack-protector")
 
-set (CMAKE_CXX_STANDARD 20)
+set (CMAKE_CXX_STANDARD 23)
 # set (CMAKE_CUDA_STANDARD 17)
 
 project(
@@ -61,15 +64,6 @@ endif()
 include(${CPM_DOWNLOAD_LOCATION})
 
 CPMAddPackage("gh:nlohmann/json@3.10.5")
-CPMAddPackage(
-  NAME libsais
-  GITHUB_REPOSITORY IlyaGrebnov/libsais
-  GIT_TAG v2.7.3
-  OPTIONS
-    "LIBSAIS_USE_OPENMP OFF"
-    "LIBSAIS_BUILD_SHARED_LIB OFF"
-)
-
 
 set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL REQUIRED)
@@ -100,7 +94,7 @@ file(GLOB all_SRCS
   "${PROJECT_SOURCE_DIR}/src/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/*.c"
   "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cpp"
-  # "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.c"
+  "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.c"
   # "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cu"
   # "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cuh"
   "${PROJECT_SOURCE_DIR}/src/miner/*.cpp"
@@ -116,7 +110,7 @@ endif()
 if(UNIX)
   target_link_libraries(${PROJECT_NAME} udns pthread)
 endif()
-target_link_libraries(${PROJECT_NAME} nlohmann_json::nlohmann_json OpenSSL::SSL ${Boost_LIBRARIES} OpenSSL::Crypto gmp gmpxx divsufsort libsais ${CUDA_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} nlohmann_json::nlohmann_json OpenSSL::SSL ${Boost_LIBRARIES} OpenSSL::Crypto gmp gmpxx ${CUDA_LIBRARIES})
 
 # set_target_properties(${PROJECT_NAME} PROPERTIES CUDA_ARCHITECTURES "60;86" CUDA_SEPARABLE_COMPILATION ON)
 # # set(CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS} "-g -G")  # enable cuda-gdb

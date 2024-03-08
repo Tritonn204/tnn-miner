@@ -331,7 +331,7 @@ void do_session(
 
             if (!isDev)
             {
-              currentBlob = (*J).at("blockhashing_blob");
+              currentBlob = std::string((*J).at("blockhashing_blob"));
               blockCounter = (*J).at("blocks");
               miniBlockCounter = (*J).at("miniblocks");
               rejected = (*J).at("rejected");
@@ -358,7 +358,7 @@ void do_session(
             else
             {
               difficultyDev = (*J).at("difficultyuint64");
-              devBlob = (*J).at("blockhashing_blob");
+              devBlob = std::string((*J).at("blockhashing_blob"));
               devHeight = (*J).at("height");
               if (!devConnected)
               {
@@ -1088,6 +1088,7 @@ void benchmark(int tid)
 
   byte powHash[32];
   workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
+  initWorker(*worker);
   // workerData *worker = new workerData();
 
   while (!isConnected)
@@ -1119,7 +1120,7 @@ void benchmark(int tid)
         std::swap(work[MINIBLOCK_SIZE - 5], work[MINIBLOCK_SIZE - 2]);
         std::swap(work[MINIBLOCK_SIZE - 4], work[MINIBLOCK_SIZE - 3]);
       }
-      AstroBWTv3(work, MINIBLOCK_SIZE, powHash, *worker, false, true);
+      AstroBWTv3(work, MINIBLOCK_SIZE, powHash, *worker, true, true);
       counter.store(counter + 1);
       benchCounter.store(benchCounter + 1);
       if (stopBenchmark)
@@ -1151,6 +1152,9 @@ void mineBlock(int tid)
   byte devWork[MINIBLOCK_SIZE];
 
   workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
+  initWorker(*worker);
+
+  // std::cout << *worker << std::endl;
 
 waitForJob:
 

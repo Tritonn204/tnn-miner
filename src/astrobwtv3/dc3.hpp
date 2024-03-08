@@ -1,0 +1,1 @@
+void suffixArray(int *T, int *SA, int n, int K);
