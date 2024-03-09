@@ -419,6 +419,8 @@ int main(int argc, char **argv)
     std::cout << "Permission Granted for Huge Pages!" << std::endl;
   else
     std::cout << "Huge Pages: Permission Failed..." << std::endl;
+
+  SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
 #endif
   // Check command line arguments.
   mpz_pow_ui(oneLsh256.get_mpz_t(), mpz_class(2).get_mpz_t(), 256);
@@ -675,7 +677,7 @@ Benchmarking:
   wallet = devWallet;
 
   boost::thread GETWORK(getWork, false);
-  setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+  // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
   winMask = std::max(1, winMask);
 
@@ -694,7 +696,7 @@ Benchmarking:
 #endif
     }
 
-    setPriority(t.native_handle(), THREAD_PRIORITY_HIGHEST);
+    // setPriority(t.native_handle(), THREAD_PRIORITY_HIGHEST);
 
     mutex.lock();
     std::cout << "(Benchmark) Worker " << i + 1 << " created" << std::endl;
@@ -754,10 +756,10 @@ Mining:
   mutex.unlock();
 
   boost::thread GETWORK(getWork, false);
-  setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+  // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
   boost::thread DEVWORK(getWork, true);
-  setPriority(DEVWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+  // setPriority(DEVWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
   unsigned int n = std::thread::hardware_concurrency();
   int winMask = 0;
@@ -773,7 +775,7 @@ Mining:
   if (false /*gpuMine*/ )
   {
     // boost::thread t(cudaMine);
-    // setPriority(t.native_handle(), THREAD_PRIORITY_HIGHEST);
+    // setPriority(t.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
     // continue;
   }
   else
@@ -790,7 +792,7 @@ Mining:
 #endif
       }
       // if (threads == 1 || (n > 2 && i <= n - 2))
-      setPriority(t.native_handle(), THREAD_PRIORITY_TIME_CRITICAL);
+      // setPriority(t.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
       std::cout << "Thread " << i + 1 << " started" << std::endl;
     }
@@ -801,11 +803,11 @@ Mining:
 
   while (!isConnected)
   {
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(50));
+    boost::this_thread::yield();
   }
 
   boost::thread reporter(update, start_time);
-  setPriority(reporter.native_handle(), THREAD_PRIORITY_TIME_CRITICAL);
+  setPriority(reporter.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
   while (true)
   {
