@@ -29,6 +29,8 @@
 // #include <cuda_runtime.h>
 
 #include "immintrin.h"
+#include "libsais.h"
+
 
 #ifndef POW_CONST
 #define POW_CONST
@@ -39,6 +41,19 @@
 #define _mm256_set_m128f(xmm1, xmm2) _mm256_permute2f128_ps(_mm256_castps128_ps256(xmm1), _mm256_castps128_ps256(xmm2), 2)
 #endif
 #endif
+
+typedef unsigned int suffix;
+typedef unsigned int t_index;
+typedef unsigned char byte;
+typedef unsigned short dbyte;
+typedef unsigned long word;
+
+const std::vector<unsigned> branchedOps_global = {
+1,3,5,9,11,13,15,17,20,21,23,27,29,30,35,39,40,43,45,47,51,54,58,60,62,64,68,70,72,74,75,80,82,85,91,92,93,94,103,108,109,115,116,117,119,120,123,124,127,132,133,134,136,138,140,142,143,146,148,149,150,154,155,159,161,165,168,169,176,177,178,180,182,184,187,189,190,193,194,195,199,202,203,204,212,214,215,216,219,221,222,223,226,227,230,231,234,236,239,240,241,242,250,253
+};
+
+const int branchedOps_size = 104; // Manually counted size of branchedOps_global
+const int regOps_size = 256-branchedOps_size; // 256 - branchedOps_global.size()
 
 // const uint64_t maskTips[8] = {
 //   0x0000000000000000,
@@ -87,12 +102,6 @@ __m256i shiftRight256(__m256i a);
 template <unsigned int N> 
 __m256i shiftLeft256(__m256i a);
 
-typedef unsigned int suffix;
-typedef unsigned int t_index;
-typedef unsigned char byte;
-typedef unsigned short dbyte;
-typedef unsigned long word;
-
 const __m256i vec_3 = _mm256_set1_epi8(3);
 
 
@@ -101,19 +110,19 @@ const __m256i vec_3 = _mm256_set1_epi8(3);
 class workerData
 {
 public:
-  unsigned char sHash[32];
+  alignas(32) unsigned char sHash[32];
   unsigned char sha_key[32];
   unsigned char sha_key2[32];
-  unsigned char sData[MAX_LENGTH+64];
+  alignas(32) unsigned char sData[MAX_LENGTH+64];
 
   unsigned char counter[64];
 
-  int bA[256];
-  int bB[256*256];
+  alignas(32) int bA[256];
+  alignas(32) int bB[256*256];
 
-  int C[256];  // Count array for characters
-  int B[256];
-  int D[512];  // Temporary array used in LMS sort
+  // int C[256];  // Count array for characters
+  // int B[256];
+  // int D[512];  // Temporary array used in LMS sort
 
   SHA256_CTX sha256;
   ucstk::Salsa20 salsa20;
@@ -121,7 +130,19 @@ public:
 
   int32_t sa[MAX_LENGTH];
 
+  alignas(32) byte branchedOps[branchedOps_size];
+  alignas(32) byte regularOps[regOps_size];
+
+  alignas(32) byte branched_idx[256];
+  alignas(32) byte reg_idx[256];
+
   unsigned char step_3[256];
+  unsigned char lookup2D[regOps_size*256];
+  int freq[256];
+
+  byte *lookup3D;
+  void *ctx;
+
   uint64_t random_switcher;
 
   uint64_t lhash;
@@ -138,18 +159,7 @@ public:
   uint32_t data_len;
 
   alignas(32) __m256i maskTable[32];
-
-  void *GPUData[16];
-  // void *cudaStore;
-
-  std::vector<std::vector<unsigned char>> workBlobs;
-  std::vector<std::vector<unsigned char>> saInputs;
-  std::vector<uint32_t> inputSizes;
-  std::vector<std::vector<uint32_t>> saResults2;
-  std::vector<std::vector<uint32_t>> saResults;
-  std::vector<std::vector<unsigned char>> outputHashes;
-  std::vector<std::vector<unsigned char>> refHashes;
-
+  
   std::vector<byte> opsA;
   std::vector<byte> opsB;
 
@@ -182,7 +192,25 @@ inline void initWorker(workerData &worker) {
     temp[i] = _mm256_insertf128_si256(temp[i], lower_part, 0); // Set lower 128 bits
     temp[i] = _mm256_insertf128_si256(temp[i], upper_part, 1); // Set upper 128 bits
   }
-  memcpy(worker.maskTable, temp, 32*sizeof(__m256i));
+  // printf("branchedOps size:cl %d", worker.branchedOps.size());
+  std::copy(branchedOps_global.begin(), branchedOps_global.end(), worker.branchedOps);
+  std::vector<byte> full(256);
+  std::vector<byte> diff(256);
+  std::iota(full.begin(), full.end(), 0);
+  std::set_difference(full.begin(), full.end(), branchedOps_global.begin(), branchedOps_global.end(), std::inserter(diff, diff.begin()));
+  std::copy(diff.begin(), diff.end(), worker.regularOps);
+  memcpy(&worker.maskTable[0], temp, 32*sizeof(__m256i));
+  worker.ctx = libsais_create_ctx();
+  // printf("Branched Ops:\n");
+  // for (int i = 0; i < branchedOps_size; i++) {
+  //   std::printf("%02X, ", worker.branchedOps[i]);
+  // }
+  // printf("\n");
+  // printf("Regular Ops:\n");
+  // for (int i = 0; i < regOps_size; i++) {
+  //   std::printf("%02X, ", worker.regularOps[i]);
+  // }
+  // printf("\n");
 }
 
 inline std::ostream& operator<<(std::ostream& os, const workerData& wd) {
@@ -222,18 +250,6 @@ inline std::ostream& operator<<(std::ostream& os, const workerData& wd) {
     os << "bB: ";
     printIntArray(wd.bB, 256*256); // Based on allocation in init
 
-    // Assuming similar allocation sizes for C and B as for bA for demonstration
-    os << "C: ";
-    printIntArray(wd.C, 256); // Adjust size as necessary
-
-    os << "B: ";
-    printIntArray(wd.B, 256); // Adjust size as necessary
-
-    // Directly contained int array D
-    os << "D: ";
-    for (int i = 0; i < 512; ++i) {
-        os << wd.D[i] << " ";
-    }
     os << '\n';
 
     // If you have other arrays or variables to print, follow the same pattern:
@@ -332,6 +348,8 @@ inline std::vector<uint8_t> padSHA256Input(const uint8_t* input, size_t length) 
     return padded;
 }
 
+void processAfterMarker(workerData& worker);
+void lookupCompute(workerData &worker);
 void branchComputeCPU(workerData &worker);
 void branchComputeCPU_optimized(workerData &worker);
 void AstroBWTv3(unsigned char *input, int inputLen, unsigned char *outputhash, workerData &scratch, bool gpuMine, bool simd=false);
