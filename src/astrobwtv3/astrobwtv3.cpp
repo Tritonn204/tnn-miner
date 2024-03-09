@@ -1,6 +1,7 @@
 #include <endian.hpp>
 #include <inttypes.h>
 
+#include <unistd.h>
 #define FMT_HEADER_ONLY
 
 #include <fmt/format.h>
@@ -28,6 +29,7 @@
 #include <highwayhash/sip_hash.h>
 #include <filesystem>
 #include <functional>
+#include "lookupcompute.h"
 
 extern "C"
 {
@@ -50,13 +52,13 @@ extern "C"
 #include "immintrin.h"
 #include "dc3.hpp"
 // #include "fgsaca.hpp"
-#include "libsais.h"
-
 #include <hugepages.h>
 
 using byte = unsigned char;
 
 int ops[256];
+
+byte lookup3D[branchedOps_size*256*256];
 
 std::vector<byte> opsA;
 std::vector<byte> opsB;
@@ -385,7 +387,7 @@ inline __m256i _mm256_reverse_epi8(__m256i input) {
 
 void optest(int op, workerData &worker, bool print=true) {
   if (print) {
-    printf("Scalar\npre op %d: ", op);
+    printf("Scalar\n--------------\npre op %d: ", op);
     for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
       printf("%02X ", worker.step_3[i]);
     }
@@ -394,34 +396,37 @@ void optest(int op, workerData &worker, bool print=true) {
 
   auto start = std::chrono::steady_clock::now();
   for(int n = 0; n < 256; n++){
-    switch(op) {
-      case 0:
-      #pragma GCC unroll 32
-        for (int i = worker.pos1; i < worker.pos2; i++)
-        {
-          // INSERT_RANDOM_CODE_START
-          worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]];             // ones count bits
-          worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
-          worker.step_3[i] *= worker.step_3[i];                             // *
-          worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
-          // INSERT_RANDOM_CODE_END
-          worker.t1 = worker.step_3[worker.pos1];
-          worker.t2 = worker.step_3[worker.pos2];
-          worker.step_3[worker.pos1] = reverse8(worker.t2);
-          worker.step_3[worker.pos2] = reverse8(worker.t1);
-        }
+        switch (op)
+    {
+    case 0:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]];             // ones count bits
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+        worker.step_3[i] *= worker.step_3[i];                             // *
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+
+        // INSERT_RANDOM_CODE_END
+        worker.t1 = worker.step_3[worker.pos1];
+        worker.t2 = worker.step_3[worker.pos2];
+        worker.step_3[worker.pos1] = reverse8(worker.t2);
+        worker.step_3[worker.pos2] = reverse8(worker.t1);
+      }
       break;
     case 1:
-      #pragma GCC unroll 32
-        for (int i = worker.pos1; i < worker.pos2; i++)
-        {
-          // INSERT_RANDOM_CODE_START
-          worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
-          worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
-          worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
-          worker.step_3[i] += worker.step_3[i];                             //eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee +
-        }
-        break;
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+        worker.step_3[i] += worker.step_3[i];                             // +
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
     case 2:
 #pragma GCC unroll 32
       for (int i = worker.pos1; i < worker.pos2; i++)
@@ -811,7 +816,6 @@ void optest(int op, workerData &worker, bool print=true) {
                                                                           // INSERT_RANDOM_CODE_END
       }
       break;
-
     case 34:
 #pragma GCC unroll 32
       for (int i = worker.pos1; i < worker.pos2; i++)
@@ -1366,7 +1370,7 @@ void optest(int op, workerData &worker, bool print=true) {
                                                             // INSERT_RANDOM_CODE_END
       }
       break;
-case 80:
+    case 80:
 #pragma GCC unroll 32
       for (int i = worker.pos1; i < worker.pos2; i++)
       {
@@ -1738,7 +1742,7 @@ case 80:
                                                                        // INSERT_RANDOM_CODE_END
       }
       break;
-case 111:
+    case 111:
 #pragma GCC unroll 32
       for (int i = worker.pos1; i < worker.pos2; i++)
       {
@@ -1858,8 +1862,1624 @@ case 111:
                                                             // INSERT_RANDOM_CODE_END
       }
       break;
+    case 121:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+        worker.step_3[i] += worker.step_3[i];                          // +
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]];          // ones count bits
+        worker.step_3[i] *= worker.step_3[i];                          // *
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 122:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);               // rotate  bits by 4
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 123:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+        worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
+        worker.step_3[i] = std::rotl(worker.step_3[i], 6);                // rotate  bits by 3
+        // worker.step_3[i] = std::rotl(worker.step_3[i], 3); // rotate  bits by 3
+        // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 124:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
+        worker.step_3[i] ^= worker.step_3[worker.pos2];     // XOR
+        worker.step_3[i] = ~worker.step_3[i];               // binary NOT operator
+                                                            // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 125:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
+        worker.step_3[i] += worker.step_3[i];                          // +
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 126:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 9); // rotate  bits by 3
+        // worker.step_3[i] = std::rotl(worker.step_3[i], 1); // rotate  bits by 1
+        // worker.step_3[i] = std::rotl(worker.step_3[i], 5); // rotate  bits by 5
+        worker.step_3[i] = reverse8(worker.step_3[i]); // reverse bits
+                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 127:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+        worker.step_3[i] *= worker.step_3[i];                             // *
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+        worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 128:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 129:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = ~worker.step_3[i];                          // binary NOT operator
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]];          // ones count bits
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]];          // ones count bits
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 130:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);    // shift right
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);               // rotate  bits by 4
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 131:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);          // XOR and -
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);    // rotate  bits by 1
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]]; // ones count bits
+        worker.step_3[i] *= worker.step_3[i];                 // *
+                                                              // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 132:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+        worker.step_3[i] = reverse8(worker.step_3[i]);                    // reverse bits
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 133:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= worker.step_3[worker.pos2];                // XOR
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);             // rotate  bits by 5
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 134:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);               // rotate  bits by 4
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 135:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
+        worker.step_3[i] += worker.step_3[i];                          // +
+        worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 136:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);                   // XOR and -
+        worker.step_3[i] ^= worker.step_3[worker.pos2];                // XOR
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);             // rotate  bits by 5
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 137:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);    // shift right
+        worker.step_3[i] = reverse8(worker.step_3[i]);                    // reverse bits
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 138:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= worker.step_3[worker.pos2]; // XOR
+        worker.step_3[i] ^= worker.step_3[worker.pos2]; // XOR
+        worker.step_3[i] += worker.step_3[i];           // +
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);    // XOR and -
+                                                        // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 139:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 8); // rotate  bits by 5
+        // worker.step_3[i] = std::rotl(worker.step_3[i], 3);             // rotate  bits by 3
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);  // rotate  bits by 3
+                                                            // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 140:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);  // rotate  bits by 1
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
+        worker.step_3[i] ^= worker.step_3[worker.pos2];     // XOR
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);  // rotate  bits by 5
+                                                            // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 141:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);    // rotate  bits by 1
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);          // XOR and -
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]]; // ones count bits
+        worker.step_3[i] += worker.step_3[i];                 // +
+                                                              // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 142:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+        worker.step_3[i] = reverse8(worker.step_3[i]);                    // reverse bits
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 143:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);                // rotate  bits by 3
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);    // shift right
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 144:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+        worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 145:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = reverse8(worker.step_3[i]);      // reverse bits
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4); // rotate  bits by 4
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4); // rotate  bits by 4
+                                                            // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 146:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]];             // ones count bits
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 147:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = ~worker.step_3[i];                          // binary NOT operator
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);            // rotate  bits by 4
+        worker.step_3[i] *= worker.step_3[i];                          // *
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 148:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);                      // XOR and -
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 149:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= worker.step_3[worker.pos2]; // XOR
+        worker.step_3[i] = reverse8(worker.step_3[i]);  // reverse bits
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);    // XOR and -
+        worker.step_3[i] += worker.step_3[i];           // +
+                                                        // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 150:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 151:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] += worker.step_3[i];                          // +
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
+        worker.step_3[i] *= worker.step_3[i];                          // *
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 152:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+        worker.step_3[i] = ~worker.step_3[i];                          // binary NOT operator
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 153:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 4); // rotate  bits by 1
+        // worker.step_3[i] = std::rotl(worker.step_3[i], 3); // rotate  bits by 3
+        // worker.step_3[i] = ~worker.step_3[i];     // binary NOT operator
+        // worker.step_3[i] = ~worker.step_3[i];     // binary NOT operator
+        // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 154:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);    // rotate  bits by 5
+        worker.step_3[i] = ~worker.step_3[i];                 // binary NOT operator
+        worker.step_3[i] ^= worker.step_3[worker.pos2];       // XOR
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]]; // ones count bits
+                                                              // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 155:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);          // XOR and -
+        worker.step_3[i] ^= worker.step_3[worker.pos2];       // XOR
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]]; // ones count bits
+        worker.step_3[i] ^= worker.step_3[worker.pos2];       // XOR
+                                                              // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 156:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+        worker.step_3[i] = std::rotl(worker.step_3[i], 4);             // rotate  bits by 3
+        // worker.step_3[i] = std::rotl(worker.step_3[i], 1);    // rotate  bits by 1
+        // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 157:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);    // shift right
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 158:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]]; // ones count bits
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);    // rotate  bits by 3
+        worker.step_3[i] += worker.step_3[i];                 // +
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);    // rotate  bits by 1
+                                                              // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 159:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);                      // XOR and -
+        worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+        worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 160:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+        worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+        worker.step_3[i] = std::rotl(worker.step_3[i], 4);             // rotate  bits by 1
+        // worker.step_3[i] = std::rotl(worker.step_3[i], 3);    // rotate  bits by 3
+        // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 161:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
+        worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 162:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] *= worker.step_3[i];               // *
+        worker.step_3[i] = reverse8(worker.step_3[i]);      // reverse bits
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);        // XOR and -
+                                                            // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 163:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);                   // XOR and -
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);            // rotate  bits by 4
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);             // rotate  bits by 1
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 164:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] *= worker.step_3[i];                 // *
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]]; // ones count bits
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);          // XOR and -
+        worker.step_3[i] = ~worker.step_3[i];                 // binary NOT operator
+                                                              // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 165:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);            // rotate  bits by 4
+        worker.step_3[i] ^= worker.step_3[worker.pos2];                // XOR
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
+        worker.step_3[i] += worker.step_3[i];                          // +
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 166:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);  // rotate  bits by 3
+        worker.step_3[i] += worker.step_3[i];               // +
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
+        worker.step_3[i] = ~worker.step_3[i];               // binary NOT operator
+                                                            // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 167:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        // worker.step_3[i] = ~worker.step_3[i];        // binary NOT operator
+        // worker.step_3[i] = ~worker.step_3[i];        // binary NOT operator
+        worker.step_3[i] *= worker.step_3[i];                          // *
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 168:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 169:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);               // rotate  bits by 4
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 170:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);   // XOR and -
+        worker.step_3[i] = reverse8(worker.step_3[i]); // reverse bits
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);   // XOR and -
+        worker.step_3[i] *= worker.step_3[i];          // *
+                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 171:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);    // rotate  bits by 3
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);          // XOR and -
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]]; // ones count bits
+        worker.step_3[i] = reverse8(worker.step_3[i]);        // reverse bits
+                                                              // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 172:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);            // rotate  bits by 4
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);                   // XOR and -
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);             // rotate  bits by 1
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 173:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = ~worker.step_3[i];                          // binary NOT operator
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
+        worker.step_3[i] *= worker.step_3[i];                          // *
+        worker.step_3[i] += worker.step_3[i];                          // +
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 174:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]];             // ones count bits
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]];             // ones count bits
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 175:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3); // rotate  bits by 3
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);       // XOR and -
+        worker.step_3[i] *= worker.step_3[i];              // *
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5); // rotate  bits by 5
+                                                           // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 176:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= worker.step_3[worker.pos2];    // XOR
+        worker.step_3[i] *= worker.step_3[i];              // *
+        worker.step_3[i] ^= worker.step_3[worker.pos2];    // XOR
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5); // rotate  bits by 5
+                                                           // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 177:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]];             // ones count bits
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 178:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+        worker.step_3[i] += worker.step_3[i];                             // +
+        worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 179:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
+        worker.step_3[i] += worker.step_3[i];                          // +
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+        worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 180:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);            // rotate  bits by 4
+        worker.step_3[i] ^= worker.step_3[worker.pos2];                // XOR
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);                   // XOR and -
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 181:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = ~worker.step_3[i];                          // binary NOT operator
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);             // rotate  bits by 5
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 182:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= worker.step_3[worker.pos2];    // XOR
+        worker.step_3[i] = std::rotl(worker.step_3[i], 6); // rotate  bits by 1
+        // worker.step_3[i] = std::rotl(worker.step_3[i], 5);         // rotate  bits by 5
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4); // rotate  bits by 4
+                                                            // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 183:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] += worker.step_3[i];        // +
+        worker.step_3[i] -= (worker.step_3[i] ^ 97); // XOR and -
+        worker.step_3[i] -= (worker.step_3[i] ^ 97); // XOR and -
+        worker.step_3[i] *= worker.step_3[i];        // *
+                                                     // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 184:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
+        worker.step_3[i] *= worker.step_3[i];                          // *
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);             // rotate  bits by 5
+        worker.step_3[i] ^= worker.step_3[worker.pos2];                // XOR
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 185:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = ~worker.step_3[i];                          // binary NOT operator
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);            // rotate  bits by 4
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);             // rotate  bits by 5
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 186:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);            // rotate  bits by 4
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);                   // XOR and -
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 187:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= worker.step_3[worker.pos2];    // XOR
+        worker.step_3[i] = ~worker.step_3[i];              // binary NOT operator
+        worker.step_3[i] += worker.step_3[i];              // +
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3); // rotate  bits by 3
+                                                           // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 188:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);   // rotate  bits by 4
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]]; // ones count bits
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);   // rotate  bits by 4
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);   // rotate  bits by 4
+                                                              // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 189:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);  // rotate  bits by 5
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4); // rotate  bits by 4
+        worker.step_3[i] ^= worker.step_3[worker.pos2];     // XOR
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);        // XOR and -
+                                                            // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 190:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);    // shift right
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 191:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] += worker.step_3[i];                             // +
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);                // rotate  bits by 3
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);    // shift right
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 192:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] += worker.step_3[i];                          // +
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
+        worker.step_3[i] += worker.step_3[i];                          // +
+        worker.step_3[i] *= worker.step_3[i];                          // *
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 193:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 194:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 195:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]]; // ones count bits
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);   // rotate  bits by 2
+        worker.step_3[i] ^= worker.step_3[worker.pos2];       // XOR
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);   // rotate  bits by 4
+                                                              // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 196:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);             // rotate  bits by 3
+        worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);             // rotate  bits by 1
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 197:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);               // rotate  bits by 4
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+        worker.step_3[i] *= worker.step_3[i];                             // *
+        worker.step_3[i] *= worker.step_3[i];                             // *
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 198:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+        worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);             // rotate  bits by 1
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 199:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = ~worker.step_3[i];           // binary NOT operator
+        worker.step_3[i] += worker.step_3[i];           // +
+        worker.step_3[i] *= worker.step_3[i];           // *
+        worker.step_3[i] ^= worker.step_3[worker.pos2]; // XOR
+                                                        // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 200:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]];          // ones count bits
+        worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+        worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 201:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);  // rotate  bits by 3
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4); // rotate  bits by 4
+        worker.step_3[i] = ~worker.step_3[i];               // binary NOT operator
+                                                            // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 202:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
+        worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 203:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);                // rotate  bits by 1
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 204:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+        worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 205:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]];          // ones count bits
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);            // rotate  bits by 4
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
+        worker.step_3[i] += worker.step_3[i];                          // +
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 206:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);   // rotate  bits by 4
+        worker.step_3[i] = reverse8(worker.step_3[i]);        // reverse bits
+        worker.step_3[i] = reverse8(worker.step_3[i]);        // reverse bits
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]]; // ones count bits
+                                                              // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 207:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 8); // rotate  bits by 5
+        // worker.step_3[i] = std::rotl(worker.step_3[i], 3);                           // rotate  bits by 3
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]]; // ones count bits
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]]; // ones count bits
+                                                              // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 208:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] += worker.step_3[i];                          // +
+        worker.step_3[i] += worker.step_3[i];                          // +
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);             // rotate  bits by 3
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 209:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);    // rotate  bits by 5
+        worker.step_3[i] = reverse8(worker.step_3[i]);        // reverse bits
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]]; // ones count bits
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);          // XOR and -
+                                                              // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 210:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);                // rotate  bits by 5
+        worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 211:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);               // rotate  bits by 4
+        worker.step_3[i] += worker.step_3[i];                             // +
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);                      // XOR and -
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 212:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+        worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
+        worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 213:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] += worker.step_3[i];                          // +
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);             // rotate  bits by 3
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);                   // XOR and -
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 214:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= worker.step_3[worker.pos2];                // XOR
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);                   // XOR and -
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+        worker.step_3[i] = ~worker.step_3[i];                          // binary NOT operator
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 215:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+        worker.step_3[i] *= worker.step_3[i];                             // *
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 216:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+        worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);                      // XOR and -
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 217:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);  // rotate  bits by 5
+        worker.step_3[i] += worker.step_3[i];               // +
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);  // rotate  bits by 1
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4); // rotate  bits by 4
+                                                            // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 218:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = reverse8(worker.step_3[i]); // reverse bits
+        worker.step_3[i] = ~worker.step_3[i];          // binary NOT operator
+        worker.step_3[i] *= worker.step_3[i];          // *
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);   // XOR and -
+                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 219:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);               // rotate  bits by 4
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);                // rotate  bits by 3
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+        worker.step_3[i] = reverse8(worker.step_3[i]);                    // reverse bits
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 220:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);             // rotate  bits by 1
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
+        worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 221:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5); // rotate  bits by 5
+        worker.step_3[i] ^= worker.step_3[worker.pos2];    // XOR
+        worker.step_3[i] = ~worker.step_3[i];              // binary NOT operator
+        worker.step_3[i] = reverse8(worker.step_3[i]);     // reverse bits
+                                                           // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 222:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
+        worker.step_3[i] ^= worker.step_3[worker.pos2];                // XOR
+        worker.step_3[i] *= worker.step_3[i];                          // *
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 223:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);                // rotate  bits by 3
+        worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);                      // XOR and -
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 224:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
+        worker.step_3[i] = std::rotl(worker.step_3[i], 4);  // rotate  bits by 1
+        // worker.step_3[i] = std::rotl(worker.step_3[i], 3);             // rotate  bits by 3
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
+                                                                       //
+      }
+      break;
+    case 225:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = ~worker.step_3[i];                          // binary NOT operator
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+        worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);             // rotate  bits by 3
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 226:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = reverse8(worker.step_3[i]);  // reverse bits
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);    // XOR and -
+        worker.step_3[i] *= worker.step_3[i];           // *
+        worker.step_3[i] ^= worker.step_3[worker.pos2]; // XOR
+                                                        // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 227:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);                      // XOR and -
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 228:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] += worker.step_3[i];                          // +
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+        worker.step_3[i] += worker.step_3[i];                          // +
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]];          // ones count bits
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 229:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);                // rotate  bits by 3
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);               // rotate  bits by 2
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]];             // ones count bits
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 230:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] *= worker.step_3[i];                             // *
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 231:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);             // rotate  bits by 3
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+        worker.step_3[i] ^= worker.step_3[worker.pos2];                // XOR
+        worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 232:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] *= worker.step_3[i];               // *
+        worker.step_3[i] *= worker.step_3[i];               // *
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4); // rotate  bits by 4
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);  // rotate  bits by 5
+                                                            // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 233:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);    // rotate  bits by 1
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]]; // ones count bits
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);    // rotate  bits by 3
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]]; // ones count bits
+                                                              // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 234:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+        worker.step_3[i] *= worker.step_3[i];                             // *
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3);    // shift right
+        worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 235:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
+        worker.step_3[i] *= worker.step_3[i];               // *
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);  // rotate  bits by 3
+        worker.step_3[i] = ~worker.step_3[i];               // binary NOT operator
+                                                            // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 236:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= worker.step_3[worker.pos2];                   // XOR
+        worker.step_3[i] += worker.step_3[i];                             // +
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);                      // XOR and -
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 237:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);             // rotate  bits by 5
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);             // rotate  bits by 3
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 238:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] += worker.step_3[i];              // +
+        worker.step_3[i] += worker.step_3[i];              // +
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3); // rotate  bits by 3
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);       // XOR and -
+                                                           // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 239:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 6); // rotate  bits by 5
+        // worker.step_3[i] = std::rotl(worker.step_3[i], 1); // rotate  bits by 1
+        worker.step_3[i] *= worker.step_3[i];                             // *
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 240:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = ~worker.step_3[i];                             // binary NOT operator
+        worker.step_3[i] += worker.step_3[i];                             // +
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3);    // shift left
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 241:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);   // rotate  bits by 4
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]]; // ones count bits
+        worker.step_3[i] ^= worker.step_3[worker.pos2];       // XOR
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);    // rotate  bits by 1
+                                                              // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 242:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] += worker.step_3[i];           // +
+        worker.step_3[i] += worker.step_3[i];           // +
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);    // XOR and -
+        worker.step_3[i] ^= worker.step_3[worker.pos2]; // XOR
+                                                        // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 243:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);    // rotate  bits by 5
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);   // rotate  bits by 2
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]]; // ones count bits
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);    // rotate  bits by 1
+                                                              // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 244:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = ~worker.step_3[i];               // binary NOT operator
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
+        worker.step_3[i] = reverse8(worker.step_3[i]);      // reverse bits
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);  // rotate  bits by 5
+                                                            // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 245:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);                   // XOR and -
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);             // rotate  bits by 5
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 246:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] += worker.step_3[i];                          // +
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);             // rotate  bits by 1
+        worker.step_3[i] = worker.step_3[i] >> (worker.step_3[i] & 3); // shift right
+        worker.step_3[i] += worker.step_3[i];                          // +
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 247:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);  // rotate  bits by 5
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);  // rotate  bits by 5
+        worker.step_3[i] = ~worker.step_3[i];               // binary NOT operator
+                                                            // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 248:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = ~worker.step_3[i];                 // binary NOT operator
+        worker.step_3[i] -= (worker.step_3[i] ^ 97);          // XOR and -
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]]; // ones count bits
+        worker.step_3[i] = std::rotl(worker.step_3[i], 5);    // rotate  bits by 5
+                                                              // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 249:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = reverse8(worker.step_3[i]);                    // reverse bits
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);               // rotate  bits by 4
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);               // rotate  bits by 4
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 250:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = worker.step_3[i] & worker.step_3[worker.pos2]; // AND
+        worker.step_3[i] = std::rotl(worker.step_3[i], worker.step_3[i]); // rotate  bits by random
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]];             // ones count bits
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);               // rotate  bits by 4
+                                                                          // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 251:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] += worker.step_3[i];                 // +
+        worker.step_3[i] ^= (byte)bitTable[worker.step_3[i]]; // ones count bits
+        worker.step_3[i] = reverse8(worker.step_3[i]);        // reverse bits
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);   // rotate  bits by 2
+                                                              // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 252:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 4);            // rotate  bits by 4
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);            // rotate  bits by 2
+        worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
+                                                                       // INSERT_RANDOM_CODE_END
+      }
+      break;
+    case 253:
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);  // rotate  bits by 3
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
+        worker.step_3[i] ^= worker.step_3[worker.pos2];     // XOR
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);  // rotate  bits by 3
+        // INSERT_RANDOM_CODE_END
+
+        worker.prev_lhash = worker.lhash + worker.prev_lhash;
+        worker.lhash = XXHash64::hash(worker.step_3, worker.pos2,0);
+      }
+      break;
+    case 254:
+    case 255:
+      RC4_set_key(&worker.key, 256,  worker.step_3);
+// worker.step_3 = highwayhash.Sum(worker.step_3[:], worker.step_3[:])
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] ^= static_cast<uint8_t>(std::bitset<8>(worker.step_3[i]).count()); // ones count bits
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);                                  // rotate  bits by 3
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                                 // rotate  bits by 2
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);                                  // rotate  bits by 3
+                                                                                            // INSERT_RANDOM_CODE_END
+      }
+      break;
+    default:
+      break;
     }
-  }
+}
   auto end = std::chrono::steady_clock::now();
   auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
   if (print) {
@@ -1867,14 +3487,14 @@ case 111:
     for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
       printf("%02x ", worker.step_3[i]);
     }
-    printf("\n took %dns\n", time.count());
+    printf("\n took %dns\n------------\n", time.count());
   }
 }
 
 
-void optest_simd(int op, workerData &worker, bool print=true) {
+void optest_lookup(int op, workerData &worker, bool print=true) {
   if (print){
-    printf("SIMD\npre op %d: ", op);
+    printf("Lookup Table\n--------------\npre op %d: ", op);
     for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
       printf("%02X ", worker.step_3[i]);
     }
@@ -1882,1711 +3502,49 @@ void optest_simd(int op, workerData &worker, bool print=true) {
   }
 
   auto start = std::chrono::steady_clock::now();
+  bool use2D = std::find(worker.branchedOps, worker.branchedOps + branchedOps_size, op) == worker.branchedOps + branchedOps_size;
+  byte *lookup = use2D ? &worker.lookup2D[0] : &worker.lookup3D[0];
+
+  int firstIndex;
+  if (use2D) {
+    __builtin_prefetch(lookup);
+    firstIndex = worker.reg_idx[op]*256;
+  } else {
+    __builtin_prefetch(lookup,0,1);
+    firstIndex = worker.branched_idx[op]*256*256 + worker.step_3[worker.pos2]*256;
+  }
   for(int n = 0; n < 256; n++){
-    switch(op) {
-      case 0:
-        // #pragma GCC unroll 16
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          // Load 32 bytes of worker.step_3 starting from i into an AVX2 256-bit register
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          __m256i pop = popcnt256_epi8(data);
-          
-          data = _mm256_xor_si256(data,pop);
-
-          // Rotate left by 5
-          data = _mm256_rol_epi8(data, 5);
-
-          // Full 16-bit multiplication
-          data = _mm256_mul_epi8(data, data);
-          data = _mm256_rolv_epi8(data, data);
-
-          // Write results to workerData
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        if ((worker.pos2-worker.pos1)%2 == 1) {
-          worker.t1 = worker.step_3[worker.pos1];
-          worker.t2 = worker.step_3[worker.pos2];
-          worker.step_3[worker.pos1] = reverse8(worker.t2);
-          worker.step_3[worker.pos2] = reverse8(worker.t1);
-        }
-        break;
-      case 1:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          __m256i shift = _mm256_and_si256(data, vec_3);
-          // data = _mm256_sllv_epi8(data, shift);
-          // data = _mm256_rol_epi8(data,1);
-          // data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          // data = _mm256_add_epi8(data, data);;
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 2:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          __m256i pop = popcnt256_epi8(data);
-          data = _mm256_xor_si256(data,pop);
-          data = _mm256_reverse_epi8(data);
-
-          __m256i shift = _mm256_and_si256(data, vec_3);
-          data = _mm256_sllv_epi8(data, shift);
-
-          pop = popcnt256_epi8(data);
-          data = _mm256_xor_si256(data,pop);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 3:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_rolv_epi8(data,_mm256_add_epi8(data,vec_3));
-          data = _mm256_xor_si256(data,_mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_rol_epi8(data,1);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 4:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-          data = _mm256_srlv_epi8(data,_mm256_and_si256(data,vec_3));
-          data = _mm256_rolv_epi8(data,data);
-          data = _mm256_sub_epi8(data,_mm256_xor_si256(data,_mm256_set1_epi8(97)));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 5:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          // Load 32 bytes of worker.step_3 starting from i into an AVX2 256-bit register
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          __m256i pop = popcnt256_epi8(data);
-          data = _mm256_xor_si256(data,pop);
-          data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_sllv_epi8(data,_mm256_and_si256(data,vec_3));
-          data = _mm256_srlv_epi8(data,_mm256_and_si256(data,vec_3));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        
-        break;
-      case 6:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_sllv_epi8(data,_mm256_and_si256(data,vec_3));
-          data = _mm256_rol_epi8(data, 3);
-          data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-
-          __m256i x = _mm256_xor_si256(data,_mm256_set1_epi8(97));
-          data = _mm256_sub_epi8(data,x);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 7:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_add_epi8(data, data);;
-          data = _mm256_rolv_epi8(data, data);
-
-          __m256i pop = popcnt256_epi8(data);
-          data = _mm256_xor_si256(data,pop);
-          data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 8:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-          data = _mm256_rol_epi8(data,2);
-          data = _mm256_sllv_epi8(data,_mm256_and_si256(data,vec_3));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 9:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data,4));
-          data = _mm256_srlv_epi8(data, _mm256_and_si256(data,vec_3));
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data,2));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 10:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-          data = _mm256_mul_epi8(data, data);
-          data = _mm256_rol_epi8(data, 3);
-          data = _mm256_mul_epi8(data, data);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 11:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_rol_epi8(data, 6);
-          data = _mm256_and_si256(data,_mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_rolv_epi8(data, data);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 12:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data,2));
-          data = _mm256_mul_epi8(data, data);
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data,2));
-          data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 13:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_rol_epi8(data, 1);
-          data = _mm256_xor_si256(data,_mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_srlv_epi8(data,_mm256_and_si256(data,vec_3));
-          data = _mm256_rol_epi8(data, 5);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 14:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_srlv_epi8(data,_mm256_and_si256(data,vec_3));
-          data = _mm256_sllv_epi8(data,_mm256_and_si256(data,vec_3));
-          data = _mm256_mul_epi8(data, data);
-          data = _mm256_sllv_epi8(data,_mm256_and_si256(data,vec_3));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 15:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data,2));
-          data = _mm256_sllv_epi8(data,_mm256_and_si256(data,vec_3));
-          data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_sub_epi8(data,_mm256_xor_si256(data,_mm256_set1_epi8(97)));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 16:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data,4));
-          data = _mm256_mul_epi8(data, data);
-          data = _mm256_rol_epi8(data,1);
-          data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 17:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_mul_epi8(data, data);
-          data = _mm256_rol_epi8(data,5);
-          data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 18:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-          data = _mm256_rol_epi8(data, 1);
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 19:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_sub_epi8(data,_mm256_xor_si256(data,_mm256_set1_epi8(97)));
-          data = _mm256_rol_epi8(data, 5);
-          data = _mm256_sllv_epi8(data,_mm256_and_si256(data,vec_3));
-          data = _mm256_add_epi8(data, data);;;
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 20:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_reverse_epi8(data);
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 21:
-
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_rol_epi8(data, 1);
-          data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_add_epi8(data, data);
-          data = _mm256_and_si256(data,_mm256_set1_epi8(worker.step_3[worker.pos2]));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-    break;
-      case 22:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
-          data = _mm256_reverse_epi8(data);
-          data = _mm256_mul_epi8(data,data);
-          data = _mm256_rol_epi8(data,1);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 23:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_rol_epi8(data, 4);
-          data = _mm256_xor_si256(data,popcnt256_epi8(data));
-          data = _mm256_and_si256(data,_mm256_set1_epi8(worker.step_3[worker.pos2]));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-      break;
-      case 24:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_add_epi8(data, data);
-          data = _mm256_srlv_epi8(data, _mm256_and_si256(data,vec_3));
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-          data = _mm256_rol_epi8(data, 5);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 25:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_xor_si256(data,popcnt256_epi8(data));
-          data = _mm256_rol_epi8(data, 3);
-          data = _mm256_rolv_epi8(data, data);
-          data = _mm256_sub_epi8(data,_mm256_xor_si256(data,_mm256_set1_epi8(97)));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 26:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_mul_epi8(data, data);
-          data = _mm256_xor_si256(data,popcnt256_epi8(data));
-          data = _mm256_add_epi8(data, data);
-          data = _mm256_reverse_epi8(data);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 27:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_rol_epi8(data, 5);
-          data = _mm256_and_si256(data,_mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-          data = _mm256_rol_epi8(data, 5);
-          if (worker.pos2-i < 32) data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 28:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
-          data = _mm256_add_epi8(data, data);
-          data = _mm256_add_epi8(data, data);
-          data = _mm256_rol_epi8(data, 5);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 29:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_mul_epi8(data, data);
-          data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_srlv_epi8(data, _mm256_and_si256(data,vec_3));
-          data = _mm256_add_epi8(data, data);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 30:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-          data = _mm256_rol_epi8(data, 5);
-          data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 31:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-        
-          data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-          data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
-          data = _mm256_mul_epi8(data, data);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 32:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-          data = _mm256_reverse_epi8(data);
-          data = _mm256_rol_epi8(data, 3);
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 33:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_rolv_epi8(data, data);
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-          data = _mm256_reverse_epi8(data);
-          data = _mm256_mul_epi8(data, data);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 34:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
-          data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
-          data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
-          data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 35:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_add_epi8(data, data);
-          data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-          data = _mm256_rol_epi8(data, 1);
-          data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 36:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_xor_si256(data, popcnt256_epi8(data));
-          data = _mm256_rol_epi8(data, 1);
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-          data = _mm256_rol_epi8(data, 1);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 37:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_rolv_epi8(data, data);
-          data = _mm256_srlv_epi8(data, _mm256_and_si256(data,vec_3));
-          data = _mm256_srlv_epi8(data, _mm256_and_si256(data,vec_3));
-          data = _mm256_mul_epi8(data, data);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 38:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_srlv_epi8(data, _mm256_and_si256(data,vec_3));
-          data = _mm256_rol_epi8(data, 3);
-          data = _mm256_xor_si256(data, popcnt256_epi8(data));
-          data = _mm256_rolv_epi8(data, data);
-
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 39:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-          data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_srlv_epi8(data, _mm256_and_si256(data,vec_3));
-          data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 40:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_rolv_epi8(data, data);
-          data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_xor_si256(data, popcnt256_epi8(data));
-          data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 41:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_rol_epi8(data, 5);
-          data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
-          data = _mm256_rol_epi8(data, 3);
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 42:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_rol_epi8(data, 4);
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-          data = _mm256_rolv_epi8(data, data);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 43:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_add_epi8(data, data);
-          data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 44:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_xor_si256(data, popcnt256_epi8(data));
-          data = _mm256_xor_si256(data, popcnt256_epi8(data));
-          data = _mm256_rol_epi8(data, 3);
-          data = _mm256_rolv_epi8(data, data);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 45:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-        
-          data = _mm256_rol_epi8(data, 2);
-          data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_xor_si256(data, popcnt256_epi8(data));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 46:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-        
-          data = _mm256_xor_si256(data, popcnt256_epi8(data));
-          data = _mm256_add_epi8(data, data);
-          data = _mm256_rol_epi8(data, 5);
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 47:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_rol_epi8(data, 5);
-          data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_rol_epi8(data, 5);
-          data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 48:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_rolv_epi8(data, data);
-          data = _mm256_rol_epi8(data, 5);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 49:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-        
-          data = _mm256_xor_si256(data, popcnt256_epi8(data));
-          data = _mm256_add_epi8(data, data);
-          data = _mm256_reverse_epi8(data);
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 50:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-        
-          data = _mm256_reverse_epi8(data);
-          data = _mm256_rol_epi8(data, 3);
-          data = _mm256_add_epi8(data, data);
-          data = _mm256_rol_epi8(data, 1);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 51:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-          data = _mm256_rol_epi8(data, 5);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 52:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_rolv_epi8(data, data);
-          data = _mm256_srlv_epi8(data, _mm256_and_si256(data,vec_3));
-          data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-          data = _mm256_xor_si256(data, popcnt256_epi8(data));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 53:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_add_epi8(data, data);
-          data = _mm256_xor_si256(data, popcnt256_epi8(data));
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 54:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-        
-          data = _mm256_reverse_epi8(data);
-          data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-
-        break;
-      case 55:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_reverse_epi8(data);
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-          data = _mm256_rol_epi8(data, 1);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 56:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-          data = _mm256_mul_epi8(data, data);
-          data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-          data = _mm256_rol_epi8(data, 1);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 57:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_rolv_epi8(data, data);
-          data = _mm256_reverse_epi8(data);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 58:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-        
-          data = _mm256_reverse_epi8(data);
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-          data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_add_epi8(data, data);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }  
-        break;
-      case 59:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_rol_epi8(data, 1);
-          data = _mm256_mul_epi8(data, data);
-          data = _mm256_rolv_epi8(data, data);
-          data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 60:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-            data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-            data = _mm256_mul_epi8(data, data);
-            data = _mm256_rol_epi8(data, 3);
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-
-        break;
-      case 61:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_rol_epi8(data, 5);
-          data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 62:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-          data = _mm256_add_epi8(data, data);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 63:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_rol_epi8(data, 5);
-          data = _mm256_xor_si256(data, popcnt256_epi8(data));
-          data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
-          data = _mm256_add_epi8(data, data);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-
-        break;
-      case 64:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_reverse_epi8(data);
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-          data = _mm256_mul_epi8(data, data);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 65:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-          data = _mm256_mul_epi8(data, data);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 66:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-          data = _mm256_reverse_epi8(data);
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-          data = _mm256_rol_epi8(data, 1);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 67:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_rol_epi8(data, 1);
-          data = _mm256_xor_si256(data, popcnt256_epi8(data));
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-          data = _mm256_rol_epi8(data, 5);
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 68:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-          data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 69:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_add_epi8(data, data);
-          data = _mm256_mul_epi8(data, data);
-          data = _mm256_reverse_epi8(data);
-          data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 70:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_mul_epi8(data, data);
-          data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 71:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_rol_epi8(data, 5);
-          data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-          data = _mm256_mul_epi8(data, data);
-          data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 72:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_reverse_epi8(data);
-          data = _mm256_xor_si256(data, popcnt256_epi8(data));
-          data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 73:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_xor_si256(data, popcnt256_epi8(data));
-          data = _mm256_reverse_epi8(data);
-          data = _mm256_rol_epi8(data, 5);
-          data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 74:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_mul_epi8(data, data);
-          data = _mm256_rol_epi8(data, 3);
-          data = _mm256_reverse_epi8(data);
-          data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-      case 75:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-          __m256i old = data;
-
-          data = _mm256_mul_epi8(data, data);
-          data = _mm256_xor_si256(data, popcnt256_epi8(data));
-          data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-          data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-        }
-        break;
-        case 76:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_rolv_epi8(data, data);
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-            data = _mm256_rol_epi8(data, 5);
-            data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 77:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_rol_epi8(data, 3);
-            data = _mm256_add_epi8(data, data);
-            data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
-            data = _mm256_xor_si256(data, popcnt256_epi8(data));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 78:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_rolv_epi8(data, data);
-            data = _mm256_reverse_epi8(data);
-            data = _mm256_mul_epi8(data, data);
-            data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 79:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-            data = _mm256_add_epi8(data, data);
-            data = _mm256_mul_epi8(data, data);
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 80:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_rolv_epi8(data, data);
-            data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
-            data = _mm256_add_epi8(data, data);
-            data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 81:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-            data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
-            data = _mm256_rolv_epi8(data, data);
-            data = _mm256_xor_si256(data, popcnt256_epi8(data));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 82:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-            data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 83:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
-            data = _mm256_reverse_epi8(data);
-            data = _mm256_rol_epi8(data, 3);
-            data = _mm256_reverse_epi8(data);
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 84:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
-            data = _mm256_rol_epi8(data, 1);
-            data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
-            data = _mm256_add_epi8(data, data);
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 85:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
-            data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-            data = _mm256_rolv_epi8(data, data);
-            data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 86:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-            data = _mm256_rolv_epi8(data, data);
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-            data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 87:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_add_epi8(data, data);
-            data = _mm256_rol_epi8(data, 3);
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-            data = _mm256_add_epi8(data, data);
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 88:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-            data = _mm256_rol_epi8(data, 1);
-            data = _mm256_mul_epi8(data, data);
-            data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 89:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_add_epi8(data, data);
-            data = _mm256_mul_epi8(data, data);
-            data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 90:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_reverse_epi8(data);
-            data = _mm256_rol_epi8(data, 6);
-            data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 91:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_xor_si256(data, popcnt256_epi8(data));
-            data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-            data = _mm256_reverse_epi8(data);
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 92:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_xor_si256(data, popcnt256_epi8(data));
-            data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-            data = _mm256_xor_si256(data, popcnt256_epi8(data));
-            data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 93:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-            data = _mm256_mul_epi8(data, data);
-            data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-            data = _mm256_add_epi8(data, data);
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 94:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_rol_epi8(data, 1);
-            data = _mm256_rolv_epi8(data, data);
-            data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-            data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 95:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_rol_epi8(data, 1);
-            data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-            data = _mm256_rol_epi8(data, 2);
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 96:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-            data = _mm256_xor_si256(data, popcnt256_epi8(data));
-            data = _mm256_rol_epi8(data, 1);
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 97:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_rol_epi8(data, 1);
-            data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
-            data = _mm256_xor_si256(data, popcnt256_epi8(data));
-            data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 98:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-            data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
-            data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 99:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-            data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
-            data = _mm256_reverse_epi8(data);
-            data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 100:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_rolv_epi8(data, data);
-            data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
-            data = _mm256_reverse_epi8(data);
-            data = _mm256_xor_si256(data, popcnt256_epi8(data));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 101:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
-            data = _mm256_xor_si256(data, popcnt256_epi8(data));
-            data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
-            data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 102:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_rol_epi8(data, 3);
-            data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
-            data = _mm256_add_epi8(data, data);
-            data = _mm256_rol_epi8(data, 3);
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 103:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_rol_epi8(data, 1);
-            data = _mm256_reverse_epi8(data);
-            data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-            data = _mm256_rolv_epi8(data, data);
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 104:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_reverse_epi8(data);
-            data = _mm256_xor_si256(data, popcnt256_epi8(data));
-            data = _mm256_rol_epi8(data, 5);
-            data = _mm256_add_epi8(data, data);
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 105:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
-            data = _mm256_rol_epi8(data, 3);
-            data = _mm256_rolv_epi8(data, data);
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 106:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_reverse_epi8(data);
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
-            data = _mm256_rol_epi8(data, 1);
-            data = _mm256_mul_epi8(data, data);
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 107:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-            data = _mm256_rol_epi8(data, 6);
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 108:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-            data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-            data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 109:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_mul_epi8(data, data);
-            data = _mm256_rolv_epi8(data, data);
-            data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 110:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_add_epi8(data, data);
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-            data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 111:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_mul_epi8(data, data);
-            data = _mm256_reverse_epi8(data);
-            data = _mm256_mul_epi8(data, data);
-            data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 112:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_rol_epi8(data, 3);
-            data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-            data = _mm256_rol_epi8(data, 5);
-            data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 113:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_rol_epi8(data, 6);
-            data = _mm256_xor_si256(data, popcnt256_epi8(data));
-            data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 114:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_rol_epi8(data, 1);
-            data = _mm256_reverse_epi8(data);
-            data = _mm256_rolv_epi8(data, data);
-            data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 115:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_rolv_epi8(data, data);
-            data = _mm256_rol_epi8(data, 5);
-            data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-            data = _mm256_rol_epi8(data, 3);
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 116:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-            data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-            data = _mm256_xor_si256(data, popcnt256_epi8(data));
-            data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 117:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
-            data = _mm256_rol_epi8(data, 3);
-            data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
-            data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 118:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
-            data = _mm256_add_epi8(data, data);
-            data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
-            data = _mm256_rol_epi8(data, 5);
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 119:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_reverse_epi8(data);
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-            data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-            data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
-        case 120:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.step_3[i]);
-            __m256i old = data;
-
-            data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
-            data = _mm256_mul_epi8(data, data);
-            data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
-            data = _mm256_reverse_epi8(data);
-
-            data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
-          }
-          break;
+    // printf("index: %d\n", lookupIndex(op, worker.step_3[worker.pos1], worker.step_3[worker.pos2]));
+    if (op == 253) {
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);  // rotate  bits by 3
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
+        worker.step_3[i] ^= worker.step_3[worker.pos2];     // XOR
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);  // rotate  bits by 3
+        // INSERT_RANDOM_CODE_END
+
+        worker.prev_lhash = worker.lhash + worker.prev_lhash;
+        worker.lhash = XXHash64::hash(worker.step_3, worker.pos2,0);
       }
+      continue;
+    } else if (op == 255) {
+      RC4_set_key(&worker.key, 256,  worker.step_3);
+    }
+    for (int i = worker.pos1; i < worker.pos2; i ++) {
+      worker.step_3[i] = lookup[firstIndex + worker.step_3[i]];
+    }
+    if (op == 0) {
+      if ((worker.pos2-worker.pos1)%2 == 1) {
+        worker.t1 = worker.step_3[worker.pos1];
+        worker.t2 = worker.step_3[worker.pos2];
+        worker.step_3[worker.pos1] = reverse8(worker.t2);
+        worker.step_3[worker.pos2] = reverse8(worker.t1);
+      }
+    }
   }
   auto end = std::chrono::steady_clock::now();
   auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
@@ -3595,16 +3553,25 @@ void optest_simd(int op, workerData &worker, bool print=true) {
     for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
       printf("%02x ", worker.step_3[i]);
     }
-    printf("\n took %dns\n", time.count());
+    printf("\n took %dns\n------------\n", time.count());
   }
 }
 
 void runOpTests(int op, int len) {
   testPopcnt256_epi8();
-  workerData *worker = new workerData;
+  workerData *worker = (workerData*)malloc_huge_pages(sizeof(workerData));
+  initWorker(*worker);
+  lookupGen(*worker, lookup3D);
+
+  workerData *worker2 = (workerData*)malloc_huge_pages(sizeof(workerData));
+  initWorker(*worker2);
+  lookupGen(*worker2, lookup3D);
+
   worker->pos1 = 0; worker->pos2 = len;
+  worker2->pos1 = 0; worker2->pos2 = len;
 
   byte test[32];
+  byte test2[32];
   std::srand(time(NULL));
   generateInitVector<32>(test);
 
@@ -3616,15 +3583,29 @@ void runOpTests(int op, int len) {
 
   // WARMUP, don't print times
   memcpy(&worker->step_3, test, 16);
-  optest(0, *worker, false);
+  // optest(0, *worker, false);
   // WARMUP, don't print times
   optest(op, *worker);
 
   // WARMUP, don't print times
   memcpy(&worker->step_3, test,  16);
-  optest_simd(0, *worker, false);
+  // optest_lookup(0, *worker, false);
   // Primary benchmarking
-  optest_simd(op, *worker);
+  optest_lookup(op, *worker);
+
+  for(int i = 0; i < 256; i++) {
+    memset(&worker->step_3, 0, 256);
+    memset(&worker2->step_3, 0, 256);
+    memcpy(&worker->step_3, test, len+1);
+    optest(i, *worker, false);
+    memcpy(&worker2->step_3, test, len+1);
+    optest_lookup(i, *worker2, false);
+
+    std::string str1 = hexStr(&(*worker).step_3[0], len);
+    std::string str2 = hexStr(&(*worker2).step_3[0], len);
+
+    if (str1.compare(str2) != 0) printf("op %d needs special treatment\n%s\n%s\n", i, str1.c_str(), str2.c_str());
+  }
 }
 
 // Function to compare two suffixes based on lexicographical order
@@ -3848,8 +3829,10 @@ void TestAstroBWTv3()
   int n = -1;
   workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
   initWorker(*worker);
+  lookupGen(*worker, lookup3D);
   workerData *worker2 = (workerData *)malloc_huge_pages(sizeof(workerData));
   initWorker(*worker2);
+  lookupGen(*worker2, lookup3D);
 
   int i = 0;
   for (PowTest t : random_pow_tests)
@@ -3859,14 +3842,25 @@ void TestAstroBWTv3()
     byte *buf = new byte[t.in.size()];
     memcpy(buf, t.in.c_str(), t.in.size());
     byte res[32];
-    AstroBWTv3(buf, (int)t.in.size(), res, *worker, false);
+    byte res2[32];
+    AstroBWTv3(buf, (int)t.in.size(), res2, *worker, false);
     // printf("vanilla result: %s\n", hexStr(res, 32).c_str());
-    AstroBWTv3(buf, (int)t.in.size(), res, *worker2, false, true);
-    // printf("SIMD result: %s\n", hexStr(res, 32).c_str());
+    AstroBWTv3(buf, (int)t.in.size(), res, *worker2, true, false);
+    // printf("lookup result: %s\n", hexStr(res, 32).c_str());
     std::string s = hexStr(res, 32);
     if (s.c_str() != t.out)
     {
       printf("FAIL. Pow function: pow(%s) = %s want %s\n", t.in.c_str(), s.c_str(), t.out.c_str());
+      debugOpOrder = true;
+      worker = (workerData *)malloc_huge_pages(sizeof(workerData));
+      initWorker(*worker);
+      lookupGen(*worker, lookup3D);
+      AstroBWTv3(buf, (int)t.in.size(), res2, *worker, false);
+      worker2 = (workerData *)malloc_huge_pages(sizeof(workerData));
+      initWorker(*worker2);
+      lookupGen(*worker2, lookup3D);
+      AstroBWTv3(buf, (int)t.in.size(), res, *worker2, true, false);
+      debugOpOrder = false;
     }
     else
     {
@@ -3967,7 +3961,42 @@ void TestAstroBWTv3repeattest()
   std::cout << "Repeated test over" << std::endl;
 }
 
-void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker, bool gpuMine, bool simd)
+void computeByteFrequencyAVX2(const unsigned char* data, size_t dataSize, int frequencyTable[256]) {
+    __m256i chunk;
+    const size_t simdWidth = 32; // AVX2 SIMD register width in bytes
+
+    // Zero-initialize a local frequency table to avoid read-modify-write AVX2 operations
+    int localFrequencyTable[256] = {0};
+
+    // Process chunks of 32 bytes
+    for (size_t i = 0; i < dataSize; i += simdWidth) {
+        if (i + simdWidth <= dataSize) { // Ensure we don't read past the end
+            chunk = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + i));
+
+            // Update frequency table in a non-vectorized manner due to AVX2 limitations
+            unsigned char temp[simdWidth];
+            _mm256_storeu_si256(reinterpret_cast<__m256i*>(temp), chunk);
+
+            for (size_t j = 0; j < simdWidth; ++j) {
+                ++localFrequencyTable[temp[j]];
+            }
+        } else {
+            // Handle remainder bytes that don't fit into a full AVX2 register
+            for (size_t j = i; j < dataSize; ++j) {
+                ++localFrequencyTable[data[j]];
+            }
+            break; // Exit the loop after processing the remainder
+        }
+    }
+
+    // Accumulate the results into the provided frequency table
+    for (int i = 0; i < 256; ++i) {
+        frequencyTable[i] += localFrequencyTable[i];
+    }
+}
+
+
+void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker, bool lookupMine, bool simd)
 {
   // auto recoverFunc = [&outputhash](void *r)
   // {
@@ -3988,44 +4017,13 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
 
     hashSHA256(worker.sha256, input, worker.sha_key, inputLen);
 
-    // std::cout << "first sha256 of data: " << hexStr(worker.sha_key, 32) << std::endl;
-
-    // printf("sha256 raw bytes: \n");
-
-    // for(int i = 0; i < 32; i++) {
-    //   printf("%d,", worker.sha_key[i]);
-    // }
-
-    // printf("\n\n");
-
-    // std::cout << "worker.step_3 pre XOR: " << hexStr(worker.step_3, 256) << std::endl;
     worker.salsa20 = (worker.sha_key);
     worker.salsa20.setIv(worker.counter);
+    prefetch(worker.step_3, 256, 0);
     worker.salsa20.processBytes(worker.step_3, worker.step_3, 256);
 
-    // std::cout << "worker.step_3 post XOR: " << hexStr(worker.step_3, 256) << std::endl;
-
-    // printf("pre setkey: \n");
-
-    // for (int i = 0; i < 256; i++) {
-    //   printf("%d, ", worker.key.data[i]);
-    // }
-
-    // printf("\n\n");
-
     RC4_set_key(&worker.key, 256,  worker.step_3);
-
-    // printf("post setkey: \n");
-
-    // for (int i = 0; i < 256; i++) {
-    //   printf("%d, ", worker.key.data[i]);
-    // }
-
-    // printf("\n x: %d, y: %d\n", worker.key.x, worker.key.y);
-
     RC4(&worker.key, 256, worker.step_3,  worker.step_3);
-
-    // std::cout << "worker.step_3 post rc4: " << hexStr(worker.step_3, 256) << std::endl;
 
     worker.lhash = hash_64_fnv1a(worker.step_3, 256);
     worker.prev_lhash = worker.lhash;
@@ -4035,127 +4033,49 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     // printf(hexStr(worker.step_3, 256).c_str());
     // printf("\n\n");
 
-    if (gpuMine)
-      return;
+    
+    // auto start = std::chrono::steady_clock::now();
+    // auto end = std::chrono::steady_clock::now();
 
-    // branchComputeCPU(worker);
-    if (simd) {
-      branchComputeCPU_optimized(worker);
-    } else {
+    if (lookupMine) {
+      // start = std::chrono::steady_clock::now();
+      lookupCompute(worker);
+      // end = std::chrono::steady_clock::now();
+    }
+    else {
+      // branchComputeCPU(worker);
+      // start = std::chrono::steady_clock::now();
       branchComputeCPU(worker);
+      // end = std::chrono::steady_clock::now();
     }
     
-    if (debugOpOrder) {
-      if (simd) {
-        printf("\nsimd:\n");
-        for (int i = 0; i < worker.opsB.size(); i++) {
-          printf("%d, ", worker.opsB[i]);
-        }
-      } else {
-        printf("scalar:\n");
-        for (int i = 0; i < worker.opsA.size(); i++) {
-          printf("%d, ", worker.opsA[i]);
-        }
-      }
 
-      printf("\n");
-      worker.opsA.clear();
-      worker.opsB.clear();
-    }
+    // auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
+    // printf("branched section took %dns\n", time.count());
+    // if (debugOpOrder) {
+    //   if (lookupMine) {
+    //     printf("Lookup Table:\n-----------\n");
+    //     for (int i = 0; i < worker.opsB.size(); i++) {
+    //       printf("%d, ", worker.opsB[i]);
+    //     }
+    //   } else {
+    //     printf("Scalar:\n-----------\n");
+    //     for (int i = 0; i < worker.opsA.size(); i++) {
+    //       printf("%d, ", worker.opsA[i]);
+    //     }
+    //   }
 
+    //   printf("\n");
+    //   worker.opsA.clear();
+    //   worker.opsB.clear();
+    // }
     worker.data_len = static_cast<uint32_t>((worker.tries - 4) * 256 + (((static_cast<uint64_t>(worker.step_3[253]) << 8) | static_cast<uint64_t>(worker.step_3[254])) & 0x3ff));
-
-    if (gpuMine)
-      return;
-
-
+    // worker.data_len = 70000;
     // saveBufferToFile("worker_sData_snapshot.bin", worker.sData, worker.data_len);
     // printf("data length: %d\n", worker.data_len);
     divsufsort(worker.sData, worker.sa, worker.data_len, worker.bA, worker.bB);
-    // fgsaca<uint32_t, uint8_t>(worker.sData, worker.sa, worker.data_len, 256);
-    // archonsort(worker.sData, worker.sa, worker.data_len);
-    // worker.sa = Radix(worker.sData, worker.data_len).build();
-    // memcpy(worker.sa, radixSA, worker.data_len);
-    // libcubwt_sa(worker.GPUData, worker.sData, worker.sa, worker.data_len);
-
-    // byte T[worker.data_len + 1];
-    // T[0] = 0;
-    // T[worker.data_len] = 0;
-    // memcpy(T, worker.sData, worker.data_len);
-    // int SA2[worker.data_len + 1];
-    // int err = gsaca(T, SA2, worker.data_len + 1);
-    // libsais_ctx(worker.sais, worker.sData, worker.sa, worker.data_len, MAX_LENGTH-worker.data_len, NULL);
-    // Archon A(worker.data_len);
-    // A.saca(worker.sData, worker.sa2, worker.data_len);
-
-    // printf("Validating...");
-    // const bool rez = A.validate(worker.sData, worker.sa2, worker.data_len);
-    // printf("%s\n", rez?"OK":"Fail");
-
-    // std::cout << worker.sData[0] << std::endl;
-    // std::cout << err << std::endl;
-
-    // int D = 0;
-    // int F = 0;
-    // bool set1 = false, set2 = false;
-    // for (int H = 0; H < MAX_LENGTH; H++) {
-    //   if (H < 15) printf("DSS: %d, ARC: %d\n", worker.sa[H], worker.sa2[H]);
-    //   if (worker.sa[H] != 0) {
-    //     D++;
-    //   }
-    //   if (worker.sa2[H] != 0) {
-    //     F++;
-    //   }
-    // }
-
-    // printf("count dss: %d, count arc: %d\n", D, F);
-    // printf("DSS: %d, ARC: %d\n", worker.sa[0], SA2[0]);
-
-    // std::string_view S(hexStr(worker.sData, worker.data_len));
-    // auto SA2 = psais::suffix_array<uint32_t>(S);
-    // std::vector<byte> I;
-    // worker.enCompute();
-
-    // the current implementation relies on these sentinels!
-
-    // unsigned int *SAH = (unsigned int *) malloc(MAX_LENGTH * sizeof(unsigned int));
-    // byte *D = new byte[worker.data_len+2];
-    // memcpy(&D[1], worker.sData, worker.data_len);
-    // D[0] = D[worker.data_len + 1] = 0;
-
-    // // gsaca_ds1(T, SA1, n);
-    // // gsaca_ds2(T, SA2, n);
-    // // gsaca_ds3(T, SA3, n);
-    // gsaca_dsh(D, SAH, worker.data_len+2);
-
-    // std::cout << worker.sa[0] << " : " << SAH[0] << std::endl;
-
-    // worker.enCompute();
-
-    // // fgsaca<uint32_t>((const uint8_t*)D, worker.sa, worker.data_len+2, 256);
-    // gsaca_dsh(D, worker.sa, worker.data_len+2);
-    // delete [] D;
-    // free(SAH);
-
-    // printf("divsufsort result at index 5: %d\ngsaca result at index 5: %d\n\n", worker.sa[5], SA3[5]);
-
-    // for (unsigned int i = 0; i < n; ++i)
-    //   std::cout << SA1[i] << " ";
-    // std::cout << std::endl;
-
-    // for (unsigned int i = 0; i < n; ++i)
-    //   std::cout << SA2[i] << " ";
-    // std::cout << std::endl;
-
-    // for (unsigned int i = 0; i < n; ++i)
-    //   std::cout << SA3[i] << " ";
-    // std::cout << std::endl;
-
-    // free(SA1);
-    // free(SA2);
-    // free(SA3);
-
-    // byte *nHash;
+    // computeByteFrequencyAVX2(worker.sData, worker.data_len, worker.freq);
+    // libsais_ctx(worker.ctx, worker.sData, worker.sa, worker.data_len, MAX_LENGTH-worker.data_len, NULL);
 
     if (littleEndian())
     {
@@ -4192,7 +4112,7 @@ void branchComputeCPU(workerData &worker)
     // printf("%d worker.random_switcher %d %08jx\n", worker.tries, worker.random_switcher, worker.random_switcher);
 
     worker.op = static_cast<byte>(worker.random_switcher);
-    if (debugOpOrder) worker.opsA.push_back(worker.op);
+    // if (debugOpOrder) worker.opsA.push_back(worker.op);
 
     // printf("op: %d\n", worker.op);
 
@@ -4212,15 +4132,13 @@ void branchComputeCPU(workerData &worker)
     // fmt::printf("op: %d, ", worker.op);
     // fmt::printf("worker.pos1: %d, worker.pos2: %d\n", worker.pos1, worker.pos2);
 
-    // if (worker.op == 6) {
-    //   printf("pre op %d:\n", worker.op);
-    //   for (int i = worker.pos1; i < worker.pos2; i++) {
-    //       printf("%02X ", worker.step_3[i]);
-    //   } 
-    //   printf("\n");
+    // if (debugOpOrder) {
+      // printf("pre op %d:\n", worker.op);
+      // for (int i = worker.pos1; i < worker.pos2; i++) {
+      //     printf("%02X ", worker.step_3[i]);
+      // } 
+      // printf("\n");
     // }
-
-    __builtin_prefetch(&worker.step_3[worker.pos1], 0, 0);
 
     switch (worker.op)
     {
@@ -7306,7 +7224,7 @@ void branchComputeCPU(workerData &worker)
       break;
     }
 
-    // if (worker.op == 6) {
+    // if (debugOpOrder) {
       // printf("op %d result:\n", worker.op);
       // for (int i = worker.pos1; i < worker.pos2; i++) {
       //     printf("%02X ", worker.step_3[i]);
@@ -7328,7 +7246,7 @@ void branchComputeCPU(workerData &worker)
       __builtin_prefetch(worker.step_3, 0, 0);
       worker.prev_lhash = worker.lhash + worker.prev_lhash;
       worker.lhash = XXHash64::hash(worker.step_3, worker.pos2, 0);
-      // printf("A: new worker.lhash: %08jx\n", worker.lhash);
+      // if (debugOpOrder) printf("A: new worker.lhash: %08jx\n", worker.lhash);
     }
 
     if (worker.A < 0x20)
@@ -7336,7 +7254,7 @@ void branchComputeCPU(workerData &worker)
       __builtin_prefetch(worker.step_3, 0, 0);
       worker.prev_lhash = worker.lhash + worker.prev_lhash;
       worker.lhash = hash_64_fnv1a(worker.step_3, worker.pos2);
-      // printf("B: new worker.lhash: %08jx\n", worker.lhash);
+      // if (debugOpOrder) printf("B: new worker.lhash: %08jx\n", worker.lhash);
     }
 
     if (worker.A < 0x30)
@@ -7347,11 +7265,17 @@ void branchComputeCPU(workerData &worker)
       HH_ALIGNAS(16)
       const highwayhash::HH_U64 key2[2] = {worker.tries, worker.prev_lhash};
       worker.lhash = highwayhash::SipHash(key2, (char*)worker.step_3, worker.pos2); // more deviations
-      // printf("C: new worker.lhash: %08jx\n", worker.lhash);
+      // if (debugOpOrder) printf("C: new worker.lhash: %08jx\n", worker.lhash);
     }
 
     if (worker.A <= 0x40)
     { // 25% probablility
+      // if (debugOpOrder) {
+      //   printf("D: RC4 key:\n");
+      //   for (int i = 0; i < 256; i++) {
+      //     printf("%d, ", worker.key.data[i]);
+      //   }
+      // }
       __builtin_prefetch(&worker.key, 0, 0);
       RC4(&worker.key, 256, worker.step_3,  worker.step_3);
     }
@@ -7382,7 +7306,7 @@ void branchComputeCPU_optimized(workerData &worker)
     // printf("%d worker.random_switcher %d %08jx\n", worker.tries, worker.random_switcher, worker.random_switcher);
 
     worker.op = static_cast<byte>(worker.random_switcher);
-    if (debugOpOrder) worker.opsB.push_back(worker.op);
+    // if (debugOpOrder) worker.opsB.push_back(worker.op);
 
     // printf("op: %d\n", worker.op);
 
@@ -7399,12 +7323,12 @@ void branchComputeCPU_optimized(workerData &worker)
       worker.pos2 = worker.pos1 + ((worker.pos2 - worker.pos1) & 0x1f);
     }
 
-    // if (worker.op == 6) {
-    //   printf("SIMD pre op %d:\n", worker.op);
-    //   for (int i = worker.pos1; i < worker.pos2; i++) {
-    //       printf("%02X ", worker.step_3[i]);
-    //   } 
-    //   printf("\n");
+    // if (debugOpOrder) {
+      // printf("SIMD pre op %d:\n", worker.op);
+      // for (int i = worker.pos1; i < worker.pos2; i++) {
+      //     printf("%02X ", worker.step_3[i]);
+      // } 
+      // printf("\n");
     // }
     // fmt::printf("op: %d, ", worker.op);
     // fmt::printf("worker.pos1: %d, worker.pos2: %d\n", worker.pos1, worker.pos2);
@@ -10757,7 +10681,7 @@ void branchComputeCPU_optimized(workerData &worker)
       prefetch(worker.step_3, 0, 1);
       worker.prev_lhash = worker.lhash + worker.prev_lhash;
       worker.lhash = XXHash64::hash(worker.step_3, worker.pos2, 0);
-      // printf("A: new worker.lhash: %08jx\n", worker.lhash);
+      // if (debugOpOrder) printf("A: new worker.lhash: %08jx\n", worker.lhash);
     }
 
     if (worker.A < 0x20)
@@ -10765,7 +10689,7 @@ void branchComputeCPU_optimized(workerData &worker)
       prefetch(worker.step_3, 0, 1);
       worker.prev_lhash = worker.lhash + worker.prev_lhash;
       worker.lhash = hash_64_fnv1a(worker.step_3, worker.pos2);
-      // printf("B: new worker.lhash: %08jx\n", worker.lhash);
+      // if (debugOpOrder) printf("B: new worker.lhash: %08jx\n", worker.lhash);
     }
 
     if (worker.A < 0x30)
@@ -10776,11 +10700,17 @@ void branchComputeCPU_optimized(workerData &worker)
       HH_ALIGNAS(16)
       const highwayhash::HH_U64 key2[2] = {worker.tries, worker.prev_lhash};
       worker.lhash = highwayhash::SipHash(key2, (char*)worker.step_3, worker.pos2); // more deviations
-      // printf("C: new worker.lhash: %08jx\n", worker.lhash);
+      // if (debugOpOrder) printf("C: new worker.lhash: %08jx\n", worker.lhash);
     }
 
     if (worker.A <= 0x40)
     { // 25% probablility
+      // if (debugOpOrder) {
+      //   printf("D: RC4 key:\n");
+      //   for (int i = 0; i < 256; i++) {
+      //     printf("%d, ", worker.key.data[i]);
+      //   }
+      // }
       prefetch(worker.step_3, 0, 1);
       RC4(&worker.key, 256, worker.step_3,  worker.step_3);
     }
@@ -10801,27 +10731,186 @@ void branchComputeCPU_optimized(workerData &worker)
   }
 }
 
-void finishBatch(workerData &worker)
+
+void lookupCompute(workerData &worker)
 {
-  for (int i = 0; i < worker.saResults.size(); i++)
+  while (true)
   {
-    if (littleEndian())
+    worker.tries++;
+    worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries;
+    // printf("%d worker.random_switcher %d %08jx\n", worker.tries, worker.random_switcher, worker.random_switcher);
+
+    worker.op = static_cast<byte>(worker.random_switcher);
+    // if (debugOpOrder) worker.opsB.push_back(worker.op);
+
+    // printf("op: %d\n", worker.op);
+
+    worker.pos1 = static_cast<byte>(worker.random_switcher >> 8);
+    worker.pos2 = static_cast<byte>(worker.random_switcher >> 16);
+
+    // __builtin_prefetch(worker.step_3 + worker.pos1, 0, 1);
+    // __builtin_prefetch(worker.maskTable, 0, 0);
+
+    if (worker.pos1 > worker.pos2)
     {
-      byte *B = reinterpret_cast<byte *>(worker.saResults[i].data());
-      hashSHA256(worker.sha256, B, worker.sHash, worker.saInputs[i].size() * 4);
-      // worker.sHash = nHash;
+      std::swap(worker.pos1, worker.pos2);
     }
-    else
+
+    if (worker.pos2 - worker.pos1 > 32)
     {
-      byte *s = new byte[MAX_LENGTH * 4];
-      for (int j = 0; j < worker.data_len; j++)
+      worker.pos2 = worker.pos1 + ((worker.pos2 - worker.pos1) & 0x1f);
+    }
+
+    // int otherpos = std::find(branchedOps.begin(), branchedOps.end(), worker.op) == branchedOps.end() ? 0 : worker.step_3[worker.pos2];
+    // __builtin_prefetch(&worker.step_3[worker.pos1], 0, 0);
+    // __builtin_prefetch(&worker.lookup[lookupIndex(worker.op,0,otherpos)]);
+
+    // if (debugOpOrder) {
+      // printf("Lookup pre op %d:\n", worker.op);
+      // for (int i = worker.pos1; i < worker.pos2; i++) {
+      //     printf("%02X ", worker.step_3[i]);
+      // } 
+      // printf("\n");
+    // }
+    // fmt::printf("op: %d, ", worker.op);
+    // fmt::printf("worker.pos1: %d, worker.pos2: %d\n", worker.pos1, worker.pos2);
+
+    // printf("index: %d\n", lookupIndex(op, worker.step_3[worker.pos1], worker.step_3[worker.pos2]));
+    if (worker.op == 253) {
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
       {
-        s[j << 1] = htonl(worker.saResults[i][j]);
+
+        // INSERT_RANDOM_CODE_START
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);  // rotate  bits by 3
+        worker.step_3[i] ^= std::rotl(worker.step_3[i], 2); // rotate  bits by 2
+        worker.step_3[i] ^= worker.step_3[worker.pos2];     // XOR
+        worker.step_3[i] = std::rotl(worker.step_3[i], 3);  // rotate  bits by 3
+        // INSERT_RANDOM_CODE_END
+
+        worker.prev_lhash = worker.lhash + worker.prev_lhash;
+        worker.lhash = XXHash64::hash(worker.step_3, worker.pos2,0);
       }
-      hashSHA256(worker.sha256, s, worker.sHash, worker.saInputs[i].size() * 4);
-      // worker.sHash = nHash;
-      delete[] s;
+      goto after;
     }
-    memcpy(worker.outputHashes[i].data(), worker.sHash, 32);
+    if (worker.op >= 254) {
+      RC4_set_key(&worker.key, 256,  worker.step_3);
+    }
+    {
+      bool use2D = std::find(worker.branchedOps, worker.branchedOps + branchedOps_size, worker.op) == worker.branchedOps + branchedOps_size;
+      byte *lookup = use2D ? &worker.lookup2D[0] : &worker.lookup3D[0];
+
+      int firstIndex;
+      if (use2D) {
+        firstIndex = worker.reg_idx[worker.op]*256;
+      } else {
+        firstIndex = worker.branched_idx[worker.op]*256*256 + worker.step_3[worker.pos2]*256;
+      }
+      __builtin_prefetch(&worker.step_3[worker.pos1],0,3);
+      int n = 0;
+      for (int i = worker.pos1; i < worker.pos2-3; i += 4) {
+        if (i < worker.pos1+16) __builtin_prefetch(&lookup[firstIndex + 64*n++],0,3);
+        worker.step_3[i] = lookup[firstIndex + worker.step_3[i]];
+        worker.step_3[i+1] = lookup[firstIndex + worker.step_3[i+1]];
+        worker.step_3[i+2] = lookup[firstIndex + worker.step_3[i+2]];
+        worker.step_3[i+3] = lookup[firstIndex + worker.step_3[i+3]];
+      }
+      if ((worker.pos2-worker.pos1)%4 != 0) {
+        for(int i = worker.pos2-(worker.pos2-worker.pos1)%4; i < worker.pos2; i++) {
+          worker.step_3[i] = lookup[firstIndex + worker.step_3[i]];
+        }
+      }
+      if (worker.op == 0) {
+        if ((worker.pos2-worker.pos1)%2 == 1) {
+          worker.t1 = worker.step_3[worker.pos1];
+          worker.t2 = worker.step_3[worker.pos2];
+          worker.step_3[worker.pos1] = reverse8(worker.t2);
+          worker.step_3[worker.pos2] = reverse8(worker.t1);
+        }
+      }
+    }
+
+after:
+    // if (debugOpOrder) {
+    //   printf("Lookup op %d result:\n", worker.op);
+    //   for (int i = worker.pos1; i < worker.pos2; i++) {
+    //       printf("%02X ", worker.step_3[i]);
+    //   } 
+    //   printf("\n");
+    // }
+
+    // if (op == 53) {
+    //   std::cout << hexStr(worker.step_3, 256) << std::endl << std::endl;
+    //   std::cout << hexStr(&worker.step_3[worker.pos1], 1) << std::endl;
+    //   std::cout << hexStr(&worker.step_3[worker.pos2], 1) << std::endl;
+    // }
+
+    worker.A = (worker.step_3[worker.pos1] - worker.step_3[worker.pos2]);
+    worker.A = (256 + (worker.A % 256)) % 256;
+
+    processAfterMarker(worker);
+    
+    // std::copy(worker.step_3, worker.step_3 + 256, &worker.sData[(worker.tries - 1) * 256]);
+
+    // memcpy(&worker->data.data()[(worker.tries - 1) * 256], worker.step_3, 256);
+
+    // std::cout << hexStr(worker.step_3, 256) << std::endl;
+
+    if (worker.tries > 260 + 16 || (worker.step_3[255] >= 0xf0 && worker.tries > 260))
+    {
+      break;
+    }
   }
+}
+
+
+void processAfterMarker(workerData& worker) {
+    if (worker.A < 0x10)
+      { // 6.25 % probability
+        // __builtin_prefetch(worker.step_3);
+        worker.prev_lhash = worker.lhash + worker.prev_lhash;
+        worker.lhash = XXHash64::hash(worker.step_3, worker.pos2, 0);
+
+        // uint64_t test = XXHash64::hash(worker.step_3, worker.pos2, 0);
+        // if (debugOpOrder) printf("A: new worker.lhash: %08jx\n", worker.lhash);
+      }
+
+      if (worker.A < 0x20)
+      { // 12.5 % probability
+        // __builtin_prefetch(worker.step_3);
+        worker.prev_lhash = worker.lhash + worker.prev_lhash;
+        worker.lhash = hash_64_fnv1a(worker.step_3, worker.pos2);
+
+        // uint64_t test = hash_64_fnv1a(worker.step_3, worker.pos2);
+        // if (debugOpOrder) printf("B: new worker.lhash: %08jx\n", worker.lhash);
+      }
+
+      if (worker.A < 0x30)
+      { // 18.75 % probability
+        // std::copy(worker.step_3, worker.step_3 + worker.pos2, s3);
+        // __builtin_prefetch(worker.step_3);
+        worker.prev_lhash = worker.lhash + worker.prev_lhash;
+        HH_ALIGNAS(16)
+        const highwayhash::HH_U64 key2[2] = {worker.tries, worker.prev_lhash};
+        worker.lhash = highwayhash::SipHash(key2, (char*)worker.step_3, worker.pos2); // more deviations
+
+        // uint64_t test = highwayhash::SipHash(key2, (char*)worker.step_3, worker.pos2); // more deviations
+        // if (debugOpOrder) printf("C: new worker.lhash: %08jx\n", worker.lhash);
+      }
+
+      if (worker.A <= 0x40)
+      { // 25% probablility
+        // if (debugOpOrder) {
+        //   printf("D: RC4 key:\n");
+        //   for (int i = 0; i < 256; i++) {
+        //     printf("%d, ", worker.key.data[i]);
+        //   }
+        // }
+        // prefetch(worker.step_3, 0, 1);
+        RC4(&worker.key, 256, worker.step_3,  worker.step_3);
+      }
+
+      worker.step_3[255] = worker.step_3[255] ^ worker.step_3[worker.pos1] ^ worker.step_3[worker.pos2];
+
+      memcpy(&worker.sData[(worker.tries - 1) * 256], worker.step_3, 256);
 }
