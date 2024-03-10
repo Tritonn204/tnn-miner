@@ -86,7 +86,7 @@ OPTIONS
     -dev-fee, -f: (optional) 
         Your desired dev fee percentage, default is 2.5, minimum is 1
     -no-lock: (optional) 
-        Disables CPU affinity / CPU core binding
+        Disables CPU affinity / CPU core binding (must be final arg if running benchmark)
     -help, -h: (must be first arg)
         Shows help
     -batch-size, -b: (GPU Setting)

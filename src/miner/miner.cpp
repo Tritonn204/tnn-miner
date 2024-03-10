@@ -740,18 +740,18 @@ Benchmarking:
   if (hashrate >= 1000000)
   {
     double rate = (double)(hashrate / 1000000.0);
-    std::string hrate = fmt::sprintf("%.2f MH/s", rate);
+    std::string hrate = fmt::sprintf("%.3f MH/s", rate);
     std::cout << hrate << std::endl;
   }
   else if (hashrate >= 1000)
   {
     double rate = (double)(hashrate / 1000.0);
-    std::string hrate = fmt::sprintf("%.2f KH/s", rate);
+    std::string hrate = fmt::sprintf("%.3f KH/s", rate);
     std::cout << hrate << std::endl;
   }
   else
   {
-    std::string hrate = fmt::sprintf("%.2f H/s", (double)hashrate);
+    std::string hrate = fmt::sprintf("%.3f H/s", (double)hashrate);
     std::cout << hrate << std::endl;
   }
   boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
@@ -911,7 +911,7 @@ startReporting:
       if (hashrate >= 1000000)
       {
         double rate = (double)(hashrate / 1000000.0);
-        std::string hrate = fmt::sprintf("HASHRATE %.2f MH/s", rate);
+        std::string hrate = fmt::sprintf("HASHRATE %.3f MH/s", rate);
         mutex.lock();
         setcolor(BRIGHT_WHITE);
         std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine;
@@ -921,7 +921,7 @@ startReporting:
       else if (hashrate >= 1000)
       {
         double rate = (double)(hashrate / 1000.0);
-        std::string hrate = fmt::sprintf("HASHRATE %.2f KH/s", rate);
+        std::string hrate = fmt::sprintf("HASHRATE %.3f KH/s", rate);
         mutex.lock();
         setcolor(BRIGHT_WHITE);
         std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine;
@@ -930,7 +930,7 @@ startReporting:
       }
       else
       {
-        std::string hrate = fmt::sprintf("HASHRATE %.2f H/s", (double)hashrate, hrate);
+        std::string hrate = fmt::sprintf("HASHRATE %.0f H/s", (double)hashrate, hrate);
         mutex.lock();
         setcolor(BRIGHT_WHITE);
         std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine;
