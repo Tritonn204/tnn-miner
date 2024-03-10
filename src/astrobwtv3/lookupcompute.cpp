@@ -7,7 +7,13 @@
 #include <bitset>
 #include <cstdint>
 
-void lookupGen(workerData &worker, byte *lookup3D) {
+// Generate lookup tables for values computed formerly by branchedCompute
+
+// @param workerData: The workerData context that will reference these tables
+// @param lookup2D: a pointer to the 2D (non-deterministic) lookup table of 2-byte chunks
+// @param lookup3D: a pointer to the 3D (deterministic) lookup table of 1-byte chunks
+
+void lookupGen(workerData &worker, uint16_t *lookup2D, byte *lookup3D) {
   for (int op = 0; op < 256; op++) {
     for (int v2 = 0; v2 < 256; v2++) {
       for (int val = 0; val < 256; val++) {
@@ -17,39 +23,35 @@ void lookupGen(workerData &worker, byte *lookup3D) {
         worker.branched_idx[op] = pos;
         byte trueVal = (byte)val;
         branchResult(trueVal, op, v2);
-        lookup3D[pos*256*256 + v2*256 + val]  = trueVal;
+        worker.lookup3D[pos*256*256 + v2*256 + val] = trueVal;
       }
     }
-    for (int val = 0; val < 256; val++) {
+    int d = -1;
+    for (int val = 0; val < 256*256; val++) {
       auto spot = std::find(worker.regularOps, worker.regularOps + regOps_size, op);
       if (spot == worker.regularOps + regOps_size) continue;
       int pos = std::distance(worker.regularOps, spot);
       worker.reg_idx[op] = pos;
-      byte trueVal = (byte)val;
-      branchResult(trueVal, op, 0);
-      worker.lookup2D[pos*256 + val] = trueVal;
+      uint16_t trueVal = val;
+      byte v1 = (byte)(trueVal >> 8);
+      byte v2 = (byte)(trueVal & 0xFF);
+      branchResult(v1, op, 0);
+      branchResult(v2, op, 0);
 
-      
-      // if (op == 2) {
-      //   printf("testing:\n");
-      //   byte validation = worker.lookup2D[worker.reg_idx[op]*256+val];
-      //   printf("pos: %d\nreg_idx[op]: %d\nval: %d\n", pos, worker.reg_idx[op], val);
-      //   printf("trueVal: %02X\nfoundval: %02X\n\n", trueVal, validation);
-      // }
+      // printf("hex combo val: %04X\n", val);
+      // printf("hex p1: %02X\n", val >> 8);
+      // printf("hex p2: %02X\n", val & 0xFF);
+
+      // printf("result p1: %02X\n", v1);
+      // printf("result p2: %02X\n", v2);
+      // printf("lookup entry: %04X\n", v2 | (uint16_t)v1 << 8);
+
+      trueVal = v2 | (uint16_t)v1 << 8;
+      worker.lookup2D[pos*256*256 + val] = trueVal;
     }
   }
-
-  worker.lookup3D = &lookup3D[0];
-  // printf("branched_idx:\n");
-  // for (int i = 0; i < 256; i++) {
-  //   std::printf("%02X, ", worker.branched_idx[i]);
-  // }
-  // printf("\n");
-  // printf("reg_idx:\n");
-  // for (int i = 0; i < 256; i++) {
-  //   std::printf("%02X, ", worker.reg_idx[i]);
-  // }
-  // printf("\n");
+  // worker.lookup3D = &lookup3D[0];
+  // worker.lookup2D = &lookup2D[0];
 }
 
 void branchResult(byte &val, int op, byte v2) {

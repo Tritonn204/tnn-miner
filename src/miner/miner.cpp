@@ -98,7 +98,8 @@ std::string devBlob;
 bool submitting = false;
 bool submittingDev = false;
 
-byte lookup3D_global[branchedOps_size*256*256];
+uint16_t *lookup2D_global; // Storage for computed values of 2-byte chunks
+byte *lookup3D_global; // Storage for deterministically computed values of 1-byte chunks
 
 int jobCounter;
 boost::atomic<int64_t> counter = 0;
@@ -426,6 +427,8 @@ int main(int argc, char **argv)
   SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
 #endif
   // Check command line arguments.
+  lookup2D_global = (uint16_t *)malloc_huge_pages(regOps_size*(256*256)*sizeof(uint16_t));
+  lookup3D_global = (byte *)malloc_huge_pages(branchedOps_size*(256*256)*sizeof(byte));
   mpz_pow_ui(oneLsh256.get_mpz_t(), mpz_class(2).get_mpz_t(), 256);
 
   // default values
@@ -483,6 +486,9 @@ int main(int argc, char **argv)
     }
   }
   if (vm.count("no-lock")) {
+    setcolor(CYAN);
+    printf("CPU affinity has been disabled\n");
+    setcolor(BRIGHT_WHITE);
     lockThreads = false;
   }
   if (vm.count("gpu")) {
@@ -792,7 +798,7 @@ void logSeconds(std::chrono::_V2::system_clock::time_point start_time, int durat
 void update(std::chrono::_V2::system_clock::time_point start_time)
 {
   auto beginning = start_time;
-  boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
+  boost::this_thread::yield();
 
 startReporting:
   while (true)
@@ -824,14 +830,15 @@ startReporting:
       //   rate1min.push_back(currentHashes);
       // }
 
+      float ratio = 1000.0f/milliseconds;
       if (rate30sec.size() <= 30 / reportInterval)
       {
-        rate30sec.push_back(currentHashes);
+        rate30sec.push_back((int64_t)(currentHashes*ratio));
       }
       else
       {
         rate30sec.erase(rate30sec.begin());
-        rate30sec.push_back(currentHashes);
+        rate30sec.push_back((int64_t)(currentHashes*ratio));
       }
 
       int64_t hashrate = 1.0 * std::accumulate(rate30sec.begin(), rate30sec.end(), 0LL) / (rate30sec.size() * reportInterval);
@@ -1095,11 +1102,11 @@ void benchmark(int tid)
   byte powHash2[32];
   workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
   initWorker(*worker);
-  lookupGen(*worker, lookup3D_global);
+  lookupGen(*worker, lookup2D_global, lookup3D_global);
 
   workerData *worker2 = (workerData *)malloc_huge_pages(sizeof(workerData));
   initWorker(*worker2);
-  lookupGen(*worker2, lookup3D_global);
+  lookupGen(*worker2, lookup2D_global, lookup3D_global);
   // workerData *worker = new workerData();
 
   while (!isConnected)
@@ -1165,7 +1172,7 @@ void mineBlock(int tid)
 
   workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
   initWorker(*worker);
-  lookupGen(*worker, lookup3D_global);
+  lookupGen(*worker, lookup2D_global, lookup3D_global);
 
   // std::cout << *worker << std::endl;
 
