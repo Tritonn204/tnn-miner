@@ -44,7 +44,7 @@ OPTIONS
     -batch-size, -b: (GPU Setting)
         Sets batch size used for GPU mining
     -sabench: (must be first arg)
-        Runs a benchmark for divsufsort on snapshot files in the 'tests' directory
+        Runs a benchmark for divsufsort on snapshot files in the 'tests' directory (must supply your own input files for now)
 DEBUG
     -test: (must be first arg)
         Runs a set of tests to verify AstrobwtV3 is working (1 test expected to fail)
