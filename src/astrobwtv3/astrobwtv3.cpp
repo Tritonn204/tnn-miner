@@ -10829,16 +10829,29 @@ void lookupCompute(workerData &worker)
         int n = 0;
 
         // Manually unrolled loops for repetetive efficiency. Worst possible loop count for 2D
-        // lookups is now 3, with less than 3 being pretty common.
+        // lookups is now 4, with less than 4 being pretty common.
+
+        //TODO: debug loop below to enable complete unrolling
+
+        // for (int i = worker.pos1; i < worker.pos2-7; i += 8) {
+        //   if (i < worker.pos1+8) __builtin_prefetch(&lookup2D[firstIndex + 256*n++],0,3);
+        //   uint32_t val1 = (lookup2D[(firstIndex + (worker.step_3[i+1] << 8)) | worker.step_3[i]]) |
+        //     (lookup2D[(firstIndex + (worker.step_3[i+3] << 8)) | worker.step_3[i+2]] << 16);
+        //   uint32_t val2 =(lookup2D[(firstIndex + (worker.step_3[i+5] << 8)) | worker.step_3[i+4]]) |
+        //     (lookup2D[(firstIndex + (worker.step_3[i+7] << 8)) | worker.step_3[i+6]] << 16);
+
+        //   uint64_t combo = val2 | (val1 << 32);
+        //   memcpy(&worker.step_3[i], &combo, sizeof(uint64_t));
+        // }
 
         for (int i = worker.pos1; i < worker.pos2-3; i += 4) {
-          if (i < worker.pos1+8) __builtin_prefetch(&lookup2D[firstIndex + 256*64*n++],0,3);
+          if (i < worker.pos1+8) __builtin_prefetch(&lookup2D[firstIndex + 256*n++],0,3);
           uint32_t val = lookup2D[(firstIndex + (worker.step_3[i+1] << 8)) | worker.step_3[i]] |
             (lookup2D[(firstIndex + (worker.step_3[i+3] << 8)) | worker.step_3[i+2]] << 16);
           memcpy(&worker.step_3[i], &val, sizeof(uint32_t));
         }
         for (int i = worker.pos2-((worker.pos2-worker.pos1)%4); i < worker.pos2-1; i += 2) {
-          if (i < worker.pos1+8) __builtin_prefetch(&lookup2D[firstIndex + 256*64*n++],0,3);
+          if (i < worker.pos1+8) __builtin_prefetch(&lookup2D[firstIndex + 256*n++],0,3);
           uint16_t val = lookup2D[(firstIndex + (worker.step_3[i+1] << 8)) | worker.step_3[i]];
           memcpy(&worker.step_3[i], &val, sizeof(uint16_t));
         }
