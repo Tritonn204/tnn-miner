@@ -137,10 +137,11 @@ public:
   alignas(32) byte reg_idx[256];
 
   unsigned char step_3[256];
-  unsigned char lookup2D[regOps_size*256];
   int freq[256];
 
   byte *lookup3D;
+  uint16_t *lookup2D;
+
   void *ctx;
 
   uint64_t random_switcher;
@@ -179,7 +180,6 @@ inline void initWorker(workerData &worker) {
       lower_part = _mm_set1_epi64x(-1ULL);
       upper_part = _mm_set_epi64x(-1ULL >> (8-(i%8))*8,-1ULL);
     } else if (i > 16) {
-
       lower_part = _mm_set_epi64x(-1ULL,-1ULL);
       upper_part = _mm_set_epi64x(0,-1ULL >> (8-(i%8))*8);
     } else if (i > 8) {
