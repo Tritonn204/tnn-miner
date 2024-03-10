@@ -3867,16 +3867,19 @@ void TestAstroBWTv3()
     if (s.c_str() != t.out)
     {
       printf("FAIL. Pow function: pow(%s) = %s want %s\n", t.in.c_str(), s.c_str(), t.out.c_str());
-      debugOpOrder = true;
-      worker = (workerData *)malloc_huge_pages(sizeof(workerData));
-      initWorker(*worker);
-      lookupGen(*worker, lookup2D, lookup3D);
-      AstroBWTv3(buf, (int)t.in.size(), res2, *worker, false);
-      worker2 = (workerData *)malloc_huge_pages(sizeof(workerData));
-      initWorker(*worker2);
-      lookupGen(*worker2, lookup2D, lookup3D);
-      AstroBWTv3(buf, (int)t.in.size(), res, *worker2, true, false);
-      debugOpOrder = false;
+
+      // Section below is for debugging modifications to the branched compute operation
+
+      // debugOpOrder = true;
+      // worker = (workerData *)malloc_huge_pages(sizeof(workerData));
+      // initWorker(*worker);
+      // lookupGen(*worker, lookup2D, lookup3D);
+      // AstroBWTv3(buf, (int)t.in.size(), res2, *worker, false);
+      // worker2 = (workerData *)malloc_huge_pages(sizeof(workerData));
+      // initWorker(*worker2);
+      // lookupGen(*worker2, lookup2D, lookup3D);
+      // AstroBWTv3(buf, (int)t.in.size(), res, *worker2, true, false);
+      // debugOpOrder = false;
     }
     else
     {
@@ -10747,6 +10750,8 @@ void branchComputeCPU_optimized(workerData &worker)
   }
 }
 
+// Compute the new values for worker.step_3 using layered lookup tables instead of
+// branched computational operations
 
 void lookupCompute(workerData &worker)
 {
@@ -10822,8 +10827,18 @@ void lookupCompute(workerData &worker)
       if (use2D) {
         firstIndex = worker.reg_idx[worker.op]*(256*256);
         int n = 0;
-        for (int i = worker.pos1; i < worker.pos2-1; i += 2) {
-          if (i < worker.pos1+16) __builtin_prefetch(&lookup2D[firstIndex + 256*n++],0,3);
+
+        // Manually unrolled loops for repetetive efficiency. Worst possible loop count for 2D
+        // lookups is now 3, with less than 3 being pretty common.
+
+        for (int i = worker.pos1; i < worker.pos2-3; i += 4) {
+          if (i < worker.pos1+8) __builtin_prefetch(&lookup2D[firstIndex + 256*64*n++],0,3);
+          uint32_t val = lookup2D[(firstIndex + (worker.step_3[i+1] << 8)) | worker.step_3[i]] |
+            (lookup2D[(firstIndex + (worker.step_3[i+3] << 8)) | worker.step_3[i+2]] << 16);
+          memcpy(&worker.step_3[i], &val, sizeof(uint32_t));
+        }
+        for (int i = worker.pos2-((worker.pos2-worker.pos1)%4); i < worker.pos2-1; i += 2) {
+          if (i < worker.pos1+8) __builtin_prefetch(&lookup2D[firstIndex + 256*64*n++],0,3);
           uint16_t val = lookup2D[(firstIndex + (worker.step_3[i+1] << 8)) | worker.step_3[i]];
           memcpy(&worker.step_3[i], &val, sizeof(uint16_t));
         }
@@ -10833,8 +10848,43 @@ void lookupCompute(workerData &worker)
         }
       } else {
         firstIndex = worker.branched_idx[worker.op]*256*256 + worker.step_3[worker.pos2]*256;
-        for(int i = worker.pos1; i < worker.pos2; i++) {
+        int n = 0;
+
+        // Manually unrolled loops for repetetive efficiency. Worst possible loop count for 3D
+        // lookups is now 4, with less than 4 being pretty common.
+
+        // Groups of 8
+        for(int i = worker.pos1; i < worker.pos2-7; i += 8) {
+          if (i < worker.pos1+16) __builtin_prefetch(&lookup3D[firstIndex + 64*n++],0,3);
           worker.step_3[i] = lookup3D[firstIndex + worker.step_3[i]];
+          worker.step_3[i+1] = lookup3D[firstIndex + worker.step_3[i+1]];
+          worker.step_3[i+2] = lookup3D[firstIndex + worker.step_3[i+2]];
+          worker.step_3[i+3] = lookup3D[firstIndex + worker.step_3[i+3]];
+          worker.step_3[i+4] = lookup3D[firstIndex + worker.step_3[i+4]];
+          worker.step_3[i+5] = lookup3D[firstIndex + worker.step_3[i+5]];
+          worker.step_3[i+6] = lookup3D[firstIndex + worker.step_3[i+6]];
+          worker.step_3[i+7] = lookup3D[firstIndex + worker.step_3[i+7]];
+        }
+
+        // Groups of 4
+        for(int i = worker.pos2-((worker.pos2-worker.pos1)%8); i < worker.pos2-3; i+= 4) {
+          if (i < worker.pos1+16) __builtin_prefetch(&lookup3D[firstIndex + 64*n++],0,3);
+          worker.step_3[i] = lookup3D[firstIndex + worker.step_3[i]];
+          worker.step_3[i+1] = lookup3D[firstIndex + worker.step_3[i+1]];
+          worker.step_3[i+2] = lookup3D[firstIndex + worker.step_3[i+2]];
+          worker.step_3[i+3] = lookup3D[firstIndex + worker.step_3[i+3]];
+        }
+
+        // Groups of 2
+        for(int i = worker.pos2-((worker.pos2-worker.pos1)%4); i < worker.pos2-1; i+= 2) {
+          if (i < worker.pos1+16) __builtin_prefetch(&lookup3D[firstIndex + 64*n++],0,3);
+          worker.step_3[i] = lookup3D[firstIndex + worker.step_3[i]];
+          worker.step_3[i+1] = lookup3D[firstIndex + worker.step_3[i+1]];
+        }
+
+        // Last if odd
+        if ((worker.pos2-worker.pos1)%2 != 0) {
+          worker.step_3[worker.pos2-1] = lookup3D[firstIndex + worker.step_3[worker.pos2-1]];
         }
       }
       if (worker.op == 0) {
