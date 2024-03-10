@@ -35,11 +35,8 @@ inline PowTest random_pow_tests[] = {
   {"00017c48ba235f82c2fa2b06993e9393fe9f629b4630f98c731abd5e4f08bcb9", "41a1dd0000229d3a47100c65000000005b4fd5bd674799179c3819a83d70a84600000000a1cc177b2f9fee0000000d01"}
 };
 
-<<<<<<< HEAD
-=======
 void runDivsufsortBenchmark();
 void runOpTests(int op, int len=15);
->>>>>>> dev
 void TestAstroBWTv3();
 void TestAstroBWTv3repeattest();
 

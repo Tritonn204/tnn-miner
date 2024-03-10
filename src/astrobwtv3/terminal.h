@@ -4,7 +4,7 @@
 #include <string>
 #include <algorithm>
 
-const char *consoleLine = " TNN-MINER v0.1.6 ";
+const char *consoleLine = " TNN-MINER v0.2.0 ";
 const char *TNN = R"(
   
                                                             YB&&@5
@@ -41,14 +41,11 @@ const char *TNN = R"(
 #define TNN_TEST 12
 #define TNN_BENCHMARK 13
 #define TNN_NO_LOCK 14
-<<<<<<< HEAD
-=======
 #define TNN_GPUMINE 15
 #define TNN_BATCHSIZE 16
 #define TNN_SABENCH 18
 #define TNN_OP 19
 #define TNN_TLEN 20
->>>>>>> dev
 
 std::vector<std::string> options = {
     "-daemon-address",
@@ -65,9 +62,6 @@ std::vector<std::string> options = {
     "-h",
     "-test",
     "-benchmark",
-<<<<<<< HEAD
-    "-no-lock"
-=======
     "-no-lock",
     "-gpu",
     "-batch-size",
@@ -75,11 +69,12 @@ std::vector<std::string> options = {
     "-sabench",
     "-o",
     "-l"
->>>>>>> dev
 };
 
 const char* usage = R"(
 OPTIONS
+    -gpu:
+        Mine with GPU instead of CPU
     -daemon-address, -d: 
         Dero node/pool URL or IP address to mine to
     -port, -p: 
@@ -94,6 +89,10 @@ OPTIONS
         Disables CPU affinity / CPU core binding (must be final arg if running benchmark)
     -help, -h: (must be first arg)
         Shows help
+    -batch-size, -b: (GPU Setting)
+        Sets batch size used for GPU mining
+    -sabench: (must be first arg)
+        Runs a benchmark for divsufsort on snapshot files in the 'tests' directory
 DEBUG
     -test: (must be first arg)
         Runs a set of tests to verify AstrobwtV3 is working (1 test expected to fail)

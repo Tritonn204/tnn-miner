@@ -7,13 +7,10 @@
 #include <sstream>
 #include <string>
 
-<<<<<<< HEAD
-=======
 // #include <cuda.h>
 // #include <cuda_runtime.h>
 
 // __host__ __forceinline__ CUDA hints
->>>>>>> dev
 inline std::string hexStr(const unsigned char *data, int len)
 {
   std::stringstream ss;
@@ -25,8 +22,6 @@ inline std::string hexStr(const unsigned char *data, int len)
   return ss.str();
 }
 
-<<<<<<< HEAD
-=======
 // __host__ __device__ __forceinline__ CUDA hints
 // char* hexStr_cuda(const unsigned char *data, int len)
 // {
@@ -43,7 +38,6 @@ inline std::string hexStr(const unsigned char *data, int len)
 // }
 
 // __host__ __device__ __forceinline__ CUDA hints
->>>>>>> dev
 inline void hexstr_to_bytes(std::string s, unsigned char *&b)
 {
   for (unsigned int i = 0; i < s.length(); i += 2)

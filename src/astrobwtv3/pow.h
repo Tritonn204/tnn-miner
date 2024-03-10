@@ -23,12 +23,6 @@
 #include <arpa/inet.h>
 #endif
 
-<<<<<<< HEAD
-#ifndef POW_CONST
-#define POW_CONST
-
-=======
-#include <libcubwt.cuh>
 #include <hugepages.h>
 // #include <cuda.h>
 // #include <cuda_runtime.h>
@@ -93,7 +87,6 @@ const uint32_t sha_standard[8] = {
     0x5be0cd19
 };
 
->>>>>>> dev
 const uint32_t MAX_LENGTH = (256 * 384) - 1; // this is the maximum
 
 #endif
@@ -101,13 +94,6 @@ const uint32_t MAX_LENGTH = (256 * 384) - 1; // this is the maximum
 static const bool sInduction = true;
 static const bool sTracking = true;
 
-<<<<<<< HEAD
-typedef unsigned int suffix;
-typedef unsigned int t_index;
-typedef unsigned char byte;
-typedef unsigned short dbyte;
-typedef unsigned long word;
-=======
 template <unsigned int N>
 __m256i shiftRight256(__m256i a);
 
@@ -115,7 +101,6 @@ template <unsigned int N>
 __m256i shiftLeft256(__m256i a);
 
 const __m256i vec_3 = _mm256_set1_epi8(3);
->>>>>>> dev
 
 //--------------------------------------------------------//
 
@@ -141,25 +126,16 @@ public:
   RC4_KEY key;
 
   int32_t sa[MAX_LENGTH];
-<<<<<<< HEAD
-  uint32_t sa2[MAX_LENGTH];
-  int32_t sa3[MAX_LENGTH];
-  unsigned char sa_bytes[MAX_LENGTH * 4];
-=======
 
   alignas(32) byte branchedOps[branchedOps_size];
   alignas(32) byte regularOps[regOps_size];
 
   alignas(32) byte branched_idx[256];
   alignas(32) byte reg_idx[256];
->>>>>>> dev
 
   int bitTable[256];
 
   unsigned char step_3[256];
-<<<<<<< HEAD
-  char s3[256];
-=======
   int freq[256];
 
   byte lookup3D[branchedOps_size*256*256];
@@ -167,7 +143,6 @@ public:
 
   void *ctx;
 
->>>>>>> dev
   uint64_t random_switcher;
 
   uint64_t lhash;
@@ -183,29 +158,12 @@ public:
   unsigned char A;
   uint32_t data_len;
 
-<<<<<<< HEAD
-  void init()
-  {
-    for (int i = 0; i < 256; i++)
-    {
-      bitTable[i] = bitTable[i / 2] + (i & 1);
-    }
-  }
-
-  workerData()
-  {
-    init();
-  }
-
-  int enCompute();
-=======
   alignas(32) __m256i maskTable[32];
   
   std::vector<byte> opsA;
   std::vector<byte> opsB;
 
   friend std::ostream& operator<<(std::ostream& os, const workerData& wd);
->>>>>>> dev
 };
 
 inline void initWorker(workerData &worker) {
@@ -345,10 +303,6 @@ inline void generateInitVector(std::uint8_t (&iv_buff)[N])
   std::generate(std::begin(iv_buff), std::end(iv_buff), rbe);
 }
 
-<<<<<<< HEAD
-#if defined(__aarch64__) || defined(_M_ARM64)
-inline void  hashSHA256(SHA256_CTX &sha256, const unsigned char *input, unsigned char *digest, unsigned long inputSize)
-=======
 template <typename T>
 inline void prefetch(T *data, int size, int hint) {
   const size_t prefetch_distance = 256; // Prefetch 8 cache lines ahead
@@ -360,7 +314,6 @@ inline void prefetch(T *data, int size, int hint) {
 }
 
 inline void hashSHA256(SHA256_CTX &sha256, const unsigned char *input, unsigned char *digest, unsigned long inputSize)
->>>>>>> dev
 {
   SHA256_Init(&sha256);
   SHA256_Update(&sha256, input, inputSize);
@@ -394,32 +347,6 @@ inline std::vector<uint8_t> padSHA256Input(const uint8_t* input, size_t length) 
     return padded;
 }
 
-<<<<<<< HEAD
-
-inline void __attribute__((target("avx2"))) hashSHA256(SHA256_CTX &sha256, const unsigned char *input, unsigned char *digest, unsigned long inputSize)
-{
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, input, inputSize);
-  SHA256_Final(digest, &sha256);
-}
-
-inline void __attribute__((target("avx"))) hashSHA256(SHA256_CTX &sha256, const unsigned char *input, unsigned char *digest, unsigned long inputSize)
-{
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, input, inputSize);
-  SHA256_Final(digest, &sha256);
-}
-
-inline void __attribute__((target("sse"))) hashSHA256(SHA256_CTX &sha256, const unsigned char *input, unsigned char *digest, unsigned long inputSize)
-{
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, input, inputSize);
-  SHA256_Final(digest, &sha256);
-}
-#endif
-
-void AstroBWTv3(unsigned char *input, int inputLen, unsigned char *outputhash, workerData &scratch);
-=======
 void processAfterMarker(workerData& worker);
 void lookupCompute(workerData &worker);
 void branchComputeCPU(workerData &worker);
@@ -427,6 +354,5 @@ void branchComputeCPU_optimized(workerData &worker);
 void AstroBWTv3(unsigned char *input, int inputLen, unsigned char *outputhash, workerData &scratch, bool gpuMine, bool simd=false);
 
 void finishBatch(workerData &worker);
->>>>>>> dev
 
 #endif

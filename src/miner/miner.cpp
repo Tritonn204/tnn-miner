@@ -35,15 +35,11 @@
 #include <miner.h>
 #include <nlohmann/json.hpp>
 
-#include <bigint.h>
 #include <random>
 
 #include <hex.h>
 #include <pow.h>
-<<<<<<< HEAD
-=======
 // #include <astrobwtv3_cuda.cuh>
->>>>>>> dev
 #include <powtest.h>
 #include <thread>
 
@@ -54,13 +50,9 @@
 #include <hugepages.h>
 #include <future>
 #include <limits>
-<<<<<<< HEAD
-=======
-#include <libcubwt.cuh>
 #include <lookupcompute.h>
 
 #include <bit>
->>>>>>> dev
 
 #if defined(_WIN32)
 #include <Windows.h>
@@ -78,11 +70,8 @@ DWORD dwPages = 0; // Count of pages gotten so far
 DWORD dwPageSize;  // Page size on this computer
 #endif
 
-<<<<<<< HEAD
-=======
 // #include <cuda_runtime.h>
 
->>>>>>> dev
 namespace beast = boost::beast;         // from <boost/beast.hpp>
 namespace http = beast::http;           // from <boost/beast/http.hpp>
 namespace websocket = beast::websocket; // from <boost/beast/websocket.hpp>
@@ -381,7 +370,6 @@ void do_session(
               }
               devConnected = devConnected || true;
               jobCounter++;
-              mutex.unlock();
             }
           }
         }
@@ -398,7 +386,7 @@ void do_session(
     {
       std::cout << "ws error\n";
     }
-    boost::this_thread::yield();
+    boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
   }
 
   // // Close the WebSocket connection
@@ -450,6 +438,9 @@ int main(int argc, char **argv)
   else
     goto fillBlanks;
 
+  // std::cout << command << " ";
+  // std::cout << options[TNN_SABENCH] << '\n';
+
   // Handle debug options
   if (command == options[TNN_HELP] || command == options[TNN_HELP + 1])
   {
@@ -457,6 +448,11 @@ int main(int argc, char **argv)
     std::cout << usage << std::endl;
     boost::this_thread::sleep_for(boost::chrono::seconds(30));
     return 0;
+  } 
+  if (command == options[TNN_SABENCH]) {
+        runDivsufsortBenchmark();
+        boost::this_thread::sleep_for(boost::chrono::seconds(30));
+        return 0;
   }
   if (command == options[TNN_TEST])
     goto Testing;
@@ -485,6 +481,16 @@ int main(int argc, char **argv)
         i++;
         wallet = argv[i];
       }
+      else if (index == TNN_GPUMINE)
+      {
+        gpuMine = true;
+      }
+      else if (index == TNN_BATCHSIZE || index == TNN_BATCHSIZE + 1)
+      {
+        i++;
+        batchSize = std::stoi(argv[i]);
+        // batchSize = (batchSize % 32 == 0) ? batchSize : (batchSize + 32 - batchSize % 32);
+      }
       else if (index == TNN_FEE || index == TNN_FEE + 1)
       {
         try
@@ -508,7 +514,7 @@ int main(int argc, char **argv)
           return 1;
         }
       }
-      else if (index == TNN_THREADS || index == TNN_THREADS + 1)
+      else if ((!gpuMine && index == TNN_THREADS) || index == TNN_THREADS + 1)
       {
         try
         {
@@ -573,39 +579,44 @@ fillBlanks:
   }
   if (threads == 0)
   {
-    while (true)
+    if (gpuMine)
+      threads = 1;
+    else
     {
-      setcolor(CYAN);
-      printf("%s\n", threadPrompt);
-      setcolor(BRIGHT_WHITE);
-
-      std::string cmdLine;
-      std::getline(std::cin, cmdLine);
-      if (cmdLine != "" && cmdLine.find_first_not_of(' ') != std::string::npos)
+      while (true)
       {
-        try
+        setcolor(CYAN);
+        printf("%s\n", threadPrompt);
+        setcolor(BRIGHT_WHITE);
+
+        std::string cmdLine;
+        std::getline(std::cin, cmdLine);
+        if (cmdLine != "" && cmdLine.find_first_not_of(' ') != std::string::npos)
         {
-          threads = std::stoi(cmdLine.c_str());
+          try
+          {
+            threads = std::stoi(cmdLine.c_str());
+            break;
+          }
+          catch (...)
+          {
+            printf("ERROR: invalid threads parameter... must be an integer\n");
+            continue;
+          }
+        }
+        else
+        {
+          setcolor(BRIGHT_YELLOW);
+          printf("Default value will be used: 1\n\n");
+          setcolor(BRIGHT_WHITE);
+          threads = 1;
           break;
         }
-        catch (...)
-        {
-          printf("ERROR: invalid threads parameter... must be an integer\n");
-          continue;
-        }
-      }
-      else
-      {
-        setcolor(BRIGHT_YELLOW);
-        printf("Default value will be used: 1\n\n");
-        setcolor(BRIGHT_WHITE);
-        threads = 1;
+
+        if (threads == 0)
+          threads = 1;
         break;
       }
-
-      if (threads == 0)
-        threads = 1;
-      break;
     }
   }
 }
@@ -615,10 +626,6 @@ Testing:
 {
   mpz_class diffTest("20000", 10);
 
-<<<<<<< HEAD
-  workerData *WORKER = new workerData;
-
-=======
   for (int i = 1; i < argc; i++)
   {
     std::vector<std::string>::iterator it = std::find(options.begin(), options.end(), argv[i]);
@@ -642,9 +649,9 @@ Testing:
     else {
       runOpTests(testOp);
     }
->>>>>>> dev
   TestAstroBWTv3();
-  TestAstroBWTv3repeattest();
+  // TestAstroBWTv3_cuda();
+  // TestAstroBWTv3repeattest();
   boost::this_thread::sleep_for(boost::chrono::seconds(30));
   return 0;
 }
@@ -693,7 +700,7 @@ Benchmarking:
 #if defined(_WIN32)
       setAffinity(t.native_handle(), 1 << (i % n));
 #else
-      setAffinity(t.native_handle(), i);
+      setAffinity(t.native_handle(), (i % n));
 #endif
     }
 
@@ -773,13 +780,6 @@ Mining:
 
   // Create worker threads and set CPU affinity
   mutex.lock();
-<<<<<<< HEAD
-  for (int i = 0; i < threads; i++)
-  {
-    boost::thread t(mineBlock, i + 1);
-
-    if (lockThreads)
-=======
   if (false /*gpuMine*/ )
   {
     // boost::thread t(cudaMine);
@@ -788,27 +788,22 @@ Mining:
   }
   else
     for (int i = 0; i < threads; i++)
->>>>>>> dev
     {
+      boost::thread t(mineBlock, i + 1);
+
+      if (lockThreads)
+      {
 #if defined(_WIN32)
-      setAffinity(t.native_handle(), 1 << (i % n));
+        setAffinity(t.native_handle(), 1 << (i % n));
 #else
-      setAffinity(t.native_handle(), i);
+        setAffinity(t.native_handle(), i);
 #endif
-<<<<<<< HEAD
-=======
       }
       // if (threads == 1 || (n > 2 && i <= n - 2))
       // setPriority(t.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
       std::cout << "Thread " << i + 1 << " started" << std::endl;
->>>>>>> dev
     }
-    // if (threads == 1 || (n > 2 && i <= n - 2))
-    setPriority(t.native_handle(), THREAD_PRIORITY_HIGHEST);
-
-    std::cout << "Thread " << i + 1 << " started" << std::endl;
-  }
   mutex.unlock();
 
   auto start_time = std::chrono::high_resolution_clock::now();
@@ -824,11 +819,7 @@ Mining:
 
   while (true)
   {
-<<<<<<< HEAD
-    boost::this_thread::yield();
-=======
     boost::this_thread::sleep_for(boost::chrono::milliseconds(500));
->>>>>>> dev
   }
 
   // std::string input;
@@ -871,11 +862,7 @@ void logSeconds(std::chrono::_V2::system_clock::time_point start_time, int durat
 void update(std::chrono::_V2::system_clock::time_point start_time)
 {
   auto beginning = start_time;
-<<<<<<< HEAD
-  boost::this_thread::sleep_for(boost::chrono::milliseconds(50));
-=======
   boost::this_thread::yield();
->>>>>>> dev
 
 startReporting:
   while (true)
@@ -928,7 +915,7 @@ startReporting:
         setcolor(BRIGHT_WHITE);
         std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine;
         setcolor(CYAN);
-        std::cout << std::setw(2) << std::setfill('0') << consoleLine << std::setw(2) << hrate << " | " << std::flush;
+        std::cout << std::setw(2) << hrate << " | " << std::flush;
       }
       else if (hashrate >= 1000)
       {
@@ -956,7 +943,7 @@ startReporting:
       setcolor(BRIGHT_WHITE);
       mutex.unlock();
     }
-    boost::this_thread::yield();
+    boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
   }
   while (true)
   {
@@ -1159,7 +1146,6 @@ connectionAttempt:
 void benchmark(int tid)
 {
 
-  bigint diff;
   byte work[MINIBLOCK_SIZE];
 
   std::random_device rd;
@@ -1170,7 +1156,7 @@ void benchmark(int tid)
                 { return dist(gen); });
   std::memcpy(work, buf.data(), buf.size());
 
-  boost::this_thread::sleep_for(boost::chrono::milliseconds(50));
+  boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
 
   int64_t localJobCounter;
 
@@ -1179,16 +1165,12 @@ void benchmark(int tid)
   byte powHash[32];
   byte powHash2[32];
   workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
-<<<<<<< HEAD
-  worker->init();
-=======
   initWorker(*worker);
   lookupGen(*worker, lookup2D_global, lookup3D_global);
 
   workerData *worker2 = (workerData *)malloc_huge_pages(sizeof(workerData));
   initWorker(*worker2);
   lookupGen(*worker2, lookup2D_global, lookup3D_global);
->>>>>>> dev
   // workerData *worker = new workerData();
 
   while (!isConnected)
@@ -1220,12 +1202,8 @@ void benchmark(int tid)
         std::swap(work[MINIBLOCK_SIZE - 5], work[MINIBLOCK_SIZE - 2]);
         std::swap(work[MINIBLOCK_SIZE - 4], work[MINIBLOCK_SIZE - 3]);
       }
-<<<<<<< HEAD
-      AstroBWTv3(work, MINIBLOCK_SIZE, powHash, *worker);
-=======
       AstroBWTv3(work, MINIBLOCK_SIZE, powHash, *worker, true, false);
 
->>>>>>> dev
       counter.store(counter + 1);
       benchCounter.store(benchCounter + 1);
       if (stopBenchmark)
@@ -1238,7 +1216,6 @@ void benchmark(int tid)
 
 void mineBlock(int tid)
 {
-  bigint diff;
   byte work[MINIBLOCK_SIZE];
 
   byte random_buf[12];
@@ -1250,7 +1227,7 @@ void mineBlock(int tid)
                 { return dist(gen); });
   std::memcpy(random_buf, buf.data(), buf.size());
 
-  boost::this_thread::sleep_for(boost::chrono::milliseconds(50));
+  boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
 
   int64_t localJobCounter;
   byte powHash[32];
@@ -1312,6 +1289,7 @@ waitForJob:
       bool devMine = false;
       bool submit = false;
       uint64_t DIFF;
+      mpz_class cmpDiff;
       // DIFF = 5000;
 
       std::string hex;
@@ -1320,8 +1298,12 @@ waitForJob:
       {
         which = (double)(rand() % 10000);
         devMine = (devConnected && which < devFee * 100.0);
-        i++;
         DIFF = devMine ? difficultyDev : difficulty;
+
+        // printf("Difficulty: %" PRIx64 "\n", DIFF);
+
+        cmpDiff = ConvertDifficultyToBig(DIFF);
+        i++;
         byte *WORK = devMine ? &devWork[0] : &work[0];
         memcpy(&WORK[MINIBLOCK_SIZE - 5], &i, sizeof(i));
 
@@ -1331,21 +1313,13 @@ waitForJob:
           std::swap(WORK[MINIBLOCK_SIZE - 5], WORK[MINIBLOCK_SIZE - 2]);
           std::swap(WORK[MINIBLOCK_SIZE - 4], WORK[MINIBLOCK_SIZE - 3]);
         }
-<<<<<<< HEAD
-
-        AstroBWTv3(&WORK[0], MINIBLOCK_SIZE, powHash, *worker);
-=======
         AstroBWTv3(&WORK[0], MINIBLOCK_SIZE, powHash, *worker, true, false);
         
->>>>>>> dev
         counter.store(counter + 1);
         submit = devMine ? !submittingDev : !submitting;
-        if (submit && CheckHash(powHash, DIFF))
+        if (submit && CheckHash(powHash, cmpDiff))
         {
-<<<<<<< HEAD
-=======
           // printf("work: %s, hash: %s\n", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str(), hexStr(powHash, 32).c_str());
->>>>>>> dev
           if (devMine)
           {
             mutex.lock();
@@ -1371,6 +1345,7 @@ waitForJob:
                 {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
           }
         }
+
         if (!isConnected)
           break;
       }
@@ -1385,9 +1360,6 @@ waitForJob:
       break;
   }
   goto waitForJob;
-<<<<<<< HEAD
-}
-=======
 }
 
 // void cudaMine()
@@ -1686,4 +1658,3 @@ waitForJob:
 //   }
 //   goto waitForJob;
 // }
->>>>>>> dev
