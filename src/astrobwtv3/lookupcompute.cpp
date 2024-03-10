@@ -23,7 +23,7 @@ void lookupGen(workerData &worker, uint16_t *lookup2D, byte *lookup3D) {
         worker.branched_idx[op] = pos;
         byte trueVal = (byte)val;
         branchResult(trueVal, op, v2);
-        lookup3D[pos*256*256 + v2*256 + val] = trueVal;
+        worker.lookup3D[pos*256*256 + v2*256 + val] = trueVal;
       }
     }
     int d = -1;
@@ -47,11 +47,11 @@ void lookupGen(workerData &worker, uint16_t *lookup2D, byte *lookup3D) {
       // printf("lookup entry: %04X\n", v2 | (uint16_t)v1 << 8);
 
       trueVal = v2 | (uint16_t)v1 << 8;
-      lookup2D[pos*256*256 + val] = trueVal;
+      worker.lookup2D[pos*256*256 + val] = trueVal;
     }
   }
-  worker.lookup3D = &lookup3D[0];
-  worker.lookup2D = &lookup2D[0];
+  // worker.lookup3D = &lookup3D[0];
+  // worker.lookup2D = &lookup2D[0];
 }
 
 void branchResult(byte &val, int op, byte v2) {

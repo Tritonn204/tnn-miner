@@ -139,8 +139,8 @@ public:
   unsigned char step_3[256];
   int freq[256];
 
-  byte *lookup3D;
-  uint16_t *lookup2D;
+  byte lookup3D[branchedOps_size*256*256];
+  uint16_t lookup2D[regOps_size*(256*256)];
 
   void *ctx;
 
