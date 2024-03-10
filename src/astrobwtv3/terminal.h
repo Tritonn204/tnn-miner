@@ -41,6 +41,14 @@ const char *TNN = R"(
 #define TNN_TEST 12
 #define TNN_BENCHMARK 13
 #define TNN_NO_LOCK 14
+<<<<<<< HEAD
+=======
+#define TNN_GPUMINE 15
+#define TNN_BATCHSIZE 16
+#define TNN_SABENCH 18
+#define TNN_OP 19
+#define TNN_TLEN 20
+>>>>>>> dev
 
 std::vector<std::string> options = {
     "-daemon-address",
@@ -57,7 +65,17 @@ std::vector<std::string> options = {
     "-h",
     "-test",
     "-benchmark",
+<<<<<<< HEAD
     "-no-lock"
+=======
+    "-no-lock",
+    "-gpu",
+    "-batch-size",
+    "-b",
+    "-sabench",
+    "-o",
+    "-l"
+>>>>>>> dev
 };
 
 const char* usage = R"(
@@ -73,12 +91,15 @@ OPTIONS
     -dev-fee, -f: (optional) 
         Your desired dev fee percentage, default is 2.5, minimum is 1
     -no-lock: (optional) 
-        Disables CPU affinity / CPU core binding
+        Disables CPU affinity / CPU core binding (must be final arg if running benchmark)
     -help, -h: (must be first arg)
         Shows help
 DEBUG
     -test: (must be first arg)
-        Runs a set of tests to verify AstrobwtV3 is working
+        Runs a set of tests to verify AstrobwtV3 is working (1 test expected to fail)
+        Params: (optional)
+          -o <num> : Sets which branch op to benchmark (0-255), benchmark will be skipped if unspecified
+          -l <num> : Sets length of the processed chunk in said benchmark (default 15) 
     -benchmark <A> <B>:
         Runs a mining benchmark for <B> seconds with <A> threads for hashrate testing
         You may insert the -no-lock flag after <A> and <B> if desired. 

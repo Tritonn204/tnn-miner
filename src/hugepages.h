@@ -1,9 +1,11 @@
 #pragma once
 
+#ifdef __cplusplus
 #include <iostream>
-#include <assert.h>
 #include <stdlib.h>
 #include <string>
+#endif
+#include <assert.h>
 
 #if defined(_WIN32)
 #include <Windows.h>
@@ -18,7 +20,8 @@
 
 #ifdef _WIN32
 
-BOOL SetPrivilege(
+#ifdef __cplusplus
+inline BOOL SetPrivilege(
     HANDLE hToken,          // access token handle
     LPCTSTR lpszPrivilege,  // name of privilege to enable/disable
     BOOL bEnablePrivilege   // to enable or disable privilege
@@ -32,7 +35,9 @@ BOOL SetPrivilege(
             lpszPrivilege,   // privilege to lookup 
             &luid ) )        // receives LUID of privilege
     {
+        #ifdef __cplusplus
         printf("LookupPrivilegeValue error: %u\n", GetLastError() ); 
+        #endif
         return FALSE; 
     }
 
@@ -53,21 +58,25 @@ BOOL SetPrivilege(
            (PTOKEN_PRIVILEGES) NULL, 
            (PDWORD) NULL) )
     { 
+          #ifdef __cplusplus
           printf("AdjustTokenPrivileges error: %u\n", GetLastError() ); 
+          #endif
           return FALSE; 
     } 
 
     if (GetLastError() == ERROR_NOT_ALL_ASSIGNED)
 
     {
+          #ifdef __cplusplus
           printf("The token does not have the specified privilege. \n");
+          #endif
           return FALSE;
     } 
 
     return TRUE;
 }
 
-std::string GetLastErrorAsString()
+inline std::string GetLastErrorAsString()
 {
     //Get the error message ID, if any.
     DWORD errorMessageID = ::GetLastError();
@@ -93,14 +102,19 @@ std::string GetLastErrorAsString()
 
 #endif
 
+#endif
+
 inline void *malloc_huge_pages(size_t size)
 {
   size_t real_size = ALIGN_TO_PAGE_SIZE(size + HUGE_PAGE_SIZE);
-  char *ptr;
+  char *ptr = NULL;
   #if defined(_WIN32)
   ptr = (char*)VirtualAlloc(NULL, real_size, MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
   if (ptr == NULL) {
+    #ifdef __cplusplus
     std::cout << GetLastErrorAsString() << std::endl;
+    printf("regular malloc");
+    #endif
     ptr = (char *)malloc(real_size);
     if (ptr == NULL) return NULL;
     real_size = 0;
@@ -109,7 +123,9 @@ inline void *malloc_huge_pages(size_t size)
   ptr = (char *) mmap(0, real_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | 
      MAP_HUGETLB, -1, 0);
   if (ptr == MAP_FAILED) {
+    #ifdef __cplusplus
     std::cerr << "failed to allocate hugepages... using regular malloc" << std::endl;
+    #endif
     ptr = (char *)malloc(real_size);
     if (ptr == NULL) return NULL;
     real_size = 0;

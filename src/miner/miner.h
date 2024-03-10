@@ -26,6 +26,15 @@ std::string host = nullArg;
 std::string port = nullArg;
 std::string wallet = nullArg;
 int threads = 0;
+<<<<<<< HEAD
+=======
+int testOp = -1;
+int testLen = -1;
+bool gpuMine = false;
+
+int cudaMemNumerator = 1000;
+int cudaMemDenominator = 750; //Kilobytes per worker in VRAM
+>>>>>>> dev
 
 // Dev fee config
 // Dev fee is a % of hashrate

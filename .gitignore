@@ -29,6 +29,8 @@
 /CMakeFiles
 /config
 /.vscode
+/cmake
+/cpp_modules
 
 # Misc
 **.txt

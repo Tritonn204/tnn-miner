@@ -5,7 +5,6 @@
   - OpenSSL v3.0.2 (static libs)
   - Boost v1.8.2 (b2 with link=static)
   - GMP (with C++ support enabled)
-  - divsufsort (with build_shared turned off)
   - UDNS (UNIX only. sudo apt-get install libudns-dev)
   - FMT (header only)
 
@@ -26,6 +25,8 @@ Do note that CMakeLists.txt will need to be altered if your libraries are instal
 This miner can be activated from the command line with the following parameters. Simply adjust the syntax for use with your shell or terminal of choice!
 ```
 OPTIONS
+    -gpu:
+        Mine with GPU instead of CPU
     -daemon-address, -d: 
         Dero node/pool URL or IP address to mine to
     -port, -p: 
@@ -37,12 +38,19 @@ OPTIONS
     -dev-fee, -f: (optional) 
         Your desired dev fee percentage, default is 2.5, minimum is 1
     -no-lock: (optional) 
-        Disables CPU affinity / CPU core binding
+        Disables CPU affinity / CPU core binding (must be final arg if running benchmark)
     -help, -h: (must be first arg)
         Shows help
+    -batch-size, -b: (GPU Setting)
+        Sets batch size used for GPU mining
+    -sabench: (must be first arg)
+        Runs a benchmark for divsufsort on snapshot files in the 'tests' directory
 DEBUG
     -test: (must be first arg)
-        Runs a set of tests to verify AstrobwtV3 is working
+        Runs a set of tests to verify AstrobwtV3 is working (1 test expected to fail)
+        Params: (optional)
+          -o <num> : Sets which branch op to benchmark (0-255), benchmark will be skipped if unspecified
+          -l <num> : Sets length of the processed chunk in said benchmark (default 15) 
     -benchmark <A> <B>:
         Runs a mining benchmark for <B> seconds with <A> threads for hashrate testing
         You may insert the -no-lock flag after <A> and <B> if desired. 
