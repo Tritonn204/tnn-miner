@@ -31,14 +31,15 @@
 #include "immintrin.h"
 #include "libsais.h"
 
-
 #ifndef POW_CONST
 #define POW_CONST
 
+#if defined(__AVX2__)
 #ifdef __GNUC__ 
 #if __GNUC__ < 8
 #define _mm256_set_m128i(xmm1, xmm2) _mm256_permute2f128_si256(_mm256_castsi128_si256(xmm1), _mm256_castsi128_si256(xmm2), 2)
 #define _mm256_set_m128f(xmm1, xmm2) _mm256_permute2f128_ps(_mm256_castps128_ps256(xmm1), _mm256_castps128_ps256(xmm2), 2)
+#endif
 #endif
 #endif
 
@@ -96,6 +97,7 @@ const int deviceAllocMB = 5;
 static const bool sInduction = true;
 static const bool sTracking = true;
 
+#if defined(__AVX2__)
 template <unsigned int N>
 __m256i shiftRight256(__m256i a);
 
@@ -103,7 +105,7 @@ template <unsigned int N>
 __m256i shiftLeft256(__m256i a);
 
 const __m256i vec_3 = _mm256_set1_epi8(3);
-
+#endif
 
 //--------------------------------------------------------//
 
@@ -168,6 +170,8 @@ public:
 };
 
 inline void initWorker(workerData &worker) {
+  #if defined(__AVX2__)
+
   __m256i temp[32];
   for(int i = 0; i < 32; i++) {
     temp[i] = _mm256_setzero_si256(); // Initialize mask with all zeros
@@ -192,6 +196,9 @@ inline void initWorker(workerData &worker) {
     temp[i] = _mm256_insertf128_si256(temp[i], lower_part, 0); // Set lower 128 bits
     temp[i] = _mm256_insertf128_si256(temp[i], upper_part, 1); // Set upper 128 bits
   }
+  memcpy(&worker.maskTable[0], temp, 32*sizeof(__m256i));
+
+  #endif
   // printf("branchedOps size:cl %d", worker.branchedOps.size());
   std::copy(branchedOps_global.begin(), branchedOps_global.end(), worker.branchedOps);
   std::vector<byte> full(256);
@@ -199,7 +206,7 @@ inline void initWorker(workerData &worker) {
   std::iota(full.begin(), full.end(), 0);
   std::set_difference(full.begin(), full.end(), branchedOps_global.begin(), branchedOps_global.end(), std::inserter(diff, diff.begin()));
   std::copy(diff.begin(), diff.end(), worker.regularOps);
-  memcpy(&worker.maskTable[0], temp, 32*sizeof(__m256i));
+  
   worker.ctx = libsais_create_ctx();
   // printf("Branched Ops:\n");
   // for (int i = 0; i < branchedOps_size; i++) {

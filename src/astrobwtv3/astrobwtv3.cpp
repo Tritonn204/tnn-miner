@@ -128,7 +128,7 @@ void checkSIMDSupport() {
 }
 */
 
-
+#if defined(__AVX2__)
 inline __m128i mullo_epi8(__m128i a, __m128i b)
 {
     // unpack and multiply
@@ -385,6 +385,8 @@ inline __m256i _mm256_reverse_epi8(__m256i input) {
 
     return input;
 }
+
+#endif
 
 void optest(int op, workerData &worker, bool print=true) {
   if (print) {
@@ -3574,7 +3576,10 @@ void optest_lookup(int op, workerData &worker, bool print=true) {
 }
 
 void runOpTests(int op, int len) {
+  #if defined(__AVX2__)
   testPopcnt256_epi8();
+  #endif
+
   workerData *worker = (workerData*)malloc_huge_pages(sizeof(workerData));
   initWorker(*worker);
   lookupGen(*worker, lookup2D, lookup3D);
@@ -3980,6 +3985,8 @@ void TestAstroBWTv3repeattest()
   std::cout << "Repeated test over" << std::endl;
 }
 
+#if defined(__AVX2__)
+
 void computeByteFrequencyAVX2(const unsigned char* data, size_t dataSize, int frequencyTable[256]) {
     __m256i chunk;
     const size_t simdWidth = 32; // AVX2 SIMD register width in bytes
@@ -4013,6 +4020,8 @@ void computeByteFrequencyAVX2(const unsigned char* data, size_t dataSize, int fr
         frequencyTable[i] += localFrequencyTable[i];
     }
 }
+
+#endif
 
 
 void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker, bool lookupMine, bool simd)
@@ -4121,6 +4130,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     std::cerr << ex.what() << std::endl;
   }
 }
+
 
 void branchComputeCPU(workerData &worker)
 {
@@ -7315,6 +7325,8 @@ void branchComputeCPU(workerData &worker)
     }
   }
 }
+
+#if defined(__AVX2__)
 
 void branchComputeCPU_optimized(workerData &worker)
 {
@@ -10750,6 +10762,8 @@ void branchComputeCPU_optimized(workerData &worker)
   }
 }
 
+#endif
+
 // Compute the new values for worker.step_3 using layered lookup tables instead of
 // branched computational operations
 
@@ -10873,8 +10887,30 @@ void lookupCompute(workerData &worker)
         // Manually unrolled loops for repetetive efficiency. Worst possible loop count for 3D
         // lookups is now 4, with less than 4 being pretty common.
 
+        // Groups of 16
+        for(int i = worker.pos1; i < worker.pos2-15; i += 16) {
+          __builtin_prefetch(&lookup3D[firstIndex + 64*n++],0,3);
+          worker.step_3[i] = lookup3D[firstIndex + worker.step_3[i]];
+          worker.step_3[i+1] = lookup3D[firstIndex + worker.step_3[i+1]];
+          worker.step_3[i+2] = lookup3D[firstIndex + worker.step_3[i+2]];
+          worker.step_3[i+3] = lookup3D[firstIndex + worker.step_3[i+3]];
+          worker.step_3[i+4] = lookup3D[firstIndex + worker.step_3[i+4]];
+          worker.step_3[i+5] = lookup3D[firstIndex + worker.step_3[i+5]];
+          worker.step_3[i+6] = lookup3D[firstIndex + worker.step_3[i+6]];
+          worker.step_3[i+7] = lookup3D[firstIndex + worker.step_3[i+7]];
+
+          worker.step_3[i+8] = lookup3D[firstIndex + worker.step_3[i+8]];
+          worker.step_3[i+9] = lookup3D[firstIndex + worker.step_3[i+9]];
+          worker.step_3[i+10] = lookup3D[firstIndex + worker.step_3[i+10]];
+          worker.step_3[i+11] = lookup3D[firstIndex + worker.step_3[i+11]];
+          worker.step_3[i+12] = lookup3D[firstIndex + worker.step_3[i+12]];
+          worker.step_3[i+13] = lookup3D[firstIndex + worker.step_3[i+13]];
+          worker.step_3[i+14] = lookup3D[firstIndex + worker.step_3[i+14]];
+          worker.step_3[i+15] = lookup3D[firstIndex + worker.step_3[i+15]];
+        }
+
         // Groups of 8
-        for(int i = worker.pos1; i < worker.pos2-7; i += 8) {
+        for(int i = worker.pos2-((worker.pos2-worker.pos1)%16); i < worker.pos2-7; i += 8) {
           __builtin_prefetch(&lookup3D[firstIndex + 64*n++],0,3);
           worker.step_3[i] = lookup3D[firstIndex + worker.step_3[i]];
           worker.step_3[i+1] = lookup3D[firstIndex + worker.step_3[i+1]];

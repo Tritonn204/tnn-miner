@@ -102,8 +102,8 @@ uint16_t *lookup2D_global; // Storage for computed values of 2-byte chunks
 byte *lookup3D_global; // Storage for deterministically computed values of 1-byte chunks
 
 int jobCounter;
-boost::atomic<int64_t> counter = 0;
-boost::atomic<int64_t> benchCounter = 0;
+std::atomic<int64_t> counter = 0;
+std::atomic<int64_t> benchCounter = 0;
 
 int blockCounter;
 int miniBlockCounter;
@@ -429,7 +429,9 @@ int main(int argc, char **argv)
   // Check command line arguments.
   lookup2D_global = (uint16_t *)malloc_huge_pages(regOps_size*(256*256)*sizeof(uint16_t));
   lookup3D_global = (byte *)malloc_huge_pages(branchedOps_size*(256*256)*sizeof(byte));
-  mpz_pow_ui(oneLsh256.get_mpz_t(), mpz_class(2).get_mpz_t(), 256);
+  oneLsh256 = Num(1) << 256;
+
+  std::cout << "1<<256 test: " << oneLsh256 << std::endl;
 
   // default values
   bool lockThreads = true;
@@ -598,7 +600,7 @@ fillBlanks:
   goto Mining;
 Testing:
 {
-  mpz_class diffTest("20000", 10);
+  Num diffTest("20000", 10);
 
   if (testOp >= 0) {
     if (testLen >= 0) {
@@ -685,18 +687,18 @@ Benchmarking:
   if (hashrate >= 1000000)
   {
     double rate = (double)(hashrate / 1000000.0);
-    std::string hrate = fmt::sprintf("%.2f MH/s", rate);
+    std::string hrate = fmt::sprintf("%.3f MH/s", rate);
     std::cout << hrate << std::endl;
   }
   else if (hashrate >= 1000)
   {
     double rate = (double)(hashrate / 1000.0);
-    std::string hrate = fmt::sprintf("%.2f KH/s", rate);
+    std::string hrate = fmt::sprintf("%.3f KH/s", rate);
     std::cout << hrate << std::endl;
   }
   else
   {
-    std::string hrate = fmt::sprintf("%.2f H/s", (double)hashrate);
+    std::string hrate = fmt::sprintf("%.3f H/s", (double)hashrate);
     std::cout << hrate << std::endl;
   }
   boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
@@ -846,7 +848,7 @@ startReporting:
       if (hashrate >= 1000000)
       {
         double rate = (double)(hashrate / 1000000.0);
-        std::string hrate = fmt::sprintf("HASHRATE %.2f MH/s", rate);
+        std::string hrate = fmt::sprintf("HASHRATE %.3f MH/s", rate);
         mutex.lock();
         setcolor(BRIGHT_WHITE);
         std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine;
@@ -856,7 +858,7 @@ startReporting:
       else if (hashrate >= 1000)
       {
         double rate = (double)(hashrate / 1000.0);
-        std::string hrate = fmt::sprintf("HASHRATE %.2f KH/s", rate);
+        std::string hrate = fmt::sprintf("HASHRATE %.3f KH/s", rate);
         mutex.lock();
         setcolor(BRIGHT_WHITE);
         std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine;
@@ -865,7 +867,7 @@ startReporting:
       }
       else
       {
-        std::string hrate = fmt::sprintf("HASHRATE %.2f H/s", (double)hashrate, hrate);
+        std::string hrate = fmt::sprintf("HASHRATE %.0f H/s", (double)hashrate, hrate);
         mutex.lock();
         setcolor(BRIGHT_WHITE);
         std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine;
@@ -1140,8 +1142,8 @@ void benchmark(int tid)
       }
       AstroBWTv3(work, MINIBLOCK_SIZE, powHash, *worker, true, false);
 
-      counter.store(counter + 1);
-      benchCounter.store(benchCounter + 1);
+      counter.fetch_add(1);
+      benchCounter.fetch_add(1);
       if (stopBenchmark)
         break;
     }
@@ -1225,7 +1227,7 @@ waitForJob:
       bool devMine = false;
       bool submit = false;
       uint64_t DIFF;
-      mpz_class cmpDiff;
+      Num cmpDiff;
       // DIFF = 5000;
 
       std::string hex;
@@ -1251,7 +1253,7 @@ waitForJob:
         }
         AstroBWTv3(&WORK[0], MINIBLOCK_SIZE, powHash, *worker, true, false);
         
-        counter.store(counter + 1);
+        counter.fetch_add(1);
         submit = devMine ? !submittingDev : !submitting;
         if (submit && CheckHash(powHash, cmpDiff))
         {
