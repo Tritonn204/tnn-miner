@@ -128,7 +128,7 @@ void checkSIMDSupport() {
 }
 */
 
-
+#if defined(__AVX2__)
 inline __m128i mullo_epi8(__m128i a, __m128i b)
 {
     // unpack and multiply
@@ -385,6 +385,8 @@ inline __m256i _mm256_reverse_epi8(__m256i input) {
 
     return input;
 }
+
+#endif
 
 void optest(int op, workerData &worker, bool print=true) {
   if (print) {
@@ -3574,7 +3576,10 @@ void optest_lookup(int op, workerData &worker, bool print=true) {
 }
 
 void runOpTests(int op, int len) {
+  #if defined(__AVX2__)
   testPopcnt256_epi8();
+  #endif
+
   workerData *worker = (workerData*)malloc_huge_pages(sizeof(workerData));
   initWorker(*worker);
   lookupGen(*worker, lookup2D, lookup3D);
@@ -3980,6 +3985,8 @@ void TestAstroBWTv3repeattest()
   std::cout << "Repeated test over" << std::endl;
 }
 
+#if defined(__AVX2__)
+
 void computeByteFrequencyAVX2(const unsigned char* data, size_t dataSize, int frequencyTable[256]) {
     __m256i chunk;
     const size_t simdWidth = 32; // AVX2 SIMD register width in bytes
@@ -4013,6 +4020,8 @@ void computeByteFrequencyAVX2(const unsigned char* data, size_t dataSize, int fr
         frequencyTable[i] += localFrequencyTable[i];
     }
 }
+
+#endif
 
 
 void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker, bool lookupMine, bool simd)
@@ -4121,6 +4130,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     std::cerr << ex.what() << std::endl;
   }
 }
+
 
 void branchComputeCPU(workerData &worker)
 {
@@ -7315,6 +7325,8 @@ void branchComputeCPU(workerData &worker)
     }
   }
 }
+
+#if defined(__AVX2__)
 
 void branchComputeCPU_optimized(workerData &worker)
 {
@@ -10749,6 +10761,8 @@ void branchComputeCPU_optimized(workerData &worker)
     }
   }
 }
+
+#endif
 
 // Compute the new values for worker.step_3 using layered lookup tables instead of
 // branched computational operations
