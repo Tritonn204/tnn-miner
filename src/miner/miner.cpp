@@ -14,6 +14,8 @@
 //------------------------------------------------------------------------------
 
 #define FMT_HEADER_ONLY
+#define BOOST_ASIO_DISABLE_CONCEPTS 
+
 
 #include "rootcert.h"
 
@@ -64,6 +66,7 @@
 #define THREAD_PRIORITY_HIGHEST -20
 #define THREAD_PRIORITY_TIME_CRITICAL -20
 #endif
+
 
 #if defined(_WIN32)
 LPTSTR lpNxtPage;  // Address of the next page to ask for
