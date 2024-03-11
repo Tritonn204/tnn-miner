@@ -4,7 +4,6 @@
 **Dependencies are as follows:**
   - OpenSSL v3.0.2 (static libs)
   - Boost v1.8.2 (b2 with link=static)
-  - GMP (with C++ support enabled)
   - UDNS (UNIX only. sudo apt-get install libudns-dev)
   - FMT (header only)
 
