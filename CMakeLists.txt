@@ -19,16 +19,12 @@ endif()
 set(CMAKE_EXE_LINKER_FLAGS "-fstack-protector")
 
 set (CMAKE_CXX_STANDARD 23)
-# set (CMAKE_CUDA_STANDARD 17)
 
 project(
   Tnn-miner
   VERSION 0.2.0
   DESCRIPTION "Open Source Astrobwt Miner"
 )
-
-# enable_language(CUDA)
-# find_package(CUDAToolkit REQUIRED)
 
 if(WIN32)
   include_directories(
@@ -110,13 +106,4 @@ endif()
 if(UNIX)
   target_link_libraries(${PROJECT_NAME} udns pthread)
 endif()
-target_link_libraries(${PROJECT_NAME} nlohmann_json::nlohmann_json OpenSSL::SSL ${Boost_LIBRARIES} OpenSSL::Crypto gmp gmpxx ${CUDA_LIBRARIES})
-
-# set_target_properties(${PROJECT_NAME} PROPERTIES CUDA_ARCHITECTURES "60;86" CUDA_SEPARABLE_COMPILATION ON)
-# # set(CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS} "-g -G")  # enable cuda-gdb
-
-# target_compile_options(${PROJECT_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-#   -Xptxas -O3,-v;
-#   --extended-lambda;
-#   --use_fast_math;
-# >)
+target_link_libraries(${PROJECT_NAME} nlohmann_json::nlohmann_json OpenSSL::SSL ${Boost_LIBRARIES} OpenSSL::Crypto)

@@ -7,11 +7,11 @@
 #include <inttypes.h>
 #include <hex.h>
 #include <endian.hpp>
-#include <gmpxx.h>
 #include <boost/thread.hpp>
 #include <vector>
 #include <terminal.h>
 #include <string>
+#include <num.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -44,7 +44,7 @@ const char *devPort = "10300";
 const char *devWallet = "dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw4wjqqp6y2n7";
 
 const int MINIBLOCK_SIZE = 48;
-mpz_class oneLsh256;                                                   
+Num oneLsh256;                                                   
 
 void getWork(bool isDev);
 void sendWork();
@@ -56,11 +56,11 @@ void cudaMine();
 void benchmark(int i);
 void logSeconds(std::chrono::_V2::system_clock::time_point start_time, int duration, bool *stop);
 
-inline mpz_class ConvertDifficultyToBig(int64_t d)
+inline Num ConvertDifficultyToBig(int64_t d)
 {
   // (1 << 256) / (difficultyNum )c
-  mpz_class difficulty = mpz_class(std::to_string(d), 10);
-  mpz_class res = oneLsh256 / difficulty;
+  Num difficulty = Num(std::to_string(d).c_str(), 10);
+  Num res = oneLsh256 / difficulty;
   return res; 
 }
 
@@ -95,27 +95,27 @@ inline void printSupported()
 #endif
 }
 
-inline mpz_class ConvertDifficultyToBig(mpz_class d)
+inline Num ConvertDifficultyToBig(Num d)
 {
   // (1 << 256) / (difficultyNum )
-  mpz_class res = oneLsh256 / d;
+  Num res = oneLsh256 / d;
   return res;
 }
 
 inline bool CheckHash(unsigned char *hash, int64_t diff)
 {
   if (littleEndian()) std::reverse(hash, hash+32);
-  int cmp = mpz_cmp(mpz_class(hexStr(hash, 32).c_str(), 16).get_mpz_t(), ConvertDifficultyToBig(diff).get_mpz_t());
+  bool cmp = Num(hexStr(hash, 32).c_str(), 16) < ConvertDifficultyToBig(diff);
   if (littleEndian()) std::reverse(hash, hash+32);
-  return (cmp <= 0);
+  return (cmp);
 }
 
-inline bool CheckHash(unsigned char *hash, mpz_class diff)
+inline bool CheckHash(unsigned char *hash, Num diff)
 {
   if (littleEndian()) std::reverse(hash, hash+32);
-  int cmp = mpz_cmp(mpz_class(hexStr(hash, 32).c_str(), 16).get_mpz_t(), diff.get_mpz_t());
+  bool cmp = Num(hexStr(hash, 32).c_str(), 16) < diff;
   if (littleEndian()) std::reverse(hash, hash+32);
-  return (cmp <= 0);
+  return (cmp);
 }
 
 void setPriorityClass(boost::thread::native_handle_type t, int priority);
