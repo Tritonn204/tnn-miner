@@ -426,7 +426,9 @@ int main(int argc, char **argv)
   // Check command line arguments.
   lookup2D_global = (uint16_t *)malloc_huge_pages(regOps_size*(256*256)*sizeof(uint16_t));
   lookup3D_global = (byte *)malloc_huge_pages(branchedOps_size*(256*256)*sizeof(byte));
-  mpz_pow_ui(oneLsh256.get_mpz_t(), mpz_class(2).get_mpz_t(), 256);
+  oneLsh256 = Num(1) << 256;
+
+  std::cout << "1<<256 test: " << oneLsh256 << std::endl;
 
   // default values
   bool lockThreads = true;
@@ -625,7 +627,7 @@ fillBlanks:
   goto Mining;
 Testing:
 {
-  mpz_class diffTest("20000", 10);
+  Num diffTest("20000", 10);
 
   for (int i = 1; i < argc; i++)
   {
@@ -1290,7 +1292,7 @@ waitForJob:
       bool devMine = false;
       bool submit = false;
       uint64_t DIFF;
-      mpz_class cmpDiff;
+      Num cmpDiff;
       // DIFF = 5000;
 
       std::string hex;
