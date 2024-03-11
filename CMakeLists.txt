@@ -26,7 +26,6 @@ project(
   Tnn-miner
   VERSION 0.3.0
   DESCRIPTION "Open Source Astrobwt Miner"
-  LANGUAGES HIP
 )
 
 # enable_language(CUDA)
