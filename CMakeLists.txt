@@ -13,7 +13,7 @@ endif()
 
 if(UNIX)
 set(CMAKE_SYSTEM_NAME Linux)
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -pthread -Wl,--whole-archive -lpthread -Wl,--no-whole-archive")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -pthread -Wl,--whole-archive -libgcc -lpthread -Wl,--no-whole-archive")
 endif()
 
 set(CMAKE_EXE_LINKER_FLAGS "-fstack-protector")
