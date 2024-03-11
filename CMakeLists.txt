@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 3.16.3)
+cmake_minimum_required(VERSION 3.21)
+cmake_policy(VERSION 3.21.3...3.27)
 
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_C_FLAGS_RELEASE "-static -O3 -fPIE -ftree-vectorize")
@@ -23,8 +24,9 @@ set (CMAKE_CXX_STANDARD 23)
 
 project(
   Tnn-miner
-  VERSION 0.2.0
+  VERSION 0.3.0
   DESCRIPTION "Open Source Astrobwt Miner"
+  LANGUAGES HIP
 )
 
 # enable_language(CUDA)
