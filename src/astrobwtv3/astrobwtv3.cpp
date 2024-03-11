@@ -10873,8 +10873,30 @@ void lookupCompute(workerData &worker)
         // Manually unrolled loops for repetetive efficiency. Worst possible loop count for 3D
         // lookups is now 4, with less than 4 being pretty common.
 
+        // Groups of 16
+        for(int i = worker.pos1; i < worker.pos2-15; i += 16) {
+          __builtin_prefetch(&lookup3D[firstIndex + 64*n++],0,3);
+          worker.step_3[i] = lookup3D[firstIndex + worker.step_3[i]];
+          worker.step_3[i+1] = lookup3D[firstIndex + worker.step_3[i+1]];
+          worker.step_3[i+2] = lookup3D[firstIndex + worker.step_3[i+2]];
+          worker.step_3[i+3] = lookup3D[firstIndex + worker.step_3[i+3]];
+          worker.step_3[i+4] = lookup3D[firstIndex + worker.step_3[i+4]];
+          worker.step_3[i+5] = lookup3D[firstIndex + worker.step_3[i+5]];
+          worker.step_3[i+6] = lookup3D[firstIndex + worker.step_3[i+6]];
+          worker.step_3[i+7] = lookup3D[firstIndex + worker.step_3[i+7]];
+
+          worker.step_3[i+8] = lookup3D[firstIndex + worker.step_3[i+8]];
+          worker.step_3[i+9] = lookup3D[firstIndex + worker.step_3[i+9]];
+          worker.step_3[i+10] = lookup3D[firstIndex + worker.step_3[i+10]];
+          worker.step_3[i+11] = lookup3D[firstIndex + worker.step_3[i+11]];
+          worker.step_3[i+12] = lookup3D[firstIndex + worker.step_3[i+12]];
+          worker.step_3[i+13] = lookup3D[firstIndex + worker.step_3[i+13]];
+          worker.step_3[i+14] = lookup3D[firstIndex + worker.step_3[i+14]];
+          worker.step_3[i+15] = lookup3D[firstIndex + worker.step_3[i+15]];
+        }
+
         // Groups of 8
-        for(int i = worker.pos1; i < worker.pos2-7; i += 8) {
+        for(int i = worker.pos2-((worker.pos2-worker.pos1)%16); i < worker.pos2-7; i += 8) {
           __builtin_prefetch(&lookup3D[firstIndex + 64*n++],0,3);
           worker.step_3[i] = lookup3D[firstIndex + worker.step_3[i]];
           worker.step_3[i+1] = lookup3D[firstIndex + worker.step_3[i+1]];

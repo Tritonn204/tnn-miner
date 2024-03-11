@@ -100,8 +100,8 @@ uint16_t *lookup2D_global; // Storage for computed values of 2-byte chunks
 byte *lookup3D_global; // Storage for deterministically computed values of 1-byte chunks
 
 int jobCounter;
-boost::atomic<int64_t> counter = 0;
-boost::atomic<int64_t> benchCounter = 0;
+std::atomic<int64_t> counter = 0;
+std::atomic<int64_t> benchCounter = 0;
 
 int blockCounter;
 int miniBlockCounter;
@@ -1205,8 +1205,8 @@ void benchmark(int tid)
       }
       AstroBWTv3(work, MINIBLOCK_SIZE, powHash, *worker, true, false);
 
-      counter.store(counter + 1);
-      benchCounter.store(benchCounter + 1);
+      counter.fetch_add(1);
+      benchCounter.fetch_add(1);
       if (stopBenchmark)
         break;
     }
@@ -1316,7 +1316,7 @@ waitForJob:
         }
         AstroBWTv3(&WORK[0], MINIBLOCK_SIZE, powHash, *worker, true, false);
         
-        counter.store(counter + 1);
+        counter.fetch_add(1);
         submit = devMine ? !submittingDev : !submitting;
         if (submit && CheckHash(powHash, cmpDiff))
         {
