@@ -1,23 +1,8 @@
 cmake_minimum_required(VERSION 3.16.3)
 
-#set(CMAKE_C_COMPILER /usr/bin/clang-17)
-#set(CMAKE_CXX_COMPILER /usr/bin/clang++-17)
-message(STATUS "CC from ENV: $ENV{CC}")
-#set(SERIAL_C_COMPILER       ${CMAKE_C_COMPILER})
-#message(STATUS "SERIAL_C_COMPILER: ${SERIAL_C_COMPILER}")
-#message(STATUS "CXX from ENV: $ENV{CXX}")
-set(SERIAL_CXX_COMPILER       ${CMAKE_CXX_COMPILER})
-#message(STATUS "SERIAL_CXX_COMPILER: ${SERIAL_CXX_COMPILER}")
-
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_C_FLAGS_RELEASE "-static -O3 -fPIE -ftree-vectorize")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -static-libgcc -m64 -O3 -Wall -Wuninitialized -fprefetch-loop-arrays -funroll-all-loops -ftree-vectorize")
-#set(CMAKE_C_FLAGS_RELEASE "-g -DLIBSAIS_OPENMP -fopenmp -static -O3 -fPIE -ftree-vectorize -mtune=znver3")
-#set(CMAKE_CXX_FLAGS_RELEASE "-g -DLIBSAIS_OPENMP -fopenmp ${CMAKE_CXX_FLAGS_RELEASE} -m64 -O3 -pthread -Wall -Wuninitialized -fprefetch-loop-arrays -funroll-all-loops -ftree-vectorize -mtune=znver3")
-#set(CMAKE_C_FLAGS_RELEASE "-gdwarf-4 -D_OPENMP -O3 -fPIE -ftree-vectorize -mtune=znver3")
-#set(CMAKE_CXX_FLAGS_RELEASE "-gdwarf-4 -D_OPENMP -fopenmp ${CMAKE_CXX_FLAGS_RELEASE} -m64 -O3 -Wall -Wuninitialized -fprefetch-loop-arrays -funroll-all-loops -ftree-vectorize -mtune=znver3")
-#set(CMAKE_C_FLAGS_RELEASE "-gdwarf-4 -O3 -fPIE -ftree-vectorize -mtune=znver3")
-#set(CMAKE_CXX_FLAGS_RELEASE "-gdwarf-4 ${CMAKE_CXX_FLAGS_RELEASE} -m64 -O3 -Wall -Wuninitialized -fprefetch-loop-arrays -funroll-all-loops -ftree-vectorize -mtune=znver3")
 
 set(CMAKE_C_COMPILER clang)
 set(CMAKE_CXX_COMPILER clang++)
@@ -119,7 +104,6 @@ include_directories(
 )
 
 file(GLOB all_SRCS
-  # "${PROJECT_SOURCE_DIR}/src/*.h"
   "${PROJECT_SOURCE_DIR}/include/*.h"
   "${PROJECT_SOURCE_DIR}/include/*.hpp"
   # "${PROJECT_SOURCE_DIR}/include/*.cuh"
