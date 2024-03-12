@@ -8,7 +8,7 @@
 #include <hex.h>
 #include <endian.hpp>
 #include <num.h>
-#include <boost/thread.hpp>
+#include <thread>
 #include <vector>
 #include <terminal.h>
 #include <string>
@@ -96,12 +96,6 @@ inline bool CheckHash(unsigned char *hash, Num diff)
   if (littleEndian()) std::reverse(hash, hash+32);
   return (cmp);
 }
-
-void setPriorityClass(boost::thread::native_handle_type t, int priority);
-
-void setPriority(boost::thread::native_handle_type t, int priority);
-
-void setAffinity(boost::thread::native_handle_type t, int core);
 
 void update(std::chrono::steady_clock::time_point startTime);
 

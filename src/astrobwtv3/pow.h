@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include <unordered_map>
 
@@ -29,9 +30,6 @@
 #include <hugepages.h>
 // #include <cuda.h>
 // #include <cuda_runtime.h>
-
-#include "immintrin.h"
-#include "libsais.h"
 
 #ifndef POW_CONST
 #define POW_CONST
@@ -80,17 +78,6 @@ const uint64_t maskTips[8] = {
   0xFFFFFFFFFFFFFFF // n%8 = 7
 };
 
-const uint32_t sha_standard[8] = {
-    0x6a09e667, 
-    0xbb67ae85, 
-    0x3c6ef372,
-    0xa54ff53a,
-    0x510e527f, 
-    0x9b05688c, 
-    0x1f83d9ab,
-    0x5be0cd19
-};
-
 const uint32_t MAX_LENGTH = (256 * 384) - 1; // this is the maximum
 const int deviceAllocMB = 5;
 
@@ -98,16 +85,6 @@ const int deviceAllocMB = 5;
 
 static const bool sInduction = true;
 static const bool sTracking = true;
-
-#if defined(__AVX2__)
-template <unsigned int N>
-__m256i shiftRight256(__m256i a);
-
-template <unsigned int N> 
-__m256i shiftLeft256(__m256i a);
-
-const __m256i vec_3 = _mm256_set1_epi8(3);
-#endif
 
 //--------------------------------------------------------//
 
@@ -162,8 +139,6 @@ public:
 
   unsigned char A;
   uint32_t data_len;
-
-  alignas(32) __m256i maskTable[32];
   
   std::vector<byte> opsA;
   std::vector<byte> opsB;
@@ -172,35 +147,6 @@ public:
 };
 
 inline void initWorker(workerData &worker) {
-  #if defined(__AVX2__)
-
-  __m256i temp[32];
-  for(int i = 0; i < 32; i++) {
-    temp[i] = _mm256_setzero_si256(); // Initialize mask with all zeros
-
-    __m128i lower_part = _mm_set1_epi64x(0);
-    __m128i upper_part = _mm_set1_epi64x(0);
-
-    if (i > 24) {
-
-      lower_part = _mm_set1_epi64x(-1ULL);
-      upper_part = _mm_set_epi64x(-1ULL >> (8-(i%8))*8,-1ULL);
-    } else if (i > 16) {
-      lower_part = _mm_set_epi64x(-1ULL,-1ULL);
-      upper_part = _mm_set_epi64x(0,-1ULL >> (8-(i%8))*8);
-    } else if (i > 8) {
-
-      lower_part = _mm_set_epi64x(-1ULL >> (8-(i%8))*8,-1ULL);
-    } else {
-      lower_part = _mm_set_epi64x(0,-1ULL >> (8-(i%8))*8);
-    }
-
-    temp[i] = _mm256_insertf128_si256(temp[i], lower_part, 0); // Set lower 128 bits
-    temp[i] = _mm256_insertf128_si256(temp[i], upper_part, 1); // Set upper 128 bits
-  }
-  memcpy(&worker.maskTable[0], temp, 32*sizeof(__m256i));
-
-  #endif
   // printf("branchedOps size:cl %d", worker.branchedOps.size());
   std::copy(branchedOps_global.begin(), branchedOps_global.end(), worker.branchedOps);
   std::vector<byte> full(256);
@@ -208,9 +154,7 @@ inline void initWorker(workerData &worker) {
   iota(full.begin(), full.end(), 0);
   std::set_difference(full.begin(), full.end(), branchedOps_global.begin(), branchedOps_global.end(), std::inserter(diff, diff.begin()));
   std::copy(diff.begin(), diff.end(), worker.regularOps);
-  
-  worker.ctx = libsais_create_ctx();
-  // printf("Branched Ops:\n");
+    // printf("Branched Ops:\n");
   // for (int i = 0; i < branchedOps_size; i++) {
   //   std::printf("%02X, ", worker.branchedOps[i]);
   // }
@@ -306,11 +250,11 @@ inline unsigned char signByte(unsigned char A)
 template <std::size_t N>
 inline void generateInitVector(std::uint8_t (&iv_buff)[N])
 {
-  using random_bytes_engine = std::independent_bits_engine<std::default_random_engine,
-                                                           CHAR_BIT, unsigned short>;
-  random_bytes_engine rbe;
+  // using random_bytes_engine = std::independent_bits_engine<std::default_random_engine,
+  //                                                          CHAR_BIT, unsigned short>;
+  // random_bytes_engine rbe;
 
-  std::generate(std::begin(iv_buff), std::end(iv_buff), rbe);
+  // std::generate(std::begin(iv_buff), std::end(iv_buff), rbe);
 }
 
 template <typename T>

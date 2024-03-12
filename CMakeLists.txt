@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 3.21)
 cmake_policy(VERSION 3.21.3...3.27)
 
 set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_C_FLAGS_RELEASE "-static -O3 -ftree-vectorize")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -m64 -O3 -Wall -Wuninitialized -ftree-vectorize")
-set(CMAKE_HIP_FLAGS "-static -fgpu-rdc --hip-link -fuse-ld=lld -Wno-deprecated-register")
+set(CMAKE_C_FLAGS_RELEASE "-fansi-escape-codes -fcolor-diagnostics -static -O3 -ftree-vectorize")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fansi-escape-codes -fcolor-diagnostics -static -m64 -g -Wuninitialized -ftree-vectorize")
+set(CMAKE_HIP_FLAGS "-static -fansi-escape-codes -fcolor-diagnostics -g -fgpu-rdc --hip-link -fuse-ld=lld -Wno-deprecated-register")
 
 if(NOT DEFINED HIP_PATH)
     if(NOT DEFINED ENV{HIP_PATH})
@@ -18,7 +18,7 @@ set(CMAKE_MODULE_PATH "${HIP_PATH}/cmake" ${CMAKE_MODULE_PATH})
 if(WIN32)
 set(CMAKE_C_COMPILER "${HIP_PATH}/bin/clang.exe")
 set(CMAKE_CXX_COMPILER "${HIP_PATH}/bin/clang++.exe")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wa,-mbig-obj")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DBOOST_USE_WINDOWS_H -Wa,-mbig-obj")
 # add_definitions( -DBOOST_ALL_NO_LIB )
 endif()
 
@@ -37,18 +37,31 @@ endif()
 
 list(APPEND CMAKE_PREFIX_PATH "${ROCM_ROOT}")
 
-set (CMAKE_CXX_STANDARD 20)
+set (CMAKE_CXX_STANDARD 17)
 set (CMAKE_hip_STANDARD 17)
 
 project(
   Tnn-miner-ROCm
   VERSION 0.1.0
   DESCRIPTION "Open Source Astrobwt Miner"
+  LANGUAGES C CXX
 )
 
+#accounting for case sensitivity issues with ROCm
+if(WIN32)
+find_package(HIP2 REQUIRED)
+else()
 find_package(HIP REQUIRED)
+endif()
+
 enable_language(HIP)
 include_directories(${hip_INCLUDE_DIRS})
+
+# On ROCm rocThrust requires rocPRIM
+find_package(rocprim REQUIRED CONFIG PATHS "/opt/rocm/rocprim")
+
+# "/opt/rocm" - default install prefix
+find_package(rocthrust REQUIRED CONFIG PATHS "/opt/rocm/rocthrust")
 
 
 set(CPM_DOWNLOAD_VERSION 0.34.0)
@@ -79,23 +92,24 @@ find_package(OpenSSL REQUIRED)
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_MULTITHREADED ON)
 find_package(Boost 1.80 REQUIRED
+  system
   coroutine
   chrono
   json
-  thread
   context
   atomic
 )
 include_directories( ${Boost_INCLUDE_DIRS} )
 
-if (WIN32)
-include_directories(
-  "C:/mingw64/include"
-)
-link_directories(
-  "C:/mingw64/lib"
-)
+if(WIN32)
+  include_directories(
+    "C:/mingw64/include"
+  )
+  link_directories(
+    "C:/mingw64/lib"
+  )
 endif()
+
 
 include_directories(
   ${PROJECT_SOURCE_DIR}/include
@@ -132,7 +146,9 @@ endif()
 if(UNIX)
   target_link_libraries(${PROJECT_NAME} udns)
 endif()
-target_link_libraries(${PROJECT_NAME} nlohmann_json::nlohmann_json OpenSSL::SSL ${Boost_LIBRARIES} OpenSSL::Crypto amdhip64)
 
-set_property(TARGET ${PROJECT_NAME} PROPERTY HIP_ARCHITECTURES gfx1100)
-set(CMAKE_EXE_LINKER_FLAGS "-fuse-ld=lld -fgpu-rdc -lC:/Boost/lib/libboost_coroutine-clangw17-mt-x64-1_82.lib")
+target_link_libraries(${PROJECT_NAME} nlohmann_json::nlohmann_json OpenSSL::SSL ${Boost_LIBRARIES} OpenSSL::Crypto hip::host roc::rocprim roc::rocthrust)
+
+
+set_property(TARGET ${PROJECT_NAME} PROPERTY hip_ARCHITECTURES gfx1100)
+set(CMAKE_EXE_LINKER_FLAGS "-fgpu-rdc -lC:/Boost/lib/libboost_coroutine-clangw17-mt-x64-1_82.lib")

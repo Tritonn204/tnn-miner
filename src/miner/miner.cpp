@@ -17,6 +17,16 @@
 
 #include "rootcert.h"
 
+#if defined(_WIN32)
+#include <Windows.h>
+#else
+#include "cpp-dns.hpp"
+#include <sched.h>
+#define THREAD_PRIORITY_ABOVE_NORMAL -5
+#define THREAD_PRIORITY_HIGHEST -20
+#define THREAD_PRIORITY_TIME_CRITICAL -20
+#endif
+
 #include <boost/beast/core.hpp>
 #include <boost/beast/ssl.hpp>
 #include <boost/beast/http.hpp>
@@ -25,8 +35,8 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/json.hpp>
 
-#include <boost/thread.hpp>
-#include <boost/atomic.hpp>
+#include <thread>
+#include <mutex>
 
 #include <cstdlib>
 #include <functional>
@@ -53,17 +63,7 @@
 #include <libcubwt.cuh>
 #include <lookupcompute.h>
 
-#include <bit>
 
-#if defined(_WIN32)
-#include <Windows.h>
-#else
-#include "cpp-dns.hpp"
-#include <sched.h>
-#define THREAD_PRIORITY_ABOVE_NORMAL -5
-#define THREAD_PRIORITY_HIGHEST -20
-#define THREAD_PRIORITY_TIME_CRITICAL -20
-#endif
 
 #if defined(_WIN32)
 LPTSTR lpNxtPage;  // Address of the next page to ask for
@@ -82,8 +82,8 @@ using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
 
 using json = nlohmann::json;
 
-boost::mutex mutex;
-boost::mutex wsMutex;
+std::mutex mutex;
+std::mutex wsMutex;
 
 json job;
 json devJob;
@@ -387,7 +387,7 @@ void do_session(
     {
       std::cout << "ws error\n";
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
+    std::this_thread::sleep_for(std::chrono::milliseconds(125));
   }
 
   // // Close the WebSocket connection
@@ -411,7 +411,7 @@ int main(int argc, char **argv)
   setcolor(RED);
   printf(TNN);
   setcolor(BRIGHT_WHITE);
-  boost::this_thread::sleep_for(boost::chrono::seconds(1));
+  std::this_thread::sleep_for(std::chrono::seconds(1));
 #if defined(_WIN32)
   SetConsoleOutputCP(CP_UTF8);
   HANDLE hSelfToken = NULL;
@@ -422,7 +422,6 @@ int main(int argc, char **argv)
   else
     std::cout << "Huge Pages: Permission Failed..." << std::endl;
 
-  SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
 #endif
   // Check command line arguments.
   lookup2D_global = (uint16_t *)malloc_huge_pages(regOps_size*(256*256)*sizeof(uint16_t));
@@ -448,12 +447,12 @@ int main(int argc, char **argv)
   {
     setcolor(CYAN);
     std::cout << usage << std::endl;
-    boost::this_thread::sleep_for(boost::chrono::seconds(30));
+    std::this_thread::sleep_for(std::chrono::seconds(30));
     return 0;
   } 
   if (command == options[TNN_SABENCH]) {
         runDivsufsortBenchmark();
-        boost::this_thread::sleep_for(boost::chrono::seconds(30));
+        std::this_thread::sleep_for(std::chrono::seconds(30));
         return 0;
   }
   if (command == options[TNN_TEST])
@@ -505,14 +504,14 @@ int main(int argc, char **argv)
             printf("ERROR: dev fee must be at least %.2f", minFee);
             std::cout << "%" << std::endl;
             setcolor(BRIGHT_WHITE);
-            boost::this_thread::sleep_for(boost::chrono::seconds(30));
+            std::this_thread::sleep_for(std::chrono::seconds(30));
             return 1;
           }
         }
         catch (...)
         {
           printf("ERROR: invalid dev fee parameter... format should be for example '1.0'");
-          boost::this_thread::sleep_for(boost::chrono::seconds(30));
+          std::this_thread::sleep_for(std::chrono::seconds(30));
           return 1;
         }
       }
@@ -526,7 +525,7 @@ int main(int argc, char **argv)
         catch (...)
         {
           printf("ERROR: invalid threads parameter... must be an integer");
-          boost::this_thread::sleep_for(boost::chrono::seconds(30));
+          std::this_thread::sleep_for(std::chrono::seconds(30));
           return 1;
         }
       }
@@ -654,7 +653,7 @@ Testing:
   TestAstroBWTv3();
   // TestAstroBWTv3_cuda();
   // TestAstroBWTv3repeattest();
-  boost::this_thread::sleep_for(boost::chrono::seconds(30));
+  std::this_thread::sleep_for(std::chrono::seconds(30));
   return 0;
 }
 Benchmarking:
@@ -686,8 +685,7 @@ Benchmarking:
   port = devPort;
   wallet = devWallet;
 
-  boost::thread GETWORK(getWork, false);
-  // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+  std::thread GETWORK(getWork, false);
 
   winMask = std::max(1, winMask);
 
@@ -695,18 +693,8 @@ Benchmarking:
   // Create worker threads and set CPU affinity
   for (int i = 0; i < threads; i++)
   {
-    boost::thread t(benchmark, i + 1);
+    std::thread t(benchmark, i + 1);
 
-    if (lockThreads)
-    {
-#if defined(_WIN32)
-      setAffinity(t.native_handle(), 1 << (i % n));
-#else
-      setAffinity(t.native_handle(), (i % n));
-#endif
-    }
-
-    // setPriority(t.native_handle(), THREAD_PRIORITY_HIGHEST);
 
     mutex.lock();
     std::cout << "(Benchmark) Worker " << i + 1 << " created" << std::endl;
@@ -715,11 +703,10 @@ Benchmarking:
 
   while (!isConnected)
   {
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
-  boost::thread t2(logSeconds, start_time, duration, &stopBenchmark);
-  setPriority(t2.native_handle(), THREAD_PRIORITY_TIME_CRITICAL);
+  std::thread t2(logSeconds, start_time, duration, &stopBenchmark);
 
   while (true)
   {
@@ -730,7 +717,7 @@ Benchmarking:
       stopBenchmark = true;
       break;
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(50));
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
 
   auto now = std::chrono::steady_clock::now();
@@ -755,17 +742,19 @@ Benchmarking:
     std::string hrate = fmt::sprintf("%.3f H/s", (double)hashrate);
     std::cout << hrate << std::endl;
   }
-  boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
   return 0;
 }
 
 Mining:
 {
-  boost::thread GETWORK(getWork, false);
-  // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+  std::thread GETWORK(getWork, false);
 
-  boost::thread DEVWORK(getWork, true);
-  // setPriority(DEVWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+  printf("Getwork thread started\n");
+
+  std::thread DEVWORK(getWork, true);
+
+  printf("Devwork thread started\n");
 
   unsigned int n = std::thread::hardware_concurrency();
   int winMask = 0;
@@ -778,46 +767,36 @@ Mining:
 
   // Create worker threads and set CPU affinity
   mutex.lock();
+  printf("mutex lock\n");
   if (false /*gpuMine*/ )
   {
-    // boost::thread t(cudaMine);
-    // setPriority(t.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+    // std::thread t(cudaMine);
     // continue;
   }
   else
     for (int i = 0; i < threads; i++)
     {
-      boost::thread t(mineBlock, i + 1);
-
-      if (lockThreads)
-      {
-#if defined(_WIN32)
-        setAffinity(t.native_handle(), 1 << (i % n));
-#else
-        setAffinity(t.native_handle(), i);
-#endif
-      }
+      std::thread t(mineBlock, i + 1);
       // if (threads == 1 || (n > 2 && i <= n - 2))
-      // setPriority(t.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
       std::cout << "Thread " << i + 1 << " started" << std::endl;
     }
   mutex.unlock();
+  printf("mutex unlock\n");
 
   auto start_time = std::chrono::high_resolution_clock::now();
   // update(start_time);
 
   while (!isConnected)
   {
-    boost::this_thread::yield();
+    std::this_thread::yield();
   }
 
-  boost::thread reporter(update, start_time);
-  setPriority(reporter.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+  std::thread reporter(update, start_time);
 
   while (true)
   {
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(500));
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
   }
 
   // std::string input;
@@ -853,14 +832,14 @@ void logSeconds(std::chrono::steady_clock::time_point start_time, int duration, 
         break;
       i++;
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(250));
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
   }
 }
 
 void update(std::chrono::steady_clock::time_point start_time)
 {
   auto beginning = start_time;
-  boost::this_thread::yield();
+  std::this_thread::yield();
 
 startReporting:
   while (true)
@@ -941,7 +920,7 @@ startReporting:
       setcolor(BRIGHT_WHITE);
       mutex.unlock();
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
+    std::this_thread::sleep_for(std::chrono::milliseconds(125));
   }
   while (true)
   {
@@ -953,69 +932,9 @@ startReporting:
       beginning = start_time;
       break;
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(50));
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
   goto startReporting;
-}
-
-void setAffinity(boost::thread::native_handle_type t, int core)
-{
-#if defined(_WIN32)
-
-  HANDLE threadHandle = t;
-
-  // Affinity on Windows makes hashing slower atm
-  // Set the CPU affinity mask to the first processor (core 0)
-  DWORD_PTR affinityMask = core; // Set to the first processor
-  DWORD_PTR previousAffinityMask = SetThreadAffinityMask(threadHandle, affinityMask);
-  if (previousAffinityMask == 0)
-  {
-    DWORD error = GetLastError();
-    std::cerr << "Failed to set CPU affinity for thread. Error code: " << error << std::endl;
-  }
-
-#else
-  // Get the native handle of the thread
-  pthread_t threadHandle = t;
-
-  // Create a CPU set with a single core
-  cpu_set_t cpuset;
-  CPU_ZERO(&cpuset);
-  CPU_SET(core, &cpuset); // Set core 0
-
-  // Set the CPU affinity of the thread
-  if (pthread_setaffinity_np(threadHandle, sizeof(cpu_set_t), &cpuset) != 0)
-  {
-    std::cerr << "Failed to set CPU affinity for thread" << std::endl;
-  }
-
-#endif
-}
-
-void setPriority(boost::thread::native_handle_type t, int priority)
-{
-#if defined(_WIN32)
-
-  HANDLE threadHandle = t;
-
-  // Set the thread priority
-  int threadPriority = priority;
-  BOOL success = SetThreadPriority(threadHandle, threadPriority);
-  if (!success)
-  {
-    DWORD error = GetLastError();
-    std::cerr << "Failed to set thread priority. Error code: " << error << std::endl;
-  }
-
-#else
-  // Get the native handle of the thread
-  pthread_t threadHandle = t;
-
-  // Set the thread priority
-  int threadPriority = priority;
-  // do nothing
-
-#endif
 }
 
 void getWork(bool isDev)
@@ -1072,7 +991,7 @@ connectionAttempt:
         setcolor(BRIGHT_WHITE);
         mutex.unlock();
       }
-      boost::this_thread::sleep_for(boost::chrono::milliseconds(10000));
+      std::this_thread::sleep_for(std::chrono::milliseconds(10000));
       ioc.reset();
       goto connectionAttempt;
     }
@@ -1100,14 +1019,14 @@ connectionAttempt:
       setcolor(BRIGHT_WHITE);
       mutex.unlock();
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(10000));
+    std::this_thread::sleep_for(std::chrono::milliseconds(10000));
     ioc.reset();
     goto connectionAttempt;
   }
   while (*B)
   {
     caughtDisconnect = false;
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
   }
   if (!isDev)
   {
@@ -1136,7 +1055,7 @@ connectionAttempt:
     mutex.unlock();
   }
   caughtDisconnect = true;
-  boost::this_thread::sleep_for(boost::chrono::milliseconds(10000));
+  std::this_thread::sleep_for(std::chrono::milliseconds(10000));
   ioc.reset();
   goto connectionAttempt;
 }
@@ -1154,7 +1073,7 @@ void benchmark(int tid)
                 { return dist(gen); });
   std::memcpy(work, buf.data(), buf.size());
 
-  boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
+  std::this_thread::sleep_for(std::chrono::milliseconds(125));
 
   int64_t localJobCounter;
 
@@ -1173,7 +1092,7 @@ void benchmark(int tid)
 
   while (!isConnected)
   {
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
   work[MINIBLOCK_SIZE - 1] = (byte)tid;
@@ -1225,7 +1144,7 @@ void mineBlock(int tid)
                 { return dist(gen); });
   std::memcpy(random_buf, buf.data(), buf.size());
 
-  boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
+  std::this_thread::sleep_for(std::chrono::milliseconds(125));
 
   int64_t localJobCounter;
   byte powHash[32];
@@ -1242,7 +1161,7 @@ waitForJob:
 
   while (!isConnected)
   {
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
   while (true)
@@ -1280,7 +1199,7 @@ waitForJob:
         std::cerr << "Unknown version, please check for updates: "
                   << "version" << (work[0] & 0x1f) << std::endl;
         mutex.unlock();
-        boost::this_thread::sleep_for(boost::chrono::milliseconds(500));
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
         continue;
       }
       double which;
@@ -1372,7 +1291,7 @@ waitForJob:
 //     setcolor(RED);
 //     std::cerr << "ERROR: No GPU with ROCm nor HIP compute capability could be found\n";
 //     setcolor(BRIGHT_WHITE);
-//     boost::this_thread::sleep_for(boost::chrono::seconds(20));
+//     std::this_thread::sleep_for(std::chrono::seconds(20));
 //     return;
 //   }
 
@@ -1475,7 +1394,7 @@ waitForJob:
 
 //   while (!isConnected)
 //   {
-//     boost::this_thread::yield();
+//     std::this_thread::yield();
 //   }
 
 //   std::string blobString;

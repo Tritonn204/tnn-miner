@@ -62,9 +62,9 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val ^= (byte)bitTable[val];             // ones count bits
-        val = std::rotl(val, 5);                // rotate  bits by 5
+        val = leftRotate8(val, 5);                // rotate  bits by 5
         val *= val;                             // *
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
 
         // // INSERT_RANDOM_CODE_END
         // worker.t1 = worker.step_3[worker.pos1];
@@ -78,7 +78,7 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = val << (val & 3);    // shift left
-        val = std::rotl(val, 1);                // rotate  bits by 1
+        val = leftRotate8(val, 1);                // rotate  bits by 1
         val = val & v2; // AND
         val += val;                             // +
                                                                           // INSERT_RANDOM_CODE_END
@@ -99,10 +99,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, val); // rotate  bits by random
-        val = std::rotl(val, 3);                // rotate  bits by 3
+        val = leftRotate8(val, val); // rotate  bits by random
+        val = leftRotate8(val, 3);                // rotate  bits by 3
         val ^= v2;                   // XOR
-        val = std::rotl(val, 1);                // rotate  bits by 1
+        val = leftRotate8(val, 1);                // rotate  bits by 1
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -112,7 +112,7 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val = ~val;                             // binary NOT operator
         val = val >> (val & 3);    // shift right
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
         val -= (val ^ 97);                      // XOR and -
                                                                           // INSERT_RANDOM_CODE_END
       break;
@@ -136,7 +136,7 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = val << (val & 3); // shift left
-        val = std::rotl(val, 3);             // rotate  bits by 3
+        val = leftRotate8(val, 3);             // rotate  bits by 3
         val = ~val;                          // binary NOT operator
         val -= (val ^ 97);                   // XOR and -
 
@@ -148,7 +148,7 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val += val;                             // +
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
         val ^= (byte)bitTable[val];             // ones count bits
         val = ~val;                             // binary NOT operator
                                                                           // INSERT_RANDOM_CODE_END
@@ -159,8 +159,8 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = ~val;               // binary NOT operator
-        val = std::rotl(val, 10); // rotate  bits by 5
-        // val = std::rotl(val, 5);// rotate  bits by 5
+        val = leftRotate8(val, 10); // rotate  bits by 5
+        // val = leftRotate8(val, 5);// rotate  bits by 5
         val = val << (val & 3); // shift left
                                                                        // INSERT_RANDOM_CODE_END
       break;
@@ -170,9 +170,9 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val ^= v2;                // XOR
-        val ^= std::rotl(val, 4);            // rotate  bits by 4
+        val ^= leftRotate8(val, 4);            // rotate  bits by 4
         val = val >> (val & 3); // shift right
-        val ^= std::rotl(val, 2);            // rotate  bits by 2
+        val ^= leftRotate8(val, 2);            // rotate  bits by 2
                                                                        // INSERT_RANDOM_CODE_END
       break;
 
@@ -182,7 +182,7 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val = ~val;              // binary NOT operator
         val *= val;              // *
-        val = std::rotl(val, 3); // rotate  bits by 3
+        val = leftRotate8(val, 3); // rotate  bits by 3
         val *= val;              // *
                                                            // INSERT_RANDOM_CODE_END
       break;
@@ -191,10 +191,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 6); // rotate  bits by 1
-        // val = std::rotl(val, 5);            // rotate  bits by 5
+        val = leftRotate8(val, 6); // rotate  bits by 1
+        // val = leftRotate8(val, 5);            // rotate  bits by 5
         val = val & v2; // AND
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -202,9 +202,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 2); // rotate  bits by 2
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
         val *= val;               // *
-        val ^= std::rotl(val, 2); // rotate  bits by 2
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
         val = ~val;               // binary NOT operator
                                                             // INSERT_RANDOM_CODE_END
       break;
@@ -213,10 +213,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 1);             // rotate  bits by 1
+        val = leftRotate8(val, 1);             // rotate  bits by 1
         val ^= v2;                // XOR
         val = val >> (val & 3); // shift right
-        val = std::rotl(val, 5);             // rotate  bits by 5
+        val = leftRotate8(val, 5);             // rotate  bits by 5
                                                                        // INSERT_RANDOM_CODE_END
       break;
 
@@ -235,7 +235,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
         val = val << (val & 3);    // shift left
         val = val & v2; // AND
         val -= (val ^ 97);                      // XOR and -
@@ -246,9 +246,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 4); // rotate  bits by 4
+        val ^= leftRotate8(val, 4); // rotate  bits by 4
         val *= val;               // *
-        val = std::rotl(val, 1);  // rotate  bits by 1
+        val = leftRotate8(val, 1);  // rotate  bits by 1
         val = ~val;               // binary NOT operator
                                                             // INSERT_RANDOM_CODE_END
       break;
@@ -259,7 +259,7 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val ^= v2;    // XOR
         val *= val;              // *
-        val = std::rotl(val, 5); // rotate  bits by 5
+        val = leftRotate8(val, 5); // rotate  bits by 5
         val = ~val;              // binary NOT operator
                                                            // INSERT_RANDOM_CODE_END
       break;
@@ -268,10 +268,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 4); // rotate  bits by 4
-        val = std::rotl(val, 9);  // rotate  bits by 3
-        // val = std::rotl(val, 1);             // rotate  bits by 1
-        // val = std::rotl(val, 5);         // rotate  bits by 5
+        val ^= leftRotate8(val, 4); // rotate  bits by 4
+        val = leftRotate8(val, 9);  // rotate  bits by 3
+        // val = leftRotate8(val, 1);             // rotate  bits by 1
+        // val = leftRotate8(val, 5);         // rotate  bits by 5
         // INSERT_RANDOM_CODE_END
       break;
 
@@ -280,7 +280,7 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val -= (val ^ 97);                   // XOR and -
-        val = std::rotl(val, 5);             // rotate  bits by 5
+        val = leftRotate8(val, 5);             // rotate  bits by 5
         val = val << (val & 3); // shift left
         val += val;                          // +
                                                                        // INSERT_RANDOM_CODE_END
@@ -293,7 +293,7 @@ void branchResult(byte &val, int op, byte v2) {
         val = val & v2; // AND
         val ^= v2;                   // XOR
         val = reverse8(val);                    // reverse bits
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -301,7 +301,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 1);                // rotate  bits by 1
+        val = leftRotate8(val, 1);                // rotate  bits by 1
         val ^= v2;                   // XOR
         val += val;                             // +
         val = val & v2; // AND
@@ -315,7 +315,7 @@ void branchResult(byte &val, int op, byte v2) {
         val = val << (val & 3); // shift left
         val = reverse8(val);                 // reverse bits
         val *= val;                          // *
-        val = std::rotl(val, 1);             // rotate  bits by 1
+        val = leftRotate8(val, 1);             // rotate  bits by 1
                                                                        // INSERT_RANDOM_CODE_END
       break;
 
@@ -323,8 +323,8 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 4); // rotate  bits by 3
-        // val = std::rotl(val, 1);                           // rotate  bits by 1
+        val = leftRotate8(val, 4); // rotate  bits by 3
+        // val = leftRotate8(val, 1);                           // rotate  bits by 1
         val ^= (byte)bitTable[val];             // ones count bits
         val = val & v2; // AND
                                                                           // INSERT_RANDOM_CODE_END
@@ -336,8 +336,8 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val += val;                          // +
         val = val >> (val & 3); // shift right
-        val ^= std::rotl(val, 4);            // rotate  bits by 4
-        val = std::rotl(val, 5);             // rotate  bits by 5
+        val ^= leftRotate8(val, 4);            // rotate  bits by 4
+        val = leftRotate8(val, 5);             // rotate  bits by 5
                                                                        // INSERT_RANDOM_CODE_END
       break;
 
@@ -346,8 +346,8 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val ^= (byte)bitTable[val];             // ones count bits
-        val = std::rotl(val, 3);                // rotate  bits by 3
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, 3);                // rotate  bits by 3
+        val = leftRotate8(val, val); // rotate  bits by random
         val -= (val ^ 97);                      // XOR and -
                                                                           // INSERT_RANDOM_CODE_END
       break;
@@ -367,10 +367,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 5);                // rotate  bits by 5
+        val = leftRotate8(val, 5);                // rotate  bits by 5
         val = val & v2; // AND
-        val ^= std::rotl(val, 4);               // rotate  bits by 4
-        val = std::rotl(val, 5);                // rotate  bits by 5
+        val ^= leftRotate8(val, 4);               // rotate  bits by 4
+        val = leftRotate8(val, 5);                // rotate  bits by 5
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -381,7 +381,7 @@ void branchResult(byte &val, int op, byte v2) {
         val = val << (val & 3); // shift left
         val += val;                          // +
         val += val;                          // +
-        val = std::rotl(val, 5);             // rotate  bits by 5
+        val = leftRotate8(val, 5);             // rotate  bits by 5
                                                                        // INSERT_RANDOM_CODE_END
       break;
 
@@ -401,8 +401,8 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = val & v2; // AND
-        val ^= std::rotl(val, 4);               // rotate  bits by 4
-        val = std::rotl(val, 5);                // rotate  bits by 5
+        val ^= leftRotate8(val, 4);               // rotate  bits by 4
+        val = leftRotate8(val, 5);                // rotate  bits by 5
         val = val << (val & 3);    // shift left
                                                                           // INSERT_RANDOM_CODE_END
       break;
@@ -412,7 +412,7 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = ~val;                          // binary NOT operator
-        val ^= std::rotl(val, 2);            // rotate  bits by 2
+        val ^= leftRotate8(val, 2);            // rotate  bits by 2
         val = val << (val & 3); // shift left
         val *= val;                          // *
                                                                        // INSERT_RANDOM_CODE_END
@@ -422,10 +422,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 2); // rotate  bits by 2
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
         val = reverse8(val);      // reverse bits
-        val = std::rotl(val, 3);  // rotate  bits by 3
-        val ^= std::rotl(val, 2); // rotate  bits by 2
+        val = leftRotate8(val, 3);  // rotate  bits by 3
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
                                                             // INSERT_RANDOM_CODE_END
       break;
 
@@ -433,8 +433,8 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, val); // rotate  bits by random
-        val ^= std::rotl(val, 4);               // rotate  bits by 4
+        val = leftRotate8(val, val); // rotate  bits by random
+        val ^= leftRotate8(val, 4);               // rotate  bits by 4
         val = reverse8(val);                    // reverse bits
         val *= val;                             // *
                                                                           // INSERT_RANDOM_CODE_END
@@ -457,7 +457,7 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val += val;              // +
         val = ~val;              // binary NOT operator
-        val = std::rotl(val, 1); // rotate  bits by 1
+        val = leftRotate8(val, 1); // rotate  bits by 1
         val ^= v2;    // XOR
                                                            // INSERT_RANDOM_CODE_END
       break;
@@ -467,9 +467,9 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val ^= (byte)bitTable[val]; // ones count bits
-        val = std::rotl(val, 1);    // rotate  bits by 1
-        val ^= std::rotl(val, 2);   // rotate  bits by 2
-        val = std::rotl(val, 1);    // rotate  bits by 1
+        val = leftRotate8(val, 1);    // rotate  bits by 1
+        val ^= leftRotate8(val, 2);   // rotate  bits by 2
+        val = leftRotate8(val, 1);    // rotate  bits by 1
                                                               // INSERT_RANDOM_CODE_END
       break;
 
@@ -477,7 +477,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
         val = val >> (val & 3);    // shift right
         val = val >> (val & 3);    // shift right
         val *= val;                             // *
@@ -489,9 +489,9 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = val >> (val & 3);    // shift right
-        val = std::rotl(val, 3);                // rotate  bits by 3
+        val = leftRotate8(val, 3);                // rotate  bits by 3
         val ^= (byte)bitTable[val];             // ones count bits
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -499,7 +499,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
         val ^= v2;                   // XOR
         val = val >> (val & 3);    // shift right
         val = val & v2; // AND
@@ -510,7 +510,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
         val ^= v2;                   // XOR
         val ^= (byte)bitTable[val];             // ones count bits
         val ^= v2;                   // XOR
@@ -521,10 +521,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 5);  // rotate  bits by 5
+        val = leftRotate8(val, 5);  // rotate  bits by 5
         val -= (val ^ 97);        // XOR and -
-        val = std::rotl(val, 3);  // rotate  bits by 3
-        val ^= std::rotl(val, 4); // rotate  bits by 4
+        val = leftRotate8(val, 3);  // rotate  bits by 3
+        val ^= leftRotate8(val, 4); // rotate  bits by 4
                                                             // INSERT_RANDOM_CODE_END
       break;
 
@@ -532,10 +532,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 4); // rotate  bits by 1
-        // val = std::rotl(val, 3);                // rotate  bits by 3
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, 4); // rotate  bits by 1
+        // val = leftRotate8(val, 3);                // rotate  bits by 3
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
+        val = leftRotate8(val, val); // rotate  bits by random
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -556,8 +556,8 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val ^= (byte)bitTable[val];             // ones count bits
         val ^= (byte)bitTable[val];             // ones count bits
-        val = std::rotl(val, 3);                // rotate  bits by 3
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, 3);                // rotate  bits by 3
+        val = leftRotate8(val, val); // rotate  bits by random
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -565,8 +565,8 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 10); // rotate  bits by 5
-        // val = std::rotl(val, 5);                       // rotate  bits by 5
+        val = leftRotate8(val, 10); // rotate  bits by 5
+        // val = leftRotate8(val, 5);                       // rotate  bits by 5
         val = val & v2; // AND
         val ^= (byte)bitTable[val];             // ones count bits
                                                                           // INSERT_RANDOM_CODE_END
@@ -578,8 +578,8 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val ^= (byte)bitTable[val]; // ones count bits
         val += val;                 // +
-        val = std::rotl(val, 5);    // rotate  bits by 5
-        val ^= std::rotl(val, 4);   // rotate  bits by 4
+        val = leftRotate8(val, 5);    // rotate  bits by 5
+        val ^= leftRotate8(val, 4);   // rotate  bits by 4
                                                               // INSERT_RANDOM_CODE_END
       break;
 
@@ -587,9 +587,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 5);                // rotate  bits by 5
+        val = leftRotate8(val, 5);                // rotate  bits by 5
         val = val & v2; // AND
-        val = std::rotl(val, 5);                // rotate  bits by 5
+        val = leftRotate8(val, 5);                // rotate  bits by 5
         val = val << (val & 3);    // shift left
                                                                           // INSERT_RANDOM_CODE_END
       break;
@@ -598,10 +598,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
         // val = ~val;                    // binary NOT operator
         // val = ~val;                    // binary NOT operator
-        val = std::rotl(val, 5); // rotate  bits by 5
+        val = leftRotate8(val, 5); // rotate  bits by 5
                                                            // INSERT_RANDOM_CODE_END
       break;
 
@@ -612,7 +612,7 @@ void branchResult(byte &val, int op, byte v2) {
         val ^= (byte)bitTable[val]; // ones count bits
         val += val;                 // +
         val = reverse8(val);        // reverse bits
-        val ^= std::rotl(val, 4);   // rotate  bits by 4
+        val ^= leftRotate8(val, 4);   // rotate  bits by 4
                                                               // INSERT_RANDOM_CODE_END
       break;
 
@@ -621,9 +621,9 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = reverse8(val);     // reverse bits
-        val = std::rotl(val, 3); // rotate  bits by 3
+        val = leftRotate8(val, 3); // rotate  bits by 3
         val += val;              // +
-        val = std::rotl(val, 1); // rotate  bits by 1
+        val = leftRotate8(val, 1); // rotate  bits by 1
                                                            // INSERT_RANDOM_CODE_END
       break;
 
@@ -632,9 +632,9 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val ^= v2;     // XOR
-        val ^= std::rotl(val, 4); // rotate  bits by 4
-        val ^= std::rotl(val, 4); // rotate  bits by 4
-        val = std::rotl(val, 5);  // rotate  bits by 5
+        val ^= leftRotate8(val, 4); // rotate  bits by 4
+        val ^= leftRotate8(val, 4); // rotate  bits by 4
+        val = leftRotate8(val, 5);  // rotate  bits by 5
                                                             // INSERT_RANDOM_CODE_END
       break;
 
@@ -642,7 +642,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
         val = val >> (val & 3);    // shift right
         val = ~val;                             // binary NOT operator
         val ^= (byte)bitTable[val];             // ones count bits
@@ -655,8 +655,8 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val += val;                 // +
         val ^= (byte)bitTable[val]; // ones count bits
-        val ^= std::rotl(val, 4);   // rotate  bits by 4
-        val ^= std::rotl(val, 4);   // rotate  bits by 4
+        val ^= leftRotate8(val, 4);   // rotate  bits by 4
+        val ^= leftRotate8(val, 4);   // rotate  bits by 4
                                                               // INSERT_RANDOM_CODE_END
       break;
 
@@ -677,9 +677,9 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = reverse8(val);      // reverse bits
-        val ^= std::rotl(val, 4); // rotate  bits by 4
-        val ^= std::rotl(val, 4); // rotate  bits by 4
-        val = std::rotl(val, 1);  // rotate  bits by 1
+        val ^= leftRotate8(val, 4); // rotate  bits by 4
+        val ^= leftRotate8(val, 4); // rotate  bits by 4
+        val = leftRotate8(val, 1);  // rotate  bits by 1
                                                             // INSERT_RANDOM_CODE_END
       break;
 
@@ -687,10 +687,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 2); // rotate  bits by 2
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
         val *= val;               // *
         val = ~val;               // binary NOT operator
-        val = std::rotl(val, 1);  // rotate  bits by 1
+        val = leftRotate8(val, 1);  // rotate  bits by 1
                                                             // INSERT_RANDOM_CODE_END
       break;
 
@@ -698,9 +698,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, val); // rotate  bits by random
-        val = std::rotl(val, 8);                // rotate  bits by 5
-        // val = std::rotl(val, 3);                // rotate  bits by 3
+        val = leftRotate8(val, val); // rotate  bits by random
+        val = leftRotate8(val, 8);                // rotate  bits by 5
+        // val = leftRotate8(val, 3);                // rotate  bits by 3
         val = reverse8(val); // reverse bits
                                                        // INSERT_RANDOM_CODE_END
       break;
@@ -710,7 +710,7 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = reverse8(val);                    // reverse bits
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
         val = val & v2; // AND
         val += val;                             // +
                                                                           // INSERT_RANDOM_CODE_END
@@ -720,9 +720,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 1);                // rotate  bits by 1
+        val = leftRotate8(val, 1);                // rotate  bits by 1
         val *= val;                             // *
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
         val = ~val;                             // binary NOT operator
                                                                           // INSERT_RANDOM_CODE_END
       break;
@@ -734,7 +734,7 @@ void branchResult(byte &val, int op, byte v2) {
         val ^= v2;    // XOR
         val = ~val;              // binary NOT operator
         val *= val;              // *
-        val = std::rotl(val, 3); // rotate  bits by 3
+        val = leftRotate8(val, 3); // rotate  bits by 3
                                                            // INSERT_RANDOM_CODE_END
       break;
 
@@ -742,10 +742,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 5);             // rotate  bits by 5
+        val = leftRotate8(val, 5);             // rotate  bits by 5
         val = val << (val & 3); // shift left
-        val = std::rotl(val, 8);             // rotate  bits by 3
-        // val = std::rotl(val, 5);// rotate  bits by 5
+        val = leftRotate8(val, 8);             // rotate  bits by 3
+        // val = leftRotate8(val, 5);// rotate  bits by 5
         // INSERT_RANDOM_CODE_END
       break;
 
@@ -755,7 +755,7 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val = val & v2; // AND
         val = ~val;                             // binary NOT operator
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
         val += val;                             // +
                                                                           // INSERT_RANDOM_CODE_END
       break;
@@ -764,7 +764,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 5);    // rotate  bits by 5
+        val = leftRotate8(val, 5);    // rotate  bits by 5
         val ^= (byte)bitTable[val]; // ones count bits
         val -= (val ^ 97);          // XOR and -
         val += val;                 // +
@@ -777,7 +777,7 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val ^= v2;     // XOR
         val = reverse8(val);      // reverse bits
-        val ^= std::rotl(val, 4); // rotate  bits by 4
+        val ^= leftRotate8(val, 4); // rotate  bits by 4
         val *= val;               // *
                                                             // INSERT_RANDOM_CODE_END
       break;
@@ -786,9 +786,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 8); // rotate  bits by 5
-        // val = std::rotl(val, 3);             // rotate  bits by 3
-        val ^= std::rotl(val, 2); // rotate  bits by 2
+        val = leftRotate8(val, 8); // rotate  bits by 5
+        // val = leftRotate8(val, 3);             // rotate  bits by 3
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
         val *= val;               // *
                                                             // INSERT_RANDOM_CODE_END
       break;
@@ -797,10 +797,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 2); // rotate  bits by 2
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
         val = reverse8(val);      // reverse bits
-        val ^= std::rotl(val, 4); // rotate  bits by 4
-        val = std::rotl(val, 1);  // rotate  bits by 1
+        val ^= leftRotate8(val, 4); // rotate  bits by 4
+        val = leftRotate8(val, 1);  // rotate  bits by 1
                                                             // INSERT_RANDOM_CODE_END
       break;
 
@@ -808,10 +808,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 1);    // rotate  bits by 1
+        val = leftRotate8(val, 1);    // rotate  bits by 1
         val ^= (byte)bitTable[val]; // ones count bits
-        val ^= std::rotl(val, 2);   // rotate  bits by 2
-        val = std::rotl(val, 5);    // rotate  bits by 5
+        val ^= leftRotate8(val, 2);   // rotate  bits by 2
+        val = leftRotate8(val, 5);    // rotate  bits by 5
                                                               // INSERT_RANDOM_CODE_END
       break;
 
@@ -821,7 +821,7 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val = val & v2; // AND
         val = ~val;                             // binary NOT operator
-        val ^= std::rotl(val, 4);               // rotate  bits by 4
+        val ^= leftRotate8(val, 4);               // rotate  bits by 4
         val ^= v2;                   // XOR
                                                                           // INSERT_RANDOM_CODE_END
       break;
@@ -844,7 +844,7 @@ void branchResult(byte &val, int op, byte v2) {
         val ^= v2;                // XOR
         val *= val;                          // *
         val = val >> (val & 3); // shift right
-        val ^= std::rotl(val, 4);            // rotate  bits by 4
+        val ^= leftRotate8(val, 4);            // rotate  bits by 4
                                                                        // INSERT_RANDOM_CODE_END
       break;
 
@@ -852,7 +852,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 5);             // rotate  bits by 5
+        val = leftRotate8(val, 5);             // rotate  bits by 5
         val = ~val;                          // binary NOT operator
         val *= val;                          // *
         val = val << (val & 3); // shift left
@@ -876,7 +876,7 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val ^= (byte)bitTable[val]; // ones count bits
         val = reverse8(val);        // reverse bits
-        val = std::rotl(val, 5);    // rotate  bits by 5
+        val = leftRotate8(val, 5);    // rotate  bits by 5
         val -= (val ^ 97);          // XOR and -
                                                               // INSERT_RANDOM_CODE_END
       break;
@@ -886,7 +886,7 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val *= val;                             // *
-        val = std::rotl(val, 3);                // rotate  bits by 3
+        val = leftRotate8(val, 3);                // rotate  bits by 3
         val = reverse8(val);                    // reverse bits
         val = val & v2; // AND
                                                                           // INSERT_RANDOM_CODE_END
@@ -899,7 +899,7 @@ void branchResult(byte &val, int op, byte v2) {
         val *= val;                             // *
         val ^= (byte)bitTable[val];             // ones count bits
         val = val & v2; // AND
-        val ^= std::rotl(val, 4);               // rotate  bits by 4
+        val ^= leftRotate8(val, 4);               // rotate  bits by 4
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -907,9 +907,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, val); // rotate  bits by random
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
-        val = std::rotl(val, 5);                // rotate  bits by 5
+        val = leftRotate8(val, val); // rotate  bits by random
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
+        val = leftRotate8(val, 5);                // rotate  bits by 5
         val = val >> (val & 3);    // shift right
                                                                           // INSERT_RANDOM_CODE_END
       break;
@@ -918,7 +918,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 3);             // rotate  bits by 3
+        val = leftRotate8(val, 3);             // rotate  bits by 3
         val += val;                          // +
         val = val << (val & 3); // shift left
         val ^= (byte)bitTable[val];          // ones count bits
@@ -929,7 +929,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
         val = reverse8(val);                    // reverse bits
         val *= val;                             // *
         val -= (val ^ 97);                      // XOR and -
@@ -940,8 +940,8 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 4); // rotate  bits by 4
-        val ^= std::rotl(val, 2); // rotate  bits by 2
+        val ^= leftRotate8(val, 4); // rotate  bits by 4
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
         val += val;               // +
         val *= val;               // *
                                                             // INSERT_RANDOM_CODE_END
@@ -951,7 +951,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
         val = val << (val & 3);    // shift left
         val += val;                             // +
         val = val & v2; // AND
@@ -962,9 +962,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 4);               // rotate  bits by 4
+        val ^= leftRotate8(val, 4);               // rotate  bits by 4
         val = val << (val & 3);    // shift left
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
         val ^= (byte)bitTable[val];             // ones count bits
                                                                           // INSERT_RANDOM_CODE_END
       break;
@@ -986,7 +986,7 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val = val << (val & 3); // shift left
         val = reverse8(val);                 // reverse bits
-        val = std::rotl(val, 3);             // rotate  bits by 3
+        val = leftRotate8(val, 3);             // rotate  bits by 3
         val = reverse8(val);                 // reverse bits
                                                                        // INSERT_RANDOM_CODE_END
       break;
@@ -996,7 +996,7 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val -= (val ^ 97);                   // XOR and -
-        val = std::rotl(val, 1);             // rotate  bits by 1
+        val = leftRotate8(val, 1);             // rotate  bits by 1
         val = val << (val & 3); // shift left
         val += val;                          // +
                                                                        // INSERT_RANDOM_CODE_END
@@ -1008,7 +1008,7 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val = val >> (val & 3);    // shift right
         val ^= v2;                   // XOR
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
         val = val << (val & 3);    // shift left
                                                                           // INSERT_RANDOM_CODE_END
       break;
@@ -1017,9 +1017,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 4);               // rotate  bits by 4
-        val = std::rotl(val, val); // rotate  bits by random
-        val ^= std::rotl(val, 4);               // rotate  bits by 4
+        val ^= leftRotate8(val, 4);               // rotate  bits by 4
+        val = leftRotate8(val, val); // rotate  bits by random
+        val ^= leftRotate8(val, 4);               // rotate  bits by 4
         val = ~val;                             // binary NOT operator
                                                                           // INSERT_RANDOM_CODE_END
       break;
@@ -1029,8 +1029,8 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val += val;               // +
-        val = std::rotl(val, 3);  // rotate  bits by 3
-        val ^= std::rotl(val, 4); // rotate  bits by 4
+        val = leftRotate8(val, 3);  // rotate  bits by 3
+        val ^= leftRotate8(val, 4); // rotate  bits by 4
         val += val;               // +
                                                             // INSERT_RANDOM_CODE_END
       break;
@@ -1039,8 +1039,8 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 2); // rotate  bits by 2
-        val = std::rotl(val, 1);  // rotate  bits by 1
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
+        val = leftRotate8(val, 1);  // rotate  bits by 1
         val *= val;               // *
         val = ~val;               // binary NOT operator
                                                             // INSERT_RANDOM_CODE_END
@@ -1053,7 +1053,7 @@ void branchResult(byte &val, int op, byte v2) {
         val += val;               // +
         val *= val;               // *
         val = ~val;               // binary NOT operator
-        val ^= std::rotl(val, 2); // rotate  bits by 2
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
                                                             // INSERT_RANDOM_CODE_END
       break;
 
@@ -1062,8 +1062,8 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = reverse8(val);     // reverse bits
-        val = std::rotl(val, 6); // rotate  bits by 5
-        // val = std::rotl(val, 1);    // rotate  bits by 1
+        val = leftRotate8(val, 6); // rotate  bits by 5
+        // val = leftRotate8(val, 1);    // rotate  bits by 1
         val = val >> (val & 3); // shift right
                                                                        // INSERT_RANDOM_CODE_END
       break;
@@ -1074,7 +1074,7 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val ^= (byte)bitTable[val];             // ones count bits
         val = val & v2; // AND
-        val ^= std::rotl(val, 4);               // rotate  bits by 4
+        val ^= leftRotate8(val, 4);               // rotate  bits by 4
         val = reverse8(val);                    // reverse bits
                                                                           // INSERT_RANDOM_CODE_END
       break;
@@ -1094,7 +1094,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
         val *= val;                             // *
         val = val & v2; // AND
         val += val;                             // +
@@ -1105,8 +1105,8 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 1);                // rotate  bits by 1
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, 1);                // rotate  bits by 1
+        val = leftRotate8(val, val); // rotate  bits by random
         val = val & v2; // AND
         val = val << (val & 3);    // shift left
                                                                           // INSERT_RANDOM_CODE_END
@@ -1116,10 +1116,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 1);  // rotate  bits by 1
+        val = leftRotate8(val, 1);  // rotate  bits by 1
         val = ~val;               // binary NOT operator
-        val = std::rotl(val, 10); // rotate  bits by 5
-        // val = std::rotl(val, 5); // rotate  bits by 5
+        val = leftRotate8(val, 10); // rotate  bits by 5
+        // val = leftRotate8(val, 5); // rotate  bits by 5
         // INSERT_RANDOM_CODE_END
       break;
 
@@ -1127,10 +1127,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 2);   // rotate  bits by 2
-        val ^= std::rotl(val, 2);   // rotate  bits by 2
+        val ^= leftRotate8(val, 2);   // rotate  bits by 2
+        val ^= leftRotate8(val, 2);   // rotate  bits by 2
         val ^= (byte)bitTable[val]; // ones count bits
-        val = std::rotl(val, 1);    // rotate  bits by 1
+        val = leftRotate8(val, 1);    // rotate  bits by 1
                                                               // INSERT_RANDOM_CODE_END
       break;
 
@@ -1138,7 +1138,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 1);             // rotate  bits by 1
+        val = leftRotate8(val, 1);             // rotate  bits by 1
         val = val << (val & 3); // shift left
         val ^= (byte)bitTable[val];          // ones count bits
         val = val >> (val & 3); // shift right
@@ -1149,10 +1149,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 4);            // rotate  bits by 4
+        val ^= leftRotate8(val, 4);            // rotate  bits by 4
         val = val << (val & 3); // shift left
         val = val >> (val & 3); // shift right
-        val ^= std::rotl(val, 4);            // rotate  bits by 4
+        val ^= leftRotate8(val, 4);            // rotate  bits by 4
                                                                        // INSERT_RANDOM_CODE_END
       break;
 
@@ -1160,7 +1160,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 4);            // rotate  bits by 4
+        val ^= leftRotate8(val, 4);            // rotate  bits by 4
         val -= (val ^ 97);                   // XOR and -
         val = reverse8(val);                 // reverse bits
         val = val >> (val & 3); // shift right
@@ -1171,7 +1171,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
         val = val << (val & 3);    // shift left
         val = reverse8(val);                    // reverse bits
         val ^= (byte)bitTable[val];             // ones count bits
@@ -1193,10 +1193,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 3); // rotate  bits by 3
+        val = leftRotate8(val, 3); // rotate  bits by 3
         val -= (val ^ 97);       // XOR and -
         val += val;              // +
-        val = std::rotl(val, 3); // rotate  bits by 3
+        val = leftRotate8(val, 3); // rotate  bits by 3
                                                            // INSERT_RANDOM_CODE_END
       break;
 
@@ -1204,10 +1204,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 1);                // rotate  bits by 1
+        val = leftRotate8(val, 1);                // rotate  bits by 1
         val = reverse8(val);                    // reverse bits
         val ^= v2;                   // XOR
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -1217,7 +1217,7 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val = reverse8(val);        // reverse bits
         val ^= (byte)bitTable[val]; // ones count bits
-        val = std::rotl(val, 5);    // rotate  bits by 5
+        val = leftRotate8(val, 5);    // rotate  bits by 5
         val += val;                 // +
                                                               // INSERT_RANDOM_CODE_END
       break;
@@ -1227,9 +1227,9 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = val << (val & 3);    // shift left
-        val = std::rotl(val, 3);                // rotate  bits by 3
-        val = std::rotl(val, val); // rotate  bits by random
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
+        val = leftRotate8(val, 3);                // rotate  bits by 3
+        val = leftRotate8(val, val); // rotate  bits by random
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -1238,8 +1238,8 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = reverse8(val);      // reverse bits
-        val ^= std::rotl(val, 4); // rotate  bits by 4
-        val = std::rotl(val, 1);  // rotate  bits by 1
+        val ^= leftRotate8(val, 4); // rotate  bits by 4
+        val = leftRotate8(val, 1);  // rotate  bits by 1
         val *= val;               // *
                                                             // INSERT_RANDOM_CODE_END
       break;
@@ -1249,9 +1249,9 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = val >> (val & 3); // shift right
-        val ^= std::rotl(val, 2);            // rotate  bits by 2
-        val = std::rotl(val, 6);             // rotate  bits by 5
-        // val = std::rotl(val, 1);             // rotate  bits by 1
+        val ^= leftRotate8(val, 2);            // rotate  bits by 2
+        val = leftRotate8(val, 6);             // rotate  bits by 5
+        // val = leftRotate8(val, 1);             // rotate  bits by 1
         // INSERT_RANDOM_CODE_END
       break;
 
@@ -1262,7 +1262,7 @@ void branchResult(byte &val, int op, byte v2) {
         val ^= v2;                   // XOR
         val = ~val;                             // binary NOT operator
         val = val & v2; // AND
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -1271,9 +1271,9 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val *= val;                             // *
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
         val ^= v2;                   // XOR
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -1282,8 +1282,8 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val += val;                          // +
-        val ^= std::rotl(val, 2);            // rotate  bits by 2
-        val ^= std::rotl(val, 2);            // rotate  bits by 2
+        val ^= leftRotate8(val, 2);            // rotate  bits by 2
+        val ^= leftRotate8(val, 2);            // rotate  bits by 2
         val = val >> (val & 3); // shift right
                                                                        // INSERT_RANDOM_CODE_END
       break;
@@ -1303,9 +1303,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 3); // rotate  bits by 3
+        val = leftRotate8(val, 3); // rotate  bits by 3
         val = ~val;              // binary NOT operator
-        val = std::rotl(val, 5); // rotate  bits by 5
+        val = leftRotate8(val, 5); // rotate  bits by 5
         val -= (val ^ 97);       // XOR and -
                                                            // INSERT_RANDOM_CODE_END
       break;
@@ -1314,8 +1314,8 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 6); // rotate  bits by 5
-        // val = std::rotl(val, 1);                           // rotate  bits by 1
+        val = leftRotate8(val, 6); // rotate  bits by 5
+        // val = leftRotate8(val, 1);                           // rotate  bits by 1
         val ^= (byte)bitTable[val]; // ones count bits
         val = ~val;                 // binary NOT operator
                                                               // INSERT_RANDOM_CODE_END
@@ -1325,9 +1325,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 1);                // rotate  bits by 1
+        val = leftRotate8(val, 1);                // rotate  bits by 1
         val = reverse8(val);                    // reverse bits
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
         val = ~val;                             // binary NOT operator
                                                                           // INSERT_RANDOM_CODE_END
       break;
@@ -1336,10 +1336,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, val); // rotate  bits by random
-        val = std::rotl(val, 5);                // rotate  bits by 5
+        val = leftRotate8(val, val); // rotate  bits by random
+        val = leftRotate8(val, 5);                // rotate  bits by 5
         val = val & v2; // AND
-        val = std::rotl(val, 3);                // rotate  bits by 3
+        val = leftRotate8(val, 3);                // rotate  bits by 3
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -1359,7 +1359,7 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = val << (val & 3);    // shift left
-        val = std::rotl(val, 3);                // rotate  bits by 3
+        val = leftRotate8(val, 3);                // rotate  bits by 3
         val = val << (val & 3);    // shift left
         val = val & v2; // AND
                                                                           // INSERT_RANDOM_CODE_END
@@ -1372,7 +1372,7 @@ void branchResult(byte &val, int op, byte v2) {
         val = val >> (val & 3); // shift right
         val += val;                          // +
         val = val << (val & 3); // shift left
-        val = std::rotl(val, 5);             // rotate  bits by 5
+        val = leftRotate8(val, 5);             // rotate  bits by 5
                                                                        // INSERT_RANDOM_CODE_END
       break;
 
@@ -1381,7 +1381,7 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = reverse8(val);      // reverse bits
-        val ^= std::rotl(val, 2); // rotate  bits by 2
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
         val = ~val;               // binary NOT operator
         val ^= v2;     // XOR
                                                             // INSERT_RANDOM_CODE_END
@@ -1391,7 +1391,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 2); // rotate  bits by 2
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
         val *= val;               // *
         val ^= v2;     // XOR
         val = reverse8(val);      // reverse bits
@@ -1413,10 +1413,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 4);               // rotate  bits by 4
-        val = std::rotl(val, val); // rotate  bits by random
-        val = std::rotl(val, 5);                // rotate  bits by 5
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
+        val ^= leftRotate8(val, 4);               // rotate  bits by 4
+        val = leftRotate8(val, val); // rotate  bits by random
+        val = leftRotate8(val, 5);                // rotate  bits by 5
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -1426,8 +1426,8 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val = val & v2; // AND
         val = ~val;                             // binary NOT operator
-        val = std::rotl(val, 6);                // rotate  bits by 3
-        // val = std::rotl(val, 3); // rotate  bits by 3
+        val = leftRotate8(val, 6);                // rotate  bits by 3
+        // val = leftRotate8(val, 3); // rotate  bits by 3
         // INSERT_RANDOM_CODE_END
       break;
 
@@ -1435,8 +1435,8 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 2); // rotate  bits by 2
-        val ^= std::rotl(val, 2); // rotate  bits by 2
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
         val ^= v2;     // XOR
         val = ~val;               // binary NOT operator
                                                             // INSERT_RANDOM_CODE_END
@@ -1447,7 +1447,7 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = reverse8(val);                 // reverse bits
-        val ^= std::rotl(val, 2);            // rotate  bits by 2
+        val ^= leftRotate8(val, 2);            // rotate  bits by 2
         val += val;                          // +
         val = val >> (val & 3); // shift right
                                                                        // INSERT_RANDOM_CODE_END
@@ -1457,9 +1457,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 9); // rotate  bits by 3
-        // val = std::rotl(val, 1); // rotate  bits by 1
-        // val = std::rotl(val, 5); // rotate  bits by 5
+        val = leftRotate8(val, 9); // rotate  bits by 3
+        // val = leftRotate8(val, 1); // rotate  bits by 1
+        // val = leftRotate8(val, 5); // rotate  bits by 5
         val = reverse8(val); // reverse bits
                                                        // INSERT_RANDOM_CODE_END
       break;
@@ -1479,10 +1479,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, val); // rotate  bits by random
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
-        val = std::rotl(val, 5);                // rotate  bits by 5
+        val = leftRotate8(val, val); // rotate  bits by random
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
+        val = leftRotate8(val, 5);                // rotate  bits by 5
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -1502,9 +1502,9 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = val >> (val & 3);    // shift right
-        val = std::rotl(val, val); // rotate  bits by random
-        val = std::rotl(val, 1);                // rotate  bits by 1
-        val ^= std::rotl(val, 4);               // rotate  bits by 4
+        val = leftRotate8(val, val); // rotate  bits by random
+        val = leftRotate8(val, 1);                // rotate  bits by 1
+        val ^= leftRotate8(val, 4);               // rotate  bits by 4
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -1513,7 +1513,7 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val -= (val ^ 97);          // XOR and -
-        val = std::rotl(val, 1);    // rotate  bits by 1
+        val = leftRotate8(val, 1);    // rotate  bits by 1
         val ^= (byte)bitTable[val]; // ones count bits
         val *= val;                 // *
                                                               // INSERT_RANDOM_CODE_END
@@ -1525,8 +1525,8 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val = val & v2; // AND
         val = reverse8(val);                    // reverse bits
-        val = std::rotl(val, 5);                // rotate  bits by 5
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
+        val = leftRotate8(val, 5);                // rotate  bits by 5
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -1535,8 +1535,8 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val ^= v2;                // XOR
-        val = std::rotl(val, 5);             // rotate  bits by 5
-        val ^= std::rotl(val, 2);            // rotate  bits by 2
+        val = leftRotate8(val, 5);             // rotate  bits by 5
+        val ^= leftRotate8(val, 2);            // rotate  bits by 2
         val = val << (val & 3); // shift left
                                                                        // INSERT_RANDOM_CODE_END
       break;
@@ -1546,8 +1546,8 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = ~val;                             // binary NOT operator
-        val ^= std::rotl(val, 4);               // rotate  bits by 4
-        val = std::rotl(val, 1);                // rotate  bits by 1
+        val ^= leftRotate8(val, 4);               // rotate  bits by 4
+        val = leftRotate8(val, 1);                // rotate  bits by 1
         val = val & v2; // AND
                                                                           // INSERT_RANDOM_CODE_END
       break;
@@ -1557,7 +1557,7 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = val >> (val & 3); // shift right
-        val ^= std::rotl(val, 2);            // rotate  bits by 2
+        val ^= leftRotate8(val, 2);            // rotate  bits by 2
         val += val;                          // +
         val = reverse8(val);                 // reverse bits
                                                                        // INSERT_RANDOM_CODE_END
@@ -1570,7 +1570,7 @@ void branchResult(byte &val, int op, byte v2) {
         val = val >> (val & 3); // shift right
         val -= (val ^ 97);                   // XOR and -
         val ^= v2;                // XOR
-        val = std::rotl(val, 5);             // rotate  bits by 5
+        val = leftRotate8(val, 5);             // rotate  bits by 5
                                                                        // INSERT_RANDOM_CODE_END
       break;
 
@@ -1578,10 +1578,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 5);                // rotate  bits by 5
+        val = leftRotate8(val, 5);                // rotate  bits by 5
         val = val >> (val & 3);    // shift right
         val = reverse8(val);                    // reverse bits
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -1600,10 +1600,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 8); // rotate  bits by 5
-        // val = std::rotl(val, 3);             // rotate  bits by 3
-        val ^= std::rotl(val, 2); // rotate  bits by 2
-        val = std::rotl(val, 3);  // rotate  bits by 3
+        val = leftRotate8(val, 8); // rotate  bits by 5
+        // val = leftRotate8(val, 3);             // rotate  bits by 3
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
+        val = leftRotate8(val, 3);  // rotate  bits by 3
                                                             // INSERT_RANDOM_CODE_END
       break;
 
@@ -1611,10 +1611,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 1);  // rotate  bits by 1
-        val ^= std::rotl(val, 2); // rotate  bits by 2
+        val = leftRotate8(val, 1);  // rotate  bits by 1
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
         val ^= v2;     // XOR
-        val = std::rotl(val, 5);  // rotate  bits by 5
+        val = leftRotate8(val, 5);  // rotate  bits by 5
                                                             // INSERT_RANDOM_CODE_END
       break;
 
@@ -1622,7 +1622,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 1);    // rotate  bits by 1
+        val = leftRotate8(val, 1);    // rotate  bits by 1
         val -= (val ^ 97);          // XOR and -
         val ^= (byte)bitTable[val]; // ones count bits
         val += val;                 // +
@@ -1634,9 +1634,9 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = val & v2; // AND
-        val = std::rotl(val, 5);                // rotate  bits by 5
+        val = leftRotate8(val, 5);                // rotate  bits by 5
         val = reverse8(val);                    // reverse bits
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -1645,7 +1645,7 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = val & v2; // AND
-        val = std::rotl(val, 3);                // rotate  bits by 3
+        val = leftRotate8(val, 3);                // rotate  bits by 3
         val = val >> (val & 3);    // shift right
         val = val << (val & 3);    // shift left
                                                                           // INSERT_RANDOM_CODE_END
@@ -1655,10 +1655,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
         val = val << (val & 3);    // shift left
         val = ~val;                             // binary NOT operator
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -1667,9 +1667,9 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = reverse8(val);      // reverse bits
-        val ^= std::rotl(val, 4); // rotate  bits by 4
-        val ^= std::rotl(val, 2); // rotate  bits by 2
-        val ^= std::rotl(val, 4); // rotate  bits by 4
+        val ^= leftRotate8(val, 4); // rotate  bits by 4
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
+        val ^= leftRotate8(val, 4); // rotate  bits by 4
                                                             // INSERT_RANDOM_CODE_END
       break;
 
@@ -1690,7 +1690,7 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val = ~val;                          // binary NOT operator
         val = val << (val & 3); // shift left
-        val ^= std::rotl(val, 4);            // rotate  bits by 4
+        val ^= leftRotate8(val, 4);            // rotate  bits by 4
         val *= val;                          // *
                                                                        // INSERT_RANDOM_CODE_END
       break;
@@ -1700,7 +1700,7 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = val & v2; // AND
-        val = std::rotl(val, 5);                // rotate  bits by 5
+        val = leftRotate8(val, 5);                // rotate  bits by 5
         val = val << (val & 3);    // shift left
         val -= (val ^ 97);                      // XOR and -
                                                                           // INSERT_RANDOM_CODE_END
@@ -1746,7 +1746,7 @@ void branchResult(byte &val, int op, byte v2) {
         val = val >> (val & 3); // shift right
         val = ~val;                          // binary NOT operator
         val = val << (val & 3); // shift left
-        val ^= std::rotl(val, 2);            // rotate  bits by 2
+        val ^= leftRotate8(val, 2);            // rotate  bits by 2
                                                                        // INSERT_RANDOM_CODE_END
       break;
 
@@ -1754,8 +1754,8 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 4); // rotate  bits by 1
-        // val = std::rotl(val, 3); // rotate  bits by 3
+        val = leftRotate8(val, 4); // rotate  bits by 1
+        // val = leftRotate8(val, 3); // rotate  bits by 3
         // val = ~val;     // binary NOT operator
         // val = ~val;     // binary NOT operator
         // INSERT_RANDOM_CODE_END
@@ -1765,7 +1765,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 5);    // rotate  bits by 5
+        val = leftRotate8(val, 5);    // rotate  bits by 5
         val = ~val;                 // binary NOT operator
         val ^= v2;       // XOR
         val ^= (byte)bitTable[val]; // ones count bits
@@ -1789,8 +1789,8 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val = val >> (val & 3); // shift right
         val = val >> (val & 3); // shift right
-        val = std::rotl(val, 4);             // rotate  bits by 3
-        // val = std::rotl(val, 1);    // rotate  bits by 1
+        val = leftRotate8(val, 4);             // rotate  bits by 3
+        // val = leftRotate8(val, 1);    // rotate  bits by 1
         // INSERT_RANDOM_CODE_END
       break;
 
@@ -1800,8 +1800,8 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val = val >> (val & 3);    // shift right
         val = val << (val & 3);    // shift left
-        val = std::rotl(val, val); // rotate  bits by random
-        val = std::rotl(val, 1);                // rotate  bits by 1
+        val = leftRotate8(val, val); // rotate  bits by random
+        val = leftRotate8(val, 1);                // rotate  bits by 1
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -1810,9 +1810,9 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val ^= (byte)bitTable[val]; // ones count bits
-        val = std::rotl(val, 3);    // rotate  bits by 3
+        val = leftRotate8(val, 3);    // rotate  bits by 3
         val += val;                 // +
-        val = std::rotl(val, 1);    // rotate  bits by 1
+        val = leftRotate8(val, 1);    // rotate  bits by 1
                                                               // INSERT_RANDOM_CODE_END
       break;
 
@@ -1822,7 +1822,7 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val -= (val ^ 97);                      // XOR and -
         val ^= v2;                   // XOR
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
         val ^= v2;                   // XOR
                                                                           // INSERT_RANDOM_CODE_END
       break;
@@ -1833,8 +1833,8 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val = val >> (val & 3); // shift right
         val = reverse8(val);                 // reverse bits
-        val = std::rotl(val, 4);             // rotate  bits by 1
-        // val = std::rotl(val, 3);    // rotate  bits by 3
+        val = leftRotate8(val, 4);             // rotate  bits by 1
+        // val = leftRotate8(val, 3);    // rotate  bits by 3
         // INSERT_RANDOM_CODE_END
       break;
 
@@ -1844,8 +1844,8 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val ^= v2;                   // XOR
         val ^= v2;                   // XOR
-        val = std::rotl(val, 5);                // rotate  bits by 5
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, 5);                // rotate  bits by 5
+        val = leftRotate8(val, val); // rotate  bits by random
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -1855,7 +1855,7 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val *= val;               // *
         val = reverse8(val);      // reverse bits
-        val ^= std::rotl(val, 2); // rotate  bits by 2
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
         val -= (val ^ 97);        // XOR and -
                                                             // INSERT_RANDOM_CODE_END
       break;
@@ -1866,8 +1866,8 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val = val << (val & 3); // shift left
         val -= (val ^ 97);                   // XOR and -
-        val ^= std::rotl(val, 4);            // rotate  bits by 4
-        val = std::rotl(val, 1);             // rotate  bits by 1
+        val ^= leftRotate8(val, 4);            // rotate  bits by 4
+        val = leftRotate8(val, 1);             // rotate  bits by 1
                                                                        // INSERT_RANDOM_CODE_END
       break;
 
@@ -1886,7 +1886,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 4);            // rotate  bits by 4
+        val ^= leftRotate8(val, 4);            // rotate  bits by 4
         val ^= v2;                // XOR
         val = val << (val & 3); // shift left
         val += val;                          // +
@@ -1897,9 +1897,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 3);  // rotate  bits by 3
+        val = leftRotate8(val, 3);  // rotate  bits by 3
         val += val;               // +
-        val ^= std::rotl(val, 2); // rotate  bits by 2
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
         val = ~val;               // binary NOT operator
                                                             // INSERT_RANDOM_CODE_END
       break;
@@ -1919,10 +1919,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
         val = val & v2; // AND
-        val = std::rotl(val, val); // rotate  bits by random
-        val = std::rotl(val, 1);                // rotate  bits by 1
+        val = leftRotate8(val, val); // rotate  bits by random
+        val = leftRotate8(val, 1);                // rotate  bits by 1
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -1930,9 +1930,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 1);                // rotate  bits by 1
+        val = leftRotate8(val, 1);                // rotate  bits by 1
         val = val << (val & 3);    // shift left
-        val ^= std::rotl(val, 4);               // rotate  bits by 4
+        val ^= leftRotate8(val, 4);               // rotate  bits by 4
         val = val & v2; // AND
                                                                           // INSERT_RANDOM_CODE_END
       break;
@@ -1952,7 +1952,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 3);    // rotate  bits by 3
+        val = leftRotate8(val, 3);    // rotate  bits by 3
         val -= (val ^ 97);          // XOR and -
         val ^= (byte)bitTable[val]; // ones count bits
         val = reverse8(val);        // reverse bits
@@ -1963,10 +1963,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 4);            // rotate  bits by 4
+        val ^= leftRotate8(val, 4);            // rotate  bits by 4
         val -= (val ^ 97);                   // XOR and -
         val = val << (val & 3); // shift left
-        val = std::rotl(val, 1);             // rotate  bits by 1
+        val = leftRotate8(val, 1);             // rotate  bits by 1
                                                                        // INSERT_RANDOM_CODE_END
       break;
 
@@ -1986,7 +1986,7 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = ~val;                             // binary NOT operator
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
         val ^= (byte)bitTable[val];             // ones count bits
         val ^= (byte)bitTable[val];             // ones count bits
                                                                           // INSERT_RANDOM_CODE_END
@@ -1996,10 +1996,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 3); // rotate  bits by 3
+        val = leftRotate8(val, 3); // rotate  bits by 3
         val -= (val ^ 97);       // XOR and -
         val *= val;              // *
-        val = std::rotl(val, 5); // rotate  bits by 5
+        val = leftRotate8(val, 5); // rotate  bits by 5
                                                            // INSERT_RANDOM_CODE_END
       break;
 
@@ -2010,7 +2010,7 @@ void branchResult(byte &val, int op, byte v2) {
         val ^= v2;    // XOR
         val *= val;              // *
         val ^= v2;    // XOR
-        val = std::rotl(val, 5); // rotate  bits by 5
+        val = leftRotate8(val, 5); // rotate  bits by 5
                                                            // INSERT_RANDOM_CODE_END
       break;
 
@@ -2019,8 +2019,8 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val ^= (byte)bitTable[val];             // ones count bits
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
         val = val & v2; // AND
                                                                           // INSERT_RANDOM_CODE_END
       break;
@@ -2032,7 +2032,7 @@ void branchResult(byte &val, int op, byte v2) {
         val = val & v2; // AND
         val += val;                             // +
         val = ~val;                             // binary NOT operator
-        val = std::rotl(val, 1);                // rotate  bits by 1
+        val = leftRotate8(val, 1);                // rotate  bits by 1
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -2040,7 +2040,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 2);            // rotate  bits by 2
+        val ^= leftRotate8(val, 2);            // rotate  bits by 2
         val += val;                          // +
         val = val >> (val & 3); // shift right
         val = reverse8(val);                 // reverse bits
@@ -2052,7 +2052,7 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = val >> (val & 3); // shift right
-        val ^= std::rotl(val, 4);            // rotate  bits by 4
+        val ^= leftRotate8(val, 4);            // rotate  bits by 4
         val ^= v2;                // XOR
         val -= (val ^ 97);                   // XOR and -
                                                                        // INSERT_RANDOM_CODE_END
@@ -2064,8 +2064,8 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val = ~val;                          // binary NOT operator
         val = val << (val & 3); // shift left
-        val ^= std::rotl(val, 2);            // rotate  bits by 2
-        val = std::rotl(val, 5);             // rotate  bits by 5
+        val ^= leftRotate8(val, 2);            // rotate  bits by 2
+        val = leftRotate8(val, 5);             // rotate  bits by 5
                                                                        // INSERT_RANDOM_CODE_END
       break;
 
@@ -2074,9 +2074,9 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val ^= v2;    // XOR
-        val = std::rotl(val, 6); // rotate  bits by 1
-        // val = std::rotl(val, 5);         // rotate  bits by 5
-        val ^= std::rotl(val, 4); // rotate  bits by 4
+        val = leftRotate8(val, 6); // rotate  bits by 1
+        // val = leftRotate8(val, 5);         // rotate  bits by 5
+        val ^= leftRotate8(val, 4); // rotate  bits by 4
                                                             // INSERT_RANDOM_CODE_END
       break;
 
@@ -2097,7 +2097,7 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val = val << (val & 3); // shift left
         val *= val;                          // *
-        val = std::rotl(val, 5);             // rotate  bits by 5
+        val = leftRotate8(val, 5);             // rotate  bits by 5
         val ^= v2;                // XOR
                                                                        // INSERT_RANDOM_CODE_END
       break;
@@ -2107,8 +2107,8 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = ~val;                          // binary NOT operator
-        val ^= std::rotl(val, 4);            // rotate  bits by 4
-        val = std::rotl(val, 5);             // rotate  bits by 5
+        val ^= leftRotate8(val, 4);            // rotate  bits by 4
+        val = leftRotate8(val, 5);             // rotate  bits by 5
         val = val >> (val & 3); // shift right
                                                                        // INSERT_RANDOM_CODE_END
       break;
@@ -2117,8 +2117,8 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 2);            // rotate  bits by 2
-        val ^= std::rotl(val, 4);            // rotate  bits by 4
+        val ^= leftRotate8(val, 2);            // rotate  bits by 2
+        val ^= leftRotate8(val, 4);            // rotate  bits by 4
         val -= (val ^ 97);                   // XOR and -
         val = val >> (val & 3); // shift right
                                                                        // INSERT_RANDOM_CODE_END
@@ -2131,7 +2131,7 @@ void branchResult(byte &val, int op, byte v2) {
         val ^= v2;    // XOR
         val = ~val;              // binary NOT operator
         val += val;              // +
-        val = std::rotl(val, 3); // rotate  bits by 3
+        val = leftRotate8(val, 3); // rotate  bits by 3
                                                            // INSERT_RANDOM_CODE_END
       break;
 
@@ -2139,10 +2139,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 4);   // rotate  bits by 4
+        val ^= leftRotate8(val, 4);   // rotate  bits by 4
         val ^= (byte)bitTable[val]; // ones count bits
-        val ^= std::rotl(val, 4);   // rotate  bits by 4
-        val ^= std::rotl(val, 4);   // rotate  bits by 4
+        val ^= leftRotate8(val, 4);   // rotate  bits by 4
+        val ^= leftRotate8(val, 4);   // rotate  bits by 4
                                                               // INSERT_RANDOM_CODE_END
       break;
 
@@ -2150,8 +2150,8 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 5);  // rotate  bits by 5
-        val ^= std::rotl(val, 4); // rotate  bits by 4
+        val = leftRotate8(val, 5);  // rotate  bits by 5
+        val ^= leftRotate8(val, 4); // rotate  bits by 4
         val ^= v2;     // XOR
         val -= (val ^ 97);        // XOR and -
                                                             // INSERT_RANDOM_CODE_END
@@ -2161,10 +2161,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 5);                // rotate  bits by 5
+        val = leftRotate8(val, 5);                // rotate  bits by 5
         val = val >> (val & 3);    // shift right
         val = val & v2; // AND
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -2173,8 +2173,8 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val += val;                             // +
-        val = std::rotl(val, 3);                // rotate  bits by 3
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, 3);                // rotate  bits by 3
+        val = leftRotate8(val, val); // rotate  bits by random
         val = val >> (val & 3);    // shift right
                                                                           // INSERT_RANDOM_CODE_END
       break;
@@ -2196,8 +2196,8 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val = val & v2; // AND
         val = val << (val & 3);    // shift left
-        val = std::rotl(val, val); // rotate  bits by random
-        val = std::rotl(val, 1);                // rotate  bits by 1
+        val = leftRotate8(val, val); // rotate  bits by random
+        val = leftRotate8(val, 1);                // rotate  bits by 1
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -2206,7 +2206,7 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = val & v2; // AND
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
         val = val << (val & 3);    // shift left
         val = val & v2; // AND
                                                                           // INSERT_RANDOM_CODE_END
@@ -2217,9 +2217,9 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val ^= (byte)bitTable[val]; // ones count bits
-        val ^= std::rotl(val, 2);   // rotate  bits by 2
+        val ^= leftRotate8(val, 2);   // rotate  bits by 2
         val ^= v2;       // XOR
-        val ^= std::rotl(val, 4);   // rotate  bits by 4
+        val ^= leftRotate8(val, 4);   // rotate  bits by 4
                                                               // INSERT_RANDOM_CODE_END
       break;
 
@@ -2227,10 +2227,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 3);             // rotate  bits by 3
+        val = leftRotate8(val, 3);             // rotate  bits by 3
         val = reverse8(val);                 // reverse bits
         val = val << (val & 3); // shift left
-        val = std::rotl(val, 1);             // rotate  bits by 1
+        val = leftRotate8(val, 1);             // rotate  bits by 1
                                                                        // INSERT_RANDOM_CODE_END
       break;
 
@@ -2238,8 +2238,8 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 4);               // rotate  bits by 4
-        val = std::rotl(val, val); // rotate  bits by random
+        val ^= leftRotate8(val, 4);               // rotate  bits by 4
+        val = leftRotate8(val, val); // rotate  bits by random
         val *= val;                             // *
         val *= val;                             // *
                                                                           // INSERT_RANDOM_CODE_END
@@ -2252,7 +2252,7 @@ void branchResult(byte &val, int op, byte v2) {
         val = val >> (val & 3); // shift right
         val = val >> (val & 3); // shift right
         val = reverse8(val);                 // reverse bits
-        val = std::rotl(val, 1);             // rotate  bits by 1
+        val = leftRotate8(val, 1);             // rotate  bits by 1
                                                                        // INSERT_RANDOM_CODE_END
       break;
 
@@ -2282,9 +2282,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 3);  // rotate  bits by 3
-        val ^= std::rotl(val, 2); // rotate  bits by 2
-        val ^= std::rotl(val, 4); // rotate  bits by 4
+        val = leftRotate8(val, 3);  // rotate  bits by 3
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
+        val ^= leftRotate8(val, 4); // rotate  bits by 4
         val = ~val;               // binary NOT operator
                                                             // INSERT_RANDOM_CODE_END
       break;
@@ -2295,8 +2295,8 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val ^= v2;                   // XOR
         val = ~val;                             // binary NOT operator
-        val = std::rotl(val, val); // rotate  bits by random
-        val = std::rotl(val, 5);                // rotate  bits by 5
+        val = leftRotate8(val, val); // rotate  bits by random
+        val = leftRotate8(val, 5);                // rotate  bits by 5
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -2306,8 +2306,8 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val ^= v2;                   // XOR
         val = val & v2; // AND
-        val = std::rotl(val, 1);                // rotate  bits by 1
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, 1);                // rotate  bits by 1
+        val = leftRotate8(val, val); // rotate  bits by random
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -2315,9 +2315,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 5);                // rotate  bits by 5
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, 5);                // rotate  bits by 5
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
+        val = leftRotate8(val, val); // rotate  bits by random
         val ^= v2;                   // XOR
                                                                           // INSERT_RANDOM_CODE_END
       break;
@@ -2327,7 +2327,7 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val ^= (byte)bitTable[val];          // ones count bits
-        val ^= std::rotl(val, 4);            // rotate  bits by 4
+        val ^= leftRotate8(val, 4);            // rotate  bits by 4
         val = val << (val & 3); // shift left
         val += val;                          // +
                                                                        // INSERT_RANDOM_CODE_END
@@ -2337,7 +2337,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 4);   // rotate  bits by 4
+        val ^= leftRotate8(val, 4);   // rotate  bits by 4
         val = reverse8(val);        // reverse bits
         val = reverse8(val);        // reverse bits
         val ^= (byte)bitTable[val]; // ones count bits
@@ -2348,8 +2348,8 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 8); // rotate  bits by 5
-        // val = std::rotl(val, 3);                           // rotate  bits by 3
+        val = leftRotate8(val, 8); // rotate  bits by 5
+        // val = leftRotate8(val, 3);                           // rotate  bits by 3
         val ^= (byte)bitTable[val]; // ones count bits
         val ^= (byte)bitTable[val]; // ones count bits
                                                               // INSERT_RANDOM_CODE_END
@@ -2362,7 +2362,7 @@ void branchResult(byte &val, int op, byte v2) {
         val += val;                          // +
         val += val;                          // +
         val = val >> (val & 3); // shift right
-        val = std::rotl(val, 3);             // rotate  bits by 3
+        val = leftRotate8(val, 3);             // rotate  bits by 3
                                                                        // INSERT_RANDOM_CODE_END
       break;
 
@@ -2370,7 +2370,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 5);    // rotate  bits by 5
+        val = leftRotate8(val, 5);    // rotate  bits by 5
         val = reverse8(val);        // reverse bits
         val ^= (byte)bitTable[val]; // ones count bits
         val -= (val ^ 97);          // XOR and -
@@ -2381,9 +2381,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
-        val = std::rotl(val, val); // rotate  bits by random
-        val = std::rotl(val, 5);                // rotate  bits by 5
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
+        val = leftRotate8(val, val); // rotate  bits by random
+        val = leftRotate8(val, 5);                // rotate  bits by 5
         val = ~val;                             // binary NOT operator
                                                                           // INSERT_RANDOM_CODE_END
       break;
@@ -2392,10 +2392,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 4);               // rotate  bits by 4
+        val ^= leftRotate8(val, 4);               // rotate  bits by 4
         val += val;                             // +
         val -= (val ^ 97);                      // XOR and -
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -2403,8 +2403,8 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, val); // rotate  bits by random
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
+        val = leftRotate8(val, val); // rotate  bits by random
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
         val ^= v2;                   // XOR
         val ^= v2;                   // XOR
                                                                           // INSERT_RANDOM_CODE_END
@@ -2416,7 +2416,7 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val += val;                          // +
         val = val << (val & 3); // shift left
-        val = std::rotl(val, 3);             // rotate  bits by 3
+        val = leftRotate8(val, 3);             // rotate  bits by 3
         val -= (val ^ 97);                   // XOR and -
                                                                        // INSERT_RANDOM_CODE_END
       break;
@@ -2447,7 +2447,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
         val = ~val;                             // binary NOT operator
         val -= (val ^ 97);                      // XOR and -
         val = val & v2; // AND
@@ -2458,10 +2458,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 5);  // rotate  bits by 5
+        val = leftRotate8(val, 5);  // rotate  bits by 5
         val += val;               // +
-        val = std::rotl(val, 1);  // rotate  bits by 1
-        val ^= std::rotl(val, 4); // rotate  bits by 4
+        val = leftRotate8(val, 1);  // rotate  bits by 1
+        val ^= leftRotate8(val, 4); // rotate  bits by 4
                                                             // INSERT_RANDOM_CODE_END
       break;
 
@@ -2480,8 +2480,8 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 4);               // rotate  bits by 4
-        val = std::rotl(val, 3);                // rotate  bits by 3
+        val ^= leftRotate8(val, 4);               // rotate  bits by 4
+        val = leftRotate8(val, 3);                // rotate  bits by 3
         val = val & v2; // AND
         val = reverse8(val);                    // reverse bits
                                                                           // INSERT_RANDOM_CODE_END
@@ -2491,7 +2491,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 1);             // rotate  bits by 1
+        val = leftRotate8(val, 1);             // rotate  bits by 1
         val = val << (val & 3); // shift left
         val = reverse8(val);                 // reverse bits
         val = val << (val & 3); // shift left
@@ -2502,7 +2502,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 5); // rotate  bits by 5
+        val = leftRotate8(val, 5); // rotate  bits by 5
         val ^= v2;    // XOR
         val = ~val;              // binary NOT operator
         val = reverse8(val);     // reverse bits
@@ -2524,9 +2524,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 3);                // rotate  bits by 3
+        val = leftRotate8(val, 3);                // rotate  bits by 3
         val ^= v2;                   // XOR
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
         val -= (val ^ 97);                      // XOR and -
                                                                           // INSERT_RANDOM_CODE_END
       break;
@@ -2535,9 +2535,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 2); // rotate  bits by 2
-        val = std::rotl(val, 4);  // rotate  bits by 1
-        // val = std::rotl(val, 3);             // rotate  bits by 3
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
+        val = leftRotate8(val, 4);  // rotate  bits by 1
+        // val = leftRotate8(val, 3);             // rotate  bits by 3
         val = val << (val & 3); // shift left
                                                                        //
       break;
@@ -2549,7 +2549,7 @@ void branchResult(byte &val, int op, byte v2) {
         val = ~val;                          // binary NOT operator
         val = val >> (val & 3); // shift right
         val = reverse8(val);                 // reverse bits
-        val = std::rotl(val, 3);             // rotate  bits by 3
+        val = leftRotate8(val, 3);             // rotate  bits by 3
                                                                        // INSERT_RANDOM_CODE_END
       break;
 
@@ -2590,9 +2590,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 3);                // rotate  bits by 3
-        val = std::rotl(val, val); // rotate  bits by random
-        val ^= std::rotl(val, 2);               // rotate  bits by 2
+        val = leftRotate8(val, 3);                // rotate  bits by 3
+        val = leftRotate8(val, val); // rotate  bits by random
+        val ^= leftRotate8(val, 2);               // rotate  bits by 2
         val ^= (byte)bitTable[val];             // ones count bits
                                                                           // INSERT_RANDOM_CODE_END
       break;
@@ -2603,8 +2603,8 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val *= val;                             // *
         val = val & v2; // AND
-        val = std::rotl(val, val); // rotate  bits by random
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -2612,7 +2612,7 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 3);             // rotate  bits by 3
+        val = leftRotate8(val, 3);             // rotate  bits by 3
         val = val >> (val & 3); // shift right
         val ^= v2;                // XOR
         val = reverse8(val);                 // reverse bits
@@ -2625,8 +2625,8 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val *= val;               // *
         val *= val;               // *
-        val ^= std::rotl(val, 4); // rotate  bits by 4
-        val = std::rotl(val, 5);  // rotate  bits by 5
+        val ^= leftRotate8(val, 4); // rotate  bits by 4
+        val = leftRotate8(val, 5);  // rotate  bits by 5
                                                             // INSERT_RANDOM_CODE_END
       break;
 
@@ -2634,9 +2634,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 1);    // rotate  bits by 1
+        val = leftRotate8(val, 1);    // rotate  bits by 1
         val ^= (byte)bitTable[val]; // ones count bits
-        val = std::rotl(val, 3);    // rotate  bits by 3
+        val = leftRotate8(val, 3);    // rotate  bits by 3
         val ^= (byte)bitTable[val]; // ones count bits
                                                               // INSERT_RANDOM_CODE_END
       break;
@@ -2656,9 +2656,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 2); // rotate  bits by 2
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
         val *= val;               // *
-        val = std::rotl(val, 3);  // rotate  bits by 3
+        val = leftRotate8(val, 3);  // rotate  bits by 3
         val = ~val;               // binary NOT operator
                                                             // INSERT_RANDOM_CODE_END
       break;
@@ -2678,10 +2678,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 5);             // rotate  bits by 5
+        val = leftRotate8(val, 5);             // rotate  bits by 5
         val = val << (val & 3); // shift left
-        val ^= std::rotl(val, 2);            // rotate  bits by 2
-        val = std::rotl(val, 3);             // rotate  bits by 3
+        val ^= leftRotate8(val, 2);            // rotate  bits by 2
+        val = leftRotate8(val, 3);             // rotate  bits by 3
                                                                        // INSERT_RANDOM_CODE_END
       break;
 
@@ -2691,7 +2691,7 @@ void branchResult(byte &val, int op, byte v2) {
         // INSERT_RANDOM_CODE_START
         val += val;              // +
         val += val;              // +
-        val = std::rotl(val, 3); // rotate  bits by 3
+        val = leftRotate8(val, 3); // rotate  bits by 3
         val -= (val ^ 97);       // XOR and -
                                                            // INSERT_RANDOM_CODE_END
       break;
@@ -2700,8 +2700,8 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 6); // rotate  bits by 5
-        // val = std::rotl(val, 1); // rotate  bits by 1
+        val = leftRotate8(val, 6); // rotate  bits by 5
+        // val = leftRotate8(val, 1); // rotate  bits by 1
         val *= val;                             // *
         val = val & v2; // AND
                                                                           // INSERT_RANDOM_CODE_END
@@ -2722,10 +2722,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val ^= std::rotl(val, 4);   // rotate  bits by 4
+        val ^= leftRotate8(val, 4);   // rotate  bits by 4
         val ^= (byte)bitTable[val]; // ones count bits
         val ^= v2;       // XOR
-        val = std::rotl(val, 1);    // rotate  bits by 1
+        val = leftRotate8(val, 1);    // rotate  bits by 1
                                                               // INSERT_RANDOM_CODE_END
       break;
 
@@ -2744,10 +2744,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 5);    // rotate  bits by 5
-        val ^= std::rotl(val, 2);   // rotate  bits by 2
+        val = leftRotate8(val, 5);    // rotate  bits by 5
+        val ^= leftRotate8(val, 2);   // rotate  bits by 2
         val ^= (byte)bitTable[val]; // ones count bits
-        val = std::rotl(val, 1);    // rotate  bits by 1
+        val = leftRotate8(val, 1);    // rotate  bits by 1
                                                               // INSERT_RANDOM_CODE_END
       break;
 
@@ -2756,9 +2756,9 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = ~val;               // binary NOT operator
-        val ^= std::rotl(val, 2); // rotate  bits by 2
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
         val = reverse8(val);      // reverse bits
-        val = std::rotl(val, 5);  // rotate  bits by 5
+        val = leftRotate8(val, 5);  // rotate  bits by 5
                                                             // INSERT_RANDOM_CODE_END
       break;
 
@@ -2767,8 +2767,8 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val -= (val ^ 97);                   // XOR and -
-        val = std::rotl(val, 5);             // rotate  bits by 5
-        val ^= std::rotl(val, 2);            // rotate  bits by 2
+        val = leftRotate8(val, 5);             // rotate  bits by 5
+        val ^= leftRotate8(val, 2);            // rotate  bits by 2
         val = val >> (val & 3); // shift right
                                                                        // INSERT_RANDOM_CODE_END
       break;
@@ -2778,7 +2778,7 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val += val;                          // +
-        val = std::rotl(val, 1);             // rotate  bits by 1
+        val = leftRotate8(val, 1);             // rotate  bits by 1
         val = val >> (val & 3); // shift right
         val += val;                          // +
                                                                        // INSERT_RANDOM_CODE_END
@@ -2788,9 +2788,9 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 5);  // rotate  bits by 5
-        val ^= std::rotl(val, 2); // rotate  bits by 2
-        val = std::rotl(val, 5);  // rotate  bits by 5
+        val = leftRotate8(val, 5);  // rotate  bits by 5
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
+        val = leftRotate8(val, 5);  // rotate  bits by 5
         val = ~val;               // binary NOT operator
                                                             // INSERT_RANDOM_CODE_END
       break;
@@ -2802,7 +2802,7 @@ void branchResult(byte &val, int op, byte v2) {
         val = ~val;                 // binary NOT operator
         val -= (val ^ 97);          // XOR and -
         val ^= (byte)bitTable[val]; // ones count bits
-        val = std::rotl(val, 5);    // rotate  bits by 5
+        val = leftRotate8(val, 5);    // rotate  bits by 5
                                                               // INSERT_RANDOM_CODE_END
       break;
 
@@ -2811,9 +2811,9 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = reverse8(val);                    // reverse bits
-        val ^= std::rotl(val, 4);               // rotate  bits by 4
-        val ^= std::rotl(val, 4);               // rotate  bits by 4
-        val = std::rotl(val, val); // rotate  bits by random
+        val ^= leftRotate8(val, 4);               // rotate  bits by 4
+        val ^= leftRotate8(val, 4);               // rotate  bits by 4
+        val = leftRotate8(val, val); // rotate  bits by random
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -2822,9 +2822,9 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = val & v2; // AND
-        val = std::rotl(val, val); // rotate  bits by random
+        val = leftRotate8(val, val); // rotate  bits by random
         val ^= (byte)bitTable[val];             // ones count bits
-        val ^= std::rotl(val, 4);               // rotate  bits by 4
+        val ^= leftRotate8(val, 4);               // rotate  bits by 4
                                                                           // INSERT_RANDOM_CODE_END
       break;
 
@@ -2835,7 +2835,7 @@ void branchResult(byte &val, int op, byte v2) {
         val += val;                 // +
         val ^= (byte)bitTable[val]; // ones count bits
         val = reverse8(val);        // reverse bits
-        val ^= std::rotl(val, 2);   // rotate  bits by 2
+        val ^= leftRotate8(val, 2);   // rotate  bits by 2
                                                               // INSERT_RANDOM_CODE_END
       break;
 
@@ -2844,8 +2844,8 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val = reverse8(val);                 // reverse bits
-        val ^= std::rotl(val, 4);            // rotate  bits by 4
-        val ^= std::rotl(val, 2);            // rotate  bits by 2
+        val ^= leftRotate8(val, 4);            // rotate  bits by 4
+        val ^= leftRotate8(val, 2);            // rotate  bits by 2
         val = val << (val & 3); // shift left
                                                                        // INSERT_RANDOM_CODE_END
       break;
@@ -2854,10 +2854,10 @@ void branchResult(byte &val, int op, byte v2) {
 
 
         // INSERT_RANDOM_CODE_START
-        val = std::rotl(val, 3);  // rotate  bits by 3
-        val ^= std::rotl(val, 2); // rotate  bits by 2
+        val = leftRotate8(val, 3);  // rotate  bits by 3
+        val ^= leftRotate8(val, 2); // rotate  bits by 2
         val ^= v2;     // XOR
-        val = std::rotl(val, 3);  // rotate  bits by 3
+        val = leftRotate8(val, 3);  // rotate  bits by 3
         // INSERT_RANDOM_CODE_END
 
         // worker.prev_lhash = worker.lhash + worker.prev_lhash;
@@ -2872,9 +2872,9 @@ void branchResult(byte &val, int op, byte v2) {
 
         // INSERT_RANDOM_CODE_START
         val ^= static_cast<uint8_t>(std::bitset<8>(val).count()); // ones count bits
-        val = std::rotl(val, 3);                                  // rotate  bits by 3
-        val ^= std::rotl(val, 2);                                 // rotate  bits by 2
-        val = std::rotl(val, 3);                                  // rotate  bits by 3
+        val = leftRotate8(val, 3);                                  // rotate  bits by 3
+        val ^= leftRotate8(val, 2);                                 // rotate  bits by 2
+        val = leftRotate8(val, 3);                                  // rotate  bits by 3
                                                                                             // INSERT_RANDOM_CODE_END
       break;
 

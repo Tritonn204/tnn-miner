@@ -7,8 +7,7 @@
 // Official repository: https://github.com/boostorg/beast
 //
 
-#ifndef BOOST_BEAST_EXAMPLE_COMMON_ROOT_CERTIFICATES_HPP
-#define BOOST_BEAST_EXAMPLE_COMMON_ROOT_CERTIFICATES_HPP
+#pragma once
 
 #include <boost/asio/ssl.hpp>
 #include <string>
@@ -120,5 +119,3 @@ load_root_certificates(ssl::context& ctx)
     if(ec)
         throw boost::system::system_error{ec};
 }
-
-#endif

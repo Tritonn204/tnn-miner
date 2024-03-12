@@ -1,7 +1,7 @@
 #include <hip/hip_runtime.h>
 
 #include "powtest.h"
-#include <astrobwtv3_hip.h>
+#include "pow_hip.h"
 #include <sha256_hip.h>
 
 #include <xxhash64_hip.h>
@@ -13,6 +13,7 @@
 #include "xxhash64.h"
 #include <highwayhash/sip_hash.h>
 #include <openssl/rc4.h>
+#include "sais.h"
 
 #include <bitset>
 #include <hex.h>
@@ -485,13 +486,11 @@ __device__ void AstroBWTv3_hip_p2(unsigned char *input, int inputLen, unsigned c
 
     if (worker.A < 0x30)
     { // 18.75 % probability
-      memcpy(worker.s3, worker.step_3, worker.pos2);
-      // std::copy(worker.step_3, worker.step_3 + worker.pos2, s3);
       worker.prev_lhash = worker.lhash + worker.prev_lhash;
 
       __align__(16)
           const uint64_t key2[2] = {worker.tries, worker.prev_lhash};
-      siphash_cuda(worker.s3, worker.pos2, key2, (uint8_t *)&worker.lhash, 8);
+      siphash_cuda(worker.step_3, worker.pos2, key2, (uint8_t *)&worker.lhash, 8);
       // printf("new worker.lhash: %" PRIx64 "\n", worker.lhash);
     }
 
@@ -6773,12 +6772,11 @@ __host__ void branchComputeCPU_hip(workerData_hip &worker)
 
     if (worker.A < 0x30)
     { // 18.75 % probability
-      memcpy(worker.s3, worker.step_3, worker.pos2);
       // std::copy(worker.step_3, worker.step_3 + worker.pos2, s3);
       worker.prev_lhash = worker.lhash + worker.prev_lhash;
       HH_ALIGNAS(16)
       const highwayhash::HH_U64 key2[2] = {worker.tries, worker.prev_lhash};
-      worker.lhash = highwayhash::SipHash(key2, worker.s3, worker.pos2); // more deviations
+      worker.lhash = highwayhash::SipHash(key2, (char*)worker.step_3, worker.pos2); // more deviations
       // printf("new worker.lhash: %08jx\n", worker.lhash);
     }
 
