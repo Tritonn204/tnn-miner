@@ -431,8 +431,6 @@ int main(int argc, char **argv)
   lookup3D_global = (byte *)malloc_huge_pages(branchedOps_size*(256*256)*sizeof(byte));
   oneLsh256 = Num(1) << 256;
 
-  std::cout << "1<<256 test: " << oneLsh256 << std::endl;
-
   // default values
   bool lockThreads = true;
   devFee = 2.5;

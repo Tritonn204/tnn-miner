@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16.3)
 
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_C_FLAGS_RELEASE "-static -O3 -fPIE -ftree-vectorize")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -m64 -O3 -pthread -Wall -Wuninitialized -fprefetch-loop-arrays -funroll-all-loops -ftree-vectorize")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -static-libgcc -m64 -O3 -Wall -Wuninitialized -fprefetch-loop-arrays -funroll-all-loops -ftree-vectorize")
 
 set(CMAKE_C_COMPILER clang)
 set(CMAKE_CXX_COMPILER g++)
@@ -13,7 +13,7 @@ endif()
 
 if(UNIX)
 set(CMAKE_SYSTEM_NAME Linux)
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -pthread -Wl,--whole-archive -lpthread -Wl,--no-whole-archive")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -pthread -Wl,--whole-archive -libgcc -lpthread -Wl,--no-whole-archive")
 endif()
 
 set(CMAKE_EXE_LINKER_FLAGS "-fstack-protector")
@@ -106,4 +106,4 @@ endif()
 if(UNIX)
   target_link_libraries(${PROJECT_NAME} udns pthread)
 endif()
-target_link_libraries(${PROJECT_NAME} nlohmann_json::nlohmann_json OpenSSL::SSL ${Boost_LIBRARIES} OpenSSL::Crypto)
+target_link_libraries(${PROJECT_NAME} nlohmann_json::nlohmann_json ${Boost_LIBRARIES} OpenSSL::SSL OpenSSL::Crypto)
