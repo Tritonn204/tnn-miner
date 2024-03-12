@@ -101,7 +101,7 @@ inline po::options_description get_prog_opts()
     ("no-lock", "Disables CPU affinity / CPU core binding")
     ("gpu", "Mine with GPU instead of CPU")
     ("batch-size", po::value<int>(), "(GPU Setting) Sets batch size used for GPU mining")
-    ("simd", "Mine with SIMD instead of regular C++")
+    ("lookup", "Mine with lookup instead of regular C++")
   ;
 
   po::options_description debug("DEBUG", col_width);
@@ -111,7 +111,6 @@ inline po::options_description get_prog_opts()
     ("len", po::value<int>(), "Sets length of the processed chunk in said benchmark (default 15)")
     ("sabench", "Runs a benchmark for divsufsort on snapshot files in the 'tests' directory")
     ("benchmark", po::value<int>(), "Runs a mining benchmark for <arg> seconds (adheres to -t threads option)")
-    ("verify", "Verifies SIMD produces identical results to C++. Adheres to -op and -len options")
   ;
 
   return general.add(debug);

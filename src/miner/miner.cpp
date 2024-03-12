@@ -153,7 +153,7 @@ void do_session(
 
   // These objects perform our I/O
   int addrCount = 0;
-  bool resolved = false;
+  //bool resolved = false;
 
   net::ip::address ip_address;
 
@@ -456,7 +456,7 @@ int main(int argc, char **argv)
     // TODO: Check if this contains a host:port... and then parse accordingly
   }
   if (vm.count("port")) {
-    port = vm["port"].as<std::string>();
+    port = std::to_string(vm["port"].as<int>());
   }
   if (vm.count("wallet")) {
     wallet = vm["wallet"].as<std::string>();
@@ -505,6 +505,10 @@ int main(int argc, char **argv)
   }
   if (vm.count("len")) {
     testLen = vm["len"].as<int>();
+  }
+  if (vm.count("lookup")) {
+    printf("Use Lookup\n");
+    useLookupMine = true;
   }
 
   // Ensure we capture *all* of the other options before we start using goto
@@ -1099,7 +1103,7 @@ void benchmark(int tid)
   int32_t i = 0;
 
   byte powHash[32];
-  byte powHash2[32];
+  //byte powHash2[32];
   workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
   initWorker(*worker);
   lookupGen(*worker, lookup2D_global, lookup3D_global);
@@ -1129,8 +1133,8 @@ void benchmark(int tid)
     while (localJobCounter == jobCounter)
     {
       i++;
-      double which = (double)(rand() % 10000);
-      bool devMine = (devConnected && which < devFee * 100.0);
+      //double which = (double)(rand() % 10000);
+      //bool devMine = (devConnected && which < devFee * 100.0);
       std::memcpy(&work[MINIBLOCK_SIZE - 5], &i, sizeof(i));
       // swap endianness
       if (littleEndian())
@@ -1138,7 +1142,7 @@ void benchmark(int tid)
         std::swap(work[MINIBLOCK_SIZE - 5], work[MINIBLOCK_SIZE - 2]);
         std::swap(work[MINIBLOCK_SIZE - 4], work[MINIBLOCK_SIZE - 3]);
       }
-      AstroBWTv3(work, MINIBLOCK_SIZE, powHash, *worker, true, false);
+      AstroBWTv3(work, MINIBLOCK_SIZE, powHash, *worker, useLookupMine);
 
       counter.fetch_add(1);
       benchCounter.fetch_add(1);
@@ -1167,7 +1171,7 @@ void mineBlock(int tid)
 
   int64_t localJobCounter;
   byte powHash[32];
-  byte powHash2[32];
+  //byte powHash2[32];
   byte devWork[MINIBLOCK_SIZE];
 
   workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
@@ -1249,7 +1253,7 @@ waitForJob:
           std::swap(WORK[MINIBLOCK_SIZE - 5], WORK[MINIBLOCK_SIZE - 2]);
           std::swap(WORK[MINIBLOCK_SIZE - 4], WORK[MINIBLOCK_SIZE - 3]);
         }
-        AstroBWTv3(&WORK[0], MINIBLOCK_SIZE, powHash, *worker, true, false);
+        AstroBWTv3(&WORK[0], MINIBLOCK_SIZE, powHash, *worker, useLookupMine);
         
         counter.fetch_add(1);
         submit = devMine ? !submittingDev : !submitting;

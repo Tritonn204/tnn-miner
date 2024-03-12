@@ -1,11 +1,26 @@
 cmake_minimum_required(VERSION 3.16.3)
 
+#set(CMAKE_C_COMPILER /usr/bin/clang-17)
+#set(CMAKE_CXX_COMPILER /usr/bin/clang++-17)
+message(STATUS "CC from ENV: $ENV{CC}")
+#set(SERIAL_C_COMPILER       ${CMAKE_C_COMPILER})
+#message(STATUS "SERIAL_C_COMPILER: ${SERIAL_C_COMPILER}")
+#message(STATUS "CXX from ENV: $ENV{CXX}")
+set(SERIAL_CXX_COMPILER       ${CMAKE_CXX_COMPILER})
+#message(STATUS "SERIAL_CXX_COMPILER: ${SERIAL_CXX_COMPILER}")
+
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_C_FLAGS_RELEASE "-static -O3 -fPIE -ftree-vectorize")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -static-libgcc -m64 -O3 -Wall -Wuninitialized -fprefetch-loop-arrays -funroll-all-loops -ftree-vectorize")
+#set(CMAKE_C_FLAGS_RELEASE "-g -DLIBSAIS_OPENMP -fopenmp -static -O3 -fPIE -ftree-vectorize -mtune=znver3")
+#set(CMAKE_CXX_FLAGS_RELEASE "-g -DLIBSAIS_OPENMP -fopenmp ${CMAKE_CXX_FLAGS_RELEASE} -m64 -O3 -pthread -Wall -Wuninitialized -fprefetch-loop-arrays -funroll-all-loops -ftree-vectorize -mtune=znver3")
+#set(CMAKE_C_FLAGS_RELEASE "-gdwarf-4 -D_OPENMP -O3 -fPIE -ftree-vectorize -mtune=znver3")
+#set(CMAKE_CXX_FLAGS_RELEASE "-gdwarf-4 -D_OPENMP -fopenmp ${CMAKE_CXX_FLAGS_RELEASE} -m64 -O3 -Wall -Wuninitialized -fprefetch-loop-arrays -funroll-all-loops -ftree-vectorize -mtune=znver3")
+#set(CMAKE_C_FLAGS_RELEASE "-gdwarf-4 -O3 -fPIE -ftree-vectorize -mtune=znver3")
+#set(CMAKE_CXX_FLAGS_RELEASE "-gdwarf-4 ${CMAKE_CXX_FLAGS_RELEASE} -m64 -O3 -Wall -Wuninitialized -fprefetch-loop-arrays -funroll-all-loops -ftree-vectorize -mtune=znver3")
 
 set(CMAKE_C_COMPILER clang)
-set(CMAKE_CXX_COMPILER g++)
+set(CMAKE_CXX_COMPILER clang++)
 
 if(WIN32)
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wa,-mbig-obj")
@@ -13,7 +28,7 @@ endif()
 
 if(UNIX)
 set(CMAKE_SYSTEM_NAME Linux)
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -pthread -Wl,--whole-archive -libgcc -lpthread -Wl,--no-whole-archive")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -pthread -Wl,--whole-archive -lpthread -Wl,--no-whole-archive")
 endif()
 
 set(CMAKE_EXE_LINKER_FLAGS "-fstack-protector")
@@ -64,14 +79,23 @@ CPMAddPackage("gh:nlohmann/json@3.10.5")
 set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL REQUIRED)
 
+  set(Boost_NO_SYSTEM_PATHS TRUE)
+  if (Boost_NO_SYSTEM_PATHS)
+    set(Boost_NO_BOOST_CMAKE TRUE)
+    set(BOOST_ROOT "/home/dirker/source/boost/boost_1_82_0")
+    set(BOOST_INCLUDE_DIRS "${BOOST_ROOT}")
+    set(BOOST_LIBRARY_DIRS "${BOOST_ROOT}/libs")
+  endif (Boost_NO_SYSTEM_PATHS)
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_MULTITHREADED ON)
+set(Boost_NO_WARN_NEW_VERSIONS ON)
 find_package(Boost 1.80 REQUIRED
   chrono
   context
   json
   thread
   atomic
+  program_options
 )
 
 include_directories(
@@ -81,9 +105,11 @@ include_directories(
   "${PROJECT_SOURCE_DIR}/src/headers"
   "${PROJECT_SOURCE_DIR}/src/astrobwtv3/"
   "${PROJECT_SOURCE_DIR}/src/miner/"
+  "${BOOST_INCLUDE_DIRS}"
 )
 
 file(GLOB all_SRCS
+  # "${PROJECT_SOURCE_DIR}/src/*.h"
   "${PROJECT_SOURCE_DIR}/include/*.h"
   "${PROJECT_SOURCE_DIR}/include/*.hpp"
   # "${PROJECT_SOURCE_DIR}/include/*.cuh"
