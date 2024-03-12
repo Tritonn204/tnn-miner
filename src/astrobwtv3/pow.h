@@ -8,10 +8,12 @@
 
 #include <unordered_map>
 
-#include <random>
+// #include <random>
 #include <chrono>
 #include <math.h>
 #include <Salsa20.h>
+#include <numeric>
+#include <algorithm>
 
 #include <openssl/sha.h>
 #include <openssl/rc4.h>
@@ -203,7 +205,7 @@ inline void initWorker(workerData &worker) {
   std::copy(branchedOps_global.begin(), branchedOps_global.end(), worker.branchedOps);
   std::vector<byte> full(256);
   std::vector<byte> diff(256);
-  std::iota(full.begin(), full.end(), 0);
+  iota(full.begin(), full.end(), 0);
   std::set_difference(full.begin(), full.end(), branchedOps_global.begin(), branchedOps_global.end(), std::inserter(diff, diff.begin()));
   std::copy(diff.begin(), diff.end(), worker.regularOps);
   
@@ -316,8 +318,29 @@ inline void prefetch(T *data, int size, int hint) {
   const size_t prefetch_distance = 256; // Prefetch 8 cache lines ahead
   const size_t cache_line_size = 64; // Assuming a 64-byte cache line
 
-  for (size_t i = 0; i < size; i += prefetch_distance * cache_line_size) {
-      __builtin_prefetch(&data[i], 0, hint);
+  switch(hint) {
+    case 0:
+    for (size_t i = 0; i < size; i += prefetch_distance * cache_line_size) {
+        __builtin_prefetch(&data[i], 0, 0);
+    }
+    break;
+    case 1:
+    for (size_t i = 0; i < size; i += prefetch_distance * cache_line_size) {
+        __builtin_prefetch(&data[i], 0, 1);
+    }
+    break;
+    case 2:
+    for (size_t i = 0; i < size; i += prefetch_distance * cache_line_size) {
+        __builtin_prefetch(&data[i], 0, 2);
+    }
+    break;
+    case 3:
+    for (size_t i = 0; i < size; i += prefetch_distance * cache_line_size) {
+        __builtin_prefetch(&data[i], 0, 3);
+    }
+    break;
+    default:
+    break;
   }
 }
 

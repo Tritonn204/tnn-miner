@@ -1,13 +1,12 @@
 #include <endian.hpp>
 #include <inttypes.h>
 
-#include <unistd.h>
+// #include <unistd.h>
 #define FMT_HEADER_ONLY
 
-#include <fmt/format.h>
-#include <fmt/printf.h>
+// #include <fmt/format.h>
+// #include <fmt/printf.h>
 
-#include <bitset>
 #include <iostream>
 #include <fstream>
 
@@ -50,7 +49,6 @@ extern "C"
 #include <lookup.h>
 // #include <sacak-lcp.h>
 #include "immintrin.h"
-#include "dc3.hpp"
 // #include "fgsaca.hpp"
 #include <hugepages.h>
 
@@ -3472,7 +3470,7 @@ void optest(int op, workerData &worker, bool print=true) {
       for (int i = worker.pos1; i < worker.pos2; i++)
       {
         // INSERT_RANDOM_CODE_START
-        worker.step_3[i] ^= static_cast<uint8_t>(std::bitset<8>(worker.step_3[i]).count()); // ones count bits
+        worker.step_3[i] ^= static_cast<uint8_t>((byte)bitTable[worker.step_3[i]]); // ones count bits
         worker.step_3[i] = std::rotl(worker.step_3[i], 3);                                  // rotate  bits by 3
         worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                                 // rotate  bits by 2
         worker.step_3[i] = std::rotl(worker.step_3[i], 3);                                  // rotate  bits by 3
@@ -3952,13 +3950,11 @@ void TestAstroBWTv3repeattest()
 
   std::random_device rd;
   std::mt19937 gen(rd());
-  std::uniform_int_distribution<uint8_t> dist(0, 255);
+  // std::uniform_int_distribution<uint8_t> dist(0, 255);
   std::array<byte, 48> buf;
 
   for (int i = 0; i < 1024; i++)
   {
-    std::generate(buf.begin(), buf.end(), [&dist, &gen]()
-                  { return dist(gen); });
     std::memcpy(random_data, buf.data(), buf.size());
 
     // std::cout << hexStr(data, 48) << std::endl;
@@ -7242,7 +7238,7 @@ void branchComputeCPU(workerData &worker)
       for (int i = worker.pos1; i < worker.pos2; i++)
       {
         // INSERT_RANDOM_CODE_START
-        worker.step_3[i] ^= static_cast<uint8_t>(std::bitset<8>(worker.step_3[i]).count()); // ones count bits
+        worker.step_3[i] ^= static_cast<uint8_t>((byte)bitTable[worker.step_3[i]]); // ones count bits
         worker.step_3[i] = std::rotl(worker.step_3[i], 3);                                  // rotate  bits by 3
         worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                                 // rotate  bits by 2
         worker.step_3[i] = std::rotl(worker.step_3[i], 3);                                  // rotate  bits by 3
@@ -10679,7 +10675,7 @@ void branchComputeCPU_optimized(workerData &worker)
       for (int i = worker.pos1; i < worker.pos2; i++)
       {
         // INSERT_RANDOM_CODE_START
-        worker.step_3[i] ^= static_cast<uint8_t>(std::bitset<8>(worker.step_3[i]).count()); // ones count bits
+        worker.step_3[i] ^= static_cast<uint8_t>((byte)bitTable[worker.step_3[i]]); // ones count bits
         worker.step_3[i] = std::rotl(worker.step_3[i], 3);                                  // rotate  bits by 3
         worker.step_3[i] ^= std::rotl(worker.step_3[i], 2);                                 // rotate  bits by 2
         worker.step_3[i] = std::rotl(worker.step_3[i], 3);                                  // rotate  bits by 3
