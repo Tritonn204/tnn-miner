@@ -3715,9 +3715,11 @@ void runDivsufsortBenchmark() {
   
   std::vector<std::chrono::duration<double>> times;
   std::vector<std::chrono::duration<double>> times2;
+  /*
   std::vector<std::chrono::duration<double>> times3;
   std::vector<std::chrono::duration<double>> times4;
   std::vector<std::chrono::duration<double>> times5;
+  */
 
   int buckets[256];
   int sorted[MAX_LENGTH];
@@ -3731,7 +3733,8 @@ void runDivsufsortBenchmark() {
 
   void * ctx = libsais_create_ctx();
   workerData *worker = new workerData;
-  
+
+  std::cout << "Testing divsufsort" << std::endl;
   for (const auto& file : snapshotFiles) {
     // printf("enter\n");
     // Load snapshot data from file
@@ -3749,9 +3752,9 @@ void runDivsufsortBenchmark() {
     
     std::chrono::duration<double> time = end - start;
     times.push_back(time);
-
   }
 
+  std::cout << "Testing sais" << std::endl;
   for (const auto& file : snapshotFiles) {
     // printf("enter\n");
     // Load snapshot data from file
@@ -3809,19 +3812,20 @@ void runDivsufsortBenchmark() {
   // Calculate average times
   
   double divsufsortAverage = 0.0;
-  double libcubwtAverage = 0.0;
-  double libcubwtInclusiveAverage = 0.0;
   double libsaisAverage = 0.0;
+  double libfgsacaAverage = 0.0;
+  double libcubwtInclusiveAverage = 0.0;
   double naiveAverage = 0.0;
   
   for (const auto& time : times) {
     divsufsortAverage += time.count();
   }
   for (const auto& time : times2) {
-    libcubwtAverage += time.count(); 
-  }
-  for (const auto& time : times3) {
     libsaisAverage += time.count(); 
+  }
+  /*
+  for (const auto& time : times3) {
+    libfgsacaAverage += time.count(); 
   }
   for (const auto& time : times4) {
     libcubwtInclusiveAverage += time.count(); 
@@ -3829,19 +3833,31 @@ void runDivsufsortBenchmark() {
   for (const auto& time : times5) {
     naiveAverage += time.count(); 
   }
+  */
+
+  std::cout << "Total divsufsort time: " << std::setprecision (5) << divsufsortAverage << " seconds" << std::endl;
+  std::cout << "Total sais time:       " << std::setprecision (5) << libsaisAverage << " seconds" << std::endl;
+  /*
+  std::cout << "Total fgsaca time:       " << std::setprecision (5) << libfgsacaAverage << " seconds" << std::endl;
+  std::cout << "Total libcubwt time:     " << std::setprecision (5) << libcubwtInclusiveAverage << " seconds" << std::endl;
+  std::cout << "Total naive time:        " << std::setprecision (5) << naiveAverage << " seconds" << std::endl;
+  */
 
   divsufsortAverage /= times.size();
-  libcubwtAverage /= times2.size();
-  libsaisAverage /= times3.size();
+  libsaisAverage /= times2.size();
+  /*
+  libfgsacaAverage /= times3.size();
   libcubwtInclusiveAverage /= times4.size();
   naiveAverage /= times5.size();
+  */
 
   std::cout << "Average divsufsort time: " << divsufsortAverage << " seconds" << std::endl;
-  // std::cout << "Average fgsaca time: " << libsaisAverage << " seconds" << std::endl;
-  std::cout << "Average sais time: " << libcubwtAverage << " seconds" << std::endl;
-  // std::cout << "Average libcubwt time (inclusive): " << libcubwtInclusiveAverage << " seconds" << std::endl;
-  // std::cout << "Average msufsort time: " << naiveAverage << " seconds" << std::endl;
-  
+  std::cout << "Average sais time:       " << libsaisAverage << " seconds" << std::endl;
+  /*
+  std::cout << "Average fgsaca time:     " << libsaisAverage << " seconds" << std::endl;
+  std::cout << "Average libcubwt time:   " << libcubwtInclusiveAverage << " seconds" << std::endl;
+  std::cout << "Average naive time:      " << naiveAverage << " seconds" << std::endl;
+  */  
 }
 
 void TestAstroBWTv3()
@@ -3866,7 +3882,7 @@ void TestAstroBWTv3()
     byte res2[32];
     AstroBWTv3(buf, (int)t.in.size(), res2, *worker, false);
     // printf("vanilla result: %s\n", hexStr(res, 32).c_str());
-    AstroBWTv3(buf, (int)t.in.size(), res, *worker2, true, false);
+    AstroBWTv3(buf, (int)t.in.size(), res, *worker2, true);
     // printf("lookup result: %s\n", hexStr(res, 32).c_str());
     std::string s = hexStr(res, 32);
     if (s.c_str() != t.out)
@@ -4024,7 +4040,7 @@ void computeByteFrequencyAVX2(const unsigned char* data, size_t dataSize, int fr
 #endif
 
 
-void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker, bool lookupMine, bool simd)
+void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker, bool lookupMine)
 {
   // auto recoverFunc = [&outputhash](void *r)
   // {
@@ -4103,7 +4119,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     // printf("data length: %d\n", worker.data_len);
     divsufsort(worker.sData, worker.sa, worker.data_len, worker.bA, worker.bB);
     // computeByteFrequencyAVX2(worker.sData, worker.data_len, worker.freq);
-    // libsais_ctx(worker.ctx, worker.sData, worker.sa, worker.data_len, MAX_LENGTH-worker.data_len, NULL);
+// libsais_ctx(worker.ctx, worker.sData, worker.sa, worker.data_len, MAX_LENGTH-worker.data_len, NULL);
 
     if (littleEndian())
     {

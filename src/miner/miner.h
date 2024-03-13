@@ -29,6 +29,7 @@ int threads = 0;
 int testOp = -1;
 int testLen = -1;
 bool gpuMine = false;
+bool useLookupMine = false;
 
 int cudaMemNumerator = 1000;
 int cudaMemDenominator = 750; //Kilobytes per worker in VRAM

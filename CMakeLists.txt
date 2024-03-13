@@ -5,7 +5,7 @@ set(CMAKE_C_FLAGS_RELEASE "-static -O3 -fPIE -ftree-vectorize")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -static-libgcc -m64 -O3 -Wall -Wuninitialized -fprefetch-loop-arrays -funroll-all-loops -ftree-vectorize")
 
 set(CMAKE_C_COMPILER clang)
-set(CMAKE_CXX_COMPILER g++)
+set(CMAKE_CXX_COMPILER clang++)
 
 if(WIN32)
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wa,-mbig-obj")
@@ -13,7 +13,7 @@ endif()
 
 if(UNIX)
 set(CMAKE_SYSTEM_NAME Linux)
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -pthread -Wl,--whole-archive -libgcc -lpthread -Wl,--no-whole-archive")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -pthread -Wl,--whole-archive -lpthread -Wl,--no-whole-archive")
 endif()
 
 set(CMAKE_EXE_LINKER_FLAGS "-fstack-protector")
@@ -64,14 +64,33 @@ CPMAddPackage("gh:nlohmann/json@3.10.5")
 set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL REQUIRED)
 
+find_program(LSB_RELEASE_EXEC lsb_release)
+execute_process(COMMAND ${LSB_RELEASE_EXEC} -cs
+    OUTPUT_VARIABLE LSB_RELEASE_CODENAME_SHORT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if("${LSB_RELEASE_CODENAME_SHORT}" STREQUAL "jammy")
+  set(Boost_NO_SYSTEM_PATHS TRUE)
+  if (Boost_NO_SYSTEM_PATHS)
+    set(Boost_NO_BOOST_CMAKE TRUE)
+    set(BOOST_ROOT "${PROJECT_SOURCE_DIR}/boost-1.82.0")
+    set(BOOST_INCLUDE_DIRS "${BOOST_ROOT}")
+    set(BOOST_LIBRARY_DIRS "${BOOST_ROOT}/libs")
+  endif (Boost_NO_SYSTEM_PATHS)
+else()
+  set(BOOST_INCLUDE_DIRS "")
+endif()
+
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_MULTITHREADED ON)
+set(Boost_NO_WARN_NEW_VERSIONS ON)
 find_package(Boost 1.80 REQUIRED
   chrono
   context
   json
   thread
   atomic
+  program_options
 )
 
 include_directories(
@@ -81,6 +100,7 @@ include_directories(
   "${PROJECT_SOURCE_DIR}/src/headers"
   "${PROJECT_SOURCE_DIR}/src/astrobwtv3/"
   "${PROJECT_SOURCE_DIR}/src/miner/"
+  "${BOOST_INCLUDE_DIRS}"
 )
 
 file(GLOB all_SRCS
@@ -107,3 +127,4 @@ if(UNIX)
   target_link_libraries(${PROJECT_NAME} udns pthread)
 endif()
 target_link_libraries(${PROJECT_NAME} nlohmann_json::nlohmann_json ${Boost_LIBRARIES} OpenSSL::SSL OpenSSL::Crypto)
+

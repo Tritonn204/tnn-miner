@@ -1,6 +1,7 @@
 #ifndef astrobwtv3
 #define astrobwtv3
 
+#include <algorithm>
 #include <iostream>
 #include <iomanip>
 #include <sstream>
@@ -316,8 +317,32 @@ inline void prefetch(T *data, int size, int hint) {
   const size_t prefetch_distance = 256; // Prefetch 8 cache lines ahead
   const size_t cache_line_size = 64; // Assuming a 64-byte cache line
 
-  for (size_t i = 0; i < size; i += prefetch_distance * cache_line_size) {
-      __builtin_prefetch(&data[i], 0, hint);
+  //for (size_t i = 0; i < size; i += prefetch_distance * cache_line_size) {
+  //    __builtin_prefetch(&data[i], 0, hint);
+  //}
+  switch(hint) {
+    case 0:
+      for (size_t i = 0; i < size; i += prefetch_distance * cache_line_size) {
+          __builtin_prefetch(&data[i], 0, 0);
+      }
+    break;
+    case 1:
+      for (size_t i = 0; i < size; i += prefetch_distance * cache_line_size) {
+          __builtin_prefetch(&data[i], 0, 1);
+      }
+    break;
+    case 2:
+      for (size_t i = 0; i < size; i += prefetch_distance * cache_line_size) {
+          __builtin_prefetch(&data[i], 0, 2);
+      }
+    break;
+    case 3:
+      for (size_t i = 0; i < size; i += prefetch_distance * cache_line_size) {
+          __builtin_prefetch(&data[i], 0, 3);
+      }
+      break;
+    default:
+    break;
   }
 }
 
@@ -359,7 +384,7 @@ void processAfterMarker(workerData& worker);
 void lookupCompute(workerData &worker);
 void branchComputeCPU(workerData &worker);
 void branchComputeCPU_optimized(workerData &worker);
-void AstroBWTv3(unsigned char *input, int inputLen, unsigned char *outputhash, workerData &scratch, bool gpuMine, bool simd=false);
+void AstroBWTv3(unsigned char *input, int inputLen, unsigned char *outputhash, workerData &scratch, bool lookupMine);
 
 void finishBatch(workerData &worker);
 
