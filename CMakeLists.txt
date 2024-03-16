@@ -3,8 +3,8 @@ cmake_policy(VERSION 3.21.3...3.27)
 
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_C_FLAGS_RELEASE "-fansi-escape-codes -fcolor-diagnostics -static -O3 -ftree-vectorize")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fansi-escape-codes -fcolor-diagnostics -static -m64 -g -Wuninitialized -ftree-vectorize")
-set(CMAKE_HIP_FLAGS "-static -fansi-escape-codes -fcolor-diagnostics -g -fgpu-rdc --hip-link -fuse-ld=lld -Wno-deprecated-register")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fansi-escape-codes -fcolor-diagnostics -static -static-libgcc -m64 -O3 -Wuninitialized -ftree-vectorize")
+set(CMAKE_HIP_FLAGS "-static -ggdb -fansi-escape-codes -fcolor-diagnostics -fgpu-rdc --hip-link -fuse-ld=lld -Wno-deprecated-register")
 
 if(NOT DEFINED HIP_PATH)
     if(NOT DEFINED ENV{HIP_PATH})
@@ -27,10 +27,9 @@ set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wl,--whole-archive -Wl,--no-whole-archive")
 endif()
 
-set(CMAKE_EXE_LINKER_FLAGS "-fstack-protector")
-
 if(WIN32)
     set(ROCM_ROOT "$ENV{HIP_PATH}" CACHE PATH "Root directory of the ROCm installation")
+    set(CMAKE_IGNORE_PREFIX_PATH "C:/mingw64")
 else()
     set(ROCM_ROOT "/opt/rocm" CACHE PATH "Root directory of the ROCm installation")
 endif()
@@ -101,16 +100,6 @@ find_package(Boost 1.80 REQUIRED
 )
 include_directories( ${Boost_INCLUDE_DIRS} )
 
-if(WIN32)
-  include_directories(
-    "C:/mingw64/include"
-  )
-  link_directories(
-    "C:/mingw64/lib"
-  )
-endif()
-
-
 include_directories(
   ${PROJECT_SOURCE_DIR}/include
   ${PROJECT_SOURCE_DIR}/include/highwayhash
@@ -150,5 +139,5 @@ endif()
 target_link_libraries(${PROJECT_NAME} nlohmann_json::nlohmann_json OpenSSL::SSL ${Boost_LIBRARIES} OpenSSL::Crypto hip::host roc::rocprim roc::rocthrust)
 
 
-set_property(TARGET ${PROJECT_NAME} PROPERTY hip_ARCHITECTURES gfx1100)
-set(CMAKE_EXE_LINKER_FLAGS "-fgpu-rdc -lC:/Boost/lib/libboost_coroutine-clangw17-mt-x64-1_82.lib")
+set_property(TARGET ${PROJECT_NAME} PROPERTY HIP_ARCHITECTURES gfx1100)
+set(CMAKE_EXE_LINKER_FLAGS "-fgpu-rdc")

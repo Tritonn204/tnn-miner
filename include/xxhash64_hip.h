@@ -13,23 +13,23 @@
 /// XXHash (64 bit), based on Yann Collet's descriptions, see http://cyan4973.github.io/xxHash/
 /** How to use:
     uint64_t myseed = 0;
-    XXHash64_cuda myhash(myseed);
+    XXHash64_hip myhash(myseed);
     myhash.add(pointerToSomeBytes,     numberOfBytes);
     myhash.add(pointerToSomeMoreBytes, numberOfMoreBytes); // call add() as often as you like to ...
     // and compute hash:
     uint64_t result = myhash.hash();
 
     // or all of the above in one single line:
-    uint64_t result2 = XXHash64_cuda::hash(mypointer, numBytes, myseed);
+    uint64_t result2 = XXHash64_hip::hash(mypointer, numBytes, myseed);
 
     Note: my code is NOT endian-aware !
 **/
-class XXHash64_cuda
+class XXHash64_hip
 {
 public:
   /// create new XXHash (64 bit)
   /** @param seed your seed value, even zero is a valid seed **/
-  __device__ explicit XXHash64_cuda(uint64_t seed)
+  __device__ explicit XXHash64_hip(uint64_t seed)
   {
     state[0] = seed + Prime1 + Prime2;
     state[1] = seed + Prime2;
@@ -160,7 +160,7 @@ public:
       @return 64 bit XXHash **/
   __device__ static uint64_t hash(const void* input, uint64_t length, uint64_t seed)
   {
-    XXHash64_cuda hasher(seed);
+    XXHash64_hip hasher(seed);
     hasher.add(input, length);
       return hasher.hash();
   }

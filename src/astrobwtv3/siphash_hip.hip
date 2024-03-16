@@ -91,7 +91,7 @@
     *out: pointer to output data (write-only), outlen bytes must be allocated
     outlen: length of the output in bytes, must be 8 or 16
 */
-__device__ int siphash_cuda(const void *in, const size_t inlen, const void *k, uint8_t *out,
+__device__ int siphash_hip(const void *in, const size_t inlen, const void *k, uint8_t *out,
             const size_t outlen) {
 
     const unsigned char *ni = (const unsigned char *)in;

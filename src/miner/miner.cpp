@@ -63,7 +63,7 @@
 #include <libcubwt.cuh>
 #include <lookupcompute.h>
 
-
+#include <pow_hip.h>
 
 #if defined(_WIN32)
 LPTSTR lpNxtPage;  // Address of the next page to ask for
@@ -422,6 +422,7 @@ int main(int argc, char **argv)
   else
     std::cout << "Huge Pages: Permission Failed..." << std::endl;
 
+  SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
 #endif
   // Check command line arguments.
   lookup2D_global = (uint16_t *)malloc_huge_pages(regOps_size*(256*256)*sizeof(uint16_t));
@@ -651,7 +652,7 @@ Testing:
       runOpTests(testOp);
     }
   TestAstroBWTv3();
-  // TestAstroBWTv3_cuda();
+  TestAstroBWTv3_hip();
   // TestAstroBWTv3repeattest();
   std::this_thread::sleep_for(std::chrono::seconds(30));
   return 0;
@@ -694,7 +695,7 @@ Benchmarking:
   for (int i = 0; i < threads; i++)
   {
     std::thread t(benchmark, i + 1);
-
+    t.detach();
 
     mutex.lock();
     std::cout << "(Benchmark) Worker " << i + 1 << " created" << std::endl;
@@ -766,21 +767,27 @@ Mining:
   winMask = std::max(1, winMask);
 
   // Create worker threads and set CPU affinity
+  int tid = 1;
   mutex.lock();
   printf("mutex lock\n");
-  if (false /*gpuMine*/ )
+  if (gpuMine)
   {
-    // std::thread t(cudaMine);
+    std::thread t(hipMine);
+    t.detach();
     // continue;
   }
   else
+  {
     for (int i = 0; i < threads; i++)
     {
-      std::thread t(mineBlock, i + 1);
+      std::thread t(mineBlock, tid);
+      t.detach();
+      tid++;
       // if (threads == 1 || (n > 2 && i <= n - 2))
-
       std::cout << "Thread " << i + 1 << " started" << std::endl;
     }
+    printf("after loop\n");
+  }
   mutex.unlock();
   printf("mutex unlock\n");
 
@@ -1133,6 +1140,8 @@ void benchmark(int tid)
 
 void mineBlock(int tid)
 {
+  printf("made it in\n");
+    
   byte work[MINIBLOCK_SIZE];
 
   byte random_buf[12];
@@ -1254,7 +1263,7 @@ waitForJob:
             mutex.lock();
             submitting = true;
             setcolor(BRIGHT_YELLOW);
-            std::cout << "\nThread " << tid << " found a nonce!\n";
+            std::cout << DERO << "\nThread " << tid << " found a nonce!\n";
             setcolor(BRIGHT_WHITE);
             mutex.unlock();
             share = {
@@ -1279,236 +1288,279 @@ waitForJob:
   goto waitForJob;
 }
 
-// void hipMine()
+void hipMine()
+{
+  printf("made it in\n");
+  int GPUCount = 0;
+  hipGetDeviceCount(&GPUCount);
+  int GPUbound = GPUCount;
+
+  if (GPUbound == 0)
+  {
+    setcolor(RED);
+    std::cerr << "ERROR: No GPU with ROCm nor HIP compute capability could be found\n";
+    setcolor(BRIGHT_WHITE);
+    std::this_thread::sleep_for(std::chrono::seconds(20));
+    return;
+  }
+
+  // checkCudaErrors(cudaMemcpyToSymbol(dev_k, host_k, sizeof(host_k), 0, cudaMemcpyHostToDevice));
+  // checkCudaErrors(cudaMemcpyToSymbol(bitTable_d, bitTable, sizeof(bitTable), 0, cudaMemcpyHostToDevice));
+
+  byte random_buf[12];
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_int_distribution<unsigned short> dist(0, 255);
+  std::array<uint8_t, 12> buf;
+  std::generate(buf.begin(), buf.end(), [&dist, &gen]()
+                { return dist(gen); });
+  memcpy(random_buf, buf.data(), buf.size());
+
+  int64_t localJobCounter;
+
+  int *batchSizes = new int[GPUCount];
+
+  hipError_t err;
+  int HHA;
+  err = hipMalloc((void **)&HHA, sizeof(int));
+
+  if (err != hipSuccess)
+  {
+    printf("hipMalloc went wrong!\n");
+    printf("Error: %s\n", hipGetErrorString(err));
+  }
+
+  for (int i = 0; i < GPUbound; i++)
+  {
+    printf("device: %d\n", i);
+    hipSetDevice(i);
+    size_t freeBytes = 0;
+    size_t totalBytes = 0;
+    err = hipMemGetInfo(&freeBytes, &totalBytes);
+
+    if (err != hipSuccess)
+    {
+      printf("hipMemGetInfo went wrong!\n");
+      printf("Error: %s\n", hipGetErrorString(err));
+    }
+
+    batchSizes[i] = batchSize;
+
+    if (batchSizes[i] == 0) batchSizes[i] = ((freeBytes / sizeof(workerData_hip)) * cudaMemNumerator) / cudaMemDenominator;
+    // batchSizes[i] = std::min(batchSizes[i], 8912);
+    printf("Free memory on GPU #%d: %ld MB\n", i, freeBytes/1000000);
+    printf("batchSize on GPU #%d: %d\n", i, batchSizes[i]);
+  }
+
+  int workerArraySize = 0;
+  int blobArraySize = 0;
+
+  workerData_hip *workers_h;
+  workerData_hip *hip_workers;
+
+//   class workerData_hip_aos
 // {
+// public:
+//   unsigned char sHash[32];
+//   unsigned char sha_key[32];
+//   unsigned char sData[MAXX + 64];
 
-//   int GPUCount = 0;
-//   hipGetDeviceCount(&GPUCount);
-//   int GPUbound = GPUCount;
+//   unsigned char counter[64];
 
-//   if (GPUbound == 0)
-//   {
-//     setcolor(RED);
-//     std::cerr << "ERROR: No GPU with ROCm nor HIP compute capability could be found\n";
-//     setcolor(BRIGHT_WHITE);
-//     std::this_thread::sleep_for(std::chrono::seconds(20));
-//     return;
-//   }
+//   SHA256_CTX_HIP sha256;
+//   rc4_state key;
 
-//   // checkCudaErrors(cudaMemcpyToSymbol(dev_k, host_k, sizeof(host_k), 0, cudaMemcpyHostToDevice));
-//   // checkCudaErrors(cudaMemcpyToSymbol(bitTable_d, bitTable, sizeof(bitTable), 0, cudaMemcpyHostToDevice));
+//   int32_t sa[MAXX];
+  
+//   alignas(32) byte branchedOps[branchedOps_size_hip];
+//   alignas(32) byte regularOps[regOps_size_hip];
 
-//   byte random_buf[12];
-//   std::random_device rd;
-//   std::mt19937 gen(rd());
-//   std::uniform_int_distribution<unsigned short> dist(0, 255);
-//   std::array<uint8_t, 12> buf;
-//   std::generate(buf.begin(), buf.end(), [&dist, &gen]()
-//                 { return dist(gen); });
-//   memcpy(random_buf, buf.data(), buf.size());
+//   alignas(32) byte branched_idx[256];
+//   alignas(32) byte reg_idx[256];
 
-//   int64_t localJobCounter;
+//   // Salsa20_cuda salsa20;
 
-//   int *batchSizes = new int[GPUCount];
+//   int bucket_A[256];
+//   int bucket_B[256*256];
+//   int M;
 
-//   int *hipWorkerStartIndexes = new int[GPUCount];
-//   int *hipBlobStartIndexes = new int[GPUCount];
-//   int *hipHashStartIndexes = new int[GPUCount];
+//   unsigned char step_3[256];
 
-//   hipError_t err;
-//   int HHA;
-//   err = hipMalloc((void **)&HHA, sizeof(int));
+//   unsigned char *lookup3D;
+//   uint16_t *lookup2D;
 
-//   if (err != hipSuccess)
-//   {
-//     printf("hipMalloc went wrong!\n");
-//     printf("Error: %s\n", hipGetErrorString(err));
-//   }
+//   uint64_t random_switcher;
 
-//   for (int i = 0; i < GPUbound; i++)
-//   {
-//     printf("device: %d\n", i);
-//     hipSetDevice(i);
-//     size_t freeBytes = 4000000000;
-//     size_t totalBytes = 24000000000;
-//     err = hipMemGetInfo(&freeBytes, &totalBytes);
+//   uint64_t lhash;
+//   uint64_t prev_lhash;
+//   uint64_t tries;
 
-//     if (err != hipSuccess)
-//     {
-//       printf("hipMemGetInfo went wrong!\n");
-//       printf("Error: %s\n", hipGetErrorString(err));
-//     }
+//   unsigned char op;
+//   unsigned char pos1;
+//   unsigned char pos2;
+//   unsigned char t1;
+//   unsigned char t2;
 
-//     batchSizes[i] = batchSize;
+//   // Vars for split sais kernels
+//   int *sais_C, *sais_B, *sais_D, *sais_RA, *sais_b;
+//   int sais_i, sais_j, sais_m, sais_p, sais_q, sais_t_var, sais_name, sais_pidx = 0, sais_newfs;
+//   int sais_c0, sais_c1;
+//   unsigned int sais_flags;
 
-//     // batchSizes[i] = ((freeBytes / 1000000) * cudaMemNumerator) / cudaMemDenominator;
-//     // printf("Free memory on GPU #%d: %ld MB\n", i, freeBytes/1000000);
-//     // printf("batchSize on GPU #%d: %d\n", i, batchSizes[i]);
-//   }
+//   unsigned char A;
+//   uint32_t data_len;
+// };
 
-//   int workerArraySize = 0;
-//   int blobArraySize = 0;
+  byte *hip_output;
+  byte *hip_work;
+  byte *hip_devWork;
 
-//   workerData_hip *workers_h;
-//   workerData_hip *hip_workers;
+  for (int i = 0; i < GPUbound; i++)
+  {
+    workerArraySize += batchSizes[i];
+  }
 
-//   byte *hip_output;
-//   byte *hip_work;
-//   byte *hip_devWork;
+  workers_h = new workerData_hip[workerArraySize];
 
-//   for (int i = 0; i < GPUbound; i++)
-//   {
-//     workerArraySize += batchSizes[i];
+  byte *work = new byte[workerArraySize * MINIBLOCK_SIZE];
+  byte *devWork = new byte[workerArraySize * MINIBLOCK_SIZE];
+  byte *outputHashes = new byte[workerArraySize * 32];
 
-//     if (i > 0)
-//     {
-//       hipWorkerStartIndexes[i] += batchSizes[i] + hipWorkerStartIndexes[i - 1];
-//       hipBlobStartIndexes[i] += batchSizes[i] * MINIBLOCK_SIZE + hipBlobStartIndexes[i - 1];
-//       hipHashStartIndexes[i] += batchSizes[i] * 32 + hipHashStartIndexes[i - 1];
-//     }
-//     else
-//     {
-//       hipWorkerStartIndexes[i] = 0;
-//       hipBlobStartIndexes[i] = 0;
-//       hipHashStartIndexes[i] = 0;
-//     }
-//   }
+  workerData *worker = (workerData *)malloc(sizeof(workerData));
+  initWorker(*worker);
+  lookupGen(*worker, lookup2D_global, lookup3D_global);
+  
+  for (int d = 0; d < GPUCount; d++) {
+    hipSetDevice(d);
+  }
 
-//   workers_h = new workerData_hip[workerArraySize];
+  for (int d = 0; d < GPUbound; d++)
+  {
+    printf("device: %d\n", d);
+    hipSetDevice(d);
+    hipMalloc((void **)&hip_output, workerArraySize * 32);
+    hipMalloc((void **)&hip_work, workerArraySize * MINIBLOCK_SIZE);
+    hipMalloc((void **)&hip_devWork, workerArraySize * MINIBLOCK_SIZE);
+    hipMalloc((void **)&hip_workers, sizeof(workerData_hip) * workerArraySize);
+    // ASTRO_LOOKUPGEN_HIP(d, batchSizes[d], &hip_workers[hipWorkerStartIndexes[d]]);
+    hipDeviceSynchronize();
+  }
 
-//   byte *work = new byte[workerArraySize * MINIBLOCK_SIZE];
-//   byte *devWork = new byte[workerArraySize * MINIBLOCK_SIZE];
-//   byte *outputHashes = new byte[workerArraySize * 32];
+waitForJob:
+  printf("After Lookupgen\n");
+  while (!isConnected)
+  {
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+  }
 
-//   for (int d = 0; d < GPUbound; d++)
-//   {
-//     printf("device: %d\n", d);
-//     hipSetDevice(d);
-//     hipMalloc((void **)&hip_output, workerArraySize * 32);
-//     hipMalloc((void **)&hip_work, workerArraySize * MINIBLOCK_SIZE);
-//     hipMalloc((void **)&hip_devWork, workerArraySize * MINIBLOCK_SIZE);
-//     hipMalloc((void **)&hip_workers, sizeof(workerData_hip) * workerArraySize);
-//   }
+  std::string blobString;
 
-// waitForJob:
+  while (true)
+  {
+    mutex.lock();
+    json myJob = job;
+    json myJobDev = devJob;
+    localJobCounter = jobCounter;
+    mutex.unlock();
 
-//   while (!isConnected)
-//   {
-//     std::this_thread::yield();
-//   }
+    byte *b2 = new byte[MINIBLOCK_SIZE];
+    blobString = myJob.at("blockhashing_blob");
+    hexstr_to_bytes(blobString, b2);
+    for (int i = 0; i < workerArraySize; i++)
+    {
+      memcpy(&work[i * MINIBLOCK_SIZE], b2, MINIBLOCK_SIZE);
+      memcpy(&work[i * MINIBLOCK_SIZE + MINIBLOCK_SIZE - 12], random_buf, 12);
+    }
+    delete[] b2;
 
-//   std::string blobString;
+    if (devConnected)
+    {
+      byte *b2d = new byte[MINIBLOCK_SIZE];
+      blobString = myJobDev.at("blockhashing_blob");
+      hexstr_to_bytes(blobString, b2d);
+      for (int i = 0; i < workerArraySize; i++)
+      {
+        memcpy(&devWork[i * MINIBLOCK_SIZE], b2d, MINIBLOCK_SIZE);
+        memcpy(&devWork[i * MINIBLOCK_SIZE + MINIBLOCK_SIZE - 12], random_buf, 12);
+      }
+      delete[] b2d;
+    }
 
-//   while (true)
-//   {
-//     mutex.lock();
-//     json myJob = job;
-//     json myJobDev = devJob;
-//     localJobCounter = jobCounter;
-//     mutex.unlock();
+    for (int d = 0; d < GPUbound; d++)
+    {
+      hipSetDevice(d);
+      hipMemset(hip_output, 0, workerArraySize * 32);
+    }
 
-//     byte *b2 = new byte[MINIBLOCK_SIZE];
-//     blobString = myJob.at("blockhashing_blob");
-//     hexstr_to_bytes_std(blobString, b2);
-//     for (int i = 0; i < workerArraySize; i++)
-//     {
-//       memcpy(&work[i * MINIBLOCK_SIZE], b2, MINIBLOCK_SIZE);
-//       memcpy(&work[i * MINIBLOCK_SIZE + MINIBLOCK_SIZE - 12], random_buf, 12);
-//     }
-//     delete[] b2;
+    double which;
+    bool devMine = false;
+    bool submit = false;
+    uint64_t DIFF;
 
-//     if (devConnected)
-//     {
-//       byte *b2d = new byte[MINIBLOCK_SIZE];
-//       blobString = myJobDev.at("blockhashing_blob");
-//       hexstr_to_bytes_std(blobString, b2d);
-//       for (int i = 0; i < workerArraySize; i++)
-//       {
-//         memcpy(&devWork[i * MINIBLOCK_SIZE], b2d, MINIBLOCK_SIZE);
-//         memcpy(&devWork[i * MINIBLOCK_SIZE + MINIBLOCK_SIZE - 12], random_buf, 12);
-//       }
-//       delete[] b2d;
-//     }
+    int nonce = 0;
+    for (int d = 0; d < GPUbound; d++)
+    {
+      hipSetDevice(d);
+      hipMemcpy(hip_work, work, workerArraySize * MINIBLOCK_SIZE, hipMemcpyHostToDevice);
+      hipMemcpy(hip_devWork, devWork, workerArraySize * MINIBLOCK_SIZE, hipMemcpyHostToDevice);
+    }
 
-//     for (int d = 0; d < GPUbound; d++)
-//     {
-//       hipSetDevice(d);
-//       hipMemset(hip_output, 0, workerArraySize * 32);
-//     }
+    Num cmpDiff;
 
-    // printf("after memset\n");
+    while (localJobCounter == jobCounter)
+    {
+      which = (double)(rand() % 10000);
+      devMine = (devConnected && which < devFee * 100.0);
+      DIFF = devMine ? difficultyDev : difficulty;
 
-    // double which;
-    // bool devMine = false;
-    // bool submit = false;
-    // uint64_t DIFF;
+      // printf("Difficulty: %" PRIx64 "\n", DIFF);
 
-    // int nonce = 0;
-    // for (int d = 0; d < GPUbound; d++)
-    // {
-    //   hipSetDevice(d);
-    //   hipMemcpy(hip_work, work, workerArraySize * MINIBLOCK_SIZE, hipMemcpyHostToDevice);
-    //   hipMemcpy(hip_devWork, devWork, workerArraySize * MINIBLOCK_SIZE, hipMemcpyHostToDevice);
-    // }
+      cmpDiff = ConvertDifficultyToBig(DIFF);
 
-    // printf("after memcpy\n");
+      byte *WORK = devMine ? hip_devWork : hip_work;
 
-    // Num cmpDiff;
+      for (int d = 0; d < GPUbound; d++)
+      {
+        hipSetDevice(d);
+        ASTRO_INIT_HIP(d, WORK, batchSizes[d], 0, nonce);
+        nonce += batchSizes[d];
+      }
 
-    // while (localJobCounter == jobCounter)
-    // {
-    //   which = (double)(rand() % 10000);
-    //   devMine = (devConnected && which < devFee * 100.0);
-    //   DIFF = devMine ? difficultyDev : difficulty;
+      for (int d = 0; d < GPUbound; d++)
+      {
+        hipSetDevice(d);
+        hipDeviceSynchronize();
+        if (localJobCounter != jobCounter)
+          break;
+      }
+      if (localJobCounter != jobCounter)
+        break;
 
-    //   // printf("Difficulty: %" PRIx64 "\n", DIFF);
+      for (int d = 0; d < GPUbound; d++)
+      {
+        hipSetDevice(d);
+        ASTRO_HIP(WORK, hip_output, hip_workers, MINIBLOCK_SIZE, batchSizes[d], 0, 0);
+      }
 
-    //   cmpDiff = ConvertDifficultyToBig(DIFF);
+      for (int d = 0; d < GPUbound; d++)
+      {
+        hipSetDevice(d);
+        hipDeviceSynchronize();
+        if (localJobCounter != jobCounter)
+          break;
+      }
 
-    //   byte *WORK = devMine ? hip_devWork : hip_work;
+      counter.store(counter + workerArraySize);
 
-    //   for (int d = 0; d < GPUbound; d++)
-    //   {
-    //     hipSetDevice(d);
-    //     ASTRO_INIT_HIP(d, WORK, batchSizes[d], hipWorkerStartIndexes[d], nonce);
-    //     nonce += batchSizes[d];
-    //   }
+      if (localJobCounter != jobCounter)
+        break;
 
-    //   for (int d = 0; d < GPUbound; d++)
-    //   {
-    //     hipSetDevice(d);
-    //     hipDeviceSynchronize();
-    //     if (localJobCounter != jobCounter)
-    //       break;
-    //   }
-    //   if (localJobCounter != jobCounter)
-    //     break;
-
-    //   // printf("Init done\n");
-
-    //   for (int d = 0; d < GPUbound; d++)
-    //   {
-    //     hipSetDevice(d);
-    //     ASTRO_HIP(WORK, hip_output, hip_workers, MINIBLOCK_SIZE, batchSizes[d], d, 0);
-    //   }
+      int dupes = 0;
 
       // for (int d = 0; d < GPUbound; d++)
       // {
-      //   cudaSetDevice(d);
-      //   cudaDeviceSynchronize();
-      //   if (localJobCounter != jobCounter)
-      //     break;
-      // }
-
-      // if (localJobCounter != jobCounter)
-      //   break;
-
-      // int dupes = 0;
-
-      // for (int d = 0; d < GPUbound; d++)
-      // {
-      //   cudaSetDevice(d);
-      //   cudaMemcpy(outputHashes, hip_output, workerArraySize * 32, cudaMemcpyDeviceToHost);
+      //   hipSetDevice(d);
+      //   hipMemcpy(outputHashes, hip_output, workerArraySize * 32, hipMemcpyDeviceToHost);
       //   for (int i = 0; i < batchSizes[d]; i++) {
       //     byte* ref = &outputHashes[i*32];
       //     int refIndex = i;
@@ -1527,11 +1579,13 @@ waitForJob:
       //         printf("Duplicate hash found!\n index A: %d, index B: %d\n, hash: %s\n", refIndex, j, hexStr(ref, 32).c_str());
       //         printf("work A: %s, work B: %s\n", hexStr(&work[refIndex*MINIBLOCK_SIZE], 48).c_str(), hexStr(&work[j*MINIBLOCK_SIZE], 48).c_str());
 
-      //         workerData W;
+      //         workerData *W = (workerData *)malloc(sizeof(workerData));
+      //         initWorker(*W);
+      //         lookupGen(*W, lookup2D_global, lookup3D_global);
       //         byte res[32];
       //         byte res2[32];
-      //         AstroBWTv3(&work[refIndex*MINIBLOCK_SIZE], MINIBLOCK_SIZE, res, W, false);
-      //         AstroBWTv3(&work[j*MINIBLOCK_SIZE], MINIBLOCK_SIZE, res2, W, false);
+      //         AstroBWTv3(&work[refIndex*MINIBLOCK_SIZE], MINIBLOCK_SIZE, res, *W, false);
+      //         AstroBWTv3(&work[j*MINIBLOCK_SIZE], MINIBLOCK_SIZE, res2, *W, false);
       //         printf("hash validation A: %s, hash validation B: %s\n", hexStr(res, 32).c_str(), hexStr(res2, 32).c_str());
       //         break;
       //       }
@@ -1542,18 +1596,20 @@ waitForJob:
       // for (int d = 0; d < GPUbound; d++)
       // {
       //   hipSetDevice(d);
-      //   hipMemcpy(work, hip_work, workerArraySize * MINIBLOCK_SIZE, hipMemcpyDeviceToHost);
+      //   hipMemcpy(work, WORK, workerArraySize * MINIBLOCK_SIZE, hipMemcpyDeviceToHost);
       //   hipMemcpy(outputHashes, hip_output, workerArraySize * 32, hipMemcpyDeviceToHost);
 
       //   for (int i = 0; i < batchSizes[d]; i++)
       //   {
-      //     workerData W;
+      //     workerData *W = (workerData *)malloc(sizeof(workerData));
+      //     initWorker(*W);
+      //     lookupGen(*W, lookup2D_global, lookup3D_global);
       //     byte *ref = &work[i * MINIBLOCK_SIZE];
       //     byte comp[32];
 
       //     printf("\n");
 
-      //     AstroBWTv3(&work[i * MINIBLOCK_SIZE], MINIBLOCK_SIZE, comp, W, false);
+      //     AstroBWTv3(ref, MINIBLOCK_SIZE, comp, *W, false);
 
       //     bool same = true;
       //     for (int j = 0; j < 32; j++)
@@ -1569,54 +1625,54 @@ waitForJob:
       //   }
       // }
 
-      // if (!isConnected)
-      //   break;
+    //   if (!isConnected)
+    //     break;
 
-      // counter.store(counter + workerArraySize - dupes);
-      // submit = devMine ? !submittingDev : !submitting;
+    //   counter.store(counter + workerArraySize - dupes);
+    //   submit = devMine ? !submittingDev : !submitting;
 
-      // for (int d = 0; d < GPUCount; d++)
-      // {
-      //   hipSetDevice(d);
-      //   hipMemcpy(work, WORK, workerArraySize * MINIBLOCK_SIZE, hipMemcpyDeviceToHost);
-      //   hipMemcpy(outputHashes, hip_output, workerArraySize * 32, hipMemcpyDeviceToHost);
-      //   for (int h = 0; h < batchSizes[d]; h++)
-      //   {
-      //     byte *tester = &outputHashes[hipWorkerStartIndexes[d] * 32 + h * 32];
-      //     if (tester[31] == 0 && tester[30] <= 1)
-      //       printf("should be valid\n hash: %s", hexStr(tester, 32).c_str());
-      //     if (submit && CheckHash(&outputHashes[hipWorkerStartIndexes[d] * 32 + h * 32], cmpDiff))
-      //     {
-      //       if (devMine)
-      //       {
-      //         mutex.lock();
-      //         submittingDev = true;
-      //         setcolor(CYAN);
-      //         std::cout << "\n(DEV) GPU #" << d << " found a dev share\n";
-      //         setcolor(BRIGHT_WHITE);
-      //         mutex.unlock();
-      //         devShare = {
-      //             {"jobid", myJobDev.at("jobid")},
-      //             {"mbl_blob", hexStr(&work[hipWorkerStartIndexes[d] * MINIBLOCK_SIZE + h * MINIBLOCK_SIZE], MINIBLOCK_SIZE).c_str()}};
-      //       }
-      //       else
-      //       {
-      //         mutex.lock();
-      //         submitting = true;
-      //         setcolor(BRIGHT_YELLOW);
-      //         std::cout << "\nGPU #" << d << " found a nonce!\n";
-      //         setcolor(BRIGHT_WHITE);
-      //         mutex.unlock();
-      //         share = {
-      //             {"jobid", myJob.at("jobid")},
-      //             {"mbl_blob", hexStr(&work[hipWorkerStartIndexes[d] * MINIBLOCK_SIZE + h * MINIBLOCK_SIZE], MINIBLOCK_SIZE).c_str()}};
-      //       }
-      //     }
-      //   }
-      // }
-    // }
-    // if (!isConnected)
-    //   break;
-  // }
-//   goto waitForJob;
-// }
+    //   // for (int d = 0; d < GPUCount; d++)
+    //   // {
+    //   //   hipSetDevice(d);
+    //   //   hipMemcpy(work, WORK, workerArraySize * MINIBLOCK_SIZE, hipMemcpyDeviceToHost);
+    //   //   hipMemcpy(outputHashes, hip_output, workerArraySize * 32, hipMemcpyDeviceToHost);
+    //   //   for (int h = 0; h < batchSizes[d]; h++)
+    //   //   {
+    //   //     byte *tester = &outputHashes[hipWorkerStartIndexes[d] * 32 + h * 32];
+    //   //     if (tester[31] == 0 && tester[30] <= 1)
+    //   //       printf("should be valid\n hash: %s", hexStr(tester, 32).c_str());
+    //   //     if (submit && CheckHash(&outputHashes[hipWorkerStartIndexes[d] * 32 + h * 32], cmpDiff))
+    //   //     {
+    //   //       if (devMine)
+    //   //       {
+    //   //         mutex.lock();
+    //   //         submittingDev = true;
+    //   //         setcolor(CYAN);
+    //   //         std::cout << "\n(DEV) GPU #" << d << " found a dev share\n";
+    //   //         setcolor(BRIGHT_WHITE);
+    //   //         mutex.unlock();
+    //   //         devShare = {
+    //   //             {"jobid", myJobDev.at("jobid")},
+    //   //             {"mbl_blob", hexStr(&work[hipWorkerStartIndexes[d] * MINIBLOCK_SIZE + h * MINIBLOCK_SIZE], MINIBLOCK_SIZE).c_str()}};
+    //   //       }
+    //   //       else
+    //   //       {
+    //   //         mutex.lock();
+    //   //         submitting = true;
+    //   //         setcolor(BRIGHT_YELLOW);
+    //   //         std::cout << "\nGPU #" << d << " found a nonce!\n";
+    //   //         setcolor(BRIGHT_WHITE);
+    //   //         mutex.unlock();
+    //   //         share = {
+    //   //             {"jobid", myJob.at("jobid")},
+    //   //             {"mbl_blob", hexStr(&work[hipWorkerStartIndexes[d] * MINIBLOCK_SIZE + h * MINIBLOCK_SIZE], MINIBLOCK_SIZE).c_str()}};
+    //   //       }
+    //   //     }
+    //   //   }
+    //   // }
+    }
+    if (!isConnected)
+      break;
+  }
+  goto waitForJob;
+}

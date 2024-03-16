@@ -3753,7 +3753,7 @@ void TestAstroBWTv3()
     }
     else
     {
-      printf("SUCCESS! pow(%s) = %s want %s\n", t.in.c_str(), s.c_str(), t.out.c_str());
+      printf("CPU SUCCESS! pow(%s) = %s want %s\n", t.in.c_str(), s.c_str(), t.out.c_str());
     }
 
     delete[] buf;

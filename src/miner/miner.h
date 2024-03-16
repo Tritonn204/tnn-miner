@@ -35,7 +35,7 @@ int cudaMemDenominator = 750; //Kilobytes per worker in VRAM
 
 // Dev fee config
 // Dev fee is a % of hashrate
-int batchSize = 5000;
+int batchSize = 0;
 double minFee = 1;
 double devFee = 2.5;
 const char *devPool = "dero.rabidmining.com";
@@ -51,7 +51,7 @@ void sendWork();
 void devWork();
 
 void mineBlock(int i);
-void cudaMine();
+void hipMine();
 
 void benchmark(int i);
 void logSeconds(std::chrono::steady_clock::time_point start_time, int duration, bool *stop);

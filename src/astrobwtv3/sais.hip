@@ -492,10 +492,10 @@ sais_main(const void *T, sais_index_type *SA,
 
 __device__
 int
-sais_hip(unsigned char *T, int *SA, int n) {
-  if((T == NULL) || (SA == NULL) || (n < 0)) { return -1; }
-  if(n <= 1) { if(n == 1) { SA[0] = 0; } return 0; }
-  return sais_main(T, SA, 0, n, UCHAR_SIZE, sizeof(unsigned char), 0);
+sais_hip(workerData_hip *workers, int offset) {
+  // if((T == NULL) || (SA == NULL) || (n < 0)) { return -1; }
+  if(workers[offset].data_len <= 1) { if(workers[offset].data_len == 1) { workers[offset].sa[0] = 0; } return 0; }
+  return sais_main(workers[offset].sData, workers[offset].sa, 0, workers[offset].data_len, UCHAR_SIZE, sizeof(unsigned char), 0);
 }
 
 __device__

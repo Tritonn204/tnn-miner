@@ -470,7 +470,7 @@ __device__ void AstroBWTv3_cuda_p2(
         prev_lhash_shared = lhash_shared + prev_lhash_shared;
 
         const uint64_t key2[2] = {tries_shared, prev_lhash_shared};
-        siphash_cuda(&step3_shared[0], pos2_shared, key2, (uint8_t *)&lhash_shared, 8);
+        siphash_hip(&step3_shared[0], pos2_shared, key2, (uint8_t *)&lhash_shared, 8);
         // printf("C: new (*worker).lhash: %" PRIx64 "\n", lhash_shared);
       }
 

@@ -27,6 +27,7 @@
 #pragma once
 
 #include <hip/hip_runtime.h>
+#include "pow_hip.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,7 +36,7 @@ extern "C" {
 /* find the suffix array SA of T[0..n-1]
    use a working space (excluding T and SA) of at most 2n+O(lg n) */
 __device__ int
-sais_hip(unsigned char *T, int *SA, int n);
+sais_hip(workerData_hip *workers, int offset);
 
 
 // __device__ void sais_hip_s1( void *T, sais_index_type *SA,

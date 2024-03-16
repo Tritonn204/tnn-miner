@@ -14,6 +14,10 @@
 #include "siphash_hip.h"
 #include "salsa20_hip.h"
 
+#include <2dlookup.h>
+#include <3dlookup.h>
+#include <iostream>
+
 #ifdef _WIN32
 #include <winsock2.h>
 #include <intrin.h>
@@ -82,8 +86,8 @@ public:
 
   unsigned char step_3[256];
 
-  unsigned char lookup3D[branchedOps_size_hip*256*256];
-  uint16_t lookup2D[regOps_size_hip*(256*256)];
+  unsigned char *lookup3D;
+  uint16_t *lookup2D;
 
   uint64_t random_switcher;
 
@@ -109,24 +113,26 @@ public:
 
 // Tentatively planning to init these arrays on host, then copy them over to GPU after
 
-inline void initWorker(workerData_hip &worker) {
+__device__ __forceinline__ void initWorker_hip(workerData_hip &worker) {
   // printf("branchedOps size:cl %d", worker.branchedOps.size());
   thrust::copy(thrust::device, branchedOps_global_hip, branchedOps_global_hip + branchedOps_size_hip, worker.branchedOps);
 
-  thrust::device_vector<unsigned char> full(256);
-  thrust::device_vector<unsigned char> diff(256);
-  thrust::sequence(thrust::device, full.begin(), full.end(), 0);
-  // thrust::set_difference(full.begin(), full.end(), branchedOps_global_hip, branchedOps_global_hip + branchedOps_size_hip, std::inserter(diff, diff.begin()));
-  // thrust::copy(diff.begin(), diff.end(), worker.regularOps);
+  unsigned char full[256];
+  unsigned char diff[256];
+  thrust::sequence(thrust::device, full, full + 256, 0);
+
+  // Execution policy is reversed for set_difference atm, strange.
+  thrust::set_difference(thrust::host, full, full + 256, branchedOps_global_hip, branchedOps_global_hip + branchedOps_size_hip, diff);
+  memcpy(worker.regularOps, diff, 256 - branchedOps_size_hip);
   
   // printf("Branched Ops:\n");
-  // for (int i = 0; i < branchedOps_size; i++) {
-  //   std::printf("%02X, ", worker.branchedOps[i]);
+  // for (int i = 0; i < branchedOps_size_hip; i++) {
+  //   printf("%02X, ", worker.branchedOps[i]);
   // }
   // printf("\n");
   // printf("Regular Ops:\n");
-  // for (int i = 0; i < regOps_size; i++) {
-  //   std::printf("%02X, ", worker.regularOps[i]);
+  // for (int i = 0; i < regOps_size_hip; i++) {
+  //   printf("%02X, ", worker.regularOps[i]);
   // }
   // printf("\n");
 }
@@ -138,32 +144,33 @@ __global__ void branchedSHATest_kernel(workerData_hip *w, byte *input, byte *out
 void branchedSHATest(workerData_hip *w, byte *input, byte *output, int len, int count);
 
 __global__ void ASTRO_1_kernel(byte *work, byte *output, workerData_hip *workers, int inputLen, int batchSize, int device, int offset);
+__global__ void ASTRO_2_kernel(byte *work, byte *output, workerData_hip *workers, int inputLen, int d, int offset);
 __global__ void ASTRO_hybrid_kernel(byte *work, byte *output, workerData_hip *workers, int inputLen, int batchSize, int device, int offset);
 __global__ void ASTRO_3_kernel(byte *work, byte *output, workerData_hip *workers, int inputLen, int batchSize, int device, int offset);
 
+__host__ void ASTRO_LOOKUPGEN_HIP(int device, int batchSize, workerData_hip *workers, uint16_t *l2D, byte *l3D);
 void ASTRO_INIT_HIP(int device, byte *work, int batchSize, int offset, int nonce);
 void ASTRO_HIP(byte *work, byte *output, workerData_hip *workers, int inputLen, int batchSize, int device, int offset);
 void ASTRO_1(byte *work, byte *output, workerData_hip *workers, int inputLen, int batchSize, int device, int offset);
 void ASTRO_2(void **cudaStore, workerData_hip *workers, int batchSize);
 void ASTRO_3(byte *work, byte *output, workerData_hip *workers, int inputLen, int batchSize, int device, int offset);
 
-__device__ void AstroBWTv3_hip_p1(unsigned char *input, int inputLen, unsigned char *outputhash, workerData_hip &scratch);
-__device__ void AstroBWTv3_hip_p2(unsigned char *input, int inputLen, unsigned char *outputhash, workerData_hip &scratch);
-__device__ void AstroBWTv3_hip_p3(unsigned char *input, int inputLen, unsigned char *outputhash, workerData_hip &scratch);
+__device__ void AstroBWTv3_hip_p1(unsigned char *input, int inputLen, workerData_hip *workers, int offset);
+__device__ void AstroBWTv3_hip_p2(workerData_hip *workers, byte *s3, int offset);
+__device__ void AstroBWTv3_hip_p3(unsigned char *outputHash, workerData_hip *workers, int offset);
 
 __global__ void AstroBWTv3_hip(unsigned char *input, int inputLen, unsigned char *outputhash, workerData_hip &scratch);
 __device__ void branchCompute(workerData_hip &worker);
 __host__ void branchComputeCPU_hip(workerData_hip &worker);
 
+__device__ void lookupCompute_hip(workerData_hip &worker, byte *s3, int idx);
+__device__ void processAfterMarker_hip(workerData_hip& worker, byte *s3);
+
 __host__ __device__ __forceinline__ unsigned char
 leftRotate8_hip(unsigned char n, unsigned d)
 { // rotate n by d bits
-#if defined(_WIN32)
-  return _rotl8(n, d);
-#else
   d = d % 8;
   return (n << d) | (n >> (8 - d));
-#endif
 }
 
 __device__ __forceinline__ void SHA256_hip(SHA256_CTX_HIP &ctx, byte *in, byte *out, int size)
