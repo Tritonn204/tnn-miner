@@ -1,0 +1,31 @@
+name: Build Tnn-miner on Ubuntu 22.04
+
+on:
+  push:
+    branches:
+    - '*dev*'
+
+jobs:
+  ubuntu-22:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: 'Setup pre-reqs'
+      run: |
+        sudo apt install git wget build-essential cmake clang libssl-dev libudns-dev libfmt-dev libc++-dev
+        #sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-10 100 --slave /usr/bin/gcc gcc /usr/bin/gcc-10
+    - name: 'Compile boost'
+      run: |
+        wget https://github.com/boostorg/boost/releases/download/boost-1.82.0/boost-1.82.0.tar.gz
+        tar -xf boost-1.82.0.tar.gz
+        cd boost-1.82.0/
+        ./bootstrap.sh --with-toolset=clang 
+        ./b2 clean
+        ./b2 toolset=clang cxxflags=-std=c++20 -stdlib=libc++ linkflags=-stdlib=libc++ link=static
+    - name: 'Compile Tnn-miner'
+      run: |
+        mkdir build
+        cd build
+        cmake ..
+        make -j3 $(nproc)
+        ls -laR ./
