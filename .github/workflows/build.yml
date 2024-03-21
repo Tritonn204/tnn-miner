@@ -12,6 +12,11 @@ jobs:
     - uses: actions/checkout@v4
     - name: 'Update system'
       run: |
+        sudo update-alternatives --display clang
+        sudo update-alternatives --display clang++
+        sudo update-alternatives --list clang
+        sudo update-alternatives --list clang++
+        sudo update-alternatives --get-selections
         sudo apt update && sudo apt upgrade -y
     - name: 'Setup pre-reqs'
       run: |
