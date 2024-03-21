@@ -10,13 +10,16 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
     - uses: actions/checkout@v2
+    - name: 'Update system'
+      run: |
+        sudo apt update && sudo apt upgrade -y
     - name: 'Setup pre-reqs'
       run: |
         sudo apt install git wget build-essential cmake clang libssl-dev libudns-dev libfmt-dev libc++-dev
         #sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-10 100 --slave /usr/bin/gcc gcc /usr/bin/gcc-10
     - name: 'Compile boost'
       run: |
-        wget https://github.com/boostorg/boost/releases/download/boost-1.82.0/boost-1.82.0.tar.gz
+        wget -q https://github.com/boostorg/boost/releases/download/boost-1.82.0/boost-1.82.0.tar.gz
         tar -xf boost-1.82.0.tar.gz
         cd boost-1.82.0/
         ./bootstrap.sh --with-toolset=clang 
