@@ -56,11 +56,12 @@ function register_clang_version {
         --slave   /usr/bin/llvm-undname         llvm-undname         /usr/bin/llvm-undname-${version} \
         --slave   /usr/bin/llvm-xray            llvm-xray            /usr/bin/llvm-xray-${version}
         
-
+    update-alternatives \
+        --verbose \
+        --install /usr/bin/clang++                                      clang++                                 /usr/bin/clang++-${version} ${priority}
     update-alternatives \
        	--verbose \
         --install /usr/bin/clang					clang					/usr/bin/clang-${version} ${priority} \
-        --slave   /usr/bin/clang++					clang++					/usr/bin/clang++-${version}  \
         --slave   /usr/bin/clang-format				clang-format			/usr/bin/clang-format-${version}  \
         --slave   /usr/bin/clang-cpp				clang-cpp				/usr/bin/clang-cpp-${version} \
         --slave   /usr/bin/asan_symbolize			asan_symbolize			/usr/bin/asan_symbolize-${version} \
