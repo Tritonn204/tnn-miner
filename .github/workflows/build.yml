@@ -24,8 +24,7 @@ jobs:
         suto apt install clang-17 -y
     - name: 'Update default clang'
       run: |
-        wget https://raw.githubusercontent.com/ShangjinTang/dotfiles/05ef87daae29475244c276db5d406b58c52be445/linux/ubuntu/22.04/bin/update-alternatives-clang
-        sudo bash ./update-alternatives-clang
+        sudo ./register-clang.sh 17 5
     - name: 'Compile boost'
       run: |
         wget -q https://github.com/boostorg/boost/releases/download/boost-1.82.0/boost-1.82.0.tar.gz
