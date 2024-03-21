@@ -62,4 +62,9 @@ jobs:
         cd build
         cmake ..
         make -j$(nproc)
-        ls -laR ./
+        tar -zcvf tnn.tar.gz ./Tnn-miner
+    - name: Archive Tnn-miner
+      uses: actions/upload-artifact@v4
+      with:
+        name: Tnn-miner
+        path: ./build/tnn.tar.gz
