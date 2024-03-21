@@ -34,12 +34,18 @@ jobs:
         version=17
         #sudo ./register-clang.sh 17 5
         # https://github.com/actions/runner-images/blob/main/images/ubuntu/scripts/build/install-clang.sh#L17
+        sudo update-alternatives --display clang++
+        sudo update-alternatives --display clang        
         echo "Make Clang ${version} default"
         sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-${version} 100
         sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-${version} 100
         sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-${version} 100
         sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-${version} 100
         sudo update-alternatives --install /usr/bin/run-clang-tidy run-clang-tidy /usr/bin/run-clang-tidy-${version} 100
+        sudo update-alternatives --set clang++ /usr/bin/clang-${version}
+        sudo update-alternatives --set clang /usr/bin/clang-${version}
+        sudo update-alternatives --display clang++
+        sudo update-alternatives --display clang
         clang --version
         clang++ --version
     - name: 'Compile boost'
