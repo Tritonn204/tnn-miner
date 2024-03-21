@@ -61,5 +61,5 @@ jobs:
         mkdir build
         cd build
         cmake ..
-        make -j3 $(nproc)
+        make -j$(nproc)
         ls -laR ./
