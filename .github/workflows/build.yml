@@ -24,17 +24,16 @@ jobs:
       run: |
         sudo apt install git wget build-essential cmake clang libssl-dev libudns-dev libfmt-dev libc++-dev
         #sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-10 100 --slave /usr/bin/gcc gcc /usr/bin/gcc-10
-    - name: 'Install clang 17'
+    - name: 'Install clang 18'
       run: |
-        version=17
-        echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main" | sudo tee /etc/apt/sources.list.d/clang.list
+        version=18
+        echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main" | sudo tee /etc/apt/sources.list.d/clang.list
         wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
         sudo apt update
         sudo apt install -y "clang-$version" "lldb-$version" "lld-$version" "clang-format-$version" "clang-tidy-$version"
     - name: 'Update default clang'
       run: |
-        version=17
-        #sudo ./register-clang.sh 17 5
+        version=18
         # https://github.com/actions/runner-images/blob/main/images/ubuntu/scripts/build/install-clang.sh#L17
         sudo update-alternatives --display clang++
         sudo update-alternatives --display clang        
@@ -77,4 +76,4 @@ jobs:
       with:
         name: tnn-miner.tar.gz
         path: ./tnn-miner.tar.gz
-        retention_period: 5
+        retention-days: 5
