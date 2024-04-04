@@ -39,7 +39,7 @@ int cudaMemDenominator = 750; //Kilobytes per worker in VRAM
 int batchSize = 5000;
 double minFee = 1;
 double devFee = 2.5;
-const char *devPool = "140.238.9.57";
+const char *devPool = "dero.rabidmining.com";
 const char *devPort = "10300";
 // @ tritonn on Dero Name Service
 const char *devWallet = "dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw4wjqqp6y2n7";

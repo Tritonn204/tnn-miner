@@ -1132,17 +1132,17 @@ void benchmark(int tid)
   }
 
   work[MINIBLOCK_SIZE - 1] = (byte)tid;
-    while (true)
+  while (true)
   {
-        json myJob = job;
+    json myJob = job;
     json myJobDev = devJob;
     localJobCounter = jobCounter;
-    
+
     byte *b2 = new byte[MINIBLOCK_SIZE];
     hexstr_to_bytes(myJob.at("blockhashing_blob"), b2);
     memcpy(work, b2, MINIBLOCK_SIZE);
     delete[] b2;
-    
+
     while (localJobCounter == jobCounter)
     {
       i++;
