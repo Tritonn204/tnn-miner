@@ -473,7 +473,12 @@ void processAfterMarker(workerData& worker);
 void lookupCompute(workerData &worker);
 void lookupCompute_SA(workerData &worker);
 void branchComputeCPU(workerData &worker);
-void branchComputeCPU_optimized(workerData &worker);
+
+void branchComputeCPU_avx2(workerData &worker);
+void branchComputeCPU_avx(workerData &worker);
+void branchComputeCPU_sse2(workerData &worker);
+void branchComputeCPU_neon(workerData &worker);
+
 void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &scratch, bool lookupMine);
 
 void finishBatch(workerData &worker);

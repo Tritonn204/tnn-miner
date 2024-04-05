@@ -156,12 +156,13 @@ inline __m256i _mm256_sllv_epi8(__m256i a, __m256i count) {
 
     __m256i count_sat      = _mm256_min_epu8(count, _mm256_set1_epi8(8));     /* AVX shift counts are not masked. So a_i << n_i = 0 for n_i >= 8. count_sat is always less than 9.*/ 
     __m256i multiplier     = _mm256_shuffle_epi8(multiplier_lut, count_sat);  /* Select the right multiplication factor in the lookup table.                                      */
-    __m256i x_lo           = _mm256_mullo_epi16(a, multiplier);               /* Unfortunately _mm256_mullo_epi8 doesn't exist. Split the 16 bit elements in a high and low part. */
+    // __m256i x_lo           = _mm256_mullo_epi16(a, multiplier);               /* Unfortunately _mm256_mullo_epi8 doesn't exist. Split the 16 bit elements in a high and low part. */
 
-    __m256i multiplier_hi  = _mm256_srli_epi16(multiplier, 8);                /* The multiplier of the high bits.                                                                 */
-    __m256i a_hi           = _mm256_and_si256(a, mask_hi);                    /* Mask off the low bits.                                                                           */
-    __m256i x_hi           = _mm256_mullo_epi16(a_hi, multiplier_hi);
-    __m256i x              = _mm256_blendv_epi8(x_lo, x_hi, mask_hi);         /* Merge the high and low part.                                                                     */
+    // __m256i multiplier_hi  = _mm256_srli_epi16(multiplier, 8);                /* The multiplier of the high bits.                                                                 */
+    // __m256i a_hi           = _mm256_and_si256(a, mask_hi);                    /* Mask off the low bits.                                                                           */
+    // __m256i x_hi           = _mm256_mullo_epi16(a_hi, multiplier_hi);
+    // __m256i x              = _mm256_blendv_epi8(x_lo, x_hi, mask_hi);         /* Merge the high and low part. */
+    __m256i x              = _mm256_mullo_epi16(a, multiplier); 
             return x;
 }
 
@@ -172,42 +173,17 @@ inline __m256i _mm256_srlv_epi8(__m256i a, __m256i count) {
 
     __m256i count_sat      = _mm256_min_epu8(count, _mm256_set1_epi8(8));     /* AVX shift counts are not masked. So a_i >> n_i = 0 for n_i >= 8. count_sat is always less than 9.*/ 
     __m256i multiplier     = _mm256_shuffle_epi8(multiplier_lut, count_sat);  /* Select the right multiplication factor in the lookup table.                                      */
-    __m256i a_lo           = _mm256_andnot_si256(mask_hi, a);                 /* Mask off the high bits.                                                                          */
-    __m256i multiplier_lo  = _mm256_andnot_si256(mask_hi, multiplier);        /* The multiplier of the low bits.                                                                  */
-    __m256i x_lo           = _mm256_mullo_epi16(a_lo, multiplier_lo);         /* Shift left a_lo by multiplying.                                                                  */
-            x_lo           = _mm256_srli_epi16(x_lo, 7);                      /* Shift right by 7 to get the low bits at the right position.                                      */
+    // __m256i a_lo           = _mm256_andnot_si256(mask_hi, a);                 /* Mask off the high bits.                                                                          */
+    // __m256i multiplier_lo  = _mm256_andnot_si256(mask_hi, multiplier);        /* The multiplier of the low bits.                                                                  */
+    // __m256i x_lo           = _mm256_mullo_epi16(a_lo, multiplier_lo);         /* Shift left a_lo by multiplying.                                                                  */
+    //         x_lo           = _mm256_srli_epi16(x_lo, 7);                      /* Shift right by 7 to get the low bits at the right position.                                      */
 
-    __m256i multiplier_hi  = _mm256_and_si256(mask_hi, multiplier);           /* The multiplier of the high bits.                                                                 */
-    __m256i x_hi           = _mm256_mulhi_epu16(a, multiplier_hi);            /* Variable shift left a_hi by multiplying. Use a instead of a_hi because the a_lo bits don't interfere */
-            x_hi           = _mm256_slli_epi16(x_hi, 1);                      /* Shift left by 1 to get the high bits at the right position.                                      */
-    __m256i x              = _mm256_blendv_epi8(x_lo, x_hi, mask_hi);         /* Merge the high and low part.                                                                     */
+    // __m256i multiplier_hi  = _mm256_and_si256(mask_hi, multiplier);           /* The multiplier of the high bits.                                                                 */
+    // __m256i x_hi           = _mm256_mulhi_epu16(a, multiplier_hi);            /* Variable shift left a_hi by multiplying. Use a instead of a_hi because the a_lo bits don't interfere */
+    //         x_hi           = _mm256_slli_epi16(x_hi, 1);                      /* Shift left by 1 to get the high bits at the right position.                                      */
+    // __m256i x              = _mm256_blendv_epi8(x_lo, x_hi, mask_hi);         /* Merge the high and low part.                                                                     */
+    __m256i x              = _mm256_mullo_epi16(a, multiplier);  
             return x;
-}
-
-// Rotates x left by r bits
-inline __m256i _mm256_rol_epi8(__m256i x, int r) {
-  // Unpack 2 8 bit numbers into their own vectors, and isolate them using masks
-  __m256i mask1 = _mm256_set1_epi16(0x00FF);
-  __m256i mask2 = _mm256_set1_epi16(0xFF00);
-  __m256i a = _mm256_and_si256(x, mask1);
-  __m256i b = _mm256_and_si256(x, mask2);
-
-  // Apply the 8bit rotation to the lower 8 bits, then mask out any extra/overflow
-  __m256i shiftedA = _mm256_slli_epi16(a, r);
-  __m256i wrappedA = _mm256_srli_epi16(a, 8 - r);
-  __m256i rotatedA = _mm256_or_si256(shiftedA, wrappedA);
-  rotatedA = _mm256_and_si256(rotatedA, mask1);
-
-  // Apply the 8bit rotation to the upper 8 bits, then mask out any extra/overflow
-  __m256i shiftedB = _mm256_slli_epi16(b, r);
-  __m256i wrappedB = _mm256_srli_epi16(b, 8 - r);
-  __m256i rotatedB = _mm256_or_si256(shiftedB, wrappedB);
-  rotatedB = _mm256_and_si256(rotatedB, mask2);
-
-  // Re-pack the isolated results into a 16-bit block
-  __m256i rotated = _mm256_or_si256(rotatedA, rotatedB);
-
-  return rotated;
 }
 
 inline __m256i _mm256_rolv_epi8(__m256i x, __m256i y) {
@@ -225,6 +201,14 @@ inline __m256i _mm256_rolv_epi8(__m256i x, __m256i y) {
 
   // Combine the left-shifted and right-shifted results using bitwise OR
   __m256i rotated = _mm256_or_si256(left_shift, right_shift);
+
+  return rotated;
+}
+
+// Rotates x left by r bits
+inline __m256i _mm256_rol_epi8(__m256i x, int r) {
+  __m256i shifter = _mm256_set1_epi8(r);
+  __m256i rotated = _mm256_rolv_epi8(x,shifter);
 
   return rotated;
 }
@@ -7706,16 +7690,18 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
 
   try
   {
-    memset(worker.sData, 0, MAX_LENGTH);
+    memset(worker.sData, 0, 256);
 
     hashSHA256(worker.sha256, input, worker.sha_key, inputLen);
 
     worker.salsa20 = (worker.sha_key);
     worker.salsa20.setIv(worker.counter);
+
     __builtin_prefetch(worker.sData, 0, 3);
     __builtin_prefetch(worker.sData + 64, 0, 3);
     __builtin_prefetch(worker.sData + 128, 0, 3);
     __builtin_prefetch(worker.sData + 192, 0, 3);
+
     worker.salsa20.processBytes(worker.sData, worker.sData, 256);
 
     RC4_set_key(&worker.key, 256,  worker.sData);
@@ -7730,8 +7716,8 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     // printf("\n\n");
 
     
-    auto start = std::chrono::steady_clock::now();
-    auto end = std::chrono::steady_clock::now();
+    // auto start = std::chrono::steady_clock::now();
+    // auto end = std::chrono::steady_clock::now();
 
     if (lookupMine) {
       // start = std::chrono::steady_clock::now();
@@ -7740,7 +7726,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     }
     else {
       // start = std::chrono::steady_clock::now();
-      branchComputeCPU_optimized(worker);
+      branchComputeCPU_avx2(worker);
       // end = std::chrono::steady_clock::now();
     }
     
@@ -11003,8 +10989,12 @@ void branchComputeCPU(workerData &worker)
 
 #if defined(__AVX2__)
 
-void branchComputeCPU_optimized(workerData &worker)
+void branchComputeCPU_avx2(workerData &worker)
 {
+  __builtin_prefetch(&worker.maskTable+0,0,3);
+  __builtin_prefetch(&worker.maskTable+64,0,3);
+  __builtin_prefetch(&worker.maskTable+128,0,3);
+  __builtin_prefetch(&worker.maskTable+192,0,3);
   while (true)
   {
     worker.tries++;
@@ -11078,7 +11068,6 @@ void branchComputeCPU_optimized(workerData &worker)
     }
     // fmt::printf("op: %d, ", worker.op);
     // fmt::printf("worker.pos1: %d, worker.pos2: %d\n", worker.pos1, worker.pos2);
-
 
     switch(worker.op) {
       case 0:
