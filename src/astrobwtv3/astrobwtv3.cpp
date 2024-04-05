@@ -150,20 +150,45 @@ inline __m128i mullo_epi8(__m128i a, __m128i b)
 #endif
 }
 
+inline __m256i _mm256_mul_epi8(__m256i x, __m256i y) {
+  // Unpack and isolate 2 8 bit numbers from a 16 bit block in each vector using masks
+  __m256i mask1 = _mm256_set1_epi16(0xFF00);
+  __m256i mask2 = _mm256_set1_epi16(0x00FF);
+
+  // Store the first and second members of the 8bit multiplication equation in their own 16 bit numbers, shifting down as necessary before calculating
+  __m256i aa = _mm256_srli_epi16(_mm256_and_si256(x, mask1), 8);
+  __m256i ab = _mm256_srli_epi16(_mm256_and_si256(y, mask1), 8);
+  __m256i ba = _mm256_and_si256(x, mask2);
+  __m256i bb = _mm256_and_si256(y, mask2);
+
+  // Perform the multiplication, and undo any downshifting
+  __m256i pa = _mm256_slli_epi16(_mm256_mullo_epi16(aa, ab), 8);
+  __m256i pb = _mm256_mullo_epi16(ba, bb);
+
+  // Mask out unwanted data to maintain isolation
+  pa = _mm256_and_si256(pa, mask1);
+  pb = _mm256_and_si256(pb, mask2);
+
+  __m256i result = _mm256_or_si256(pa,pb);
+
+  return result;
+}
+
 inline __m256i _mm256_sllv_epi8(__m256i a, __m256i count) {
     __m256i mask_hi        = _mm256_set1_epi32(0xFF00FF00);
     __m256i multiplier_lut = _mm256_set_epi8(0,0,0,0, 0,0,0,0, 128,64,32,16, 8,4,2,1, 0,0,0,0, 0,0,0,0, 128,64,32,16, 8,4,2,1);
 
     __m256i count_sat      = _mm256_min_epu8(count, _mm256_set1_epi8(8));     /* AVX shift counts are not masked. So a_i << n_i = 0 for n_i >= 8. count_sat is always less than 9.*/ 
     __m256i multiplier     = _mm256_shuffle_epi8(multiplier_lut, count_sat);  /* Select the right multiplication factor in the lookup table.                                      */
-    // __m256i x_lo           = _mm256_mullo_epi16(a, multiplier);               /* Unfortunately _mm256_mullo_epi8 doesn't exist. Split the 16 bit elements in a high and low part. */
+    
+    __m256i x_lo           = _mm256_mullo_epi16(a, multiplier);               /* Unfortunately _mm256_mullo_epi8 doesn't exist. Split the 16 bit elements in a high and low part. */
 
-    // __m256i multiplier_hi  = _mm256_srli_epi16(multiplier, 8);                /* The multiplier of the high bits.                                                                 */
-    // __m256i a_hi           = _mm256_and_si256(a, mask_hi);                    /* Mask off the low bits.                                                                           */
-    // __m256i x_hi           = _mm256_mullo_epi16(a_hi, multiplier_hi);
-    // __m256i x              = _mm256_blendv_epi8(x_lo, x_hi, mask_hi);         /* Merge the high and low part. */
-    __m256i x              = _mm256_mullo_epi16(a, multiplier); 
-            return x;
+    __m256i multiplier_hi  = _mm256_srli_epi16(multiplier, 8);                /* The multiplier of the high bits.                                                                 */
+    __m256i a_hi           = _mm256_and_si256(a, mask_hi);                    /* Mask off the low bits.                                                                           */
+    __m256i x_hi           = _mm256_mullo_epi16(a_hi, multiplier_hi);
+    __m256i x              = _mm256_blendv_epi8(x_lo, x_hi, mask_hi);         /* Merge the high and low part. */
+
+    return x;
 }
 
 
@@ -173,17 +198,17 @@ inline __m256i _mm256_srlv_epi8(__m256i a, __m256i count) {
 
     __m256i count_sat      = _mm256_min_epu8(count, _mm256_set1_epi8(8));     /* AVX shift counts are not masked. So a_i >> n_i = 0 for n_i >= 8. count_sat is always less than 9.*/ 
     __m256i multiplier     = _mm256_shuffle_epi8(multiplier_lut, count_sat);  /* Select the right multiplication factor in the lookup table.                                      */
-    // __m256i a_lo           = _mm256_andnot_si256(mask_hi, a);                 /* Mask off the high bits.                                                                          */
-    // __m256i multiplier_lo  = _mm256_andnot_si256(mask_hi, multiplier);        /* The multiplier of the low bits.                                                                  */
-    // __m256i x_lo           = _mm256_mullo_epi16(a_lo, multiplier_lo);         /* Shift left a_lo by multiplying.                                                                  */
-    //         x_lo           = _mm256_srli_epi16(x_lo, 7);                      /* Shift right by 7 to get the low bits at the right position.                                      */
+    __m256i a_lo           = _mm256_andnot_si256(mask_hi, a);                 /* Mask off the high bits.                                                                          */
+    __m256i multiplier_lo  = _mm256_andnot_si256(mask_hi, multiplier);        /* The multiplier of the low bits.                                                                  */
+    __m256i x_lo           = _mm256_mullo_epi16(a_lo, multiplier_lo);         /* Shift left a_lo by multiplying.                                                                  */
+            x_lo           = _mm256_srli_epi16(x_lo, 7);                      /* Shift right by 7 to get the low bits at the right position.                                      */
 
-    // __m256i multiplier_hi  = _mm256_and_si256(mask_hi, multiplier);           /* The multiplier of the high bits.                                                                 */
-    // __m256i x_hi           = _mm256_mulhi_epu16(a, multiplier_hi);            /* Variable shift left a_hi by multiplying. Use a instead of a_hi because the a_lo bits don't interfere */
-    //         x_hi           = _mm256_slli_epi16(x_hi, 1);                      /* Shift left by 1 to get the high bits at the right position.                                      */
-    // __m256i x              = _mm256_blendv_epi8(x_lo, x_hi, mask_hi);         /* Merge the high and low part.                                                                     */
-    __m256i x              = _mm256_mullo_epi16(a, multiplier);  
-            return x;
+    __m256i multiplier_hi  = _mm256_and_si256(mask_hi, multiplier);           /* The multiplier of the high bits.                                                                 */
+    __m256i x_hi           = _mm256_mulhi_epu16(a, multiplier_hi);            /* Variable shift left a_hi by multiplying. Use a instead of a_hi because the a_lo bits don't interfere */
+            x_hi           = _mm256_slli_epi16(x_hi, 1);                      /* Shift left by 1 to get the high bits at the right position.                                      */
+    __m256i x              = _mm256_blendv_epi8(x_lo, x_hi, mask_hi);         /* Merge the high and low part.                                                                     */
+
+    return x;
 }
 
 inline __m256i _mm256_rolv_epi8(__m256i x, __m256i y) {
@@ -212,31 +237,6 @@ inline __m256i _mm256_rol_epi8(__m256i x, int r) {
 
   return rotated;
 }
-
-inline __m256i _mm256_mul_epi8(__m256i x, __m256i y) {
-  // Unpack and isolate 2 8 bit numbers from a 16 bit block in each vector using masks
-  __m256i mask1 = _mm256_set1_epi16(0xFF00);
-  __m256i mask2 = _mm256_set1_epi16(0x00FF);
-
-  // Store the first and second members of the 8bit multiplication equation in their own 16 bit numbers, shifting down as necessary before calculating
-  __m256i aa = _mm256_srli_epi16(_mm256_and_si256(x, mask1), 8);
-  __m256i ab = _mm256_srli_epi16(_mm256_and_si256(y, mask1), 8);
-  __m256i ba = _mm256_and_si256(x, mask2);
-  __m256i bb = _mm256_and_si256(y, mask2);
-
-  // Perform the multiplication, and undo any downshifting
-  __m256i pa = _mm256_slli_epi16(_mm256_mullo_epi16(aa, ab), 8);
-  __m256i pb = _mm256_mullo_epi16(ba, bb);
-
-  // Mask out unwanted data to maintain isolation
-  pa = _mm256_and_si256(pa, mask1);
-  pb = _mm256_and_si256(pb, mask2);
-
-  __m256i result = _mm256_or_si256(pa,pb);
-
-  return result;
-}
-
 
 // parallelPopcnt16bytes - find population count for 8-bit groups in xmm (16 groups)
 //                         each byte of xmm result contains a value ranging from 0 to 8
@@ -672,9 +672,9 @@ void optest(int op, workerData &worker, bool print=true) {
       {
         // INSERT_RANDOM_CODE_START
         worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-        worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
-        worker.step_3[i] *= worker.step_3[i];                          // *
-        worker.step_3[i] = std::rotl(worker.step_3[i], 1);             // rotate  bits by 1
+        // worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+        // worker.step_3[i] *= worker.step_3[i];                          // *
+        // worker.step_3[i] = std::rotl(worker.step_3[i], 1);             // rotate  bits by 1
                                                                        // INSERT_RANDOM_CODE_END
       }
       break;
@@ -3834,9 +3834,9 @@ void optest_simd(int op, workerData &worker, bool print=true) {
           __m256i old = data;
 
           data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
-          data = _mm256_reverse_epi8(data);
-          data = _mm256_mul_epi8(data,data);
-          data = _mm256_rol_epi8(data,1);
+          // data = _mm256_reverse_epi8(data);
+          // data = _mm256_mul_epi8(data,data);
+          // data = _mm256_rol_epi8(data,1);
 
           data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
@@ -7690,7 +7690,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
 
   try
   {
-    memset(worker.sData, 0, 256);
+    memset(worker.sData, 0, MAX_LENGTH);
 
     hashSHA256(worker.sha256, input, worker.sha_key, inputLen);
 
@@ -7735,23 +7735,23 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     // if (!lookupMine) printf("AVX2: ");
     // else printf("Lookup: ");
     // printf("branched section took %dns\n", time.count());
-    // if (debugOpOrder) {
-    //   if (lookupMine) {
-    //     printf("Lookup Table:\n-----------\n");
-    //     for (int i = 0; i < worker.opsB.size(); i++) {
-    //       printf("%d, ", worker.opsB[i]);
-    //     }
-    //   } else {
-    //     printf("Scalar:\n-----------\n");
-    //     for (int i = 0; i < worker.opsA.size(); i++) {
-    //       printf("%d, ", worker.opsA[i]);
-    //     }
-    //   }
+    if (debugOpOrder) {
+      if (lookupMine) {
+        printf("Lookup Table:\n-----------\n");
+        for (int i = 0; i < worker.opsB.size(); i++) {
+          printf("%d, ", worker.opsB[i]);
+        }
+      } else {
+        printf("Scalar:\n-----------\n");
+        for (int i = 0; i < worker.opsA.size(); i++) {
+          printf("%d, ", worker.opsA[i]);
+        }
+      }
 
-    //   printf("\n");
-    //   worker.opsA.clear();
-    //   worker.opsB.clear();
-    // }
+      printf("\n");
+      worker.opsA.clear();
+      worker.opsB.clear();
+    }
     // // worker.data_len = 70000;
     // saveBufferToFile("worker_sData_snapshot.bin", worker.sData, worker.data_len);
     // printf("data length: %d\n", worker.data_len);
