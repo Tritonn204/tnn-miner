@@ -58,8 +58,6 @@ General:
   --threads arg          The amount of mining threads to create, default is 1
   --dev-fee arg          Your desired dev fee percentage, default is 2.5, minimum is 1
   --no-lock              Disables CPU affinity / CPU core binding
-  --gpu                  Mine with GPU instead of CPU
-  --batch-size arg       (GPU Setting) Sets batch size used for GPU mining
   --lookup               Mine with lookup instead of regular C++
 
 DEBUG:

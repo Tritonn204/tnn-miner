@@ -129,8 +129,8 @@ inline po::options_description get_prog_opts()
     ("threads", po::value<int>(), "The amount of mining threads to create, default is 1")
     ("dev-fee", po::value<double>(), "Your desired dev fee percentage, default is 2.5, minimum is 1")
     ("no-lock", "Disables CPU affinity / CPU core binding")
-    ("gpu", "Mine with GPU instead of CPU")
-    ("batch-size", po::value<int>(), "(GPU Setting) Sets batch size used for GPU mining")
+    // ("gpu", "Mine with GPU instead of CPU")
+    // ("batch-size", po::value<int>(), "(GPU Setting) Sets batch size used for GPU mining")
     ("lookup", "Mine with lookup instead of regular C++")
   ;
 

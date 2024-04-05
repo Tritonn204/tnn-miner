@@ -14624,10 +14624,6 @@ void branchComputeCPU_optimized(workerData &worker)
           break;
         case 253:
           {
-            // for (int i = worker.pos1; i < worker.pos2; i++)
-            // {
-            //   worker.chunk[i] = worker.prev_chunk[i];
-            // }
             std::copy(&worker.prev_chunk[worker.pos1], &worker.prev_chunk[worker.pos2], &worker.chunk[worker.pos1]);
     #pragma GCC unroll 32
             for (int i = worker.pos1; i < worker.pos2; i++)
