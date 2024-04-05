@@ -1,136 +1,154 @@
-#include <bits/stdc++.h>
+/*********************************************************************************
+** MIT License
+**
+** Copyright (c) 2021 VIKAS AWADHIYA
+**
+** Permission is hereby granted, free of charge, to any person obtaining a copy
+** of this software and associated documentation files (the "Software"), to deal
+** in the Software without restriction, including without limitation the rights
+** to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+** copies of the Software, and to permit persons to whom the Software is
+** furnished to do so, subject to the following conditions:
+
+** The above copyright notice and this permission notice shall be included in all
+** copies or substantial portions of the Software.
+
+** THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+** IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+** FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+** AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+** LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+** OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+** SOFTWARE.
+*********************************************************************************/
+
 #include "dc3.hpp"
+#include "r0.hpp"
+#include "r12.hpp"
 
-using namespace std;
+#include <iterator>
 
-// Suffix array DC3 algorithm from "Linear Work Suffix Array Construction"
+#include <numeric>
+#include <algorithm>
 
-// lexicographic order for pairs
-inline bool leq(int a1, int a2, int b1, int b2) {
-    return (a1 < b1 || (a1 == b1 && a2 <= b2));
-}
+namespace dc3 {
 
-// lexicographic order for triples
-inline bool leq(int a1, int a2, int a3, int b1, int b2, int b3) {
-    return (a1 < b1 || (a1 == b1 && leq(a2, a3, b2, b3)));
-}
 
-// stably sort a[0..n-1] to b[0..n-1] with keys in 0..K from r
-static void radixPass(int *a, int *b, int *r, int n, int K) {
-    // count occurrences
-    int *c = new int[K + 1];  // counter array
-    for (int i = 0; i <= K; i++)
-        c[i] = 0;  // reset counters
-    for (int i = 0; i < n; i++)
-        c[r[a[i]]]++;                      // count occurrences
-    for (int i = 0, sum = 0; i <= K; i++)  // exclusive prefix sums
-    {
-        int t = c[i];
-        c[i] = sum;
-        sum += t;
+std::vector<std::string::size_type> mergeR0AndR12Orders(const std::vector<std::string::size_type>& r0Order,
+                                                        const std::vector<std::string::size_type>& r12Order,
+                                                        const std::vector<std::string::size_type>& numStr){
+
+    std::vector<std::string::size_type> mappingArr = r12::indexToR12OrderMapping(r12Order.cbegin(), r12Order.cend(),
+                                                                            numStr.size());
+
+    std::vector<std::string::size_type> rOrder;
+    rOrder.reserve(numStr.size() - 2);
+
+    std::vector<std::string::size_type>::const_iterator r0It = r0Order.cbegin();
+    std::vector<std::string::size_type>::const_iterator r12It = r12Order.cbegin();
+
+    if(numStr.size() - 3 == *r0It){
+        ++r0It;
     }
-    for (int i = 0; i < n; i++)
-        b[c[r[a[i]]]++] = a[i];  // sort
-    delete[] c;
-}
+    else{
+        ++r12It;
+    }
 
-// find the suffix array SA of T[0..n-1] in {1..K}^n
-// require T[n]=T[n+1]=T[n+2]=0, n>=2
-void suffixArray(int *T, int *SA, int n, int K) {
-    int n0 = (n + 2) / 3, n1 = (n + 1) / 3, n2 = n / 3, n02 = n0 + n2;
-    int *R = new int[n02 + 3];
-    R[n02] = R[n02 + 1] = R[n02 + 2] = 0;
-    int *SA12 = new int[n02 + 3];
-    SA12[n02] = SA12[n02 + 1] = SA12[n02 + 2] = 0;
-    int *R0 = new int[n0];
-    int *SA0 = new int[n0];
+    for(std::vector<std::string::size_type>::const_iterator r0EndIt = r0Order.cend(), r12EndIt = r12Order.cend();
+        (r0EndIt != r0It && r12EndIt != r12It);){
 
-    //******* Step 0: Construct sample ********
-    // generate positions of mod 1 and mod 2 suffixes
-    // the "+(n0-n1)" adds a dummy mod 1 suffix if n%3 == 1
-    for (int i = 0, j = 0; i < n + (n0 - n1); i++)
-        if (i % 3 != 0)
-            R[j++] = i;
+        unsigned rNum = 0;
 
-    //******* Step 1: Sort sample suffixes ********
-    // lsb radix sort the mod 1 and mod 2 triples
-    radixPass(R, SA12, T + 2, n02, K);
-    radixPass(SA12, R, T + 1, n02, K);
-    radixPass(R, SA12, T, n02, K);
+        if(numStr[*r0It] == numStr[*r12It]){
 
-    // find lexicographic names of triples and
-    // write them to correct places in R
-    int name = 0, c0 = -1, c1 = -1, c2 = -1;
-    for (int i = 0; i < n02; i++) {
-        if (T[SA12[i]] != c0 || T[SA12[i] + 1] != c1 || T[SA12[i] + 2] != c2) {
-            name++;
-            c0 = T[SA12[i]];
-            c1 = T[SA12[i] + 1];
-            c2 = T[SA12[i] + 2];
+            if(2 == *r12It % 3){
+
+                if(numStr[*r0It + 1] == numStr[*r12It + 1]){
+                    rNum = mappingArr[*r0It + 2] < mappingArr[*r12It + 2] ? 0 : 1;
+                }
+                else{
+                    rNum = numStr[*r0It + 1] < numStr[*r12It + 1] ? 0 : 1;
+                }
+            }
+            else{
+                rNum = (mappingArr[*r0It + 1] < mappingArr[*r12It + 1]) ? 0 : 1;
+            }
         }
-        if (SA12[i] % 3 == 1) {
-            R[SA12[i] / 3] = name;
-        }  // write to R1
-        else {
-            R[SA12[i] / 3 + n0] = name;
-        }  // write to R2
-    }
+        else{
+            rNum = numStr[*r0It] < numStr[*r12It] ? 0 : 1;
+        }
 
-    // recurse if names are not yet unique
-    if (name < n02) {
-        suffixArray(R, SA12, n02, name);
-        // store unique names in R using the suffix array
-        for (int i = 0; i < n02; i++)
-            R[SA12[i]] = i + 1;
-    } else  // generate the suffix array of R directly
-        for (int i = 0; i < n02; i++)
-            SA12[R[i] - 1] = i;
-    //******* Step 2: Sort nonsample suffixes ********
-    // stably sort the mod 0 suffixes from SA12 by their first character
-    for (int i = 0, j = 0; i < n02; i++)
-        if (SA12[i] < n0)
-            R0[j++] = 3 * SA12[i];
-    radixPass(R0, SA0, T, n0, K);
-
-    //******* Step 3: Merge ********
-    // merge sorted SA0 suffixes and sorted SA12 suffixes
-    for (int p = 0, t = n0 - n1, k = 0; k < n; k++) {
-#define GetI() (SA12[t] < n0 ? SA12[t] * 3 + 1 : (SA12[t] - n0) * 3 + 2)
-        int i = GetI();     // pos of current offset 12 suffix
-        int j = SA0[p];     // pos of current offset 0 suffix
-        if (SA12[t] < n0 ?  // different compares for mod 1 and mod 2 suffixes
-                leq(T[i], R[SA12[t] + n0], T[j], R[j / 3])
-                         : leq(T[i], T[i + 1], R[SA12[t] - n0 + 1], T[j], T[j + 1],
-                               R[j / 3 + n0])) {  // suffix from SA12 is smaller
-            SA[k] = i;
-            t++;
-            if (t == n02)  // done --- only SA0 suffixes left
-                for (k++; p < n0; p++, k++)
-                    SA[k] = SA0[p];
-        } else {  // suffix from SA0 is smaller
-            SA[k] = j;
-            p++;
-            if (p == n0)  // done --- only SA12 suffixes left
-                for (k++; t < n02; t++, k++)
-                    SA[k] = GetI();
+        if(0 == rNum){
+            rOrder.push_back(*r0It);
+            ++r0It;
+        }
+        else{
+            rOrder.push_back(*r12It);
+            ++r12It;
         }
     }
-    delete[] R;
-    delete[] SA12;
-    delete[] SA0;
-    delete[] R0;
+
+    if(r0Order.cend() != r0It){
+        rOrder.insert(rOrder.cend(), r0It, r0Order.cend());
+    }
+    else{
+        rOrder.insert(rOrder.cend(), r12It, r12Order.cend());
+    }
+
+    return rOrder;
 }
 
-vector<int> suffix_array(const string &s) {
-    int n = s.size();
-    if (n == 0)
-        return {};
-    if (n == 1)
-        return {0};
-    vector<int> t(n + 3);
-    for (int i = 0; i < n; i++)
-        t[i] = s[i];
-    vector<int> sa(n);
-    suffixArray(t.data(), sa.data(), n, 256);
-    return sa;
+std::vector<std::string::size_type> uniqueR12Order(const std::vector<std::string::size_type>& numStr){
+
+    std::pair<std::vector<std::string::size_type>, std::vector<std::string::size_type>> orderR12Info = r12::r12Order(
+                numStr);
+
+    if(orderR12Info.first.size() == orderR12Info.second.size()){
+        return orderR12Info.second;
+    }
+
+    std::vector<std::string::size_type> r12NumStr = r12::r12NumString(orderR12Info.second, orderR12Info.first,
+                                                                      numStr.size());
+
+    r12NumStr.insert(r12NumStr.cend(), {0, 0, 0});
+
+    std::vector<std::string::size_type> secondLevelR12Order = uniqueR12Order(r12NumStr);
+
+    std::vector<std::string::size_type> secondLevelROrder = mergeR0AndR12Orders(
+                r0::r0Order(secondLevelR12Order, r12NumStr), secondLevelR12Order, r12NumStr);
+
+    std::vector<std::string::size_type> orderMappingArr = r12::r12Indexes(numStr.size());
+
+    for(std::vector<std::string::size_type>::iterator it = secondLevelROrder.begin(), endIt = secondLevelROrder.end();
+        endIt != it; ++it){
+
+        std::string::size_type temp = orderMappingArr[*it];
+        *it = temp;
+    }
+
+    return secondLevelROrder;
+}
+
+
+std::vector<std::string::size_type> suffixArray(std::string::const_iterator firstIt,
+                                                std::string::const_iterator lastIt){
+
+    std::vector<std::string::size_type> numStr((lastIt - firstIt) + 3);
+    std::vector<std::string::size_type>::iterator it = numStr.begin();
+
+    for(; lastIt != firstIt; ++firstIt, ++it){
+
+        *it = *firstIt;
+    }
+
+    numStr.back() = 0;
+    numStr[numStr.size() - 2] = 0;
+    numStr[numStr.size() - 3] = 0;
+
+    std::vector<std::string::size_type> orderR12 = uniqueR12Order(numStr);
+
+    return mergeR0AndR12Orders(r0::r0Order(orderR12, numStr), orderR12, numStr);
+}
+
+
 }
