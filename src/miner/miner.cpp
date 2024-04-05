@@ -445,7 +445,7 @@ int main(int argc, char **argv)
   catch(std::exception& e)
   {
     std::cerr << "Error: " << e.what() << "\n";
-    std::cerr << "Remember: Long options now use a double-dash -- instead of a signle-dash -\n";
+    std::cerr << "Remember: Long options now use a double-dash -- instead of a single-dash -\n";
     return -1;
   }
   catch(...)
