@@ -22,7 +22,7 @@ set (CMAKE_CXX_STANDARD 23)
 
 project(
   Tnn-miner
-  VERSION 0.2.0
+  VERSION 0.2.5
   DESCRIPTION "Open Source Astrobwt Miner"
 )
 
