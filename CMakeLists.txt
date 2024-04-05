@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.16.3)
 
 set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_C_FLAGS_RELEASE "-static -O3 -fPIE -ftree-vectorize")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -static-libgcc -m64 -O3 -Wall -Wuninitialized -fprefetch-loop-arrays -funroll-all-loops -ftree-vectorize")
+set(CMAKE_C_FLAGS_RELEASE "-static -O3 -fPIE -ftree-vectorize -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -static-libgcc -m64 -g -O3 -Wall -Wuninitialized -march=native -mavx2 -DNDEBUG")
 
 set(CMAKE_C_COMPILER clang)
 set(CMAKE_CXX_COMPILER clang++)
@@ -92,6 +92,8 @@ find_package(Boost 1.80 REQUIRED
   atomic
   program_options
 )
+
+set(BOOST_INCLUDE_DIRS ${Boost_INCLUDE_DIRS})
 
 include_directories(
   ${PROJECT_SOURCE_DIR}/include

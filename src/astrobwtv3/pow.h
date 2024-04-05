@@ -35,6 +35,18 @@
 #ifndef POW_CONST
 #define POW_CONST
 
+#define TNN_TYPICAL_MAX 71000
+
+#define INSERT	10
+#define MAXST	64
+#define DEEP	150
+#define DEELCP	10000
+#define OVER	1000
+#define TERM	((1+OVER)*sizeof(unsigned long))
+#define LCPART	8
+#define ABIT	7
+const int AMASK	= (1<<ABIT)-1;
+
 #if defined(__AVX2__)
 #ifdef __GNUC__ 
 #if __GNUC__ < 8
@@ -42,13 +54,23 @@
 #define _mm256_set_m128f(xmm1, xmm2) _mm256_permute2f128_ps(_mm256_castps128_ps256(xmm1), _mm256_castps128_ps256(xmm2), 2)
 #endif
 #endif
+
+#define ALIGNMENT 32
+#else
+
+#define ALIGNMENT 16
+
 #endif
+
+
 
 typedef unsigned int suffix;
 typedef unsigned int t_index;
 typedef unsigned char byte;
 typedef unsigned short dbyte;
 typedef unsigned long word;
+
+const int sus_op = 253;
 
 const std::vector<unsigned> branchedOps_global = {
 1,3,5,9,11,13,15,17,20,21,23,27,29,30,35,39,40,43,45,47,51,54,58,60,62,64,68,70,72,74,75,80,82,85,91,92,93,94,103,108,109,115,116,117,119,120,123,124,127,132,133,134,136,138,140,142,143,146,148,149,150,154,155,159,161,165,168,169,176,177,178,180,182,184,187,189,190,193,194,195,199,202,203,204,212,214,215,216,219,221,222,223,226,227,230,231,234,236,239,240,241,242,250,253
@@ -90,7 +112,7 @@ const uint32_t sha_standard[8] = {
     0x5be0cd19
 };
 
-const uint32_t MAX_LENGTH = (256 * 384) - 1; // this is the maximum
+const uint32_t MAX_LENGTH = (256 * 385) - 1; // this is the maximum
 const int deviceAllocMB = 5;
 
 #endif
@@ -113,15 +135,15 @@ const __m256i vec_3 = _mm256_set1_epi8(3);
 class workerData
 {
 public:
-  alignas(32) unsigned char sHash[32];
-  unsigned char sha_key[32];
-  unsigned char sha_key2[32];
-  alignas(32) unsigned char sData[MAX_LENGTH+64];
+  byte sHash[32];
+  byte sha_key[32];
+  byte sha_key2[32];
+  byte sData[MAX_LENGTH+64];
 
-  unsigned char counter[64];
+  byte counter[64];
 
-  alignas(32) int bA[256];
-  alignas(32) int bB[256*256];
+  int bA[256];
+  int bB[256*256];
 
   // int C[256];  // Count array for characters
   // int B[256];
@@ -132,15 +154,53 @@ public:
   RC4_KEY key;
 
   int32_t sa[MAX_LENGTH];
+  int32_t chunkSA[512];
 
-  alignas(32) byte branchedOps[branchedOps_size];
-  alignas(32) byte regularOps[regOps_size];
+  uint32_t buckets_B_offsets[256][256] = {0};
+  int32_t buckets_sizes[256] = {0};
+  int32_t buckets_suffixes[256][MAX_LENGTH] = {0};
 
-  alignas(32) byte branched_idx[256];
-  alignas(32) byte reg_idx[256];
+  int32_t m_suffixes[276*2];
+  int32_t m_suffixes_size;
 
-  unsigned char step_3[256];
+  int32_t chunkBuckets[256] = {0};
+
+  byte modMask[256];
+
+  byte *chunk;
+  byte *prev_chunk;
+  bool assigned[256];
+
+  bool LMS[256][MAX_LENGTH];
+
+  byte unsorted[256];
+  uint32_t pSpots[256][MAX_LENGTH]; 
+
+
+
+  byte branchedOps[branchedOps_size];
+  byte regularOps[regOps_size];
+
+  byte branched_idx[256];
+  byte reg_idx[256];
+
+  byte step_3[256];
   int freq[256];
+
+  //Archon fields
+  byte s_bin[MAX_LENGTH + TERM + 1];
+  byte *bin = s_bin + TERM;
+  int ndis = (MAX_LENGTH + AMASK) >> ABIT;
+  int nlcp = MAX_LENGTH >> LCPART;
+  int ch;
+  byte *sfin;
+  int baza = 0;
+
+  byte offs[MAX_LENGTH];
+  short lcp[MAX_LENGTH >> LCPART];
+  int* anch[(MAX_LENGTH + AMASK) >> ABIT];
+
+  int lucky = 0;
 
   byte lookup3D[branchedOps_size*256*256];
   uint16_t lookup2D[regOps_size*(256*256)];
@@ -153,21 +213,32 @@ public:
   uint64_t prev_lhash;
   uint64_t tries;
 
-  unsigned char op;
-  unsigned char pos1;
-  unsigned char pos2;
-  unsigned char t1;
-  unsigned char t2;
+  byte op;
+  byte pos1;
+  byte pos2;
+  byte t1;
+  byte t2;
 
-  unsigned char A;
+  byte A;
   uint32_t data_len;
 
-  alignas(32) __m256i maskTable[32];
+  __m256i maskTable[32];
   
   std::vector<byte> opsA;
   std::vector<byte> opsB;
+  byte opGap[600];
+
+
+  int32_t bucketSuffixes[256][MAX_LENGTH];
+  int32_t bucketSuffixes_sizes[256];
 
   friend std::ostream& operator<<(std::ostream& os, const workerData& wd);
+
+  void reset() {
+    memset(offs, 0, ndis * sizeof(unsigned char));
+    memset(lcp, 0, nlcp * sizeof(short));
+    memset(anch, 0, ndis * sizeof(int*));
+  }
 };
 
 inline void initWorker(workerData &worker) {
@@ -207,7 +278,7 @@ inline void initWorker(workerData &worker) {
   std::iota(full.begin(), full.end(), 0);
   std::set_difference(full.begin(), full.end(), branchedOps_global.begin(), branchedOps_global.end(), std::inserter(diff, diff.begin()));
   std::copy(diff.begin(), diff.end(), worker.regularOps);
-  
+
   worker.ctx = libsais_create_ctx();
   // printf("Branched Ops:\n");
   // for (int i = 0; i < branchedOps_size; i++) {
@@ -222,8 +293,8 @@ inline void initWorker(workerData &worker) {
 }
 
 inline std::ostream& operator<<(std::ostream& os, const workerData& wd) {
-    // Print values for dynamically allocated unsigned char arrays (assuming 32 bytes for demonstration)
-    auto printByteArray = [&os](const unsigned char* arr, size_t size) {
+    // Print values for dynamically allocated byte arrays (assuming 32 bytes for demonstration)
+    auto printByteArray = [&os](const byte* arr, size_t size) {
         for (size_t i = 0; i < size; ++i) {
             os << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(arr[i]) << " ";
         }
@@ -261,15 +332,15 @@ inline std::ostream& operator<<(std::ostream& os, const workerData& wd) {
     os << '\n';
 
     // If you have other arrays or variables to print, follow the same pattern:
-    // 1. Use printByteArray for unsigned char* with known sizes
+    // 1. Use printByteArray for byte* with known sizes
     // 2. Use printIntArray for int* with known sizes
     // 3. Directly iterate over and print contents of fixed-size arrays or std::vector
 
     return os;
 }
 
-inline unsigned char
-leftRotate8(unsigned char n, unsigned d)
+inline byte
+leftRotate8(byte n, unsigned d)
 { // rotate n by d bits
 #if defined(_WIN32)
   return _rotl8(n, d);
@@ -280,14 +351,14 @@ leftRotate8(unsigned char n, unsigned d)
 }
 
 void bitCountLookup();
-inline unsigned char reverse8(unsigned char b)
+inline byte reverse8(byte b)
 {
   return (b * 0x0202020202ULL & 0x010884422010ULL) % 1023;
 }
 
-inline unsigned char countSetBits(unsigned char n)
+inline byte countSetBits(byte n)
 {
-  unsigned char count = 0;
+  byte count = 0;
   while (n)
   {
     count += n & 1;
@@ -296,7 +367,7 @@ inline unsigned char countSetBits(unsigned char n)
   return count;
 }
 
-inline unsigned char signByte(unsigned char A)
+inline byte signByte(byte A)
 {
   A = (A + (A % 256)) % 256;
   return A;
@@ -346,7 +417,7 @@ inline void prefetch(T *data, int size, int hint) {
   }
 }
 
-inline void hashSHA256(SHA256_CTX &sha256, const unsigned char *input, unsigned char *digest, unsigned long inputSize)
+inline void hashSHA256(SHA256_CTX &sha256, const byte *input, byte *digest, unsigned long inputSize)
 {
   SHA256_Init(&sha256);
   SHA256_Update(&sha256, input, inputSize);
@@ -380,12 +451,45 @@ inline std::vector<uint8_t> padSHA256Input(const uint8_t* input, size_t length) 
     return padded;
 }
 
+template <typename T>
+inline void insertElement(T* arr, int& size, int capacity, int index, const T& element) {
+    if (size < capacity) {
+        // Shift elements to the right
+        for (int i = size - 1; i >= index; i--) {
+            arr[i + 1] = arr[i];
+        }
+
+        // Insert the new element
+        arr[index] = element;
+
+        // Increase the size
+        size++;
+    } else {
+        std::cout << "Array is full. Cannot insert element." << std::endl;
+    }
+}
+
 void processAfterMarker(workerData& worker);
 void lookupCompute(workerData &worker);
+void lookupCompute_SA(workerData &worker);
 void branchComputeCPU(workerData &worker);
 void branchComputeCPU_optimized(workerData &worker);
-void AstroBWTv3(unsigned char *input, int inputLen, unsigned char *outputhash, workerData &scratch, bool lookupMine);
+void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &scratch, bool lookupMine);
 
 void finishBatch(workerData &worker);
+
+static void construct_SA_pre(const byte *T, int *SA,
+             int *bucket_A, int *bucket_B,
+             std::vector<std::vector<int>> &buckets_A,
+             int n, int m);
+
+#undef INSERT
+#undef MAXST
+#undef DEEP
+#undef DEELCP
+#undef OVER
+#undef TERM
+#undef LCPART
+#undef ABIT
 
 #endif

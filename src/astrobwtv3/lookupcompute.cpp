@@ -6,6 +6,8 @@
 #include <bit>
 #include <bitset>
 #include <cstdint>
+#include <fstream>
+#include <filesystem>
 
 // Generate lookup tables for values computed formerly by branchedCompute
 
@@ -49,6 +51,20 @@ void lookupGen(workerData &worker, uint16_t *lookup2D, byte *lookup3D) {
       trueVal = v2 | (uint16_t)v1 << 8;
       worker.lookup2D[pos*256*256 + val] = trueVal;
     }
+  }
+  std::ofstream file1("2d.bin", std::ios::binary);
+  if (file1.is_open()) {
+      file1.write(reinterpret_cast<const char*>(worker.lookup2D), 256*256*regOps_size);
+      file1.close();
+  } else {
+      std::cerr << "Unable to open file: " << "2d.bin" << std::endl;
+  }
+  std::ofstream file2("3d.bin", std::ios::binary);
+  if (file2.is_open()) {
+      file2.write(reinterpret_cast<const char*>(worker.lookup3D), 256*256*branchedOps_size);
+      file2.close();
+  } else {
+      std::cerr << "Unable to open file: " << "3d.bin" << std::endl;
   }
   // worker.lookup3D = &lookup3D[0];
   // worker.lookup2D = &lookup2D[0];

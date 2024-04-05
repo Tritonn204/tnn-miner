@@ -37,6 +37,7 @@ extern "C" {
 
 /*- Private Functions -*/
 
+
 /* Sorts suffixes of type B*. */
 static
 saidx_t

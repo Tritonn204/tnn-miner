@@ -9,7 +9,7 @@
 
 namespace po = boost::program_options;  // from <boost/program_options.hpp>
 
-const char *consoleLine = " TNN-MINER v0.2.0 ";
+const char *consoleLine = " TNN-MINER v0.2.5 ";
 const char *TNN = R"(
   
                                                             YB&&@5
@@ -36,6 +36,36 @@ const char *TNN = R"(
                .&Y:                        █   █ █ █  ██ ████ █ ██    
 
 )";  
+
+const char *DERO = R"(
+                                                                  
+                              @                                 
+                         @@       @@                            
+                     @@               @@                        
+                 @                         @                    
+             @                                 @@               
+        @@                    @                    @@           
+    @                    @@       @@                    @       
+    @                @@       .       @@                @       
+    @            @@       ..     ..       @@            @       
+    @          @      .               .      @          @       
+    @          @   .       @@@@@@@       .   @          @       
+    @          @   .    @@@@@@@@@@@@@    .   @          @       
+    @          @   .    @@@@@@@@@@@@@    .   @          @       
+    @          @   .    @@@@@@@@@@@@@    .   @          @       
+    @          @   .     @@@@@@@@@@@     .   @          @       
+    @          @    ..     @@@@@@@     ..    @          @       
+    @          @@        .@@@@@@@@@.        @@          @       
+    @              @@     @@@@@@@@@     @@              @       
+    @                  @@ @@@@@@@@@ @@                  @       
+       @                    @@@@@                    @@         
+           @@                                    @              
+               @@                           @@                  
+                   @@                   @@                      
+                        @@         @@                           
+                              @                               
+                                                                
+)";
 
 const char* daemonPrompt = "Please enter your mining deamon/host address: ";
 const char* portPrompt = "Please enter your mining port: ";
