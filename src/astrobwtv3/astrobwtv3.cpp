@@ -11030,6 +11030,8 @@ void branchComputeCPU_optimized(workerData &worker)
     }
 
     worker.chunk = &worker.sData[(worker.tries - 1) * 256];
+    __builtin_prefetch(&worker.chunk[worker.pos1],0,3);
+
     if (worker.tries == 1) {
       worker.prev_chunk = worker.chunk;
     } else {
@@ -11077,7 +11079,6 @@ void branchComputeCPU_optimized(workerData &worker)
     // fmt::printf("op: %d, ", worker.op);
     // fmt::printf("worker.pos1: %d, worker.pos2: %d\n", worker.pos1, worker.pos2);
 
-    __builtin_prefetch(&worker.prev_chunk[worker.pos1]+192,0,3);
 
     switch(worker.op) {
       case 0:
