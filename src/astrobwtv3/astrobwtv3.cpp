@@ -672,9 +672,9 @@ void optest(int op, workerData &worker, bool print=true) {
       {
         // INSERT_RANDOM_CODE_START
         worker.step_3[i] = worker.step_3[i] << (worker.step_3[i] & 3); // shift left
-        // worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
-        // worker.step_3[i] *= worker.step_3[i];                          // *
-        // worker.step_3[i] = std::rotl(worker.step_3[i], 1);             // rotate  bits by 1
+        worker.step_3[i] = reverse8(worker.step_3[i]);                 // reverse bits
+        worker.step_3[i] *= worker.step_3[i];                          // *
+        worker.step_3[i] = std::rotl(worker.step_3[i], 1);             // rotate  bits by 1
                                                                        // INSERT_RANDOM_CODE_END
       }
       break;
@@ -3834,9 +3834,9 @@ void optest_simd(int op, workerData &worker, bool print=true) {
           __m256i old = data;
 
           data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
-          // data = _mm256_reverse_epi8(data);
-          // data = _mm256_mul_epi8(data,data);
-          // data = _mm256_rol_epi8(data,1);
+          data = _mm256_reverse_epi8(data);
+          data = _mm256_mul_epi8(data,data);
+          data = _mm256_rol_epi8(data,1);
 
           data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
