@@ -1,0 +1,79 @@
+name: Build Tnn-miner on Ubuntu 22.04
+
+on:
+  push:
+    branches:
+    - '*dev*'
+    tags:
+      - "v*.*.*"
+
+jobs:
+  ubuntu-22:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v4
+    - name: 'Update system'
+      run: |
+        sudo update-alternatives --display clang
+        sudo update-alternatives --display clang++
+        sudo update-alternatives --list clang
+        sudo update-alternatives --list clang++
+        sudo update-alternatives --get-selections
+        sudo apt update && sudo apt upgrade -y
+    - name: 'Setup pre-reqs'
+      run: |
+        sudo apt install git wget build-essential cmake clang libssl-dev libudns-dev libfmt-dev libc++-dev
+        #sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-10 100 --slave /usr/bin/gcc gcc /usr/bin/gcc-10
+    - name: 'Install clang 18'
+      run: |
+        version=18
+        echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main" | sudo tee /etc/apt/sources.list.d/clang.list
+        wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+        sudo apt update
+        sudo apt install -y "clang-$version" "lldb-$version" "lld-$version" "clang-format-$version" "clang-tidy-$version"
+    - name: 'Update default clang'
+      run: |
+        version=18
+        # https://github.com/actions/runner-images/blob/main/images/ubuntu/scripts/build/install-clang.sh#L17
+        sudo update-alternatives --display clang++
+        sudo update-alternatives --display clang        
+        echo "Make Clang ${version} default"
+        sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-${version} 100
+        sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-${version} 100
+        sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-${version} 100
+        sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-${version} 100
+        sudo update-alternatives --install /usr/bin/run-clang-tidy run-clang-tidy /usr/bin/run-clang-tidy-${version} 100
+        sudo update-alternatives --set clang++ /usr/bin/clang++-${version}
+        sudo update-alternatives --set clang /usr/bin/clang-${version}
+        sudo update-alternatives --display clang++
+        sudo update-alternatives --display clang
+        clang --version
+        clang++ --version
+    - name: 'Compile boost'
+      run: |
+        wget -q https://github.com/boostorg/boost/releases/download/boost-1.82.0/boost-1.82.0.tar.gz
+        tar -xf boost-1.82.0.tar.gz
+        cd boost-1.82.0/
+        ./bootstrap.sh --with-toolset=clang 
+        ./b2 clean
+        ./b2 toolset=clang cxxflags=-std=c++20 -stdlib=libc++ linkflags=-stdlib=libc++ link=static
+    - name: 'Compile Tnn-miner'
+      run: |
+        mkdir build
+        cd build
+        cmake ..
+        make -j$(nproc)
+        tar -zcvf ../tnn-miner.tar.gz Tnn-miner
+    - name: Release
+      uses: softprops/action-gh-release@v2
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        make_latest: "true"
+        files: |
+          tnn-miner.tar.gz
+    - name: Archive tnn-miner.tar.gz
+      uses: actions/upload-artifact@v4
+      with:
+        name: tnn-miner.tar.gz
+        path: ./tnn-miner.tar.gz
+        retention-days: 5

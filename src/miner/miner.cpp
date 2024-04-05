@@ -435,15 +435,28 @@ int main(int argc, char **argv)
   bool lockThreads = true;
   devFee = 2.5;
 
-  po::options_description opts = get_prog_opts();
-  int style = get_prog_style();
   po::variables_map vm;
-  po::store(po::command_line_parser(argc, argv).options(opts).style(style).run(), vm);
-  po::notify(vm);
+  po::options_description opts = get_prog_opts();
+  try {
+    int style = get_prog_style();
+    po::store(po::command_line_parser(argc, argv).options(opts).style(style).run(), vm);
+    po::notify(vm);
+  }
+  catch(std::exception& e)
+  {
+    std::cerr << "Error: " << e.what() << "\n";
+    std::cerr << "Remember: Long options now use a double-dash -- instead of a signle-dash -\n";
+    return -1;
+  }
+  catch(...)
+  {
+    std::cerr << "Unknown error!" << "\n";
+    return -1;
+  }
 
   if (vm.count("help")) {
     std::cout << opts << std::endl;
-    boost::this_thread::sleep_for(boost::chrono::seconds(5));
+    boost::this_thread::sleep_for(boost::chrono::seconds(1));
     return 0;
   }
   if (vm.count("sabench")) {
@@ -474,14 +487,14 @@ int main(int argc, char **argv)
         printf("ERROR: dev fee must be at least %.2f", minFee);
         std::cout << "%" << std::endl;
         setcolor(BRIGHT_WHITE);
-        boost::this_thread::sleep_for(boost::chrono::seconds(5));
+        boost::this_thread::sleep_for(boost::chrono::seconds(1));
         return 1;
       }
     }
     catch (...)
     {
       printf("ERROR: invalid dev fee parameter... format should be for example '1.0'");
-      boost::this_thread::sleep_for(boost::chrono::seconds(5));
+      boost::this_thread::sleep_for(boost::chrono::seconds(1));
       return 1;
     }
   }
@@ -510,7 +523,7 @@ int main(int argc, char **argv)
     printf("Use Lookup\n");
     useLookupMine = true;
   }
-
+  
   // Ensure we capture *all* of the other options before we start using goto
   if (vm.count("test")) {
     goto Testing;
@@ -614,7 +627,7 @@ Testing:
   TestAstroBWTv3();
   // TestAstroBWTv3_cuda();
   // TestAstroBWTv3repeattest();
-  boost::this_thread::sleep_for(boost::chrono::seconds(30));
+  boost::this_thread::sleep_for(boost::chrono::seconds(3));
   return 0;
 }
 Benchmarking:

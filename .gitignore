@@ -33,6 +33,7 @@
 /cpp_modules
 /build
 /tests
+/boost-1.82.0/**
 
 # Misc
 **.txt
