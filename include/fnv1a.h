@@ -13,6 +13,7 @@ inline uint32_t hash_32_fnv1a(const void* key, const uint32_t len) {
     uint32_t prime = 0x1000193;
 
     for(int i = 0; i < len; ++i) {
+        __builtin_prefetch(key+32);
         uint8_t value = data[i];
         hash = hash ^ value;
         hash *= prime;
@@ -29,6 +30,7 @@ inline uint64_t hash_64_fnv1a(const void* key, const uint64_t len) {
     uint64_t prime = 0x100000001b3;
     
     for(int i = 0; i < len; ++i) {
+        __builtin_prefetch(key+64);
         uint8_t value = data[i];
         hash = hash ^ value;
         hash *= prime;

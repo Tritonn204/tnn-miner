@@ -7712,7 +7712,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     __builtin_prefetch(&worker.sData[256+64], 0, 3);
     __builtin_prefetch(&worker.sData[256+128], 0, 3);
     __builtin_prefetch(&worker.sData[256+192], 0, 3);
-    __builtin_prefetch(&worker.sData[512], 0, 3);
+    __builtin_prefetch(&worker.sData[320], 0, 3);
 
     std::fill_n(worker.sData, 320, 0);
     hashSHA256(worker.sha256, input, &worker.sData[320], inputLen);
@@ -7725,6 +7725,11 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     __builtin_prefetch(&worker.sData[192], 0, 3);
 
     worker.salsa20.processBytes(worker.sData, worker.sData, 256);
+
+    __builtin_prefetch(&worker.key + 8, 0, 3);
+    __builtin_prefetch(&worker.key + 8+64, 0, 3);
+    __builtin_prefetch(&worker.key + 8+128, 0, 3);
+    __builtin_prefetch(&worker.key + 8+192, 0, 3);
 
     RC4_set_key(&worker.key, 256,  worker.sData);
     RC4(&worker.key, 256, worker.sData,  worker.sData);
@@ -11013,17 +11018,15 @@ void branchComputeCPU(workerData &worker)
 
 void branchComputeCPU_avx2(workerData &worker)
 {
-  // __builtin_prefetch(&worker.maskTable+64,0,3);
-  // __builtin_prefetch(&worker.maskTable+128,0,3);
-  // __builtin_prefetch(&worker.maskTable+192,0,3);
   while (true)
   {
     worker.tries++;
     worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries;
+    __builtin_prefetch(&worker.random_switcher,0,3);
     // printf("%d worker.random_switcher %d %08jx\n", worker.tries, worker.random_switcher, worker.random_switcher);
 
     worker.op = static_cast<byte>(worker.random_switcher);
-    if (debugOpOrder) worker.opsA.push_back(worker.op);
+    // if (debugOpOrder) worker.opsA.push_back(worker.op);
 
     // printf("op: %d\n", worker.op);
 
@@ -11041,15 +11044,22 @@ void branchComputeCPU_avx2(workerData &worker)
     }
 
     worker.chunk = &worker.sData[(worker.tries - 1) * 256];
-    __builtin_prefetch(&worker.chunk[worker.pos1],0,3);
+    // __builtin_prefetch(&worker.chunk[worker.pos1],0,3);
     __builtin_prefetch(&worker.maskTable[worker.pos2-worker.pos1],0,3);
+    __builtin_prefetch(&worker.maskTable[worker.pos2-worker.pos1] + 64,0,3);
+    __builtin_prefetch(&worker.maskTable[worker.pos2-worker.pos1] + 128,0,3);
+    __builtin_prefetch(&worker.maskTable[worker.pos2-worker.pos1] + 192,0,3);
 
     if (worker.tries == 1) {
       worker.prev_chunk = worker.chunk;
     } else {
       worker.prev_chunk = &worker.sData[(worker.tries - 2) * 256];
 
-      __builtin_prefetch(&worker.prev_chunk[worker.pos1],0,3);
+      // __builtin_prefetch(&worker.prev_chunk[worker.pos1],0,3);
+      __builtin_prefetch(worker.prev_chunk,0,3);
+      __builtin_prefetch(worker.prev_chunk+64,0,3);
+      __builtin_prefetch(worker.prev_chunk+128,0,3);
+      __builtin_prefetch(worker.prev_chunk+192,0,3);
 
       // Calculate the start and end blocks
       int start_block = 0;
@@ -11082,13 +11092,13 @@ void branchComputeCPU_avx2(workerData &worker)
       }
     }
 
-    if (debugOpOrder && worker.op == sus_op) {
-      printf("SIMD pre op %d:\n", worker.op);
-      for (int i = 0; i < 256; i++) {
-          printf("%02X ", worker.prev_chunk[i]);
-      } 
-      printf("\n");
-    }
+    // if (debugOpOrder && worker.op == sus_op) {
+    //   printf("SIMD pre op %d:\n", worker.op);
+    //   for (int i = 0; i < 256; i++) {
+    //       printf("%02X ", worker.prev_chunk[i]);
+    //   } 
+    //   printf("\n");
+    // }
     // fmt::printf("op: %d, ", worker.op);
     // fmt::printf("worker.pos1: %d, worker.pos2: %d\n", worker.pos1, worker.pos2);
 
@@ -11124,7 +11134,6 @@ void branchComputeCPU_avx2(workerData &worker)
         break;
       case 1:
         for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          if (debugOpOrder) printf("i = %d\n", i);
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
           __m256i old = data;
 
@@ -14680,12 +14689,16 @@ void branchComputeCPU_avx2(workerData &worker)
     //   std::cout << hexStr(&worker.step_3[worker.pos2], 1) << std::endl;
     // }
 
+    __builtin_prefetch(worker.chunk,0,3);
+    __builtin_prefetch(worker.chunk+64,0,3);
+    __builtin_prefetch(worker.chunk+128,0,3);
+    __builtin_prefetch(worker.chunk+192,0,3);
+
     worker.A = (worker.chunk[worker.pos1] - worker.chunk[worker.pos2]);
     worker.A = (256 + (worker.A % 256)) % 256;
 
     if (worker.A < 0x10)
     { // 6.25 % probability
-      // __builtin_prefetch(worker.step_3);
       worker.prev_lhash = worker.lhash + worker.prev_lhash;
       worker.lhash = XXHash64::hash(worker.chunk, worker.pos2, 0);
 
@@ -14695,7 +14708,6 @@ void branchComputeCPU_avx2(workerData &worker)
 
     if (worker.A < 0x20)
     { // 12.5 % probability
-      // __builtin_prefetch(worker.step_3);
       worker.prev_lhash = worker.lhash + worker.prev_lhash;
       worker.lhash = hash_64_fnv1a(worker.chunk, worker.pos2);
 
@@ -14705,8 +14717,6 @@ void branchComputeCPU_avx2(workerData &worker)
 
     if (worker.A < 0x30)
     { // 18.75 % probability
-      // std::copy(worker.step_3, worker.step_3 + worker.pos2, s3);
-      // __builtin_prefetch(worker.step_3);
       worker.prev_lhash = worker.lhash + worker.prev_lhash;
       HH_ALIGNAS(16)
       const highwayhash::HH_U64 key2[2] = {worker.tries, worker.prev_lhash};
@@ -14724,19 +14734,18 @@ void branchComputeCPU_avx2(workerData &worker)
       //     printf("%d, ", worker.key.data[i]);
       //   }
       // }
-      prefetch(worker.step_3, 0, 1);
-      RC4(&worker.key, 256, worker.chunk,  worker.chunk);
+      RC4(&worker.key, 256, worker.chunk, worker.chunk);
     }
 
     worker.chunk[255] = worker.chunk[255] ^ worker.chunk[worker.pos1] ^ worker.chunk[worker.pos2];
 
-    if (debugOpOrder && worker.op == sus_op) {
-      printf("SIMD op %d result:\n", worker.op);
-      for (int i = 0; i < 256; i++) {
-          printf("%02X ", worker.chunk[i]);
-      } 
-      printf("\n");
-    }
+    // if (debugOpOrder && worker.op == sus_op) {
+    //   printf("SIMD op %d result:\n", worker.op);
+    //   for (int i = 0; i < 256; i++) {
+    //       printf("%02X ", worker.chunk[i]);
+    //   } 
+    //   printf("\n");
+    // }
 
     // memcpy(&worker.sData[(worker.tries - 1) * 256], worker.step_3, 256);
     
