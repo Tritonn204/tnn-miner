@@ -70,9 +70,9 @@ typedef unsigned char byte;
 typedef unsigned short dbyte;
 typedef unsigned long word;
 
-const int sus_op = 253;
+const int sus_op = 1;
 
-const std::vector<unsigned> branchedOps_global = {
+const std::vector<unsigned char> branchedOps_global = {
 1,3,5,9,11,13,15,17,20,21,23,27,29,30,35,39,40,43,45,47,51,54,58,60,62,64,68,70,72,74,75,80,82,85,91,92,93,94,103,108,109,115,116,117,119,120,123,124,127,132,133,134,136,138,140,142,143,146,148,149,150,154,155,159,161,165,168,169,176,177,178,180,182,184,187,189,190,193,194,195,199,202,203,204,212,214,215,216,219,221,222,223,226,227,230,231,234,236,239,240,241,242,250,253
 };
 
@@ -112,7 +112,7 @@ const uint32_t sha_standard[8] = {
     0x5be0cd19
 };
 
-const uint32_t MAX_LENGTH = (256 * 385) - 1; // this is the maximum
+const uint32_t MAX_LENGTH = (256 * 277) - 1; // this is the maximum
 const int deviceAllocMB = 5;
 
 #endif
@@ -135,55 +135,6 @@ const __m256i vec_3 = _mm256_set1_epi8(3);
 class workerData
 {
 public:
-  byte sHash[32];
-  byte sha_key[32];
-  byte sha_key2[32];
-  byte sData[MAX_LENGTH+64];
-
-  byte counter[64];
-
-  int bA[256];
-  int bB[256*256];
-
-  // int C[256];  // Count array for characters
-  // int B[256];
-  // int D[512];  // Temporary array used in LMS sort
-
-  SHA256_CTX sha256;
-  ucstk::Salsa20 salsa20;
-  RC4_KEY key;
-
-  int32_t sa[MAX_LENGTH];
-  int32_t chunkSA[512];
-
-  uint32_t buckets_B_offsets[256][256] = {0};
-  int32_t buckets_sizes[256] = {0};
-  int32_t buckets_suffixes[256][MAX_LENGTH] = {0};
-
-  int32_t m_suffixes[276*2];
-  int32_t m_suffixes_size;
-
-  int32_t chunkBuckets[256] = {0};
-
-  byte modMask[256];
-
-  byte *chunk;
-  byte *prev_chunk;
-  bool assigned[256];
-
-  bool LMS[256][MAX_LENGTH];
-
-  byte unsorted[256];
-  uint32_t pSpots[256][MAX_LENGTH]; 
-
-
-
-  byte branchedOps[branchedOps_size];
-  byte regularOps[regOps_size];
-
-  byte branched_idx[256];
-  byte reg_idx[256];
-
   byte step_3[256];
   int freq[256];
 
@@ -196,23 +147,18 @@ public:
   byte *sfin;
   int baza = 0;
 
-  byte offs[MAX_LENGTH];
-  short lcp[MAX_LENGTH >> LCPART];
-  int* anch[(MAX_LENGTH + AMASK) >> ABIT];
-
   int lucky = 0;
 
   byte lookup3D[branchedOps_size*256*256];
   uint16_t lookup2D[regOps_size*(256*256)];
 
+  SHA256_CTX sha256;
+  ucstk::Salsa20 salsa20;
+  RC4_KEY key;
+
   void *ctx;
 
-  uint64_t random_switcher;
-
-  uint64_t lhash;
-  uint64_t prev_lhash;
-  uint64_t tries;
-
+  byte salsaInput[256] = {0};
   byte op;
   byte pos1;
   byte pos2;
@@ -222,24 +168,71 @@ public:
   byte A;
   uint32_t data_len;
 
-  __m256i maskTable[32];
+  byte *chunk;
+  byte *prev_chunk;
+
+  byte sHash[32];
+  byte sha_key[32];
+  byte sha_key2[32];
+  byte sData[MAX_LENGTH+64];
+
+  #ifdef __AVX2__
+  alignas(32) __m256i maskTable[32];
+  #endif
+
+  byte branchedOps[branchedOps_size*2];
+  byte regularOps[regOps_size*2];
+
+  byte branched_idx[256];
+  byte reg_idx[256];
+
+  uint64_t random_switcher;
+
+  uint64_t lhash;
+  uint64_t prev_lhash;
+  uint64_t tries;
+
+  byte counter[64];
+
+  int bA[256];
+  int bB[256*256];
+  int32_t sa[MAX_LENGTH];
   
   std::vector<byte> opsA;
   std::vector<byte> opsB;
-  byte opGap[600];
-
-
-  int32_t bucketSuffixes[256][MAX_LENGTH];
-  int32_t bucketSuffixes_sizes[256];
 
   friend std::ostream& operator<<(std::ostream& os, const workerData& wd);
-
-  void reset() {
-    memset(offs, 0, ndis * sizeof(unsigned char));
-    memset(lcp, 0, nlcp * sizeof(short));
-    memset(anch, 0, ndis * sizeof(int*));
-  }
 };
+
+#if defined(__AVX2__)
+
+inline __m256i genMask(workerData &worker, int n){
+  // printf("maskgen\n");
+  __m256i temp = _mm256_setzero_si256(); // Initialize mask with all zeros
+
+  __m128i lower_part = _mm_set1_epi64x(0);
+  __m128i upper_part = _mm_set1_epi64x(0);
+
+  if (n > 24) {
+    lower_part = _mm_set1_epi64x(-1ULL);
+    upper_part = _mm_set_epi64x(-1ULL >> (8-(n%8))*8,-1ULL);
+  } else if (n > 16) {
+    lower_part = _mm_set_epi64x(-1ULL,-1ULL);
+    upper_part = _mm_set_epi64x(0,-1ULL >> (8-(n%8))*8);
+  } else if (n > 8) {
+
+    lower_part = _mm_set_epi64x(-1ULL >> (8-(n%8))*8,-1ULL);
+  } else {
+    lower_part = _mm_set_epi64x(0,-1ULL >> (8-(n%8))*8);
+  }
+
+  temp = _mm256_insertf128_si256(temp, lower_part, 0); // Set lower 128 bits
+  temp = _mm256_insertf128_si256(temp, upper_part, 1); // Set upper 128 bits
+
+  return temp;
+}
+
+#endif
 
 inline void initWorker(workerData &worker) {
   #if defined(__AVX2__)
@@ -271,7 +264,6 @@ inline void initWorker(workerData &worker) {
   memcpy(&worker.maskTable[0], temp, 32*sizeof(__m256i));
 
   #endif
-  // printf("branchedOps size:cl %d", worker.branchedOps.size());
   std::copy(branchedOps_global.begin(), branchedOps_global.end(), worker.branchedOps);
   std::vector<byte> full(256);
   std::vector<byte> diff(256);
@@ -473,7 +465,12 @@ void processAfterMarker(workerData& worker);
 void lookupCompute(workerData &worker);
 void lookupCompute_SA(workerData &worker);
 void branchComputeCPU(workerData &worker);
-void branchComputeCPU_optimized(workerData &worker);
+
+void branchComputeCPU_avx2(workerData &worker);
+void branchComputeCPU_avx(workerData &worker);
+void branchComputeCPU_sse2(workerData &worker);
+void branchComputeCPU_neon(workerData &worker);
+
 void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &scratch, bool lookupMine);
 
 void finishBatch(workerData &worker);
