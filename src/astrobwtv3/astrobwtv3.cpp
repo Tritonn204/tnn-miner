@@ -7708,8 +7708,6 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
 
   try
   {
-    memset(worker.sData, 0, MAX_LENGTH);
-
     hashSHA256(worker.sha256, input, worker.sha_key, inputLen);
 
     worker.salsa20 = (worker.sha_key);
@@ -7720,7 +7718,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     __builtin_prefetch(worker.sData + 128, 0, 3);
     __builtin_prefetch(worker.sData + 192, 0, 3);
 
-    worker.salsa20.processBytes(worker.sData, worker.sData, 256);
+    worker.salsa20.processBytes(worker.salsaInput, worker.sData, 256);
 
     RC4_set_key(&worker.key, 256,  worker.sData);
     RC4(&worker.key, 256, worker.sData,  worker.sData);
@@ -7775,7 +7773,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     // printf("data length: %d\n", worker.data_len);
     divsufsort(worker.sData, worker.sa, worker.data_len, worker.bA, worker.bB);
     // computeByteFrequencyAVX2(worker.sData, worker.data_len, worker.freq);
-// libsais_ctx(worker.ctx, worker.sData, worker.sa, worker.data_len, MAX_LENGTH-worker.data_len, NULL);
+    // libsais_ctx(worker.ctx, worker.sData, worker.sa, worker.data_len, MAX_LENGTH-worker.data_len, NULL);
 
     if (littleEndian())
     {
@@ -15063,6 +15061,7 @@ after:
   worker.data_len = static_cast<uint32_t>((worker.tries - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
 }
 
+/*
 void lookupCompute_SA(workerData &worker)
 {
   memset(worker.buckets_sizes,0,256);
@@ -15410,3 +15409,4 @@ after:
 
   // libsais(worker.sData, worker.sa, worker.data_len, 0, worker.buckets_sizes);
 }
+*/

@@ -112,7 +112,7 @@ const uint32_t sha_standard[8] = {
     0x5be0cd19
 };
 
-const uint32_t MAX_LENGTH = (256 * 385) - 1; // this is the maximum
+const uint32_t MAX_LENGTH = (256 * 277) - 1; // this is the maximum
 const int deviceAllocMB = 5;
 
 #endif
@@ -135,25 +135,11 @@ const __m256i vec_3 = _mm256_set1_epi8(3);
 class workerData
 {
 public:
-  byte sHash[32];
-  byte sha_key[32];
-  byte sha_key2[32];
-  byte sData[MAX_LENGTH+64];
-
-  byte counter[64];
-
-  int bA[256];
-  int bB[256*256];
 
   // int C[256];  // Count array for characters
   // int B[256];
   // int D[512];  // Temporary array used in LMS sort
 
-  SHA256_CTX sha256;
-  ucstk::Salsa20 salsa20;
-  RC4_KEY key;
-
-  int32_t sa[MAX_LENGTH];
   int32_t chunkSA[512];
 
   uint32_t buckets_B_offsets[256][256] = {0};
@@ -166,9 +152,6 @@ public:
   int32_t chunkBuckets[256] = {0};
 
   byte modMask[256];
-
-  byte *chunk;
-  byte *prev_chunk;
   bool assigned[256];
 
   bool LMS[256][MAX_LENGTH];
@@ -176,13 +159,6 @@ public:
   byte unsorted[256];
   uint32_t pSpots[256][MAX_LENGTH]; 
 
-
-
-  byte branchedOps[branchedOps_size];
-  byte regularOps[regOps_size];
-
-  byte branched_idx[256];
-  byte reg_idx[256];
 
   byte step_3[256];
   int freq[256];
@@ -205,14 +181,13 @@ public:
   byte lookup3D[branchedOps_size*256*256];
   uint16_t lookup2D[regOps_size*(256*256)];
 
+  SHA256_CTX sha256;
+  ucstk::Salsa20 salsa20;
+  RC4_KEY key;
+
   void *ctx;
 
-  uint64_t random_switcher;
-
-  uint64_t lhash;
-  uint64_t prev_lhash;
-  uint64_t tries;
-
+  byte salsaInput[256] = {0};
   byte op;
   byte pos1;
   byte pos2;
@@ -222,23 +197,48 @@ public:
   byte A;
   uint32_t data_len;
 
+  byte *chunk;
+  byte *prev_chunk;
+
+  byte sHash[32];
+  byte sha_key[32];
+  byte sha_key2[32];
+  byte sData[MAX_LENGTH+64];
   __m256i maskTable[32];
+
+  byte branchedOps[branchedOps_size];
+  byte regularOps[regOps_size];
+
+  byte branched_idx[256];
+  byte reg_idx[256];
+
+  uint64_t random_switcher;
+
+  uint64_t lhash;
+  uint64_t prev_lhash;
+  uint64_t tries;
+
+  byte counter[64];
+
+  int bA[256];
+  int bB[256*256];
+  int32_t sa[MAX_LENGTH];
   
   std::vector<byte> opsA;
   std::vector<byte> opsB;
   byte opGap[600];
 
 
-  int32_t bucketSuffixes[256][MAX_LENGTH];
-  int32_t bucketSuffixes_sizes[256];
+  // int32_t bucketSuffixes[256][MAX_LENGTH];
+  // int32_t bucketSuffixes_sizes[256];
 
   friend std::ostream& operator<<(std::ostream& os, const workerData& wd);
 
-  void reset() {
-    memset(offs, 0, ndis * sizeof(unsigned char));
-    memset(lcp, 0, nlcp * sizeof(short));
-    memset(anch, 0, ndis * sizeof(int*));
-  }
+  // void reset() {
+  //   memset(offs, 0, ndis * sizeof(unsigned char));
+  //   memset(lcp, 0, nlcp * sizeof(short));
+  //   memset(anch, 0, ndis * sizeof(int*));
+  // }
 };
 
 inline void initWorker(workerData &worker) {
