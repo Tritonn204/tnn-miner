@@ -177,7 +177,7 @@ public:
   byte sData[MAX_LENGTH+64];
 
   #ifdef __AVX2__
-  __m256i maskTable[32];
+  alignas(32) __m256i maskTable[32];
   #endif
 
   byte branchedOps[branchedOps_size*2];

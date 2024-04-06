@@ -8413,7 +8413,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     std::fill_n(worker.sData, 320, 0);
     hashSHA256(worker.sha256, input, &worker.sData[320], inputLen);
     worker.salsa20.setKey(&worker.sData[320]);
-    worker.salsa20.setIv(worker.counter);
+    worker.salsa20.setIv(&worker.sData[256]);
 
     __builtin_prefetch(worker.sData, 0, 3);
     __builtin_prefetch(&worker.sData[64], 0, 3);
@@ -11718,11 +11718,11 @@ void branchComputeCPU_avx2(workerData &worker)
   {
     worker.tries++;
     worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries;
-    __builtin_prefetch(&worker.random_switcher,0,3);
+    // __builtin_prefetch(&worker.random_switcher,0,3);
     // printf("%d worker.random_switcher %d %08jx\n", worker.tries, worker.random_switcher, worker.random_switcher);
 
     worker.op = static_cast<byte>(worker.random_switcher);
-    if (debugOpOrder) worker.opsA.push_back(worker.op);
+    // if (debugOpOrder) worker.opsA.push_back(worker.op);
 
     // printf("op: %d\n", worker.op);
 
@@ -11751,7 +11751,7 @@ void branchComputeCPU_avx2(workerData &worker)
     } else {
       worker.prev_chunk = &worker.sData[(worker.tries - 2) * 256];
 
-      __builtin_prefetch(&worker.prev_chunk[worker.pos1],0,3);
+      // __builtin_prefetch(&worker.chunk[worker.pos1],0,3);
       __builtin_prefetch(worker.prev_chunk,0,3);
       __builtin_prefetch(worker.prev_chunk+64,0,3);
       __builtin_prefetch(worker.prev_chunk+128,0,3);
@@ -11788,13 +11788,13 @@ void branchComputeCPU_avx2(workerData &worker)
       }
     }
 
-    if (debugOpOrder && worker.op == sus_op) {
-      printf("SIMD pre op %d:\n", worker.op);
-      for (int i = 0; i < 256; i++) {
-          printf("%02X ", worker.prev_chunk[i]);
-      } 
-      printf("\n");
-    }
+    // if (debugOpOrder && worker.op == sus_op) {
+    //   printf("SIMD pre op %d:\n", worker.op);
+    //   for (int i = 0; i < 256; i++) {
+    //       printf("%02X ", worker.prev_chunk[i]);
+    //   } 
+    //   printf("\n");
+    // }
     // fmt::printf("op: %d, ", worker.op);
     // fmt::printf("worker.pos1: %d, worker.pos2: %d\n", worker.pos1, worker.pos2);
 
@@ -16364,8 +16364,8 @@ void branchComputeCPU_avx2(workerData &worker)
     // }
 
     __builtin_prefetch(worker.chunk,0,3);
-    __builtin_prefetch(worker.chunk+64,0,3);
-    __builtin_prefetch(worker.chunk+128,0,3);
+    // __builtin_prefetch(worker.chunk+64,0,3);
+    // __builtin_prefetch(worker.chunk+128,0,3);
     __builtin_prefetch(worker.chunk+192,0,3);
 
     worker.A = (worker.chunk[worker.pos1] - worker.chunk[worker.pos2]);
@@ -16413,13 +16413,13 @@ void branchComputeCPU_avx2(workerData &worker)
 
     worker.chunk[255] = worker.chunk[255] ^ worker.chunk[worker.pos1] ^ worker.chunk[worker.pos2];
 
-    if (debugOpOrder && worker.op == sus_op) {
-      printf("SIMD op %d result:\n", worker.op);
-      for (int i = 0; i < 256; i++) {
-          printf("%02X ", worker.chunk[i]);
-      } 
-      printf("\n");
-    }
+    // if (debugOpOrder && worker.op == sus_op) {
+    //   printf("SIMD op %d result:\n", worker.op);
+    //   for (int i = 0; i < 256; i++) {
+    //       printf("%02X ", worker.chunk[i]);
+    //   } 
+    //   printf("\n");
+    // }
 
     // memcpy(&worker.sData[(worker.tries - 1) * 256], worker.step_3, 256);
     
