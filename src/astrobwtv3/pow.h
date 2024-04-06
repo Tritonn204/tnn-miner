@@ -70,7 +70,7 @@ typedef unsigned char byte;
 typedef unsigned short dbyte;
 typedef unsigned long word;
 
-const int sus_op = 225;
+const int sus_op = 1;
 
 const std::vector<unsigned char> branchedOps_global = {
 1,3,5,9,11,13,15,17,20,21,23,27,29,30,35,39,40,43,45,47,51,54,58,60,62,64,68,70,72,74,75,80,82,85,91,92,93,94,103,108,109,115,116,117,119,120,123,124,127,132,133,134,136,138,140,142,143,146,148,149,150,154,155,159,161,165,168,169,176,177,178,180,182,184,187,189,190,193,194,195,199,202,203,204,212,214,215,216,219,221,222,223,226,227,230,231,234,236,239,240,241,242,250,253
@@ -177,7 +177,7 @@ public:
   byte sData[MAX_LENGTH+64];
 
   #ifdef __AVX2__
-  alignas(32) __m256i maskTable[32] = {0};
+  __m256i maskTable[32];
   #endif
 
   byte branchedOps[branchedOps_size*2];
@@ -204,6 +204,36 @@ public:
   friend std::ostream& operator<<(std::ostream& os, const workerData& wd);
 };
 
+#if defined(__AVX2__)
+
+inline __m256i genMask(workerData &worker, int n){
+  // printf("maskgen\n");
+  __m256i temp = _mm256_setzero_si256(); // Initialize mask with all zeros
+
+  __m128i lower_part = _mm_set1_epi64x(0);
+  __m128i upper_part = _mm_set1_epi64x(0);
+
+  if (n > 24) {
+    lower_part = _mm_set1_epi64x(-1ULL);
+    upper_part = _mm_set_epi64x(-1ULL >> (8-(n%8))*8,-1ULL);
+  } else if (n > 16) {
+    lower_part = _mm_set_epi64x(-1ULL,-1ULL);
+    upper_part = _mm_set_epi64x(0,-1ULL >> (8-(n%8))*8);
+  } else if (n > 8) {
+
+    lower_part = _mm_set_epi64x(-1ULL >> (8-(n%8))*8,-1ULL);
+  } else {
+    lower_part = _mm_set_epi64x(0,-1ULL >> (8-(n%8))*8);
+  }
+
+  temp = _mm256_insertf128_si256(temp, lower_part, 0); // Set lower 128 bits
+  temp = _mm256_insertf128_si256(temp, upper_part, 1); // Set upper 128 bits
+
+  return temp;
+}
+
+#endif
+
 inline void initWorker(workerData &worker) {
   #if defined(__AVX2__)
 
@@ -215,6 +245,7 @@ inline void initWorker(workerData &worker) {
     __m128i upper_part = _mm_set1_epi64x(0);
 
     if (i > 24) {
+
       lower_part = _mm_set1_epi64x(-1ULL);
       upper_part = _mm_set_epi64x(-1ULL >> (8-(i%8))*8,-1ULL);
     } else if (i > 16) {
@@ -229,9 +260,8 @@ inline void initWorker(workerData &worker) {
 
     temp[i] = _mm256_insertf128_si256(temp[i], lower_part, 0); // Set lower 128 bits
     temp[i] = _mm256_insertf128_si256(temp[i], upper_part, 1); // Set upper 128 bits
-
-    worker.maskTable[i] = temp[i];
   }
+  memcpy(&worker.maskTable[0], temp, 32*sizeof(__m256i));
 
   #endif
   std::copy(branchedOps_global.begin(), branchedOps_global.end(), worker.branchedOps);
