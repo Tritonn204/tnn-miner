@@ -72,7 +72,7 @@ typedef unsigned long word;
 
 const int sus_op = 225;
 
-const std::vector<unsigned> branchedOps_global = {
+const std::vector<unsigned char> branchedOps_global = {
 1,3,5,9,11,13,15,17,20,21,23,27,29,30,35,39,40,43,45,47,51,54,58,60,62,64,68,70,72,74,75,80,82,85,91,92,93,94,103,108,109,115,116,117,119,120,123,124,127,132,133,134,136,138,140,142,143,146,148,149,150,154,155,159,161,165,168,169,176,177,178,180,182,184,187,189,190,193,194,195,199,202,203,204,212,214,215,216,219,221,222,223,226,227,230,231,234,236,239,240,241,242,250,253
 };
 
@@ -180,8 +180,8 @@ public:
   __m256i maskTable[32];
   #endif
 
-  byte branchedOps[branchedOps_size];
-  byte regularOps[regOps_size];
+  byte branchedOps[branchedOps_size*2];
+  byte regularOps[regOps_size*2];
 
   byte branched_idx[256];
   byte reg_idx[256];
@@ -234,7 +234,6 @@ inline void initWorker(workerData &worker) {
   memcpy(&worker.maskTable[0], temp, 32*sizeof(__m256i));
 
   #endif
-  // printf("branchedOps size:cl %d", worker.branchedOps.size());
   std::copy(branchedOps_global.begin(), branchedOps_global.end(), worker.branchedOps);
   std::vector<byte> full(256);
   std::vector<byte> diff(256);
