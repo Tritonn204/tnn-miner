@@ -8408,7 +8408,6 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     __builtin_prefetch(&worker.sData[256+64], 0, 3);
     __builtin_prefetch(&worker.sData[256+128], 0, 3);
     __builtin_prefetch(&worker.sData[256+192], 0, 3);
-    __builtin_prefetch(&worker.sData[320], 0, 3);
 
     std::fill_n(worker.sData, 320, 0);
     hashSHA256(worker.sha256, input, &worker.sData[320], inputLen);
@@ -11741,10 +11740,10 @@ void branchComputeCPU_avx2(workerData &worker)
 
     worker.chunk = &worker.sData[(worker.tries - 1) * 256];
     // __builtin_prefetch(&worker.chunk[worker.pos1],0,3);
-    __builtin_prefetch(&worker.maskTable[worker.pos2-worker.pos1],0,3);
-    __builtin_prefetch(&worker.maskTable[worker.pos2-worker.pos1] + 64,0,3);
-    __builtin_prefetch(&worker.maskTable[worker.pos2-worker.pos1] + 128,0,3);
-    __builtin_prefetch(&worker.maskTable[worker.pos2-worker.pos1] + 192,0,3);
+    // __builtin_prefetch(&worker.maskTable[worker.pos2-worker.pos1],0,3);
+    // __builtin_prefetch(&worker.maskTable[worker.pos2-worker.pos1] + 64,0,3);
+    // __builtin_prefetch(&worker.maskTable[worker.pos2-worker.pos1] + 128,0,3);
+    // __builtin_prefetch(&worker.maskTable[worker.pos2-worker.pos1] + 192,0,3);
 
     if (worker.tries == 1) {
       worker.prev_chunk = worker.chunk;
