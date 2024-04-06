@@ -177,7 +177,7 @@ public:
   byte sData[MAX_LENGTH+64];
 
   #ifdef __AVX2__
-  __m256i maskTable[32];
+  alignas(32) __m256i maskTable[32] = {0};
   #endif
 
   byte branchedOps[branchedOps_size*2];
@@ -215,7 +215,6 @@ inline void initWorker(workerData &worker) {
     __m128i upper_part = _mm_set1_epi64x(0);
 
     if (i > 24) {
-
       lower_part = _mm_set1_epi64x(-1ULL);
       upper_part = _mm_set_epi64x(-1ULL >> (8-(i%8))*8,-1ULL);
     } else if (i > 16) {
@@ -230,8 +229,9 @@ inline void initWorker(workerData &worker) {
 
     temp[i] = _mm256_insertf128_si256(temp[i], lower_part, 0); // Set lower 128 bits
     temp[i] = _mm256_insertf128_si256(temp[i], upper_part, 1); // Set upper 128 bits
+
+    worker.maskTable[i] = temp[i];
   }
-  memcpy(&worker.maskTable[0], temp, 32*sizeof(__m256i));
 
   #endif
   std::copy(branchedOps_global.begin(), branchedOps_global.end(), worker.branchedOps);
