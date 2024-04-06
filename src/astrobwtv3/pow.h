@@ -135,31 +135,6 @@ const __m256i vec_3 = _mm256_set1_epi8(3);
 class workerData
 {
 public:
-
-  // int C[256];  // Count array for characters
-  // int B[256];
-  // int D[512];  // Temporary array used in LMS sort
-
-  int32_t chunkSA[512];
-
-  uint32_t buckets_B_offsets[256][256] = {0};
-  int32_t buckets_sizes[256] = {0};
-  int32_t buckets_suffixes[256][MAX_LENGTH] = {0};
-
-  int32_t m_suffixes[276*2];
-  int32_t m_suffixes_size;
-
-  int32_t chunkBuckets[256] = {0};
-
-  byte modMask[256];
-  bool assigned[256];
-
-  bool LMS[256][MAX_LENGTH];
-
-  byte unsorted[256];
-  uint32_t pSpots[256][MAX_LENGTH]; 
-
-
   byte step_3[256];
   int freq[256];
 
@@ -171,10 +146,6 @@ public:
   int ch;
   byte *sfin;
   int baza = 0;
-
-  byte offs[MAX_LENGTH];
-  short lcp[MAX_LENGTH >> LCPART];
-  int* anch[(MAX_LENGTH + AMASK) >> ABIT];
 
   int lucky = 0;
 
@@ -204,7 +175,10 @@ public:
   byte sha_key[32];
   byte sha_key2[32];
   byte sData[MAX_LENGTH+64];
+
+  #ifdef __AVX2__
   __m256i maskTable[32];
+  #endif
 
   byte branchedOps[branchedOps_size];
   byte regularOps[regOps_size];
@@ -226,19 +200,8 @@ public:
   
   std::vector<byte> opsA;
   std::vector<byte> opsB;
-  byte opGap[600];
-
-
-  // int32_t bucketSuffixes[256][MAX_LENGTH];
-  // int32_t bucketSuffixes_sizes[256];
 
   friend std::ostream& operator<<(std::ostream& os, const workerData& wd);
-
-  // void reset() {
-  //   memset(offs, 0, ndis * sizeof(unsigned char));
-  //   memset(lcp, 0, nlcp * sizeof(short));
-  //   memset(anch, 0, ndis * sizeof(int*));
-  // }
 };
 
 inline void initWorker(workerData &worker) {

@@ -7708,17 +7708,23 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
 
   try
   {
-    hashSHA256(worker.sha256, input, worker.sha_key, inputLen);
+    __builtin_prefetch(&worker.sData[256], 0, 3);
+    __builtin_prefetch(&worker.sData[256+64], 0, 3);
+    __builtin_prefetch(&worker.sData[256+128], 0, 3);
+    __builtin_prefetch(&worker.sData[256+192], 0, 3);
+    __builtin_prefetch(&worker.sData[512], 0, 3);
 
-    worker.salsa20 = (worker.sha_key);
-    worker.salsa20.setIv(worker.counter);
+    std::fill_n(worker.sData, 320, 0);
+    hashSHA256(worker.sha256, input, &worker.sData[320], inputLen);
+    worker.salsa20.setKey(&worker.sData[320]);
+    worker.salsa20.setIv(&worker.sData[256]);
 
     __builtin_prefetch(worker.sData, 0, 3);
-    __builtin_prefetch(worker.sData + 64, 0, 3);
-    __builtin_prefetch(worker.sData + 128, 0, 3);
-    __builtin_prefetch(worker.sData + 192, 0, 3);
+    __builtin_prefetch(&worker.sData[64], 0, 3);
+    __builtin_prefetch(&worker.sData[128], 0, 3);
+    __builtin_prefetch(&worker.sData[192], 0, 3);
 
-    worker.salsa20.processBytes(worker.salsaInput, worker.sData, 256);
+    worker.salsa20.processBytes(worker.sData, worker.sData, 256);
 
     RC4_set_key(&worker.key, 256,  worker.sData);
     RC4(&worker.key, 256, worker.sData,  worker.sData);
@@ -11036,6 +11042,7 @@ void branchComputeCPU_avx2(workerData &worker)
 
     worker.chunk = &worker.sData[(worker.tries - 1) * 256];
     __builtin_prefetch(&worker.chunk[worker.pos1],0,3);
+    __builtin_prefetch(&worker.maskTable[worker.pos2-worker.pos1],0,3);
 
     if (worker.tries == 1) {
       worker.prev_chunk = worker.chunk;
@@ -11043,7 +11050,6 @@ void branchComputeCPU_avx2(workerData &worker)
       worker.prev_chunk = &worker.sData[(worker.tries - 2) * 256];
 
       __builtin_prefetch(&worker.prev_chunk[worker.pos1],0,3);
-      __builtin_prefetch(&worker.maskTable[12],0,3);
 
       // Calculate the start and end blocks
       int start_block = 0;
