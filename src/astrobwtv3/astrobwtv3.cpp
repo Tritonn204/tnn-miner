@@ -232,8 +232,26 @@ inline __m256i _mm256_rolv_epi8(__m256i x, __m256i y) {
 
 // Rotates x left by r bits
 inline __m256i _mm256_rol_epi8(__m256i x, int r) {
-  __m256i shifter = _mm256_set1_epi8(r);
-  __m256i rotated = _mm256_rolv_epi8(x,shifter);
+  // Unpack 2 8 bit numbers into their own vectors, and isolate them using masks
+  __m256i mask1 = _mm256_set1_epi16(0x00FF);
+  __m256i mask2 = _mm256_set1_epi16(0xFF00);
+  __m256i a = _mm256_and_si256(x, mask1);
+  __m256i b = _mm256_and_si256(x, mask2);
+
+  // Apply the 8bit rotation to the lower 8 bits, then mask out any extra/overflow
+  __m256i shiftedA = _mm256_slli_epi16(a, r);
+  __m256i wrappedA = _mm256_srli_epi16(a, 8 - r);
+  __m256i rotatedA = _mm256_or_si256(shiftedA, wrappedA);
+  rotatedA = _mm256_and_si256(rotatedA, mask1);
+
+  // Apply the 8bit rotation to the upper 8 bits, then mask out any extra/overflow
+  __m256i shiftedB = _mm256_slli_epi16(b, r);
+  __m256i wrappedB = _mm256_srli_epi16(b, 8 - r);
+  __m256i rotatedB = _mm256_or_si256(shiftedB, wrappedB);
+  rotatedB = _mm256_and_si256(rotatedB, mask2);
+
+  // Re-pack the isolated results into a 16-bit block
+  __m256i rotated = _mm256_or_si256(rotatedA, rotatedB);
 
   return rotated;
 }
@@ -10991,10 +11009,9 @@ void branchComputeCPU(workerData &worker)
 
 void branchComputeCPU_avx2(workerData &worker)
 {
-  __builtin_prefetch(&worker.maskTable+0,0,3);
-  __builtin_prefetch(&worker.maskTable+64,0,3);
-  __builtin_prefetch(&worker.maskTable+128,0,3);
-  __builtin_prefetch(&worker.maskTable+192,0,3);
+  // __builtin_prefetch(&worker.maskTable+64,0,3);
+  // __builtin_prefetch(&worker.maskTable+128,0,3);
+  // __builtin_prefetch(&worker.maskTable+192,0,3);
   while (true)
   {
     worker.tries++;
@@ -11028,6 +11045,8 @@ void branchComputeCPU_avx2(workerData &worker)
       worker.prev_chunk = &worker.sData[(worker.tries - 2) * 256];
 
       __builtin_prefetch(&worker.prev_chunk[worker.pos1],0,3);
+      __builtin_prefetch(&worker.maskTable[12],0,3);
+
       // Calculate the start and end blocks
       int start_block = 0;
       int end_block = worker.pos1 / 16;
