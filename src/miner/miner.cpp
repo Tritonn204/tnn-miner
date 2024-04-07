@@ -404,6 +404,45 @@ void do_session(
   // std::cout << beast::make_printable(buffer.data()) << std::endl;
 }
 
+#pragma clang optimize off
+void initMaskTable() {
+#if defined(__AVX2__)
+  alignas(16) uint32_t v[8];
+  for(int i = 0; i < 32; i++) {
+    g_maskTable[i] = _mm256_setzero_si256(); // Initialize mask with all zeros
+
+    __m128i lower_part = _mm_set1_epi64x(0);
+    __m128i upper_part = _mm_set1_epi64x(0);
+
+    if (i > 24) {
+      lower_part = _mm_set1_epi64x(-1ULL);
+      upper_part = _mm_set_epi64x(-1ULL >> (8-(i%8))*8,-1ULL);
+    } else if (i > 16) {
+      lower_part = _mm_set_epi64x(-1ULL,-1ULL);
+      upper_part = _mm_set_epi64x(0,-1ULL >> (8-(i%8))*8);
+    } else if (i > 8) {
+      lower_part = _mm_set_epi64x(-1ULL >> (8-(i%8))*8,-1ULL);
+    } else {
+      lower_part = _mm_set_epi64x(0,-1ULL >> (8-(i%8))*8);
+    }
+
+    g_maskTable[i] = _mm256_insertf128_si256(g_maskTable[i], lower_part, 0); // Set lower 128 bits
+    g_maskTable[i] = _mm256_insertf128_si256(g_maskTable[i], upper_part, 1); // Set upper 128 bits
+   
+    // If this printf is removed, then the Clang compiler does it's weird optimizations again 
+    //_mm256_storeu_si256((__m256i*)v, g_maskTable[i]);
+    //printf("%02d v8_u32: %x %x %x %x %x %x %x %x\n", i, v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
+  }
+
+  printf("g_maskTable:\n"); 
+  for(int i = 0; i < 32; i++) {
+    _mm256_storeu_si256((__m256i*)v, g_maskTable[i]);
+    printf("%02d v8_u32: %x %x %x %x %x %x %x %x\n", i, v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
+  }
+#endif
+}
+#pragma clang optimize on
+
 //------------------------------------------------------------------------------
 
 int main(int argc, char **argv)
@@ -430,6 +469,8 @@ int main(int argc, char **argv)
   lookup2D_global = (uint16_t *)malloc_huge_pages(regOps_size*(256*256)*sizeof(uint16_t));
   lookup3D_global = (byte *)malloc_huge_pages(branchedOps_size*(256*256)*sizeof(byte));
   oneLsh256 = Num(1) << 256;
+
+  initMaskTable();
 
   // default values
   bool lockThreads = true;
