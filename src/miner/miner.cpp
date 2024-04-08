@@ -434,11 +434,11 @@ void initMaskTable() {
     //printf("%02d v8_u32: %x %x %x %x %x %x %x %x\n", i, v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
   }
 
-  printf("g_maskTable:\n"); 
-  for(int i = 0; i < 32; i++) {
-    _mm256_storeu_si256((__m256i*)v, g_maskTable[i]);
-    printf("%02d v8_u32: %x %x %x %x %x %x %x %x\n", i, v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
-  }
+  // printf("g_maskTable:\n"); 
+  // for(int i = 0; i < 32; i++) {
+  //   _mm256_storeu_si256((__m256i*)v, g_maskTable[i]);
+  //   printf("%02d v8_u32: %x %x %x %x %x %x %x %x\n", i, v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
+  // }
 #endif
 }
 #pragma clang optimize on

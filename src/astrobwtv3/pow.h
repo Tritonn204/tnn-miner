@@ -237,6 +237,7 @@ inline __m256i genMask(workerData &worker, int n){
 #endif
 
 inline void initWorker(workerData &worker) {
+  #pragma clang optimize off
   #if defined(__AVX2__)
 
   __m256i temp[32];
@@ -264,14 +265,15 @@ inline void initWorker(workerData &worker) {
     temp[i] = _mm256_insertf128_si256(temp[i], upper_part, 1); // Set upper 128 bits
   }
   memcpy(&worker.maskTable[0], temp, 32*sizeof(__m256i));
-  printf("worker.maskTable\n");
-  alignas(16) uint32_t v[8];
-  for(int i = 0; i < 32; i++) {
-    _mm256_storeu_si256((__m256i*)v, worker.maskTable[i]);
-    printf("%02d v8_u32: %x %x %x %x %x %x %x %x\n", i, v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
-  }
+  // printf("worker.maskTable\n");
+  // alignas(16) uint32_t v[8];
+  // for(int i = 0; i < 32; i++) {
+  //   _mm256_storeu_si256((__m256i*)v, worker.maskTable[i]);
+  //   printf("%02d v8_u32: %x %x %x %x %x %x %x %x\n", i, v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
+  // }
 
   #endif
+  #pragma clang optimize on
   std::copy(branchedOps_global.begin(), branchedOps_global.end(), worker.branchedOps);
   std::vector<byte> full(256);
   std::vector<byte> diff(256);

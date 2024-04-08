@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16.3)
 
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_C_FLAGS_RELEASE "-static -O3 -fPIE -ftree-vectorize -DNDEBUG")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -m64 -g -O3 -Wall -Wuninitialized -march=native -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -m64 -O3 -Wall -Wuninitialized -march=native -DNDEBUG")
 
 set(CMAKE_C_COMPILER clang)
 set(CMAKE_CXX_COMPILER clang++)
