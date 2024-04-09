@@ -141,6 +141,7 @@ inline po::options_description get_prog_opts()
     ("len", po::value<int>(), "Sets length of the processed chunk in said benchmark (default 15)")
     ("sabench", "Runs a benchmark for divsufsort on snapshot files in the 'tests' directory")
     ("benchmark", po::value<int>(), "Runs a mining benchmark for <arg> seconds (adheres to -t threads option)")
+    ("verify", "Verify Normal, Lookup and SIMD ops")
   ;
 
   return general.add(debug);

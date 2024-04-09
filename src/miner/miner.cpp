@@ -111,7 +111,6 @@ int rejected;
 int accepted;
 int firstRejected;
 
-uint64_t hashrate;
 int64_t ourHeight;
 int64_t devHeight;
 int64_t difficulty;
@@ -127,6 +126,7 @@ bool devConnected = false;
 using byte = unsigned char;
 int bench_duration = -1;
 bool stopBenchmark = false;
+bool startBenchmark = false;
 //------------------------------------------------------------------------------
 
 // Report a failure
@@ -147,9 +147,14 @@ void do_session(
     net::io_context &ioc,
     ssl::context &ctx,
     net::yield_context yield,
-    bool isDev)
+    bool isDev,
+    int fixedDiff = 0)
 {
   beast::error_code ec;
+  std::string fixedDiffStr = "";
+  if(fixedDiff > 0) {
+    fixedDiffStr = "#" + std::to_string(fixedDiff);
+  }
 
   // These objects perform our I/O
   int addrCount = 0;
@@ -272,7 +277,7 @@ void do_session(
 
   // Perform the websocket handshake
   std::stringstream ss;
-  ss << "/ws/" << wallet;
+  ss << "/ws/" << wallet << fixedDiffStr;
   ws.async_handshake(host, ss.str().c_str(), yield[ec]);
   if (ec)
     return fail(ec, "handshake");
@@ -280,6 +285,7 @@ void do_session(
   // This buffer will hold the incoming message
   beast::flat_buffer buffer;
   std::stringstream workInfo;
+  json workData;
 
   while (true)
   {
@@ -316,7 +322,7 @@ void do_session(
         workInfo << beast::make_printable(buffer.data());
         if (json::accept(workInfo.str()))
         {
-          json workData = json::parse(workInfo.str());
+          workData = json::parse(workInfo.str());
           if ((isDev ? (workData.at("height") != devHeight) : (workData.at("height") != ourHeight)))
           {
             // mutex.lock();
@@ -336,10 +342,10 @@ void do_session(
             if (!isDev)
             {
               currentBlob = std::string((*J).at("blockhashing_blob"));
-              blockCounter = (*J).at("blocks");
-              miniBlockCounter = (*J).at("miniblocks");
-              rejected = (*J).at("rejected");
-              hashrate = (*J).at("difficultyuint64");
+              //blockCounter = (*J).at("blocks");
+              //miniBlockCounter = (*J).at("miniblocks");
+              //rejected = (*J).at("rejected");
+              //hashrate = (*J).at("difficultyuint64");
               ourHeight = (*J).at("height");
               difficulty = (*J).at("difficultyuint64");
               // printf("NEW JOB RECEIVED | Height: %d | Difficulty %" PRIu64 "\n", ourHeight, difficulty);
@@ -349,7 +355,7 @@ void do_session(
               {
                 mutex.lock();
                 setcolor(BRIGHT_YELLOW);
-                printf("Mining at: %s/ws/%s\n", host.c_str(), wallet.c_str());
+                printf("Mining at: %s/ws/%s%s\n", host.c_str(), wallet.c_str(), fixedDiffStr.c_str());
                 setcolor(CYAN);
                 printf("Dev fee: %.2f", devFee);
                 std::cout << "%" << std::endl;
@@ -404,45 +410,6 @@ void do_session(
   // std::cout << beast::make_printable(buffer.data()) << std::endl;
 }
 
-#pragma clang optimize off
-void initMaskTable() {
-#if defined(__AVX2__)
-  alignas(16) uint32_t v[8];
-  for(int i = 0; i < 32; i++) {
-    g_maskTable[i] = _mm256_setzero_si256(); // Initialize mask with all zeros
-
-    __m128i lower_part = _mm_set1_epi64x(0);
-    __m128i upper_part = _mm_set1_epi64x(0);
-
-    if (i > 24) {
-      lower_part = _mm_set1_epi64x(-1ULL);
-      upper_part = _mm_set_epi64x(-1ULL >> (8-(i%8))*8,-1ULL);
-    } else if (i > 16) {
-      lower_part = _mm_set_epi64x(-1ULL,-1ULL);
-      upper_part = _mm_set_epi64x(0,-1ULL >> (8-(i%8))*8);
-    } else if (i > 8) {
-      lower_part = _mm_set_epi64x(-1ULL >> (8-(i%8))*8,-1ULL);
-    } else {
-      lower_part = _mm_set_epi64x(0,-1ULL >> (8-(i%8))*8);
-    }
-
-    g_maskTable[i] = _mm256_insertf128_si256(g_maskTable[i], lower_part, 0); // Set lower 128 bits
-    g_maskTable[i] = _mm256_insertf128_si256(g_maskTable[i], upper_part, 1); // Set upper 128 bits
-   
-    // If this printf is removed, then the Clang compiler does it's weird optimizations again 
-    //_mm256_storeu_si256((__m256i*)v, g_maskTable[i]);
-    //printf("%02d v8_u32: %x %x %x %x %x %x %x %x\n", i, v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
-  }
-
-  // printf("g_maskTable:\n"); 
-  // for(int i = 0; i < 32; i++) {
-  //   _mm256_storeu_si256((__m256i*)v, g_maskTable[i]);
-  //   printf("%02d v8_u32: %x %x %x %x %x %x %x %x\n", i, v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
-  // }
-#endif
-}
-#pragma clang optimize on
-
 //------------------------------------------------------------------------------
 
 int main(int argc, char **argv)
@@ -451,7 +418,7 @@ int main(int argc, char **argv)
   SetConsoleOutputCP(CP_UTF8);
 #endif
   setcolor(BRIGHT_WHITE);
-  printf(TNN);
+  printf("%s", TNN);
   boost::this_thread::sleep_for(boost::chrono::seconds(1));
 #if defined(_WIN32)
   SetConsoleOutputCP(CP_UTF8);
@@ -469,8 +436,6 @@ int main(int argc, char **argv)
   lookup2D_global = (uint16_t *)malloc_huge_pages(regOps_size*(256*256)*sizeof(uint16_t));
   lookup3D_global = (byte *)malloc_huge_pages(branchedOps_size*(256*256)*sizeof(byte));
   oneLsh256 = Num(1) << 256;
-
-  initMaskTable();
 
   // default values
   bool lockThreads = true;
@@ -567,7 +532,8 @@ int main(int argc, char **argv)
   
   // Ensure we capture *all* of the other options before we start using goto
   if (vm.count("test")) {
-    goto Testing;
+    int rc = Testing();
+    return rc;
   }
   if (vm.count("benchmark")) {
     bench_duration = vm["benchmark"].as<int>();
@@ -576,6 +542,10 @@ int main(int argc, char **argv)
       return 1;
     }
     goto Benchmarking;
+  }
+  if (vm.count("verify")) {
+    int rc = runOpVerificationTests(useLookupMine);
+    return rc;
   }
 
 fillBlanks:
@@ -654,23 +624,7 @@ fillBlanks:
 }
   printf("\n");
   goto Mining;
-Testing:
-{
-  Num diffTest("20000", 10);
 
-  if (testOp >= 0) {
-    if (testLen >= 0) {
-      runOpTests(testOp, testLen);
-    } else {
-      runOpTests(testOp);
-    }
-  }
-  TestAstroBWTv3();
-  // TestAstroBWTv3_cuda();
-  // TestAstroBWTv3repeattest();
-  boost::this_thread::sleep_for(boost::chrono::seconds(3));
-  return 0;
-}
 Benchmarking:
 {
   if(threads <= 0) {
@@ -688,12 +642,11 @@ Benchmarking:
   port = devPort;
   wallet = devWallet;
 
-  boost::thread GETWORK(getWork, false);
+  boost::thread GETWORK(getWork, false, 0);
   // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
   winMask = std::max(1, winMask);
 
-  auto start_time = std::chrono::steady_clock::now();
   // Create worker threads and set CPU affinity
   for (int i = 0; i < threads; i++)
   {
@@ -720,6 +673,8 @@ Benchmarking:
     boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
   }
 
+  auto start_time = std::chrono::steady_clock::now();
+  startBenchmark = true;
   boost::thread t2(logSeconds, start_time, bench_duration, &stopBenchmark);
   setPriority(t2.native_handle(), THREAD_PRIORITY_TIME_CRITICAL);
 
@@ -767,10 +722,10 @@ Mining:
   printSupported();
   mutex.unlock();
 
-  boost::thread GETWORK(getWork, false);
+  boost::thread GETWORK(getWork, false, 0);
   // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
-  boost::thread DEVWORK(getWork, true);
+  boost::thread DEVWORK(getWork, true, 0);
   // setPriority(DEVWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
   unsigned int n = std::thread::hardware_concurrency();
@@ -828,6 +783,24 @@ Mining:
 
   return EXIT_SUCCESS;
   }
+}
+
+int Testing() {
+  int failedTests = 0;
+  Num diffTest("1234567890123456789", 10);
+
+  if (testOp >= 0) {
+    if (testLen >= 0) {
+      failedTests += runOpTests(testOp, testLen);
+    } else {
+      failedTests += runOpTests(testOp);
+    }
+  }
+  failedTests += TestAstroBWTv3();
+  // TestAstroBWTv3_cuda();
+  // TestAstroBWTv3repeattest();
+  boost::this_thread::sleep_for(boost::chrono::seconds(1));
+  return failedTests;
 }
 
 void logSeconds(std::chrono::_V2::steady_clock::time_point start_time, int duration, bool *stop)
@@ -1005,16 +978,16 @@ void setPriority(boost::thread::native_handle_type t, int priority)
 
 #else
   // Get the native handle of the thread
-  pthread_t threadHandle = t;
+  //pthread_t threadHandle = t;
 
   // Set the thread priority
-  int threadPriority = priority;
+  //int threadPriority = priority;
   // do nothing
 
 #endif
 }
 
-void getWork(bool isDev)
+void getWork(bool isDev, int fixedDiff)
 {
   net::io_context ioc;
   ssl::context ctx = ssl::context{ssl::context::tlsv12_client};
@@ -1035,7 +1008,7 @@ connectionAttempt:
     // Launch the asynchronous operation
     bool err = false;
     if (isDev)
-      boost::asio::spawn(ioc, std::bind(&do_session, std::string(devPool), std::string(devPort), std::string(devWallet), std::ref(ioc), std::ref(ctx), std::placeholders::_1, true),
+      boost::asio::spawn(ioc, std::bind(&do_session, std::string(devPool), std::string(devPort), std::string(devWallet), std::ref(ioc), std::ref(ctx), std::placeholders::_1, true, fixedDiff),
                          // on completion, spawn will call this function
                          [&](std::exception_ptr ex)
                          {
@@ -1046,7 +1019,7 @@ connectionAttempt:
                            }
                          });
     else
-      boost::asio::spawn(ioc, std::bind(&do_session, host, port, wallet, std::ref(ioc), std::ref(ctx), std::placeholders::_1, false),
+      boost::asio::spawn(ioc, std::bind(&do_session, host, port, wallet, std::ref(ioc), std::ref(ctx), std::placeholders::_1, false, fixedDiff),
                          // on completion, spawn will call this function
                          [&](std::exception_ptr ex)
                          {
@@ -1141,6 +1114,8 @@ void benchmark(int tid)
 {
 
   byte work[MINIBLOCK_SIZE];
+  //byte work_fast[MINIBLOCK_SIZE];
+  //byte work_fast_fast[MINIBLOCK_SIZE];
 
   std::random_device rd;
   std::mt19937 gen(rd());
@@ -1173,6 +1148,9 @@ void benchmark(int tid)
   }
 
   work[MINIBLOCK_SIZE - 1] = (byte)tid;
+  while(!startBenchmark) {
+
+  }
   while (true)
   {
     json myJob = job;
@@ -1255,6 +1233,7 @@ waitForJob:
       hexstr_to_bytes(myJob.at("blockhashing_blob"), b2);
       memcpy(work, b2, MINIBLOCK_SIZE);
       delete[] b2;
+      //hexstr_to_bytes_direct(myJob.at("blockhashing_blob"), work);
 
       if (devConnected)
       {
@@ -1262,6 +1241,7 @@ waitForJob:
         hexstr_to_bytes(myJobDev.at("blockhashing_blob"), b2d);
         memcpy(devWork, b2d, MINIBLOCK_SIZE);
         delete[] b2d;
+        //hexstr_to_bytes_direct(myJobDev.at("blockhashing_blob"), devWork);
       }
 
       memcpy(&work[MINIBLOCK_SIZE - 12], random_buf, 12);

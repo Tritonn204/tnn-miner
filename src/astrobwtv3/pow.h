@@ -62,10 +62,6 @@ const int AMASK	= (1<<ABIT)-1;
 
 #endif
 
-#if defined(__AVX2__)
-alignas(32) inline __m256i g_maskTable[32];
-#endif
-
 typedef unsigned int suffix;
 typedef unsigned int t_index;
 typedef unsigned char byte;
@@ -236,8 +232,7 @@ inline __m256i genMask(workerData &worker, int n){
 
 #endif
 
-inline void initWorker(workerData &worker) {
-  #pragma clang optimize off
+[[clang::optnone]] inline void initWorker(workerData &worker) {
   #if defined(__AVX2__)
 
   __m256i temp[32];
@@ -273,7 +268,7 @@ inline void initWorker(workerData &worker) {
   // }
 
   #endif
-  #pragma clang optimize on
+
   std::copy(branchedOps_global.begin(), branchedOps_global.end(), worker.branchedOps);
   std::vector<byte> full(256);
   std::vector<byte> diff(256);
@@ -385,6 +380,18 @@ inline void generateInitVector(std::uint8_t (&iv_buff)[N])
   std::generate(std::begin(iv_buff), std::end(iv_buff), rbe);
 }
 
+// TODO: Move to tnn.h eventually
+template <std::size_t N>
+inline void generateRandomVector(std::uint8_t (&buf)[N])
+{
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_int_distribution<uint8_t> dist(0, 255);
+  //std::array<uint8_t, 12> buf;
+  std::generate(buf.begin(), buf.end(), [&dist, &gen]()
+                { return dist(gen); });
+}
+
 template <typename T>
 inline void prefetch(T *data, int size, int hint) {
   const size_t prefetch_distance = 256; // Prefetch 8 cache lines ahead
@@ -484,11 +491,6 @@ void branchComputeCPU_neon(workerData &worker);
 void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &scratch, bool lookupMine);
 
 void finishBatch(workerData &worker);
-
-static void construct_SA_pre(const byte *T, int *SA,
-             int *bucket_A, int *bucket_B,
-             std::vector<std::vector<int>> &buckets_A,
-             int n, int m);
 
 #undef INSERT
 #undef MAXST

@@ -48,3 +48,15 @@ inline void hexstr_to_bytes(std::string s, unsigned char *&b)
     b[i / 2] = byte;
   }
 }
+
+inline void hexstr_to_bytes_direct(std::string s, unsigned char *b)
+{
+  for(int x = 0; x < s.length(); x++) {
+    __builtin_prefetch(&s, 0, 3);
+  }
+  for (unsigned int i = 0; i < s.length(); i += 2)
+  {
+    b[i / 2] = ((9 * (s[i] >> 6) + (s[i] & 017)) << 4) + (9 * (s[i+1] >> 6) + (s[i+1] & 017));
+  }
+  
+}

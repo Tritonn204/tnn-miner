@@ -71,7 +71,15 @@ byte lookup3D[branchedOps_size*256*256];
 std::vector<byte> opsA;
 std::vector<byte> opsB;
 
+// TODO: Move to tnn.h
 bool debugOpOrder = false;
+
+// TODO: Move to tnn.h
+struct OpTestResult {
+  unsigned char input[256];
+  unsigned char result[256];
+  std::chrono::nanoseconds duration_ns;
+};
 
 // int main(int argc, char **argv)
 // {
@@ -397,7 +405,7 @@ inline __m256i _mm256_reverse_epi8(__m256i input) {
 
 #endif
 
-void optest(int op, workerData &worker, bool print=true) {
+void optest(int op, workerData &worker, OpTestResult &testRes, bool print=true) {
   if (print) {
     printf("Scalar\n--------------\npre op %d: ", op);
     for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
@@ -3494,16 +3502,18 @@ void optest(int op, workerData &worker, bool print=true) {
 }
   auto end = std::chrono::steady_clock::now();
   auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
+  testRes.duration_ns = time;
+  memcpy(testRes.result, worker.step_3, 256);
   if (print) {
     printf("result: ");
     for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
       printf("%02x ", worker.step_3[i]);
     }
-    printf("\n took %dns\n------------\n", time.count());
+    printf("\n took %ld ns\n------------\n", time.count());
   }
 }
 
-void optest_simd(int op, workerData &worker, bool print=true) {
+void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=true) {
   if (print){
     printf("SIMD\npre op %d: ", op);
     for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
@@ -7094,16 +7104,18 @@ void optest_simd(int op, workerData &worker, bool print=true) {
   }
   auto end = std::chrono::steady_clock::now();
   auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
+  testRes.duration_ns = time;
+  memcpy(testRes.result, worker.step_3, 256);
   if (print){
     printf("result: ");
     for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
       printf("%02x ", worker.step_3[i]);
     }
-    printf("\n took %dns\n", time.count());
+    printf("\n took %ld ns\n", time.count());
   }
 }
 
-void optest_lookup(int op, workerData &worker, bool print=true) {
+void optest_lookup(int op, workerData &worker, OpTestResult &testRes, bool print=true) {
   if (print){
     printf("Lookup Table\n--------------\npre op %d: ", op);
     for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
@@ -7174,16 +7186,19 @@ void optest_lookup(int op, workerData &worker, bool print=true) {
   }
   auto end = std::chrono::steady_clock::now();
   auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
+  testRes.duration_ns = time;
+  memcpy(testRes.result, worker.step_3, 256);
   if (print){
     printf("result: ");
     for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
       printf("%02x ", worker.step_3[i]);
     }
-    printf("\n took %dns\n------------\n", time.count());
+    printf("\n took %ld ns\n------------\n", time.count());
   }
 }
 
-void runOpTests(int op, int len) {
+int runOpTests(int op, int len) {
+  int opsFailed = 0;
   #if defined(__AVX2__)
   testPopcnt256_epi8();
   #endif
@@ -7210,40 +7225,46 @@ void runOpTests(int op, int len) {
   }
   printf("\n");
 
-  // WARMUP, don't print times
+  OpTestResult *opResult = new OpTestResult;
   memcpy(&worker->step_3, test, 16);
-  // optest(0, *worker, false);
-  optest(op, *worker, false);
   // WARMUP, don't print times
-  optest(op, *worker);
+  optest(op, *worker, *opResult, false);
+  // WARMUP, don't print times
+  optest(op, *worker, *opResult);
 
-  // WARMUP, don't print times
+  OpTestResult *lookupResult = new OpTestResult;
   memcpy(&worker->step_3, test,  16);
-  // optest_simd(0, *worker, false);
-  optest_simd(op, *worker, false);
-  // Primary benchmarking
-  optest_simd(op, *worker);
+  // WARMUP, don't print times
+  optest_lookup(op, *worker, *lookupResult, false);
+  // Benchmarking
+  optest_lookup(op, *worker, *lookupResult);
 
-  // WARMUP, don't print times
+  OpTestResult *simdResult = new OpTestResult;
   memcpy(&worker->step_3, test,  16);
-  // optest_simd(0, *worker, false);
-  optest_lookup(op, *worker, false);
-  // Primary benchmarking
-  optest_lookup(op, *worker);
+    // WARMUP, don't print times
+  optest_simd(op, *worker, *simdResult, false);
+  // benchmarking
+  optest_simd(op, *worker, *simdResult);
 
   for(int i = 0; i < 256; i++) {
     memset(&worker->step_3, 0, 256);
     memset(&worker2->step_3, 0, 256);
     memcpy(&worker->step_3, test, len+1);
-    optest(i, *worker, false);
+    OpTestResult *opResult = new OpTestResult;
+    optest(i, *worker, *opResult, false);
     memcpy(&worker2->step_3, test, len+1);
-    optest_simd(i, *worker2, false);
+    OpTestResult *simdResult = new OpTestResult;
+    optest_simd(i, *worker2, *simdResult, false);
 
     std::string str1 = hexStr(&(*worker).step_3[0], len);
     std::string str2 = hexStr(&(*worker2).step_3[0], len);
 
-    if (str1.compare(str2) != 0) printf("op %d needs special treatment\n%s\n%s\n", i, str1.c_str(), str2.c_str());
+    if (str1.compare(str2) != 0) {
+      printf("op %d needs special treatment\n%s\n%s\n", i, str1.c_str(), str2.c_str());
+      opsFailed++;
+    }
   }
+  return opsFailed;
 }
 
 // Function to compare two suffixes based on lexicographical order
@@ -7510,8 +7531,9 @@ void runDivsufsortBenchmark() {
   std::cout << "Average DC3 time:       " << saislcpAverage << " seconds" << std::endl;
 }
 
-void TestAstroBWTv3()
+int TestAstroBWTv3()
 {
+  int failedTests = 0;
   std::srand(1);
   int n = -1;
   workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
@@ -7534,10 +7556,15 @@ void TestAstroBWTv3()
     // printf("vanilla result: %s\n", hexStr(res, 32).c_str());
     AstroBWTv3(buf, (int)t.in.size(), res, *worker2, false);
     // printf("lookup result: %s\n", hexStr(res, 32).c_str());
-    std::string s = hexStr(res, 32);
-    if (s.c_str() != t.out)
+    std::string actualRes = hexStr(res, 32);
+    if (actualRes.c_str() != t.out)
     {
-      printf("FAIL. Pow function: pow(%s) = %s want %s\n", t.in.c_str(), s.c_str(), t.out.c_str());
+      if(t.expectFail) {
+        printf("SUCCESS! Pow function failed as expected! pow(%s) expected !%s received  %s\n", t.in.c_str(), t.out.c_str(), actualRes.c_str());
+      } else {
+        printf("FAIL. pow(%s) expected %s received %s\n", t.in.c_str(), t.out.c_str(), actualRes.c_str());
+        failedTests++;
+      }
 
       // Section below is for debugging modifications to the branched compute operation
 
@@ -7554,7 +7581,7 @@ void TestAstroBWTv3()
     }
     else
     {
-      printf("SUCCESS! pow(%s) = %s want %s\n", t.in.c_str(), s.c_str(), t.out.c_str());
+      printf("SUCCESS! pow(%s) expected %s received %s\n", t.in.c_str(), t.out.c_str(), actualRes.c_str());
     }
 
     delete[] buf;
@@ -7569,9 +7596,11 @@ void TestAstroBWTv3()
   hexstr_to_bytes(c, data);
   hexstr_to_bytes(c2, data2);
 
-  printf("A: %s, B: %s\n", hexStr(data, 48).c_str(), hexStr(data2, 48).c_str());
+  printf("Str: %s\nHex: %s\n", c.c_str(), hexStr(data, 48).c_str());
+  printf("Str: %s\nHex: %s\n", c2.c_str(), hexStr(data2, 48).c_str());
 
-  TestAstroBWTv3repeattest();
+  failedTests += TestAstroBWTv3repeattest(true);
+  failedTests += TestAstroBWTv3repeattest(false);
 
   // for (int i = 0; i < 1024; i++)
   // {
@@ -7603,10 +7632,12 @@ void TestAstroBWTv3()
   // std::cout << "Repeated test over" << std::endl;
   // libcubwt_free_device_storage(storage);
   // cudaFree(storage);
+  return failedTests;
 }
 
-void TestAstroBWTv3repeattest()
+int TestAstroBWTv3repeattest(bool useLookup)
 {
+  int failedTests = 0;
   workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
   initWorker(*worker);
   lookupGen(*worker, lookup2D, lookup3D);
@@ -7634,22 +7665,24 @@ void TestAstroBWTv3repeattest()
     if (i % 2 == 0)
     {
       byte res[32];
-      AstroBWTv3(data, 48, res, *worker, true);
+      AstroBWTv3(data, 48, res, *worker, useLookup);
 
       // hexStr(res, 64);
       std::string s = hexStr(res, 32);
       if (s != "c392762a462fd991ace791bfe858c338c10c23c555796b50f665b636cb8c8440")
       {
         printf("%d test failed hash %s\n", i, s.c_str());
+        failedTests++;
       }
     }
     else
     {
       byte res[32];
-      AstroBWTv3(buf.data(), 48, res, *worker, false);
+      AstroBWTv3(buf.data(), 48, res, *worker, useLookup);
     }
   }
-  std::cout << "Repeated test over" << std::endl;
+  std::cout << "Repeated test(useLookup: " << (useLookup ? "true" : "false") << ") complete: " << (failedTests ? "Failed" : "Passed") << std::endl;
+  return failedTests;
 }
 
 #if defined(__AVX2__)
@@ -7761,7 +7794,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     // auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
     // if (!lookupMine) printf("AVX2: ");
     // else printf("Lookup: ");
-    // printf("branched section took %dns\n", time.count());
+    // printf("branched section took %ld ns\n", time.count());
     if (debugOpOrder) {
       if (lookupMine) {
         printf("Lookup Table:\n-----------\n");
@@ -15430,3 +15463,76 @@ after:
   // libsais(worker.sData, worker.sa, worker.data_len, 0, worker.buckets_sizes);
 }
 */
+
+
+int runOpVerificationTests(bool useLookup) {
+  int numOpsFailed = 0;
+  #if defined(__AVX2__)
+  testPopcnt256_epi8();
+  #endif
+  workerData *worker = new workerData;
+  worker->pos1 = 0; worker->pos2 = 256;
+
+  unsigned char test[32];
+  generateRandomVector<32>(test);
+
+  printf("Initial Input\n");
+  for (int i = 0; i < 32; i++) {
+    printf("%02x", test[i]);
+  }
+  printf("\n");
+
+  int max_op = 255;
+  int data_len = 48;
+  for(int op = 0; op <= max_op; op++) {
+    // WARMUP, don't print times
+    memcpy(&worker->step_3, test, 256);
+    OpTestResult *opResult = new OpTestResult;
+    optest(0, *worker, *opResult, false);
+    // WARMUP, don't print times
+    worker->pos1 = 0; worker->pos2 = 256;
+    optest(op, *worker, *opResult, false);
+    //printf("  Op: %3d - %6ld ns\n", op, opResult->duration_ns);
+
+    // WARMUP, don't print times
+    memcpy(&worker->step_3, test, 256);
+    OpTestResult *testResult = new OpTestResult;
+    if(useLookup) {
+      optest_lookup(0, *worker, *testResult, false);
+      worker->pos1 = 0; worker->pos2 = 256;
+      optest_lookup(op, *worker, *testResult, false);
+    } else {
+      optest_simd(0, *worker, *testResult, false);
+      worker->pos1 = 0; worker->pos2 = 256;
+      optest_simd(op, *worker, *testResult, false);
+    }
+
+    auto op_dur = opResult->duration_ns.count();
+    auto test_dur = testResult->duration_ns.count();
+
+    auto percent_speedup = double(double(op_dur-test_dur)/double(test_dur))*100;
+    bool valid = 0 == memcmp(opResult->result, testResult->result, data_len);
+    //printf("Speedup: %3.2f%\n", percent_speedup);
+    printf("  Op: %3d - %5ld ns vs %5ld ns = %04.2f %% - %s\n", op, opResult->duration_ns, testResult->duration_ns, percent_speedup, valid ? "true" : "false");
+    if(!valid) {
+      numOpsFailed++;
+      printf("Vanilla: ");
+      for (int i = 0; i < data_len; i++) {
+        printf("%02x", opResult->result[i]);
+      }
+      printf("\n");
+      if(useLookup) {
+        printf(" Lookup: ");
+      } else {
+        printf("   SIMD: ");
+      }
+      
+      for (int i = 0; i < data_len; i++) {
+        printf("%02x", testResult->result[i]);
+      }
+      printf("\n");
+    }
+  }
+  
+  return numOpsFailed;
+}

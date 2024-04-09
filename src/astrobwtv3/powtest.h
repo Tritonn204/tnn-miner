@@ -11,6 +11,7 @@ void init_basic();
 struct PowTest{
 	std::string out;
 	std::string in;
+	bool expectFail = false;
 };
 
 template<class T, size_t N, class V>
@@ -33,14 +34,15 @@ inline PowTest random_pow_tests[] = {
 	{"f96191b7e39568301449d75d42d05090e41e3f79a462819473a62b1fcc2d0997", "abcdefgh"},
 	{"8c76af6a57dfed744d5b7467fa822d9eb8536a851884aa7d8e3657028d511322", "abcdefghi"},
 	{"f838568c38f83034b2ff679d5abf65245bd2be1b27c197ab5fbac285061cf0a7", "abcdefghij"},
-	{"ff9f23980870b4dd3521fcf6807b85d8bf70c5fbbd9736c87c23fac0114e2b8b", "4145bd000025fbf83b29cddc000000009b6d4f3ecaaaea9e99ff5630b7c9d01d000000000e326f0593a9000000339a10"}
+	{"ff9f23980870b4dd3521fcf6807b85d8bf70c5fbbd9736c87c23fac0114e2b8b", "4145bd000025fbf83b29cddc000000009b6d4f3ecaaaea9e99ff5630b7c9d01d000000000e326f0593a9000000339a10", true}
 };
 
 void runDivsufsortBenchmark();
-void runOpTests(int op, int len=15);
-void TestAstroBWTv3();
+int runOpTests(int op, int len=15);
+int runOpVerificationTests(bool useLookup);
+int TestAstroBWTv3();
 void TestAstroBWTv3_cuda();
 void TestRace_cuda();
-void TestAstroBWTv3repeattest();
+int TestAstroBWTv3repeattest(bool useLookup);
 
 #endif

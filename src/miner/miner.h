@@ -47,7 +47,7 @@ const char *devWallet = "dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw
 const int MINIBLOCK_SIZE = 48;
 Num oneLsh256;                                                   
 
-void getWork(bool isDev);
+void getWork(bool isDev, int fixedDiff);
 void sendWork();
 void devWork();
 
@@ -126,5 +126,7 @@ void setPriority(boost::thread::native_handle_type t, int priority);
 void setAffinity(boost::thread::native_handle_type t, int core);
 
 void update(std::chrono::_V2::steady_clock::time_point startTime);
+
+int Testing();
 
 #endif
