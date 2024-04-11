@@ -236,8 +236,8 @@ inline __m256i genMask(workerData &worker, int n){
 
 #endif
 
+#pragma clang optimize off
 inline void initWorker(workerData &worker) {
-  #pragma clang optimize off
   #if defined(__AVX2__)
 
   __m256i temp[32];
@@ -273,7 +273,6 @@ inline void initWorker(workerData &worker) {
   // }
 
   #endif
-  #pragma clang optimize on
   std::copy(branchedOps_global.begin(), branchedOps_global.end(), worker.branchedOps);
   std::vector<byte> full(256);
   std::vector<byte> diff(256);
@@ -293,6 +292,7 @@ inline void initWorker(workerData &worker) {
   // }
   // printf("\n");
 }
+#pragma clang optimize on
 
 inline std::ostream& operator<<(std::ostream& os, const workerData& wd) {
     // Print values for dynamically allocated byte arrays (assuming 32 bytes for demonstration)
