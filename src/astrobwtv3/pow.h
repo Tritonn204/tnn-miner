@@ -177,9 +177,10 @@ public:
   byte sha_key[32];
   byte sha_key2[32];
   byte sData[MAX_LENGTH+64];
+  byte chunkCache[256];
 
   #ifdef __AVX2__
-  alignas(32) __m256i maskTable[32];
+__m256i maskTable[32];
   #endif
 
   byte branchedOps[branchedOps_size*2];
@@ -217,15 +218,14 @@ inline __m256i genMask(workerData &worker, int n){
 
   if (n > 24) {
     lower_part = _mm_set1_epi64x(-1ULL);
-    upper_part = _mm_set_epi64x(-1ULL >> (8-(n%8))*8,-1ULL);
+    upper_part = _mm_set_epi64x(-1ULL >> (32-n)*8,-1ULL);
   } else if (n > 16) {
     lower_part = _mm_set_epi64x(-1ULL,-1ULL);
-    upper_part = _mm_set_epi64x(0,-1ULL >> (8-(n%8))*8);
+    upper_part = _mm_set_epi64x(0,-1ULL >> (24-n)*8);
   } else if (n > 8) {
-
-    lower_part = _mm_set_epi64x(-1ULL >> (8-(n%8))*8,-1ULL);
-  } else {
-    lower_part = _mm_set_epi64x(0,-1ULL >> (8-(n%8))*8);
+    lower_part = _mm_set_epi64x(-1ULL >> (16-n)*8,-1ULL);
+  } else if (n > 0) {
+    lower_part = _mm_set_epi64x(0,-1ULL >> (8-n)*8);
   }
 
   temp = _mm256_insertf128_si256(temp, lower_part, 0); // Set lower 128 bits
@@ -236,7 +236,10 @@ inline __m256i genMask(workerData &worker, int n){
 
 #endif
 
-#pragma clang optimize off
+template <std::size_t N>
+inline void generateInitVector(std::uint8_t (&iv_buff)[N]);
+
+// #pragma clang optimize off
 inline void initWorker(workerData &worker) {
   #if defined(__AVX2__)
 
@@ -248,17 +251,15 @@ inline void initWorker(workerData &worker) {
     __m128i upper_part = _mm_set1_epi64x(0);
 
     if (i > 24) {
-
       lower_part = _mm_set1_epi64x(-1ULL);
-      upper_part = _mm_set_epi64x(-1ULL >> (8-(i%8))*8,-1ULL);
+      upper_part = _mm_set_epi64x(-1ULL >> (32-i)*8,-1ULL);
     } else if (i > 16) {
       lower_part = _mm_set_epi64x(-1ULL,-1ULL);
-      upper_part = _mm_set_epi64x(0,-1ULL >> (8-(i%8))*8);
+      upper_part = _mm_set_epi64x(0,-1ULL >> (24-i)*8);
     } else if (i > 8) {
-
-      lower_part = _mm_set_epi64x(-1ULL >> (8-(i%8))*8,-1ULL);
-    } else {
-      lower_part = _mm_set_epi64x(0,-1ULL >> (8-(i%8))*8);
+      lower_part = _mm_set_epi64x(-1ULL >> (16-i)*8,-1ULL);
+    } else if (i > 0) {
+      lower_part = _mm_set_epi64x(0,-1ULL >> (8-i)*8);
     }
 
     temp[i] = _mm256_insertf128_si256(temp[i], lower_part, 0); // Set lower 128 bits
@@ -273,6 +274,7 @@ inline void initWorker(workerData &worker) {
   // }
 
   #endif
+
   std::copy(branchedOps_global.begin(), branchedOps_global.end(), worker.branchedOps);
   std::vector<byte> full(256);
   std::vector<byte> diff(256);
@@ -292,7 +294,7 @@ inline void initWorker(workerData &worker) {
   // }
   // printf("\n");
 }
-#pragma clang optimize on
+// #pragma clang optimize on
 
 inline std::ostream& operator<<(std::ostream& os, const workerData& wd) {
     // Print values for dynamically allocated byte arrays (assuming 32 bytes for demonstration)
