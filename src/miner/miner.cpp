@@ -1308,10 +1308,12 @@ waitForJob:
           std::swap(WORK[MINIBLOCK_SIZE - 4], WORK[MINIBLOCK_SIZE - 3]);
         }
         AstroBWTv3(&WORK[0], MINIBLOCK_SIZE, powHash, *worker, useLookupMine);
+        // AstroBWTv3((byte*)("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\0"), MINIBLOCK_SIZE, powHash, *worker, useLookupMine);
         
         counter.fetch_add(1);
         submit = devMine ? !submittingDev : !submitting;
-        if (submit && CheckHash(powHash, cmpDiff))
+
+        if (submit && CheckHash(&powHash[0], cmpDiff))
         {
           // printf("work: %s, hash: %s\n", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str(), hexStr(powHash, 32).c_str());
           if (devMine)
