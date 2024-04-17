@@ -1,20 +1,20 @@
 cmake_minimum_required(VERSION 3.16.3)
 
 set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_C_FLAGS_RELEASE "-static -O3 -fPIE -ftree-vectorize -DNDEBUG")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -m64 -O3 -Wall -Wuninitialized -march=native -DNDEBUG")
+set(CMAKE_C_FLAGS_RELEASE "-static -O3 -fPIE -ftree-vectorize -Wno-deprecated -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -pthread -m64 -O3 -Wno-deprecated -Wuninitialized -march=native -DNDEBUG")
 
 set(CMAKE_C_COMPILER clang)
 set(CMAKE_CXX_COMPILER clang++)
 
 if(WIN32)
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wa,-mbig-obj")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fuse-ld=lld")
 endif()
 
-if(UNIX)
-set(CMAKE_SYSTEM_NAME Linux)
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -pthread -Wl,--whole-archive -lpthread -Wl,--no-whole-archive")
-endif()
+# if(UNIX)
+# set(CMAKE_SYSTEM_NAME Linux)
+# set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+# endif()
 
 set(CMAKE_EXE_LINKER_FLAGS "-fstack-protector")
 
@@ -70,17 +70,18 @@ execute_process(COMMAND ${LSB_RELEASE_EXEC} -cs
     OUTPUT_VARIABLE LSB_RELEASE_CODENAME_SHORT
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
-if("${LSB_RELEASE_CODENAME_SHORT}" STREQUAL "jammy")
-  set(Boost_NO_SYSTEM_PATHS TRUE)
-  if (Boost_NO_SYSTEM_PATHS)
-    set(Boost_NO_BOOST_CMAKE TRUE)
-    set(BOOST_ROOT "${PROJECT_SOURCE_DIR}/boost-1.82.0")
-    set(BOOST_INCLUDE_DIRS "${BOOST_ROOT}")
-    set(BOOST_LIBRARY_DIRS "${BOOST_ROOT}/libs")
-  endif (Boost_NO_SYSTEM_PATHS)
-else()
-  set(BOOST_INCLUDE_DIRS "")
-endif()
+
+# if("${LSB_RELEASE_CODENAME_SHORT}" STREQUAL "jammy")
+#   set(Boost_NO_SYSTEM_PATHS TRUE)
+#   if (Boost_NO_SYSTEM_PATHS)
+#     set(Boost_NO_BOOST_CMAKE TRUE)
+#     set(BOOST_ROOT "${PROJECT_SOURCE_DIR}/boost-1.82.0")
+#     set(BOOST_INCLUDE_DIRS "${BOOST_ROOT}")
+#     set(BOOST_LIBRARY_DIRS "${BOOST_ROOT}/libs")
+#   endif (Boost_NO_SYSTEM_PATHS)
+# else()
+#   set(BOOST_INCLUDE_DIRS "")
+# endif()
 
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_MULTITHREADED ON)
@@ -93,6 +94,9 @@ find_package(Boost 1.80 REQUIRED
   atomic
   program_options
 )
+
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
 
 set(BOOST_INCLUDE_DIRS ${Boost_INCLUDE_DIRS})
 
@@ -129,5 +133,5 @@ endif()
 if(UNIX)
   target_link_libraries(${PROJECT_NAME} udns pthread)
 endif()
-target_link_libraries(${PROJECT_NAME} nlohmann_json::nlohmann_json ${Boost_LIBRARIES} OpenSSL::SSL OpenSSL::Crypto)
+target_link_libraries(${PROJECT_NAME} Threads::Threads nlohmann_json::nlohmann_json ${Boost_LIBRARIES} OpenSSL::SSL OpenSSL::Crypto)
 
