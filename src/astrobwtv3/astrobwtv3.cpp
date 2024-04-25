@@ -7744,7 +7744,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     // // worker.data_len = 70000;
     // saveBufferToFile("worker_sData_snapshot.bin", worker.sData, worker.data_len);
     // printf("data length: %d\n", worker.data_len);
-    divsufsort(worker.sData, worker.sa, worker.data_len/2, worker.bA, worker.bB);
+    divsufsort(worker.sData, worker.sa, worker.data_len, worker.bA, worker.bB);
     // computeByteFrequencyAVX2(worker.sData, worker.data_len, worker.freq);
     // libsais_ctx(worker.ctx, worker.sData, worker.sa, worker.data_len, MAX_LENGTH-worker.data_len, NULL);
 
