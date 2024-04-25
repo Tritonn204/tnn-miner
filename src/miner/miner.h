@@ -81,7 +81,7 @@ inline void printSupported()
   //do nothing
 #else
   setcolor(BRIGHT_WHITE);
-  printf("Supported SIMD Suites\n\n");
+  printf("Supported CPU Intrinsics\n\n");
   setcolor(CYAN);
   pSupport("SSE", __builtin_cpu_supports("sse"));
   pSupport("SSE2", __builtin_cpu_supports("sse2"));

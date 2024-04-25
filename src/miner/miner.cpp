@@ -1313,34 +1313,34 @@ waitForJob:
         counter.fetch_add(1);
         submit = devMine ? !submittingDev : !submitting;
 
-        if (submit && CheckHash(&powHash[0], cmpDiff))
-        {
-          // printf("work: %s, hash: %s\n", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str(), hexStr(powHash, 32).c_str());
-          if (devMine)
-          {
-            mutex.lock();
-            submittingDev = true;
-            setcolor(CYAN);
-            std::cout << "\n(DEV) Thread " << tid << " found a dev share\n";
-            setcolor(BRIGHT_WHITE);
-            mutex.unlock();
-            devShare = {
-                {"jobid", myJobDev.at("jobid")},
-                {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
-          }
-          else
-          {
-            mutex.lock();
-            submitting = true;
-            setcolor(BRIGHT_YELLOW);
-            std::cout << "\nThread " << tid << " found a nonce!\n";
-            setcolor(BRIGHT_WHITE);
-            mutex.unlock();
-            share = {
-                {"jobid", myJob.at("jobid")},
-                {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
-          }
-        }
+        // if (submit && CheckHash(&powHash[0], cmpDiff))
+        // {
+        //   // printf("work: %s, hash: %s\n", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str(), hexStr(powHash, 32).c_str());
+        //   if (devMine)
+        //   {
+        //     mutex.lock();
+        //     submittingDev = true;
+        //     setcolor(CYAN);
+        //     std::cout << "\n(DEV) Thread " << tid << " found a dev share\n";
+        //     setcolor(BRIGHT_WHITE);
+        //     mutex.unlock();
+        //     devShare = {
+        //         {"jobid", myJobDev.at("jobid")},
+        //         {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
+        //   }
+        //   else
+        //   {
+        //     mutex.lock();
+        //     submitting = true;
+        //     setcolor(BRIGHT_YELLOW);
+        //     std::cout << "\nThread " << tid << " found a nonce!\n";
+        //     setcolor(BRIGHT_WHITE);
+        //     mutex.unlock();
+        //     share = {
+        //         {"jobid", myJob.at("jobid")},
+        //         {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
+        //   }
+        // }
 
         if (!isConnected)
           break;

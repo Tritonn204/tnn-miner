@@ -114,7 +114,7 @@ const uint32_t sha_standard[8] = {
     0x5be0cd19
 };
 
-const uint32_t MAX_LENGTH = (256 * 277) - 1; // this is the maximum
+const uint32_t MAX_LENGTH = (256 * 276) - 1; // this is the maximum
 const int deviceAllocMB = 5;
 
 #endif
@@ -181,6 +181,8 @@ public:
 
   #ifdef __AVX2__
   alignas(32) __m256i maskTable[32];
+  __m256i simd_data;
+  __m256i simd_old;
   #endif
 
   byte branchedOps[branchedOps_size*2];
