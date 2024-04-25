@@ -40,7 +40,7 @@ endif()
 
 include_directories(${CUDAToolkit_INCLUDE_DIRS})
 
-set(CPM_DOWNLOAD_VERSION 0.34.0)
+set(CPM_DOWNLOAD_VERSION 0.39.0)
 
 if(CPM_SOURCE_CACHE)
   set(CPM_DOWNLOAD_LOCATION "${CPM_SOURCE_CACHE}/cpm/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
@@ -60,7 +60,7 @@ endif()
 
 include(${CPM_DOWNLOAD_LOCATION})
 
-CPMAddPackage("gh:nlohmann/json@3.10.5")
+CPMAddPackage("gh:nlohmann/json@3.11.3")
 
 set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL REQUIRED)
