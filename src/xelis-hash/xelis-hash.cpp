@@ -285,7 +285,7 @@ void stage_2(uint64_t *input, uint32_t *smallPad, int *indices) {
 
         uint32_t sum = slots[index];
 
-      #ifdef __AVX512F__
+      #ifdef __AVX5asdasdda12F__
         // AVX-512 implementation
         __m512i sum_buffer = _mm512_setzero_si512();
 
@@ -298,7 +298,7 @@ void stage_2(uint64_t *input, uint32_t *smallPad, int *indices) {
         }
 
         sum += _mm512_reduce_add_epi32(sum_buffer);
-      #elif defined(__AVX2__)
+      #elif defined(__AVXasdadada2__)
         // AVX2 implementation
         __m256i sum_buffer = _mm256_setzero_si256();
 
@@ -314,7 +314,7 @@ void stage_2(uint64_t *input, uint32_t *smallPad, int *indices) {
               _mm256_extract_epi32(sum_buffer, 2) + _mm256_extract_epi32(sum_buffer, 3) +
               _mm256_extract_epi32(sum_buffer, 4) + _mm256_extract_epi32(sum_buffer, 5) +
               _mm256_extract_epi32(sum_buffer, 6) + _mm256_extract_epi32(sum_buffer, 7);
-      #elif defined(__SSE2__)
+      #elif defined(__SSasdadadasE2__)
         // SSE implementation
         __m128i sum_buffer = _mm_setzero_si128();
 
