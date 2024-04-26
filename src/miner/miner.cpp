@@ -517,7 +517,8 @@ int main(int argc, char **argv)
     std::fill_n(hash_result, HASH_SIZE, 0);
 
     // Compute the hash
-    xelis_hash(input_bytes, reinterpret_cast<byte*>(scratch_pad), hash_result);
+    workerData_xelis worker;
+    xelis_hash(input_bytes, worker, hash_result);
 
     // Print the hash result as a continuous hex string
     std::cout << "C++ hash result: ";
@@ -536,7 +537,9 @@ int main(int argc, char **argv)
   }
 
   if (vm.count("xelis-bench")) {
-    xelis_benchmark_cpu_hash();
+    boost::thread t(xelis_benchmark_cpu_hash);
+    setPriority(t.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+    t.join();
     return 0;
   }
 
@@ -1353,34 +1356,34 @@ waitForJob:
         counter.fetch_add(1);
         submit = devMine ? !submittingDev : !submitting;
 
-        // if (submit && CheckHash(&powHash[0], cmpDiff))
-        // {
-        //   // printf("work: %s, hash: %s\n", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str(), hexStr(powHash, 32).c_str());
-        //   if (devMine)
-        //   {
-        //     mutex.lock();
-        //     submittingDev = true;
-        //     setcolor(CYAN);
-        //     std::cout << "\n(DEV) Thread " << tid << " found a dev share\n";
-        //     setcolor(BRIGHT_WHITE);
-        //     mutex.unlock();
-        //     devShare = {
-        //         {"jobid", myJobDev.at("jobid")},
-        //         {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
-        //   }
-        //   else
-        //   {
-        //     mutex.lock();
-        //     submitting = true;
-        //     setcolor(BRIGHT_YELLOW);
-        //     std::cout << "\nThread " << tid << " found a nonce!\n";
-        //     setcolor(BRIGHT_WHITE);
-        //     mutex.unlock();
-        //     share = {
-        //         {"jobid", myJob.at("jobid")},
-        //         {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
-        //   }
-        // }
+        if (submit && CheckHash(&powHash[0], cmpDiff))
+        {
+          // printf("work: %s, hash: %s\n", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str(), hexStr(powHash, 32).c_str());
+          if (devMine)
+          {
+            mutex.lock();
+            submittingDev = true;
+            setcolor(CYAN);
+            std::cout << "\n(DEV) Thread " << tid << " found a dev share\n";
+            setcolor(BRIGHT_WHITE);
+            mutex.unlock();
+            devShare = {
+                {"jobid", myJobDev.at("jobid")},
+                {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
+          }
+          else
+          {
+            mutex.lock();
+            submitting = true;
+            setcolor(BRIGHT_YELLOW);
+            std::cout << "\nThread " << tid << " found a nonce!\n";
+            setcolor(BRIGHT_WHITE);
+            mutex.unlock();
+            share = {
+                {"jobid", myJob.at("jobid")},
+                {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
+          }
+        }
 
         if (!isConnected)
           break;

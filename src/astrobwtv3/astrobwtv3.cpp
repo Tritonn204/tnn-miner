@@ -7672,26 +7672,26 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
   {
     std::fill_n(worker.sData + 256, 64, 0);
 
-    __builtin_prefetch(&worker.sData[256], 0, 3);
-    __builtin_prefetch(&worker.sData[256+64], 0, 3);
-    __builtin_prefetch(&worker.sData[256+128], 0, 3);
-    __builtin_prefetch(&worker.sData[256+192], 0, 3);
+    __builtin_prefetch(&worker.sData[256], 1, 3);
+    __builtin_prefetch(&worker.sData[256+64], 1, 3);
+    __builtin_prefetch(&worker.sData[256+128], 1, 3);
+    __builtin_prefetch(&worker.sData[256+192], 1, 3);
     
     hashSHA256(worker.sha256, input, &worker.sData[320], inputLen);
     worker.salsa20.setKey(&worker.sData[320]);
     worker.salsa20.setIv(&worker.sData[256]);
 
-    __builtin_prefetch(worker.sData, 0, 3);
-    __builtin_prefetch(&worker.sData[64], 0, 3);
-    __builtin_prefetch(&worker.sData[128], 0, 3);
-    __builtin_prefetch(&worker.sData[192], 0, 3);
+    __builtin_prefetch(worker.sData, 1, 3);
+    __builtin_prefetch(&worker.sData[64], 1, 3);
+    __builtin_prefetch(&worker.sData[128], 1, 3);
+    __builtin_prefetch(&worker.sData[192], 1, 3);
 
     worker.salsa20.processBytes(worker.salsaInput, worker.sData, 256);
 
-    __builtin_prefetch(&worker.key + 8, 0, 3);
-    __builtin_prefetch(&worker.key + 8+64, 0, 3);
-    __builtin_prefetch(&worker.key + 8+128, 0, 3);
-    __builtin_prefetch(&worker.key + 8+192, 0, 3);
+    __builtin_prefetch(&worker.key + 8, 1, 3);
+    __builtin_prefetch(&worker.key + 8+64, 1, 3);
+    __builtin_prefetch(&worker.key + 8+128, 1, 3);
+    __builtin_prefetch(&worker.key + 8+192, 1, 3);
 
     RC4_set_key(&worker.key, 256,  worker.sData);
     RC4(&worker.key, 256, worker.sData,  worker.sData);
@@ -11048,7 +11048,7 @@ void branchComputeCPU_avx2(workerData &worker)
       }
     }
 
-    __builtin_prefetch(&worker.chunk[worker.pos1],0,3);
+    __builtin_prefetch(&worker.chunk[worker.pos1],1,3);
 
     // if (debugOpOrder && worker.op == sus_op) {
     //   printf("SIMD pre op %d:\n", worker.op);
