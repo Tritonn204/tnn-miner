@@ -188,8 +188,6 @@ void stage_2(uint64_t *input, uint32_t *smallPad, int *indices) {
         uint16_t index = indices[index_in_indices];
         indices[index_in_indices] = indices[slot_idx];
 
-        uint32_t sum = slots[index];
-
       #ifdef __AVX5asdasdda12F__
         // AVX-512 implementation
         __m512i sum_buffer = _mm512_setzero_si512();
@@ -203,22 +201,35 @@ void stage_2(uint64_t *input, uint32_t *smallPad, int *indices) {
         }
 
         sum += _mm512_reduce_add_epi32(sum_buffer);
-      #elif defined(__AVXasdadada2__)
+      #elif defined(__AVX2__)
         // AVX2 implementation
         __m256i sum_buffer = _mm256_setzero_si256();
+        int sign = slots[index] >> 31;
+        alignas(32) int32_t temp_sum[8];
 
         for (uint16_t k = 0; k < SLOT_LENGTH; k += 8) {
           __m256i slot_vector = _mm256_loadu_si256((__m256i*)&slots[k]);
           __m256i values = _mm256_loadu_si256((__m256i*)&smallPad[j * SLOT_LENGTH + k]);
 
           __m256i sign_mask = _mm256_cmpgt_epi32(_mm256_setzero_si256(), _mm256_srli_epi32(slot_vector, 31));
-          sum_buffer = _mm256_add_epi32(sum_buffer, _mm256_blendv_epi8(values, _mm256_sub_epi32(_mm256_setzero_si256(), values), sign_mask));
+          sum_buffer = _mm256_blendv_epi8(_mm256_add_epi32(sum_buffer, values), _mm256_sub_epi32(sum_buffer, values), sign_mask);
         }
 
-        sum += _mm256_extract_epi32(sum_buffer, 0) + _mm256_extract_epi32(sum_buffer, 1) +
-              _mm256_extract_epi32(sum_buffer, 2) + _mm256_extract_epi32(sum_buffer, 3) +
-              _mm256_extract_epi32(sum_buffer, 4) + _mm256_extract_epi32(sum_buffer, 5) +
-              _mm256_extract_epi32(sum_buffer, 6) + _mm256_extract_epi32(sum_buffer, 7);
+        // Perform horizontal additions to sum up the elements of sum_buffer
+        __m256i sum_halves = _mm256_hadd_epi32(sum_buffer, sum_buffer);
+        __m256i sum_quarters = _mm256_hadd_epi32(sum_halves, sum_halves);
+        __m256i sum_eighths = _mm256_hadd_epi32(sum_quarters, sum_quarters);
+
+        // Extract the lowest 32-bit element, which contains the final sum
+        int32_t final_sum = _mm256_extract_epi32(sum_eighths, 0);
+
+        if (sign == 0) {
+          final_sum -= smallPad[j * SLOT_LENGTH + index];
+        } else {
+          final_sum += smallPad[j * SLOT_LENGTH + index];
+        }
+
+        slots[index] += final_sum;
       #elif defined(__SSasdadadasE2__)
         // SSE implementation
         __m128i sum_buffer = _mm_setzero_si128();
@@ -234,6 +245,7 @@ void stage_2(uint64_t *input, uint32_t *smallPad, int *indices) {
         sum += _mm_extract_epi32(sum_buffer, 0) + _mm_extract_epi32(sum_buffer, 1) +
               _mm_extract_epi32(sum_buffer, 2) + _mm_extract_epi32(sum_buffer, 3);
       #else
+        uint32_t sum = slots[index];
         // SCALAR implementation
         uint16_t offset = j * SLOT_LENGTH;
 
@@ -246,8 +258,8 @@ void stage_2(uint64_t *input, uint32_t *smallPad, int *indices) {
           uint32_t pad = smallPad[offset + k];
           sum = (slots[k] >> 31 == 0) ? sum + pad : sum - pad;
         }
-      #endif
         slots[index] = sum;
+      #endif
         // printf("sum: %llu, index: %u\n", sum, index);
       }
     }
