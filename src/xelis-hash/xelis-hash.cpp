@@ -123,101 +123,6 @@ void keccakp_1600_12(uint64_t state[25]) {
     }
 }
 
-void keccakp_1600_12_unrolled(uint64_t state[25]) {
-    for (int round = 0; round < 12; ++round) {
-        uint64_t C[5] = {0};
-        uint64_t D[5] = {0};
-
-        // Theta step
-        C[0] = state[0] ^ state[5] ^ state[10] ^ state[15] ^ state[20];
-        C[1] = state[1] ^ state[6] ^ state[11] ^ state[16] ^ state[21];
-        C[2] = state[2] ^ state[7] ^ state[12] ^ state[17] ^ state[22];
-        C[3] = state[3] ^ state[8] ^ state[13] ^ state[18] ^ state[23];
-        C[4] = state[4] ^ state[9] ^ state[14] ^ state[19] ^ state[24];
-
-        D[0] = C[4] ^ _rotl64(C[1], 1);
-        D[1] = C[0] ^ _rotl64(C[2], 1);
-        D[2] = C[1] ^ _rotl64(C[3], 1);
-        D[3] = C[2] ^ _rotl64(C[4], 1);
-        D[4] = C[3] ^ _rotl64(C[0], 1);
-
-        state[0] ^= D[0];
-        state[5] ^= D[0];
-        state[10] ^= D[0];
-        state[15] ^= D[0];
-        state[20] ^= D[0];
-
-        state[1] ^= D[1];
-        state[6] ^= D[1];
-        state[11] ^= D[1];
-        state[16] ^= D[1];
-        state[21] ^= D[1];
-
-        state[2] ^= D[2];
-        state[7] ^= D[2];
-        state[12] ^= D[2];
-        state[17] ^= D[2];
-        state[22] ^= D[2];
-
-        state[3] ^= D[3];
-        state[8] ^= D[3];
-        state[13] ^= D[3];
-        state[18] ^= D[3];
-        state[23] ^= D[3];
-
-        state[4] ^= D[4];
-        state[9] ^= D[4];
-        state[14] ^= D[4];
-        state[19] ^= D[4];
-        state[24] ^= D[4];
-
-        // Rho and Pi steps
-        uint64_t last = state[1];
-        state[1] = _rotl64(state[6], 44);
-        state[6] = _rotl64(state[9], 20);
-        state[9] = _rotl64(state[22], 61);
-        state[22] = _rotl64(state[14], 39);
-        state[14] = _rotl64(state[20], 18);
-        state[20] = _rotl64(state[2], 62);
-        state[2] = _rotl64(state[12], 43);
-        state[12] = _rotl64(state[13], 25);
-        state[13] = _rotl64(state[19], 8);
-        state[19] = _rotl64(state[23], 56);
-        state[23] = _rotl64(state[15], 41);
-        state[15] = _rotl64(state[4], 27);
-        state[4] = _rotl64(state[24], 14);
-        state[24] = _rotl64(state[21], 2);
-        state[21] = _rotl64(state[8], 55);
-        state[8] = _rotl64(state[16], 45);
-        state[16] = _rotl64(state[5], 36);
-        state[5] = _rotl64(state[3], 28);
-        state[3] = _rotl64(state[18], 21);
-        state[18] = _rotl64(state[17], 15);
-        state[17] = _rotl64(state[11], 10);
-        state[11] = _rotl64(state[7], 6);
-        state[7] = _rotl64(state[10], 3);
-        state[10] = _rotl64(last, 1);
-
-        // Chi step
-        for (int j = 0; j < 25; j += 5) {
-            C[0] = state[j];
-            C[1] = state[j + 1];
-            C[2] = state[j + 2];
-            C[3] = state[j + 3];
-            C[4] = state[j + 4];
-
-            state[j] ^= (~C[1]) & C[2];
-            state[j + 1] ^= (~C[2]) & C[3];
-            state[j + 2] ^= (~C[3]) & C[4];
-            state[j + 3] ^= (~C[4]) & C[0];
-            state[j + 4] ^= (~C[0]) & C[1];
-        }
-
-        // Iota step
-        state[0] ^= RC[round];
-    }
-}
-
 void stage_1(uint64_t* int_input, uint64_t* scratchPad, 
   uint16_t A1, uint16_t A2, byte B1, byte B2
 ) {
@@ -225,7 +130,7 @@ void stage_1(uint64_t* int_input, uint64_t* scratchPad,
   // print_reversed_words(int_input, KECCAK_WORDS);
   // printf("\n");
   for (size_t i = A1; i <= A2; ++i) {
-    keccakp_1600_12_unrolled(int_input);
+    keccakp_1600_12(int_input);
     // // reverse_bytes(int_input, 25);
     // printf("after keccak: ");
     // print_reversed_words(int_input, KECCAK_WORDS);
