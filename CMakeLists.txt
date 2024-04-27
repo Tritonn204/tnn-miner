@@ -1,11 +1,28 @@
 cmake_minimum_required(VERSION 3.16.3)
 
 set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_C_FLAGS_RELEASE "-static -O3 -fPIE -ftree-vectorize -Wno-deprecated -DNDEBUG")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -pthread -m64 -O3 -g -Wno-deprecated -Wuninitialized -march=native -DNDEBUG")
+set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   -static -O3 -g -fPIE -ftree-vectorize -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -O3 -g -pthread -m64 -Wuninitialized -march=native -DNDEBUG")
 
-set(CMAKE_C_COMPILER clang)
-set(CMAKE_CXX_COMPILER clang++)
+if(USE_GCC)
+  set(CMAKE_C_COMPILER gcc)
+  set(CMAKE_CXX_COMPILER g++)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
+  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Wno-deprecated-declarations")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-deprecated-declarations")
+else()
+  set(CMAKE_C_COMPILER clang)
+  set(CMAKE_CXX_COMPILER clang++)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
+  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Wno-deprecated")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-deprecated")
+endif()
+
+project(
+  Tnn-miner
+  VERSION 0.2.5
+  DESCRIPTION "Open Source Astrobwt Miner"
+)
 
 # if(WIN32)
 # set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
@@ -16,16 +33,12 @@ set(CMAKE_CXX_COMPILER clang++)
 # set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
 # endif()
 
-set(CMAKE_EXE_LINKER_FLAGS "-fuse-ld=lld -fstack-protector")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fstack-protector")
 
 set (CMAKE_STANDARD_REQUIRED TRUE)
 set (CMAKE_CXX_STANDARD 23)
 
-project(
-  Tnn-miner
-  VERSION 0.2.5
-  DESCRIPTION "Open Source Astrobwt Miner"
-)
+
 
 enable_language(ASM)
 
