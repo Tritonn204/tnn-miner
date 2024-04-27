@@ -140,8 +140,7 @@ void fail(beast::error_code ec, char const *what) noexcept
   mutex.unlock();
 }
 
-// Sends a WebSocket message and prints the response
-void do_session(
+void dero_session(
     std::string host,
     std::string const &port,
     std::string const &wallet,
@@ -150,7 +149,7 @@ void do_session(
     net::yield_context yield,
     bool isDev)
 {
-  beast::error_code ec;
+beast::error_code ec;
 
   // These objects perform our I/O
   int addrCount = 0;
@@ -256,7 +255,6 @@ void do_session(
                 std::string(BOOST_BEAST_VERSION_STRING) +
                     " websocket-client-coro");
       }));
-
   // Perform the SSL handshake
   ws.next_layer().async_handshake(ssl::stream_base::client, yield[ec]);
   if (ec)
@@ -274,10 +272,10 @@ void do_session(
   // Perform the websocket handshake
   std::stringstream ss;
   ss << "/ws/" << wallet;
+  
   ws.async_handshake(host, ss.str().c_str(), yield[ec]);
   if (ec)
     return fail(ec, "handshake");
-
   // This buffer will hold the incoming message
   beast::flat_buffer buffer;
   std::stringstream workInfo;
@@ -307,7 +305,7 @@ void do_session(
         *B = false;
       }
 
-      beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(5));
+      beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(15));
       ws.async_read(buffer, yield[ec]);
       if (!ec)
       {
@@ -363,7 +361,7 @@ void do_session(
             else
             {
               difficultyDev = (*J).at("difficultyuint64");
-              devBlob = std::string((*J).at("blockhashing_blob"));
+              devBlob  = std::string((*J).at("blockhashing_blob"));
               devHeight = (*J).at("height");
               if (!devConnected)
               {
@@ -395,15 +393,218 @@ void do_session(
   }
 
   // // Close the WebSocket connection
-  // ws.async_close(websocket::close_code::normal, yield[ec]);
-  // if (ec)
-  //   return fail(ec, "close");
+  ws.async_close(websocket::close_code::normal, yield[ec]);
+  if (ec)
+    return fail(ec, "close");
 
   // If we get here then the connection is closed gracefully
 
   // The make_printable() function helps print a ConstBufferSequence
   // std::cout << beast::make_printable(buffer.data()) << std::endl;
 }
+
+void xelis_session(
+    std::string host,
+    std::string const &port,
+    std::string const &wallet,
+    std::string const &worker,
+    net::io_context &ioc,
+    net::yield_context yield,
+    bool isDev)
+{
+    beast::error_code ec;
+
+    // These objects perform our I/O
+    int addrCount = 0;
+
+    net::ip::address ip_address;
+
+    websocket::stream<beast::tcp_stream> ws(ioc);
+
+    // If the specified host/pool is not in IP address form, resolve to acquire the IP address
+#ifndef _WIN32
+    boost::asio::ip::address::from_string(host, ec);
+    if (ec)
+    {
+        // Using cpp-dns to circumvent the issues cause by combining static linking and getaddrinfo()
+        // A second io_context is used to enable std::promise
+        net::io_context ioc2;
+        std::string ip;
+        std::promise<void> p;
+
+        YukiWorkshop::DNSResolver d(ioc2);
+        d.resolve_a4(host, [&](int err, auto &addrs, auto &qname, auto &cname, uint ttl)
+                     {
+            if (!err) {
+                mutex.lock();
+                for (auto &it : addrs) {
+                    addrCount++;
+                    ip = it.to_string();
+                }
+                p.set_value();
+            } else {
+                p.set_value();
+            } });
+        ioc2.run();
+
+        std::future<void> f = p.get_future();
+        f.get();
+        mutex.unlock();
+
+        if (addrCount == 0)
+        {
+            mutex.lock();
+            setcolor(RED);
+            std::cerr << "ERROR: Could not resolve " << host << std::endl;
+            setcolor(BRIGHT_WHITE);
+            mutex.unlock();
+            return;
+        }
+
+        ip_address = net::ip::address::from_string(ip.c_str(), ec);
+    }
+    else
+    {
+        ip_address = net::ip::address::from_string(host, ec);
+    }
+
+    tcp::endpoint daemon(ip_address, (uint_least16_t)std::stoi(port.c_str()));
+    // Set a timeout on the operation
+    beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(30));
+
+    // Make the connection on the IP address we get from a lookup
+    beast::get_lowest_layer(ws).connect(daemon);
+
+#else
+    // Look up the domain name
+    tcp::resolver resolver(ioc);
+    auto const results = resolver.async_resolve(host, port, yield[ec]);
+    if (ec)
+        return fail(ec, "resolve");
+
+    // Set a timeout on the operation
+    beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(30));
+
+    // Make the connection on the IP address we get from a lookup
+    auto daemon = beast::get_lowest_layer(ws).connect(results);
+#endif
+
+    // Update the host string. This will provide the value of the
+    // Host HTTP header during the WebSocket handshake.
+    // See https://tools.ietf.org/html/rfc7230#section-5.4
+    host += ':' + std::to_string(daemon.port());
+
+    // Set a timeout on the operation
+    beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(30));
+
+    // Set a decorator to change the User-Agent of the handshake
+    ws.set_option(websocket::stream_base::decorator(
+        [](websocket::request_type &req)
+        {
+            req.set(http::field::user_agent,
+                    std::string(BOOST_BEAST_VERSION_STRING) +
+                        " websocket-client-coro");
+        }));
+
+    // Turn off the timeout on the tcp_stream, because
+    // the websocket stream has its own timeout system.
+    beast::get_lowest_layer(ws).expires_never();
+
+    // Set suggested timeout settings for the websocket
+    ws.set_option(
+        websocket::stream_base::timeout::suggested(
+            beast::role_type::client));
+
+    // Perform the websocket handshake
+    std::stringstream ss;
+    ss << "/getwork/" << wallet << "/" << worker;
+    ws.async_handshake(host, ss.str().c_str(), yield[ec]);
+    if (ec)
+        return fail(ec, "handshake");
+
+    // This buffer will hold the incoming message
+    beast::flat_buffer buffer;
+    std::stringstream workInfo;
+
+    while (true)
+    {
+        try
+        {
+            buffer.clear();
+            workInfo.str("");
+            workInfo.clear();
+
+            bool *B = isDev ? &submittingDev : &submitting;
+
+            if (*B)
+            {
+                boost::json::object *S = isDev ? &devShare : &share;
+                std::string msg = boost::json::serialize(*S);
+                ws.async_write(boost::asio::buffer(msg), yield[ec]);
+                if (ec)
+                {
+                    return fail(ec, "async_write");
+                }
+                *B = false;
+            }
+
+            beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(15));
+            ws.async_read(buffer, yield[ec]);
+            if (!ec)
+            {
+                // handle getwork feed
+                beast::get_lowest_layer(ws).expires_never();
+                workInfo << beast::make_printable(buffer.data());
+                // TODO: Process the received message and handle new jobs
+
+                // Check if there are any blocks found by mining threads
+                // TODO: Implement a mechanism to receive blocks from mining threads
+                // If a block is found, send it to the daemon
+                // ws.async_write(boost::asio::buffer(block_data), yield[ec]);
+                // if (ec) {
+                //     return fail(ec, "async_write");
+                // }
+            }
+            else
+            {
+                bool *B = isDev ? &devConnected : &isConnected;
+                (*B) = false;
+                fail(ec, "async_read");
+                return;
+            }
+        }
+        catch (...)
+        {
+            std::cout << "ws error\n";
+        }
+        boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
+    }
+
+    // Close the WebSocket connection
+    ws.async_close(websocket::close_code::normal, yield[ec]);
+    if (ec)
+        return fail(ec, "close");
+}
+
+void do_session(
+    std::string host,
+    std::string const &port,
+    std::string const &wallet,
+    std::string const &worker,
+    int algo,
+    net::io_context &ioc,
+    ssl::context &ctx,
+    net::yield_context yield,
+    bool isDev)
+{
+  switch(algo) {
+    case DERO_HASH:
+      dero_session(host, port, wallet, ioc, ctx, yield, isDev);
+    case XELIS_HASH:
+      xelis_session(host, port, wallet, worker, ioc, yield, isDev);
+  }
+}
+
 
 #pragma clang optimize off
 void initMaskTable() {
@@ -503,32 +704,7 @@ int main(int argc, char **argv)
   }
 
   if (vm.count("xelis")) {
-    std::string input = vm["xelis"].as<std::string>();
-
-    // Prepare the input and scratch pad
-    alignas(64) byte input_bytes[BYTES_ARRAY_INPUT];
-    std::fill_n(input_bytes, BYTES_ARRAY_INPUT, 0);
-    std::copy_n(input.c_str(), std::min(input.size(), static_cast<size_t>(BYTES_ARRAY_INPUT)), input_bytes);
-
-    uint64_t scratch_pad[MEMORY_SIZE];
-    std::fill_n(scratch_pad, MEMORY_SIZE, 0);
-
-    byte hash_result[HASH_SIZE];
-    std::fill_n(hash_result, HASH_SIZE, 0);
-
-    // Compute the hash
-    workerData_xelis worker;
-    xelis_hash(input_bytes, worker, hash_result);
-
-    // Print the hash result as a continuous hex string
-    std::cout << "C++ hash result: ";
-    for (byte b : hash_result) {
-        std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(b);
-    }
-    std::cout << std::endl;
-
-    // Return from the function after printing
-    return 0;
+    miningAlgo = XELIS_HASH;
   }
 
   if (vm.count("xelis-test")) {
@@ -557,6 +733,9 @@ int main(int argc, char **argv)
   }
   if (vm.count("wallet")) {
     wallet = vm["wallet"].as<std::string>();
+  }
+  if (vm.count("worker-name")) {
+    workerName = vm["worker-name"].as<std::string>();
   }
   if (vm.count("threads")) {
     threads = vm["threads"].as<int>();
@@ -625,7 +804,7 @@ fillBlanks:
 {
   printf("%s\n", inputIntro);
   std::vector<std::string *> stringParams = {&host, &port, &wallet};
-  std::vector<const char *> stringDefaults = {devPool, "10300", devWallet};
+  std::vector<const char *> stringDefaults = {devPool, devPort[miningAlgo].c_str(), devWallet[miningAlgo].c_str()};
   std::vector<const char *> stringPrompts = {daemonPrompt, portPrompt, walletPrompt};
   int i = 0;
   for (std::string *param : stringParams)
@@ -728,10 +907,10 @@ Benchmarking:
   }
 
   host = devPool;
-  port = devPort;
-  wallet = devWallet;
+  port = devPort[miningAlgo];
+  wallet = devWallet[miningAlgo];
 
-  boost::thread GETWORK(getWork, false);
+  boost::thread GETWORK(getWork, false, miningAlgo);
   // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
   winMask = std::max(1, winMask);
@@ -810,10 +989,10 @@ Mining:
   printSupported();
   mutex.unlock();
 
-  boost::thread GETWORK(getWork, false);
+  boost::thread GETWORK(getWork, false, miningAlgo);
   // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
-  boost::thread DEVWORK(getWork, true);
+  boost::thread DEVWORK(getWork, true, miningAlgo);
   // setPriority(DEVWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
   unsigned int n = std::thread::hardware_concurrency();
@@ -836,7 +1015,8 @@ Mining:
   else
     for (int i = 0; i < threads; i++)
     {
-      boost::thread t(mineBlock, i + 1);
+
+      boost::thread t(mine, i + 1, miningAlgo);
 
       if (lockThreads)
       {
@@ -1057,7 +1237,7 @@ void setPriority(boost::thread::native_handle_type t, int priority)
 #endif
 }
 
-void getWork(bool isDev)
+void getWork(bool isDev, int algo)
 {
   net::io_context ioc;
   ssl::context ctx = ssl::context{ssl::context::tlsv12_client};
@@ -1078,7 +1258,27 @@ connectionAttempt:
     // Launch the asynchronous operation
     bool err = false;
     if (isDev)
-      boost::asio::spawn(ioc, std::bind(&do_session, std::string(devPool), std::string(devPort), std::string(devWallet), std::ref(ioc), std::ref(ctx), std::placeholders::_1, true),
+      {
+        std::string HOST, WORKER;
+        switch(algo) {
+          case DERO_HASH:
+          {
+            HOST = devPool;
+            WORKER = workerName;
+            break;
+          }
+        case XELIS_HASH:
+          {
+            HOST = host;
+            WORKER = workerName + "_tnn-dev";
+            break;
+          }
+        }
+      boost::asio::spawn(ioc, std::bind(
+        &do_session, devPool, devPort[miningAlgo], devWallet[algo], WORKER, algo,
+        std::ref(ioc), std::ref(ctx), 
+        std::placeholders::_1, true
+      ),
                          // on completion, spawn will call this function
                          [&](std::exception_ptr ex)
                          {
@@ -1088,8 +1288,13 @@ connectionAttempt:
                              err = true;
                            }
                          });
+    }
     else
-      boost::asio::spawn(ioc, std::bind(&do_session, host, port, wallet, std::ref(ioc), std::ref(ctx), std::placeholders::_1, false),
+      boost::asio::spawn(ioc, std::bind(
+        &do_session, host, port, wallet, workerName, algo,
+        std::ref(ioc), std::ref(ctx), 
+        std::placeholders::_1, false
+      ),
                          // on completion, spawn will call this function
                          [&](std::exception_ptr ex)
                          {
@@ -1251,7 +1456,16 @@ void benchmark(int tid)
   }
 }
 
-void mineBlock(int tid)
+void mine(int tid, int algo) {
+  switch(algo) {
+    case DERO_HASH:
+      mineDero(tid);
+    case XELIS_HASH:
+      mineXelis(tid);
+  }
+}
+
+void mineDero(int tid)
 {
   byte work[MINIBLOCK_SIZE];
 
@@ -1393,6 +1607,104 @@ waitForJob:
     }
     catch (...)
     {
+      std::cerr << "Error in POW Function" << std::endl;
+    }
+    if (!isConnected)
+      break;
+  }
+  goto waitForJob;
+}
+
+void mineXelis(int tid) {
+  byte work[XELIS_TEMPLATE_SIZE];
+  int64_t localJobCounter;
+  byte powHash[32];
+  byte devWork[XELIS_TEMPLATE_SIZE];
+
+  workerData_xelis *worker = (workerData_xelis *)malloc_huge_pages(sizeof(workerData_xelis));
+waitForJob:
+
+  while (!isConnected)
+  {
+    boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+  }
+
+  while (true)
+  {
+    try
+    {
+      mutex.lock();
+      json myJob = job;
+      json myJobDev = devJob;
+      localJobCounter = jobCounter;
+      mutex.unlock();
+
+      byte *b2 = new byte[XELIS_TEMPLATE_SIZE];
+      hexstr_to_bytes(myJob.at("blockhashing_blob"), b2);
+      memcpy(work, b2, XELIS_TEMPLATE_SIZE);
+      delete[] b2;
+
+      if (devConnected)
+      {
+        byte *b2d = new byte[XELIS_TEMPLATE_SIZE];
+        hexstr_to_bytes(myJobDev.at("blockhashing_blob"), b2d);
+        memcpy(devWork, b2d, XELIS_TEMPLATE_SIZE);
+        delete[] b2d;
+      }
+
+      bool devMine = false;
+      double which;
+      bool submit = false;
+      uint64_t DIFF;
+      Num cmpDiff;
+
+      int32_t i = 0;
+      while (localJobCounter == jobCounter) {
+        ++i;
+        which = (double)(rand() % 10000);
+        devMine = (devConnected && which < devFee * 100.0);
+        DIFF = devMine ? difficultyDev : difficulty;
+
+        byte *WORK = devMine ? &devWork[0] : &work[0];
+        ((xelis_BlockMiner*)&(WORK))->nonce = tid | (i << 10);
+        byte *nonceBytes = (byte*)&((xelis_BlockMiner*)&(WORK))->nonce;
+
+        if (littleEndian())
+        {
+          std::swap(nonceBytes[3], nonceBytes[0]);
+          std::swap(nonceBytes[2], nonceBytes[1]);
+        }
+
+        xelis_hash(&WORK[0], *worker, powHash);
+
+        counter.fetch_add(1);
+        submit = devMine ? !submittingDev : !submitting;
+
+        // if (submit && CheckHash(powHash, cmpDiff)) {
+        //   if (devMine) {
+        //     mutex.lock();
+        //     submittingDev = true;
+        //     setcolor(CYAN);
+        //     std::cout << "\n(DEV) Thread " << tid << " found a dev share\n";
+        //     setcolor(BRIGHT_WHITE);
+        //     mutex.unlock();
+        //     devShare = {
+        //       {"jobid", myJobDev.at("jobid")},
+        //       {"block_template", hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str()}};
+        //   } else {
+        //     mutex.lock();
+        //     submitting = true;
+        //     setcolor(BRIGHT_YELLOW);
+        //     std::cout << "\nThread " << tid << " found a nonce!\n";
+        //     setcolor(BRIGHT_WHITE);
+        //     mutex.unlock();
+        //     share = {
+        //       {"jobid", myJob.at("jobid")},
+        //       {"block_template", hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str()}};
+        //   }
+        // }
+      }
+    } catch (...) {
       std::cerr << "Error in POW Function" << std::endl;
     }
     if (!isConnected)

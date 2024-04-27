@@ -17,6 +17,9 @@
 #include <windows.h>
 #endif
 
+#define DERO_HASH 0
+#define XELIS_HASH 1
+
 const int workerThreads = 2;
 
 const int reportInterval = 1;
@@ -25,6 +28,8 @@ const char *nullArg = "NULL";
 std::string host = nullArg;
 std::string port = nullArg;
 std::string wallet = nullArg;
+std::string workerName = "default";
+int miningAlgo = DERO_HASH;
 int threads = 0;
 int testOp = -1;
 int testLen = -1;
@@ -40,18 +45,28 @@ int batchSize = 5000;
 double minFee = 1;
 double devFee = 2.5;
 const char *devPool = "dero.rabidmining.com";
-const char *devPort = "10300";
+std::string devPort[] = {
+  "10300",
+  "8080"
+};
 // @ tritonn on Dero Name Service
-const char *devWallet = "dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw4wjqqp6y2n7";
+std::string devWallet[] = {
+  "dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw4wjqqp6y2n7",
+  // "xel:xz9574c80c4xegnvurazpmxhw5dlg2n0g9qm60uwgt75uqyx3pcsqzzra9m"
+  "xet:5zwxjesmz6gtpg3c6zt20n9nevsyeewavpx6nwmv08z2hu2dpp3sq8w8ue6"
+};
 
 const int MINIBLOCK_SIZE = 48;
+const int XELIS_TEMPLATE_SIZE = 112;
 Num oneLsh256;                                                   
 
-void getWork(bool isDev);
+void getWork(bool isDev, int algo);
 void sendWork();
 void devWork();
 
-void mineBlock(int i);
+void mine(int tid, int algo = DERO_HASH);
+void mineDero(int tid);
+void mineXelis(int tid);
 void cudaMine();
 
 void benchmark(int i);

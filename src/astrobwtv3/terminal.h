@@ -69,7 +69,7 @@ const char *DERO = R"(
 
 const char* daemonPrompt = "Please enter your mining deamon/host address: ";
 const char* portPrompt = "Please enter your mining port: ";
-const char* walletPrompt = "Please enter your Dero wallet address for mining rewards: ";
+const char* walletPrompt = "Please enter your wallet address for mining rewards: ";
 const char* threadPrompt = "Please provide the desired amount of mining threads: ";
 
 const char* inputIntro = "Please provide your mining settings (leave fields blank to use defaults)";
@@ -123,10 +123,12 @@ inline po::options_description get_prog_opts()
   po::options_description general("General", col_width);
   general.add_options()
     ("help", "produce help message")
+    ("xelis", "Will mine Xelis instead of Dero")
     ("daemon-address", po::value<std::string>(), "Dero node/pool URL or IP address to mine to") // todo: parse out port and/or wss:// or ws://
     ("port", po::value<int>(), "The port used to connect to the Dero node")
     ("wallet", po::value<std::string>(), "Wallet address for receiving mining rewards")
     ("threads", po::value<int>(), "The amount of mining threads to create, default is 1")
+    ("worker-name", po::value<std::string>(), "Sets the worker name for this instance when mining Xelis")
     ("dev-fee", po::value<double>(), "Your desired dev fee percentage, default is 2.5, minimum is 1")
     ("no-lock", "Disables CPU affinity / CPU core binding")
     // ("gpu", "Mine with GPU instead of CPU")
@@ -141,7 +143,6 @@ inline po::options_description get_prog_opts()
     ("len", po::value<int>(), "Sets length of the processed chunk in said benchmark (default 15)")
     ("sabench", "Runs a benchmark for divsufsort on snapshot files in the 'tests' directory")
     ("dero-benchmark", po::value<int>(), "Runs a mining benchmark for <arg> seconds (adheres to -t threads option)")
-    ("xelis", po::value<std::string>(), "Printf the Xelis-hash result of an input string.")
     ("xelis-bench", "Run a benchmark of xelis-hash with 1 thread")
     ("xelis-test", "Run the xelis-hash tests from the official source code")
   ;

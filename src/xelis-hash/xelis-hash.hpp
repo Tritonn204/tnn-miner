@@ -24,6 +24,15 @@ typedef struct workerData_xelis {
   byte indices[SLOT_LENGTH] = {0};
 } workerData_xelis;
 
+typedef struct xelis_BlockMiner {
+    uint8_t header_work_hash[32];
+    uint64_t timestamp;
+    uint64_t nonce;
+    uint8_t miner[32];
+    uint8_t extra_nonce[32];
+    // Other fields and methods...
+} xelis_BlockMiner;
+
 void xelis_hash(byte* input, workerData_xelis &worker, byte *hashResult);
 void xelis_benchmark_cpu_hash();
 void xelis_runTests();
