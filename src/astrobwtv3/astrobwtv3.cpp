@@ -316,44 +316,6 @@ void testPopcnt256_epi8() {
     std::cout << "All tests passed!" << std::endl;
 }
 
-
-// inline __m256i genMask(int n) {
-
-//   uint64_t A = 0;
-//   uint64_t B = 0;
-//   uint64_t C = 0;
-//   uint64_t D = 0;
-
-//   uint64_t upper_bit = 255ULL << 63*8;
-
-//   if (n >= 24) {
-//       A = 0xFFFFFFFFFFFFFFFF;
-//       B = 0xFFFFFFFFFFFFFFFF;
-//       C = 0xFFFFFFFFFFFFFFFF;
-//       D = maskTips[n%8];
-//   }
-
-//   else if (n >= 16) {
-//       A = 0xFFFFFFFFFFFFFFFF;
-//       B = 0xFFFFFFFFFFFFFFFF;
-//       C = maskTips[n%8];
-//   }
-
-//   else if (n >= 8) {
-//       A = 0xFFFFFFFFFFFFFFFF;
-//       B = maskTips[n%8];
-//   }
-
-//   else if (n > 0) {
-//       A = maskTips[n%8];
-//   }
-
-//   __m128i lower = _mm_set_epi64x(B, A);
-//   __m128i upper = _mm_set_epi64x(D, C);
-
-//   return _mm256_set_m128i(upper, lower);
-// }
-
 int check_results(__m256i avx_result, unsigned char* scalar_result, int num_elements) {
   union {
      __m256i avx;
@@ -3544,7 +3506,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_rolv_epi8(data, data);
 
           // Write results to workerData
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         if ((worker.pos2-worker.pos1)%2 == 1) {
@@ -3565,7 +3527,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
           data = _mm256_add_epi8(data, data);;
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3584,7 +3546,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           pop = popcnt256_epi8(data);
           data = _mm256_xor_si256(data,pop);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3597,7 +3559,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_xor_si256(data,_mm256_set1_epi8(worker.step_3[worker.pos2]));
           data = _mm256_rol_epi8(data,1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3611,7 +3573,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_rolv_epi8(data,data);
           data = _mm256_sub_epi8(data,_mm256_xor_si256(data,_mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3627,7 +3589,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_sllv_epi8(data,_mm256_and_si256(data,vec_3));
           data = _mm256_srlv_epi8(data,_mm256_and_si256(data,vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         
@@ -3644,7 +3606,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           __m256i x = _mm256_xor_si256(data,_mm256_set1_epi8(97));
           data = _mm256_sub_epi8(data,x);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3660,7 +3622,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_xor_si256(data,pop);
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3673,7 +3635,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_rol_epi8(data,2);
           data = _mm256_sllv_epi8(data,_mm256_and_si256(data,vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3687,7 +3649,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_srlv_epi8(data, _mm256_and_si256(data,vec_3));
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data,2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3701,7 +3663,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_rol_epi8(data, 3);
           data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3714,7 +3676,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_and_si256(data,_mm256_set1_epi8(worker.step_3[worker.pos2]));
           data = _mm256_rolv_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3728,7 +3690,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data,2));
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3742,7 +3704,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_srlv_epi8(data,_mm256_and_si256(data,vec_3));
           data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3756,7 +3718,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_mul_epi8(data, data);
           data = _mm256_sllv_epi8(data,_mm256_and_si256(data,vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3770,7 +3732,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
           data = _mm256_sub_epi8(data,_mm256_xor_si256(data,_mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3784,7 +3746,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_rol_epi8(data,1);
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3798,7 +3760,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_rol_epi8(data,5);
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3809,7 +3771,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
 
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
           data = _mm256_rol_epi8(data, 1);
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3823,7 +3785,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_sllv_epi8(data,_mm256_and_si256(data,vec_3));
           data = _mm256_add_epi8(data, data);;;
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3837,7 +3799,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_reverse_epi8(data);
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3852,7 +3814,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_add_epi8(data, data);
           data = _mm256_and_si256(data,_mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
     break;
@@ -3866,7 +3828,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_mul_epi8(data,data);
           data = _mm256_rol_epi8(data,1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3879,7 +3841,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_xor_si256(data,popcnt256_epi8(data));
           data = _mm256_and_si256(data,_mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
       break;
@@ -3893,7 +3855,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
           data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3919,7 +3881,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_add_epi8(data, data);
           data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3932,7 +3894,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_and_si256(data,_mm256_set1_epi8(worker.step_3[worker.pos2]));
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
           data = _mm256_rol_epi8(data, 5);
-          if (worker.pos2-i < 32) data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          if (worker.pos2-i < 32) data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3946,7 +3908,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_add_epi8(data, data);
           data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3960,7 +3922,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_srlv_epi8(data, _mm256_and_si256(data,vec_3));
           data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3974,7 +3936,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_rol_epi8(data, 5);
           data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -3988,7 +3950,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
           data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4002,7 +3964,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_rol_epi8(data, 3);
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4016,7 +3978,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_reverse_epi8(data);
           data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4030,7 +3992,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
           data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4044,7 +4006,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_rol_epi8(data, 1);
           data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4058,7 +4020,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
           data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4072,7 +4034,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_srlv_epi8(data, _mm256_and_si256(data,vec_3));
           data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4098,7 +4060,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_srlv_epi8(data, _mm256_and_si256(data,vec_3));
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4112,7 +4074,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_xor_si256(data, popcnt256_epi8(data));
           data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4126,7 +4088,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_rol_epi8(data, 3);
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4139,7 +4101,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
           data = _mm256_rolv_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4153,7 +4115,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
           data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4178,7 +4140,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
           data = _mm256_xor_si256(data, popcnt256_epi8(data));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4192,7 +4154,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_rol_epi8(data, 5);
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4206,7 +4168,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_rol_epi8(data, 5);
           data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4218,7 +4180,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_rolv_epi8(data, data);
           data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4232,7 +4194,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_reverse_epi8(data);
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4246,7 +4208,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_add_epi8(data, data);
           data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4272,7 +4234,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
           data = _mm256_xor_si256(data, popcnt256_epi8(data));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4296,7 +4258,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_reverse_epi8(data);
           data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
 
@@ -4323,7 +4285,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
           data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4335,7 +4297,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_rolv_epi8(data, data);
           data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4349,7 +4311,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
           data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }  
         break;
@@ -4363,7 +4325,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_rolv_epi8(data, data);
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4377,7 +4339,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_mul_epi8(data, data);
             data = _mm256_rol_epi8(data, 3);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
 
@@ -4390,7 +4352,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_rol_epi8(data, 5);
           data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4404,7 +4366,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
           data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4418,7 +4380,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
           data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
 
@@ -4433,7 +4395,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
           data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4446,7 +4408,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
           data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4460,7 +4422,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
           data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4474,7 +4436,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
           data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4488,7 +4450,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
           data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4502,7 +4464,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_reverse_epi8(data);
           data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4516,7 +4478,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4530,7 +4492,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_mul_epi8(data, data);
           data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4544,7 +4506,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
           data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4558,7 +4520,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_rol_epi8(data, 5);
           data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4572,7 +4534,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_reverse_epi8(data);
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4586,7 +4548,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
           _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
         }
         break;
@@ -4600,7 +4562,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 5);
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4614,7 +4576,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_xor_si256(data, popcnt256_epi8(data));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4628,7 +4590,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_mul_epi8(data, data);
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4642,7 +4604,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_add_epi8(data, data);
             data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4656,7 +4618,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_add_epi8(data, data);
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4670,7 +4632,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_xor_si256(data, popcnt256_epi8(data));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4682,7 +4644,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4696,7 +4658,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 3);
             data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4710,7 +4672,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4724,7 +4686,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4738,7 +4700,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4752,7 +4714,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
             data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4766,7 +4728,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_mul_epi8(data, data);
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4780,7 +4742,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4793,7 +4755,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 6);
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4807,7 +4769,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
             data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4821,7 +4783,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, popcnt256_epi8(data));
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4835,7 +4797,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4849,7 +4811,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4862,7 +4824,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
             data = _mm256_rol_epi8(data, 2);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4888,7 +4850,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, popcnt256_epi8(data));
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4902,7 +4864,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4916,7 +4878,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_reverse_epi8(data);
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4930,7 +4892,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_reverse_epi8(data);
             data = _mm256_xor_si256(data, popcnt256_epi8(data));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4944,7 +4906,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4958,7 +4920,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_add_epi8(data, data);
             data = _mm256_rol_epi8(data, 3);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4972,7 +4934,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_rolv_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -4986,7 +4948,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 5);
             data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5000,7 +4962,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5014,7 +4976,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 1);
             data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5027,7 +4989,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_rol_epi8(data, 6);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5041,7 +5003,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5055,7 +5017,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5069,7 +5031,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5083,7 +5045,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_mul_epi8(data, data);
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5097,7 +5059,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 5);
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5110,7 +5072,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, popcnt256_epi8(data));
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5124,7 +5086,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5138,7 +5100,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_rol_epi8(data, 3);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5152,7 +5114,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, popcnt256_epi8(data));
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5166,7 +5128,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5180,7 +5142,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5194,7 +5156,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5208,7 +5170,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5223,7 +5185,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, pop);
             data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5237,7 +5199,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 5);
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5250,7 +5212,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
             data = _mm256_rol_epi8(data, 6);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5264,7 +5226,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5278,7 +5240,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_add_epi8(data, data);
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5290,7 +5252,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 1);
             data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5304,7 +5266,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5332,7 +5294,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, pop);
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5346,7 +5308,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 1);
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5361,7 +5323,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, pop);
             data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5375,7 +5337,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 5);
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5389,7 +5351,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5403,7 +5365,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 1);
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5417,7 +5379,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_add_epi8(data, data);
             data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5431,7 +5393,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5445,7 +5407,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_reverse_epi8(data);
             data = _mm256_rolv_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5459,7 +5421,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_add_epi8(data, data);
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5471,7 +5433,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_rol_epi8(data, 3);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5485,7 +5447,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5500,7 +5462,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, pop);
             data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5514,7 +5476,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_reverse_epi8(data);
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5528,7 +5490,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5542,7 +5504,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
             data = _mm256_rolv_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5556,7 +5518,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5571,7 +5533,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             __m256i pop = popcnt256_epi8(data);
             data = _mm256_xor_si256(data, pop);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5585,7 +5547,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
             data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5599,7 +5561,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5613,7 +5575,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
             data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5627,7 +5589,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5641,7 +5603,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_mul_epi8(data, data);
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5655,7 +5617,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5666,7 +5628,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
 
             data = _mm256_rol_epi8(data, 4);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5681,7 +5643,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             __m256i pop = popcnt256_epi8(data);
             data = _mm256_xor_si256(data, pop);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5696,7 +5658,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, pop);
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5709,7 +5671,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_rol_epi8(data, 4);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5723,7 +5685,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5738,7 +5700,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_add_epi8(data, data);
             data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5752,7 +5714,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5765,7 +5727,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_reverse_epi8(data);
             data = _mm256_rol_epi8(data, 4);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5779,7 +5741,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 5);
             data = _mm256_rolv_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5793,7 +5755,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5807,7 +5769,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
             data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5822,7 +5784,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5836,7 +5798,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5850,7 +5812,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5862,7 +5824,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_mul_epi8(data, data);
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5876,7 +5838,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5890,7 +5852,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5904,7 +5866,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
             data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5919,7 +5881,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, pop);
             data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5933,7 +5895,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5947,7 +5909,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_mul_epi8(data, data);
             data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5963,7 +5925,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             pop = popcnt256_epi8(data);
             data = _mm256_xor_si256(data, pop);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5977,7 +5939,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_mul_epi8(data, data);
             data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -5991,7 +5953,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6006,7 +5968,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6020,7 +5982,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
             data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6034,7 +5996,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6048,7 +6010,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6062,7 +6024,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6075,7 +6037,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 6);
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6089,7 +6051,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
             data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6103,7 +6065,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 5);
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6117,7 +6079,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 5);
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6131,7 +6093,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6145,7 +6107,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_add_epi8(data, data);
             data = _mm256_rol_epi8(data, 3);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6171,7 +6133,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6185,7 +6147,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6199,7 +6161,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6213,7 +6175,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_add_epi8(data, data);
             data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6227,7 +6189,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6241,7 +6203,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6256,7 +6218,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6270,7 +6232,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6284,7 +6246,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_mul_epi8(data, data);
             data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6298,7 +6260,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_reverse_epi8(data);
             data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6312,7 +6274,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_mul_epi8(data, data);
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6327,7 +6289,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_reverse_epi8(data);
             data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6341,7 +6303,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6355,7 +6317,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6369,7 +6331,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 1);
             data = _mm256_rolv_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6383,7 +6345,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6398,7 +6360,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6413,7 +6375,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             __m256i pop = popcnt256_epi8(data);
             data = _mm256_xor_si256(data, pop);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6427,7 +6389,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             pop = popcnt256_epi8(data);
             data = _mm256_xor_si256(data, pop);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6454,7 +6416,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, pop);
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6468,7 +6430,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 5);
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6482,7 +6444,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
             data = _mm256_rolv_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6496,7 +6458,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             // data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             // data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6510,7 +6472,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 3);
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6524,7 +6486,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6538,7 +6500,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6552,7 +6514,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6566,7 +6528,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 1);
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6580,7 +6542,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_mul_epi8(data, data);
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6594,7 +6556,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6608,7 +6570,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_reverse_epi8(data);
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6622,7 +6584,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
             data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6636,7 +6598,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6650,7 +6612,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6663,7 +6625,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 4);
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6677,7 +6639,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_reverse_epi8(data);
             data = _mm256_rol_epi8(data, 3);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6691,7 +6653,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_mul_epi8(data, data);
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6705,7 +6667,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6720,7 +6682,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             __m256i pop = popcnt256_epi8(data);
             data = _mm256_xor_si256(data, pop);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6735,7 +6697,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             __m256i pop = popcnt256_epi8(data);
             data = _mm256_xor_si256(data, pop);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6749,7 +6711,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_rolv_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6763,7 +6725,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6777,7 +6739,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
             data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6793,7 +6755,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             pop = popcnt256_epi8(data);
             data = _mm256_xor_si256(data, pop);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6807,7 +6769,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6821,7 +6783,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 3);
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6835,7 +6797,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6849,7 +6811,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_rol_epi8(data, 3);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6863,7 +6825,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 3);
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6876,7 +6838,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_mul_epi8(data, data);
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6890,7 +6852,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6905,7 +6867,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
             data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6919,7 +6881,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.step_3[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6934,7 +6896,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, pop);
             data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6948,7 +6910,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_reverse_epi8(data);
             data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6962,7 +6924,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6976,7 +6938,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -6990,7 +6952,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_rol_epi8(data, 5);
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -7005,7 +6967,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, pop);
             data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -7032,7 +6994,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, pop);
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -7047,7 +7009,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_reverse_epi8(data);
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -7061,7 +7023,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -7094,7 +7056,7 @@ void optest_simd(int op, workerData &worker, OpTestResult &testRes, bool print=t
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_rol_epi8(data, 3);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.step_3[i], data);
           }
           break;
@@ -7741,28 +7703,28 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
 
   try
   {
-    std::fill_n(worker.sData, 320, 0);
+    std::fill_n(worker.sData + 256, 64, 0);
 
-    __builtin_prefetch(&worker.sData[256], 0, 3);
-    __builtin_prefetch(&worker.sData[256+64], 0, 3);
-    __builtin_prefetch(&worker.sData[256+128], 0, 3);
-    __builtin_prefetch(&worker.sData[256+192], 0, 3);
+    __builtin_prefetch(&worker.sData[256], 1, 3);
+    __builtin_prefetch(&worker.sData[256+64], 1, 3);
+    __builtin_prefetch(&worker.sData[256+128], 1, 3);
+    __builtin_prefetch(&worker.sData[256+192], 1, 3);
     
     hashSHA256(worker.sha256, input, &worker.sData[320], inputLen);
     worker.salsa20.setKey(&worker.sData[320]);
     worker.salsa20.setIv(&worker.sData[256]);
 
-    __builtin_prefetch(worker.sData, 0, 3);
-    __builtin_prefetch(&worker.sData[64], 0, 3);
-    __builtin_prefetch(&worker.sData[128], 0, 3);
-    __builtin_prefetch(&worker.sData[192], 0, 3);
+    __builtin_prefetch(worker.sData, 1, 3);
+    __builtin_prefetch(&worker.sData[64], 1, 3);
+    __builtin_prefetch(&worker.sData[128], 1, 3);
+    __builtin_prefetch(&worker.sData[192], 1, 3);
 
-    worker.salsa20.processBytes(worker.sData, worker.sData, 256);
+    worker.salsa20.processBytes(worker.salsaInput, worker.sData, 256);
 
-    __builtin_prefetch(&worker.key + 8, 0, 3);
-    __builtin_prefetch(&worker.key + 8+64, 0, 3);
-    __builtin_prefetch(&worker.key + 8+128, 0, 3);
-    __builtin_prefetch(&worker.key + 8+192, 0, 3);
+    __builtin_prefetch(&worker.key + 8, 1, 3);
+    __builtin_prefetch(&worker.key + 8+64, 1, 3);
+    __builtin_prefetch(&worker.key + 8+128, 1, 3);
+    __builtin_prefetch(&worker.key + 8+192, 1, 3);
 
     RC4_set_key(&worker.key, 256,  worker.sData);
     RC4(&worker.key, 256, worker.sData,  worker.sData);
@@ -11077,11 +11039,6 @@ void branchComputeCPU_avx2(workerData &worker)
     }
 
     worker.chunk = &worker.sData[(worker.tries - 1) * 256];
-    __builtin_prefetch(&worker.chunk[worker.pos1],0,3);
-    __builtin_prefetch(&worker.maskTable[worker.pos2-worker.pos1],0,3);
-    __builtin_prefetch(&worker.maskTable[worker.pos2-worker.pos1] + 64,0,3);
-    __builtin_prefetch(&worker.maskTable[worker.pos2-worker.pos1] + 128,0,3);
-    __builtin_prefetch(&worker.maskTable[worker.pos2-worker.pos1] + 192,0,3);
 
     if (worker.tries == 1) {
       worker.prev_chunk = worker.chunk;
@@ -11124,6 +11081,8 @@ void branchComputeCPU_avx2(workerData &worker)
       }
     }
 
+    __builtin_prefetch(&worker.chunk[worker.pos1],1,3);
+
     // if (debugOpOrder && worker.op == sus_op) {
     //   printf("SIMD pre op %d:\n", worker.op);
     //   for (int i = 0; i < 256; i++) {
@@ -11137,9 +11096,9 @@ void branchComputeCPU_avx2(workerData &worker)
     switch(worker.op) {
       case 0:
         // #pragma GCC unroll 16
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
+        {
           // Load 32 bytes of worker.prev_chunk starting from i into an AVX2 256-bit register
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           __m256i pop = popcnt256_epi8(data);
@@ -11155,8 +11114,8 @@ void branchComputeCPU_avx2(workerData &worker)
 
           // Write results to workerData
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         if ((worker.pos2-worker.pos1)%2 == 1) {
           worker.t1 = worker.chunk[worker.pos1];
@@ -11166,24 +11125,23 @@ void branchComputeCPU_avx2(workerData &worker)
         }
         break;
       case 1:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           __m256i shift = _mm256_and_si256(data, vec_3);
           data = _mm256_sllv_epi8(data, shift);
           data = _mm256_rol_epi8(data,1);
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos2]));
-          data = _mm256_add_epi8(data, data);;
+          data = _mm256_add_epi8(data, data);
 
-
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 2:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           __m256i pop = popcnt256_epi8(data);
@@ -11196,26 +11154,26 @@ void branchComputeCPU_avx2(workerData &worker)
           pop = popcnt256_epi8(data);
           data = _mm256_xor_si256(data,pop);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 3:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_rolv_epi8(data,_mm256_add_epi8(data,vec_3));
           data = _mm256_xor_si256(data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
           data = _mm256_rol_epi8(data,1);
           
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 4:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
@@ -11223,14 +11181,14 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_rolv_epi8(data,data);
           data = _mm256_sub_epi8(data,_mm256_xor_si256(data,_mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 5:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
+        {
           // Load 32 bytes of worker.prev_chunk starting from i into an AVX2 256-bit register
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           __m256i pop = popcnt256_epi8(data);
@@ -11239,14 +11197,14 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_sllv_epi8(data,_mm256_and_si256(data,vec_3));
           data = _mm256_srlv_epi8(data,_mm256_and_si256(data,vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         
         break;
       case 6:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_sllv_epi8(data,_mm256_and_si256(data,vec_3));
@@ -11256,13 +11214,13 @@ void branchComputeCPU_avx2(workerData &worker)
           __m256i x = _mm256_xor_si256(data,_mm256_set1_epi8(97));
           data = _mm256_sub_epi8(data,x);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 7:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_add_epi8(data, data);;
@@ -11272,26 +11230,26 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_xor_si256(data,pop);
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 8:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
           data = _mm256_rol_epi8(data,2);
           data = _mm256_sllv_epi8(data,_mm256_and_si256(data,vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 9:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -11299,13 +11257,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_srlv_epi8(data, _mm256_and_si256(data,vec_3));
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data,2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 10:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
@@ -11313,26 +11271,26 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_rol_epi8(data, 3);
           data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 11:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_rol_epi8(data, 6);
           data = _mm256_and_si256(data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
           data = _mm256_rolv_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 12:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data,2));
@@ -11340,13 +11298,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data,2));
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 13:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_rol_epi8(data, 1);
@@ -11354,13 +11312,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_srlv_epi8(data,_mm256_and_si256(data,vec_3));
           data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 14:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_srlv_epi8(data,_mm256_and_si256(data,vec_3));
@@ -11368,13 +11326,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_mul_epi8(data, data);
           data = _mm256_sllv_epi8(data,_mm256_and_si256(data,vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 15:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data,2));
@@ -11382,13 +11340,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
           data = _mm256_sub_epi8(data,_mm256_xor_si256(data,_mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 16:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data,4));
@@ -11396,13 +11354,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_rol_epi8(data,1);
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 17:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -11410,24 +11368,24 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_rol_epi8(data,5);
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 18:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
           data = _mm256_rol_epi8(data, 1);
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 19:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_sub_epi8(data,_mm256_xor_si256(data,_mm256_set1_epi8(97)));
@@ -11435,13 +11393,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_sllv_epi8(data,_mm256_and_si256(data,vec_3));
           data = _mm256_add_epi8(data, data);;;
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 20:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -11449,14 +11407,14 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_reverse_epi8(data);
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 21:
 
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_rol_epi8(data, 1);
@@ -11464,13 +11422,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_add_epi8(data, data);
           data = _mm256_and_si256(data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
     break;
       case 22:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
@@ -11478,26 +11436,26 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_mul_epi8(data,data);
           data = _mm256_rol_epi8(data,1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 23:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_rol_epi8(data, 4);
           data = _mm256_xor_si256(data,popcnt256_epi8(data));
           data = _mm256_and_si256(data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
       break;
       case 24:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_add_epi8(data, data);
@@ -11505,8 +11463,8 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
           data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 25:
@@ -11522,8 +11480,8 @@ void branchComputeCPU_avx2(workerData &worker)
         }
         break;
       case 26:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_mul_epi8(data, data);
@@ -11531,26 +11489,27 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_add_epi8(data, data);
           data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 27:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_rol_epi8(data, 5);
           data = _mm256_and_si256(data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
           data = _mm256_rol_epi8(data, 5);
-          if (worker.pos2-i < 32) data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 28:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
@@ -11558,13 +11517,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_add_epi8(data, data);
           data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 29:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_mul_epi8(data, data);
@@ -11572,13 +11531,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_srlv_epi8(data, _mm256_and_si256(data,vec_3));
           data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 30:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -11586,13 +11545,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_rol_epi8(data, 5);
           data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 31:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
         
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
@@ -11600,13 +11559,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
           data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 32:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
@@ -11614,13 +11573,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_rol_epi8(data, 3);
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 33:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_rolv_epi8(data, data);
@@ -11628,13 +11587,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_reverse_epi8(data);
           data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 34:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
@@ -11642,13 +11601,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
           data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 35:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_add_epi8(data, data);
@@ -11656,13 +11615,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_rol_epi8(data, 1);
           data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 36:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_xor_si256(data, popcnt256_epi8(data));
@@ -11670,13 +11629,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
           data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 37:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_rolv_epi8(data, data);
@@ -11684,8 +11643,8 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_srlv_epi8(data, _mm256_and_si256(data,vec_3));
           data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 38:
@@ -11701,8 +11660,8 @@ void branchComputeCPU_avx2(workerData &worker)
         }
         break;
       case 39:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
@@ -11710,13 +11669,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_srlv_epi8(data, _mm256_and_si256(data,vec_3));
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 40:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_rolv_epi8(data, data);
@@ -11724,13 +11683,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_xor_si256(data, popcnt256_epi8(data));
           data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 41:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_rol_epi8(data, 5);
@@ -11738,26 +11697,26 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_rol_epi8(data, 3);
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 42:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_rol_epi8(data, 4);
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
           data = _mm256_rolv_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 43:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -11765,8 +11724,8 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
           data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 44:
@@ -11782,21 +11741,21 @@ void branchComputeCPU_avx2(workerData &worker)
         }
         break;
       case 45:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
         
           data = _mm256_rol_epi8(data, 2);
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
           data = _mm256_xor_si256(data, popcnt256_epi8(data));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 46:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
         
           data = _mm256_xor_si256(data, popcnt256_epi8(data));
@@ -11804,13 +11763,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_rol_epi8(data, 5);
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 47:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_rol_epi8(data, 5);
@@ -11818,25 +11777,25 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_rol_epi8(data, 5);
           data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 48:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_rolv_epi8(data, data);
           data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 49:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
         
           data = _mm256_xor_si256(data, popcnt256_epi8(data));
@@ -11844,13 +11803,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_reverse_epi8(data);
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 50:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
         
           data = _mm256_reverse_epi8(data);
@@ -11858,8 +11817,8 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_add_epi8(data, data);
           data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 51:
@@ -11875,8 +11834,8 @@ void branchComputeCPU_avx2(workerData &worker)
         }
         break;
       case 52:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_rolv_epi8(data, data);
@@ -11884,8 +11843,8 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
           data = _mm256_xor_si256(data, popcnt256_epi8(data));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 53:
@@ -11901,15 +11860,15 @@ void branchComputeCPU_avx2(workerData &worker)
         }
         break;
       case 54:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
         
           data = _mm256_reverse_epi8(data);
           data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
 
         break;
@@ -11926,8 +11885,8 @@ void branchComputeCPU_avx2(workerData &worker)
         }
         break;
       case 56:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
@@ -11935,25 +11894,25 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
           data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 57:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_rolv_epi8(data, data);
           data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 58:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
         
           data = _mm256_reverse_epi8(data);
@@ -11961,13 +11920,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
           data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }  
         break;
       case 59:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_rol_epi8(data, 1);
@@ -11975,13 +11934,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_rolv_epi8(data, data);
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 60:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -11990,29 +11949,29 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rol_epi8(data, 3);
 
             #ifdef _WIN32
-              data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+              data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             #else
-              data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
+              data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
             #endif
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
 
         break;
       case 61:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_rol_epi8(data, 5);
           data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 62:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -12020,13 +11979,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
           data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 63:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_rol_epi8(data, 5);
@@ -12034,14 +11993,14 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
           data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
 
         break;
       case 64:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -12049,26 +12008,26 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
           data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 65:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
 
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
           data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 66:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
@@ -12076,13 +12035,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
           data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 67:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_rol_epi8(data, 1);
@@ -12090,13 +12049,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
           data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 68:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -12104,13 +12063,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
           data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 69:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_add_epi8(data, data);
@@ -12118,13 +12077,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_reverse_epi8(data);
           data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 70:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -12132,13 +12091,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 71:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_rol_epi8(data, 5);
@@ -12146,13 +12105,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_mul_epi8(data, data);
           data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 72:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_reverse_epi8(data);
@@ -12160,13 +12119,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
           data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 73:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_xor_si256(data, popcnt256_epi8(data));
@@ -12174,13 +12133,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_rol_epi8(data, 5);
           data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 74:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_mul_epi8(data, data);
@@ -12188,13 +12147,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_reverse_epi8(data);
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
       case 75:
-        for (int i = worker.pos1; i < worker.pos2; i += 32) {
-          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
 
           data = _mm256_mul_epi8(data, data);
@@ -12202,13 +12161,13 @@ void branchComputeCPU_avx2(workerData &worker)
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-          _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         }
         break;
         case 76:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rolv_epi8(data, data);
@@ -12216,13 +12175,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rol_epi8(data, 5);
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 77:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 3);
@@ -12230,13 +12189,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_xor_si256(data, popcnt256_epi8(data));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 78:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rolv_epi8(data, data);
@@ -12244,13 +12203,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_mul_epi8(data, data);
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 79:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
@@ -12258,13 +12217,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_add_epi8(data, data);
             data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 80:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rolv_epi8(data, data);
@@ -12272,13 +12231,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_add_epi8(data, data);
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 81:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
@@ -12286,25 +12245,25 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_xor_si256(data, popcnt256_epi8(data));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 82:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 83:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -12312,13 +12271,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rol_epi8(data, 3);
             data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 84:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
@@ -12326,13 +12285,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 85:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -12340,13 +12299,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 86:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
@@ -12354,13 +12313,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 87:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_add_epi8(data, data);
@@ -12368,13 +12327,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
             data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 88:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
@@ -12382,13 +12341,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_mul_epi8(data, data);
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 89:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_add_epi8(data, data);
@@ -12396,26 +12355,26 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 90:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_reverse_epi8(data);
             data = _mm256_rol_epi8(data, 6);
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 91:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, popcnt256_epi8(data));
@@ -12423,13 +12382,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
             data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 92:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, popcnt256_epi8(data));
@@ -12437,13 +12396,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, popcnt256_epi8(data));
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 93:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
@@ -12451,13 +12410,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 94:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 1);
@@ -12465,21 +12424,21 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 95:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 1);
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
             data = _mm256_rol_epi8(data, 2);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 96:
@@ -12495,8 +12454,8 @@ void branchComputeCPU_avx2(workerData &worker)
           }
           break;
         case 97:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 1);
@@ -12504,13 +12463,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, popcnt256_epi8(data));
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 98:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
@@ -12518,13 +12477,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 99:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
@@ -12532,13 +12491,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_reverse_epi8(data);
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 100:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rolv_epi8(data, data);
@@ -12546,13 +12505,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_reverse_epi8(data);
             data = _mm256_xor_si256(data, popcnt256_epi8(data));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 101:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -12560,13 +12519,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 102:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 3);
@@ -12574,13 +12533,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_add_epi8(data, data);
             data = _mm256_rol_epi8(data, 3);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 103:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 1);
@@ -12588,13 +12547,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_rolv_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 104:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_reverse_epi8(data);
@@ -12602,13 +12561,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rol_epi8(data, 5);
             data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 105:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -12616,13 +12575,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 106:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_reverse_epi8(data);
@@ -12630,26 +12589,26 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rol_epi8(data, 1);
             data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 107:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_rol_epi8(data, 6);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 108:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -12657,13 +12616,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 109:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_mul_epi8(data, data);
@@ -12671,13 +12630,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 110:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_add_epi8(data, data);
@@ -12685,13 +12644,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 111:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_mul_epi8(data, data);
@@ -12699,13 +12658,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_mul_epi8(data, data);
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 112:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 3);
@@ -12713,26 +12672,26 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rol_epi8(data, 5);
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 113:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 6);
             data = _mm256_xor_si256(data, popcnt256_epi8(data));
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 114:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 1);
@@ -12740,13 +12699,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 115:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rolv_epi8(data, data);
@@ -12754,13 +12713,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_rol_epi8(data, 3);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 116:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -12768,13 +12727,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, popcnt256_epi8(data));
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 117:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -12782,13 +12741,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 118:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -12796,13 +12755,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 119:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_reverse_epi8(data);
@@ -12810,13 +12769,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 120:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
@@ -12824,13 +12783,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 121:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -12839,13 +12798,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, pop);
             data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 122:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
@@ -12853,26 +12812,26 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rol_epi8(data, 5);
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 123:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
             data = _mm256_rol_epi8(data, 6);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 124:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
@@ -12880,13 +12839,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 125:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_reverse_epi8(data);
@@ -12894,25 +12853,25 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_add_epi8(data, data);
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 126:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 1);
             data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 127:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -12920,8 +12879,8 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 128:
@@ -12937,8 +12896,8 @@ void branchComputeCPU_avx2(workerData &worker)
           }
           break;
         case 129:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
@@ -12948,13 +12907,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, pop);
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 130:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -12962,13 +12921,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rol_epi8(data, 1);
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 131:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
@@ -12977,13 +12936,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, pop);
             data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 132:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -12991,13 +12950,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rol_epi8(data, 5);
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 133:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -13005,13 +12964,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 134:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
@@ -13019,13 +12978,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rol_epi8(data, 1);
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 135:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -13033,13 +12992,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_add_epi8(data, data);
             data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 136:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -13047,13 +13006,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 137:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 5);
@@ -13061,13 +13020,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_reverse_epi8(data);
             data = _mm256_rolv_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 138:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -13075,25 +13034,25 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_add_epi8(data, data);
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 139:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_rol_epi8(data, 3);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 140:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 1);
@@ -13101,13 +13060,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 141:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 1);
@@ -13116,13 +13075,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, pop);
             data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 142:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -13130,13 +13089,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_reverse_epi8(data);
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 143:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -13144,13 +13103,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 144:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rolv_epi8(data, data);
@@ -13158,13 +13117,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
             data = _mm256_rolv_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 145:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_reverse_epi8(data);
@@ -13172,13 +13131,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 146:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -13187,13 +13146,13 @@ void branchComputeCPU_avx2(workerData &worker)
             __m256i pop = popcnt256_epi8(data);
             data = _mm256_xor_si256(data, pop);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 147:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
@@ -13201,13 +13160,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
             data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 148:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -13215,13 +13174,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 149:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -13229,13 +13188,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
             data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 150:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -13243,13 +13202,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 151:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_add_epi8(data, data);
@@ -13257,13 +13216,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_mul_epi8(data, data);
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 152:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -13271,24 +13230,24 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 153:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 4);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 154:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 5);
@@ -13297,13 +13256,13 @@ void branchComputeCPU_avx2(workerData &worker)
             __m256i pop = popcnt256_epi8(data);
             data = _mm256_xor_si256(data, pop);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 155:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
@@ -13312,26 +13271,26 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, pop);
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 156:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_rol_epi8(data, 4);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 157:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -13339,13 +13298,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 158:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             __m256i pop = popcnt256_epi8(data);
@@ -13354,13 +13313,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_add_epi8(data, data);
             data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 159:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
@@ -13368,26 +13327,26 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 160:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_reverse_epi8(data);
             data = _mm256_rol_epi8(data, 4);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 161:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -13395,13 +13354,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rol_epi8(data, 5);
             data = _mm256_rolv_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 162:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_mul_epi8(data, data);
@@ -13409,13 +13368,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 163:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -13423,13 +13382,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
             data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 164:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_mul_epi8(data, data);
@@ -13438,13 +13397,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 165:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
@@ -13452,13 +13411,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 166:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 3);
@@ -13466,25 +13425,25 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 167:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_mul_epi8(data, data);
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 168:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rolv_epi8(data, data);
@@ -13492,13 +13451,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 169:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 1);
@@ -13506,13 +13465,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 170:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
@@ -13520,13 +13479,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
             data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 171:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 3);
@@ -13535,13 +13494,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, pop);
             data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 172:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
@@ -13549,13 +13508,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 173:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
@@ -13563,13 +13522,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_mul_epi8(data, data);
             data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 174:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
@@ -13579,13 +13538,13 @@ void branchComputeCPU_avx2(workerData &worker)
             pop = popcnt256_epi8(data);
             data = _mm256_xor_si256(data, pop);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 175:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 3);
@@ -13593,13 +13552,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_mul_epi8(data, data);
             data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 176:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -13607,13 +13566,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 177:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             __m256i pop = popcnt256_epi8(data);
@@ -13622,13 +13581,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 178:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -13636,13 +13595,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
             data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 179:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
@@ -13650,13 +13609,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 180:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -13664,13 +13623,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 181:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
@@ -13678,26 +13637,26 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 182:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_rol_epi8(data, 6);
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 183:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_add_epi8(data, data);
@@ -13705,13 +13664,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
             data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 184:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -13719,13 +13678,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rol_epi8(data, 5);
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 185:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
@@ -13733,13 +13692,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rol_epi8(data, 5);
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 186:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
@@ -13747,13 +13706,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 187:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -13761,8 +13720,8 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_add_epi8(data, data);
             data = _mm256_rol_epi8(data, 3);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 188:
@@ -13778,8 +13737,8 @@ void branchComputeCPU_avx2(workerData &worker)
           }
           break;
         case 189:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 5);
@@ -13787,13 +13746,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 190:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 5);
@@ -13801,13 +13760,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 191:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_add_epi8(data, data);
@@ -13815,13 +13774,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 192:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_add_epi8(data, data);
@@ -13829,13 +13788,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_add_epi8(data, data);
             data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 193:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -13843,13 +13802,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 194:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -13857,13 +13816,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 195:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             __m256i pop = popcnt256_epi8(data);
@@ -13872,13 +13831,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 196:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 3);
@@ -13886,13 +13845,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 197:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
@@ -13900,13 +13859,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_mul_epi8(data, data);
             data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 198:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -13914,13 +13873,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_reverse_epi8(data);
             data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 199:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
@@ -13928,13 +13887,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_mul_epi8(data, data);
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 200:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -13943,13 +13902,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_reverse_epi8(data);
             data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 201:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 3);
@@ -13957,13 +13916,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 202:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -13971,13 +13930,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 203:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -13985,13 +13944,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rol_epi8(data, 1);
             data = _mm256_rolv_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 204:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 5);
@@ -13999,13 +13958,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 205:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             __m256i pop = popcnt256_epi8(data);
@@ -14014,13 +13973,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 206:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
@@ -14029,13 +13988,13 @@ void branchComputeCPU_avx2(workerData &worker)
             __m256i pop = popcnt256_epi8(data);
             data = _mm256_xor_si256(data, pop);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 207:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             __m256i pop = popcnt256_epi8(data);
@@ -14043,8 +14002,8 @@ void branchComputeCPU_avx2(workerData &worker)
             pop = popcnt256_epi8(data);
             data = _mm256_xor_si256(data, pop);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 208:
@@ -14060,8 +14019,8 @@ void branchComputeCPU_avx2(workerData &worker)
           }
           break;
         case 209:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 5);
@@ -14070,13 +14029,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, pop);
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 210:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
@@ -14084,13 +14043,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rol_epi8(data, 5);
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 211:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
@@ -14098,13 +14057,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
             data = _mm256_rolv_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 212:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rolv_epi8(data, data);
@@ -14112,13 +14071,13 @@ void branchComputeCPU_avx2(workerData &worker)
             // data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             // data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 213:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_add_epi8(data, data);
@@ -14126,13 +14085,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rol_epi8(data, 3);
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 214:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -14140,13 +14099,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 215:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -14154,13 +14113,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 216:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rolv_epi8(data, data);
@@ -14168,13 +14127,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 217:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 5);
@@ -14182,13 +14141,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rol_epi8(data, 1);
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 218:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_reverse_epi8(data);
@@ -14196,13 +14155,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_mul_epi8(data, data);
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 219:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
@@ -14210,13 +14169,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 220:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 1);
@@ -14224,13 +14183,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_reverse_epi8(data);
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 221:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 5);
@@ -14238,13 +14197,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
             data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 222:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -14252,13 +14211,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_mul_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 223:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 3);
@@ -14266,26 +14225,26 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 224:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_rol_epi8(data, 4);
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 225:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
@@ -14293,13 +14252,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_reverse_epi8(data);
             data = _mm256_rol_epi8(data, 3);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 226:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_reverse_epi8(data);
@@ -14307,13 +14266,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_mul_epi8(data, data);
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 227:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
@@ -14321,13 +14280,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 228:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_add_epi8(data, data);
@@ -14336,13 +14295,13 @@ void branchComputeCPU_avx2(workerData &worker)
             __m256i pop = popcnt256_epi8(data);
             data = _mm256_xor_si256(data, pop);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 229:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 3);
@@ -14351,13 +14310,13 @@ void branchComputeCPU_avx2(workerData &worker)
             __m256i pop = popcnt256_epi8(data);
             data = _mm256_xor_si256(data, pop);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 230:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_mul_epi8(data, data);
@@ -14365,13 +14324,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rolv_epi8(data, data);
             data = _mm256_rolv_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 231:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 3);
@@ -14379,13 +14338,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_reverse_epi8(data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 232:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_mul_epi8(data, data);
@@ -14393,13 +14352,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
             data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 233:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 1);
@@ -14409,13 +14368,13 @@ void branchComputeCPU_avx2(workerData &worker)
             pop = popcnt256_epi8(data);
             data = _mm256_xor_si256(data, pop);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 234:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -14423,13 +14382,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 235:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
@@ -14437,13 +14396,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rol_epi8(data, 3);
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 236:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -14451,13 +14410,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 237:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 5);
@@ -14465,13 +14424,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_rol_epi8(data, 3);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 238:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_add_epi8(data, data);
@@ -14479,26 +14438,26 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rol_epi8(data, 3);
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 239:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 6);
             data = _mm256_mul_epi8(data, data);
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 240:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
@@ -14506,13 +14465,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 241:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
@@ -14521,13 +14480,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
             data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 242:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_add_epi8(data, data);
@@ -14535,13 +14494,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
             data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 243:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 5);
@@ -14550,13 +14509,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, pop);
             data = _mm256_rol_epi8(data, 1);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 244:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
@@ -14564,13 +14523,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_reverse_epi8(data);
             data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 245:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
@@ -14578,13 +14537,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 246:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_add_epi8(data, data);
@@ -14592,13 +14551,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
             data = _mm256_add_epi8(data, data);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 247:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_rol_epi8(data, 5);
@@ -14606,13 +14565,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_rol_epi8(data, 5);
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 248:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
@@ -14621,8 +14580,8 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, pop);
             data = _mm256_rol_epi8(data, 5);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 249:
@@ -14638,8 +14597,8 @@ void branchComputeCPU_avx2(workerData &worker)
           }
           break;
         case 250:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -14648,13 +14607,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, pop);
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 251:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_add_epi8(data, data);
@@ -14663,13 +14622,13 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_reverse_epi8(data);
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 252:
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             data = _mm256_reverse_epi8(data);
@@ -14677,8 +14636,8 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         case 253:
@@ -14703,8 +14662,8 @@ void branchComputeCPU_avx2(workerData &worker)
         case 255:
           RC4_set_key(&worker.key, 256, worker.prev_chunk);
 
-          for (int i = worker.pos1; i < worker.pos2; i += 32) {
-            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
+          {
+            __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
             __m256i old = data;
 
             __m256i pop = popcnt256_epi8(data);
@@ -14713,8 +14672,8 @@ void branchComputeCPU_avx2(workerData &worker)
             data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
             data = _mm256_rol_epi8(data, 3);
 
-          data = _mm256_blendv_epi8(old, data, worker.maskTable[worker.pos2-i]);
-            _mm256_storeu_si256((__m256i*)&worker.chunk[i], data);
+          data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
           }
           break;
         default:
@@ -15463,76 +15422,3 @@ after:
   // libsais(worker.sData, worker.sa, worker.data_len, 0, worker.buckets_sizes);
 }
 */
-
-
-int runOpVerificationTests(bool useLookup) {
-  int numOpsFailed = 0;
-  #if defined(__AVX2__)
-  testPopcnt256_epi8();
-  #endif
-  workerData *worker = new workerData;
-  worker->pos1 = 0; worker->pos2 = 256;
-
-  unsigned char test[32];
-  generateRandomVector<32>(test);
-
-  printf("Initial Input\n");
-  for (int i = 0; i < 32; i++) {
-    printf("%02x", test[i]);
-  }
-  printf("\n");
-
-  int max_op = 255;
-  int data_len = 48;
-  for(int op = 0; op <= max_op; op++) {
-    // WARMUP, don't print times
-    memcpy(&worker->step_3, test, 256);
-    OpTestResult *opResult = new OpTestResult;
-    optest(0, *worker, *opResult, false);
-    // WARMUP, don't print times
-    worker->pos1 = 0; worker->pos2 = 256;
-    optest(op, *worker, *opResult, false);
-    //printf("  Op: %3d - %6ld ns\n", op, opResult->duration_ns);
-
-    // WARMUP, don't print times
-    memcpy(&worker->step_3, test, 256);
-    OpTestResult *testResult = new OpTestResult;
-    if(useLookup) {
-      optest_lookup(0, *worker, *testResult, false);
-      worker->pos1 = 0; worker->pos2 = 256;
-      optest_lookup(op, *worker, *testResult, false);
-    } else {
-      optest_simd(0, *worker, *testResult, false);
-      worker->pos1 = 0; worker->pos2 = 256;
-      optest_simd(op, *worker, *testResult, false);
-    }
-
-    auto op_dur = opResult->duration_ns.count();
-    auto test_dur = testResult->duration_ns.count();
-
-    auto percent_speedup = double(double(op_dur-test_dur)/double(test_dur))*100;
-    bool valid = 0 == memcmp(opResult->result, testResult->result, data_len);
-    //printf("Speedup: %3.2f%\n", percent_speedup);
-    printf("  Op: %3d - %5ld ns vs %5ld ns = %04.2f %% - %s\n", op, opResult->duration_ns, testResult->duration_ns, percent_speedup, valid ? "true" : "false");
-    if(!valid) {
-      numOpsFailed++;
-      printf("Vanilla: ");
-      for (int i = 0; i < data_len; i++) {
-        printf("%02x", opResult->result[i]);
-      }
-      printf("\n");
-      if(useLookup) {
-        printf(" Lookup: ");
-      } else {
-        printf("   SIMD: ");
-      }
-      
-      for (int i = 0; i < data_len; i++) {
-        printf("%02x", testResult->result[i]);
-      }
-      printf("\n");
-    }
-  }
-  
-  return numOpsFailed;
-}

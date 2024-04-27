@@ -81,7 +81,7 @@ inline void printSupported()
   //do nothing
 #else
   setcolor(BRIGHT_WHITE);
-  printf("Supported SIMD Suites\n\n");
+  printf("Supported CPU Intrinsics\n\n");
   setcolor(CYAN);
   pSupport("SSE", __builtin_cpu_supports("sse"));
   pSupport("SSE2", __builtin_cpu_supports("sse2"));
@@ -91,6 +91,11 @@ inline void printSupported()
   pSupport("AVX", __builtin_cpu_supports("avx"));
   pSupport("AVX2", __builtin_cpu_supports("avx2"));
   pSupport("AVX512", __builtin_cpu_supports("avx512f"));
+  bool sha = false;
+  #if defined(__SHA__)
+  sha = true;
+  #endif
+  pSupport("SHA", sha);
   setcolor(BRIGHT_WHITE);
   printf("\n");
 #endif

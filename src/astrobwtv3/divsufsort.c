@@ -241,7 +241,7 @@ construct_SA(const sauchar_t *T, saidx_t *SA,
   *k++ = (T[n - 2] < c2) ? ~(n - 1) : (n - 1);
   /* Scan the suffix array from left to right. */
   for(i = SA, j = SA + n; i < j; ++i) {
-    __builtin_prefetch(SA + n, 0, 0);
+    __builtin_prefetch(i+64, 0, 3);
     if(0 < (s = *i)) {
       assert(T[s - 1] >= T[s]);
       c0 = T[--s];
@@ -309,7 +309,7 @@ construct_BWT(const sauchar_t *T, saidx_t *SA,
   *k++ = (T[n - 2] < c2) ? ~((saidx_t)T[n - 2]) : (n - 1);
   /* Scan the suffix array from left to right. */
   for(i = SA, j = SA + n, orig = SA; i < j; ++i) {
-    __builtin_prefetch(SA + n, 0, 0);
+    __builtin_prefetch(i+64, 0, 3);
     if(0 < (s = *i)) {
       assert(T[s - 1] >= T[s]);
       c0 = T[--s];
