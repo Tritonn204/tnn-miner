@@ -586,7 +586,7 @@ int main(int argc, char **argv)
     }
     goto Benchmarking;
   }
-  if (vm.count("verify")) {
+  if (vm.count("dero-verify")) {
     int rc = runOpVerificationTests(useLookupMine);
     return rc;
   }
