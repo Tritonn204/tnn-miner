@@ -136,11 +136,14 @@ inline po::options_description get_prog_opts()
 
   po::options_description debug("DEBUG", col_width);
   debug.add_options()
-    ("test", "Runs a set of tests to verify AstrobwtV3 is working (1 test expected to fail)")
+    ("dero-test", "Runs a set of tests to verify AstrobwtV3 is working (1 test expected to fail)")
     ("op", po::value<int>(), "Sets which branch op to benchmark (0-255), benchmark will be skipped if unspecified")
     ("len", po::value<int>(), "Sets length of the processed chunk in said benchmark (default 15)")
     ("sabench", "Runs a benchmark for divsufsort on snapshot files in the 'tests' directory")
-    ("benchmark", po::value<int>(), "Runs a mining benchmark for <arg> seconds (adheres to -t threads option)")
+    ("dero-benchmark", po::value<int>(), "Runs a mining benchmark for <arg> seconds (adheres to -t threads option)")
+    ("xelis", po::value<std::string>(), "Printf the Xelis-hash result of an input string.")
+    ("xelis-bench", "Run a benchmark of xelis-hash with 1 thread")
+    ("xelis-test", "Run the xelis-hash tests from the official source code")
   ;
 
   return general.add(debug);

@@ -53,6 +53,7 @@
 #include <limits>
 #include <libcubwt.cuh>
 #include <lookupcompute.h>
+#include <xelis-hash.hpp>
 
 #include <bit>
 
@@ -500,6 +501,48 @@ int main(int argc, char **argv)
     boost::this_thread::sleep_for(boost::chrono::seconds(1));
     return 0;
   }
+
+  if (vm.count("xelis")) {
+    std::string input = vm["xelis"].as<std::string>();
+
+    // Prepare the input and scratch pad
+    alignas(64) byte input_bytes[BYTES_ARRAY_INPUT];
+    std::fill_n(input_bytes, BYTES_ARRAY_INPUT, 0);
+    std::copy_n(input.c_str(), std::min(input.size(), static_cast<size_t>(BYTES_ARRAY_INPUT)), input_bytes);
+
+    uint64_t scratch_pad[MEMORY_SIZE];
+    std::fill_n(scratch_pad, MEMORY_SIZE, 0);
+
+    byte hash_result[HASH_SIZE];
+    std::fill_n(hash_result, HASH_SIZE, 0);
+
+    // Compute the hash
+    workerData_xelis worker;
+    xelis_hash(input_bytes, worker, hash_result);
+
+    // Print the hash result as a continuous hex string
+    std::cout << "C++ hash result: ";
+    for (byte b : hash_result) {
+        std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(b);
+    }
+    std::cout << std::endl;
+
+    // Return from the function after printing
+    return 0;
+  }
+
+  if (vm.count("xelis-test")) {
+    xelis_runTests();
+    return 0;
+  }
+
+  if (vm.count("xelis-bench")) {
+    boost::thread t(xelis_benchmark_cpu_hash);
+    setPriority(t.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+    t.join();
+    return 0;
+  }
+
   if (vm.count("sabench")) {
     runDivsufsortBenchmark();
     return 0;
@@ -566,11 +609,11 @@ int main(int argc, char **argv)
   }
   
   // Ensure we capture *all* of the other options before we start using goto
-  if (vm.count("test")) {
+  if (vm.count("dero-test")) {
     goto Testing;
   }
-  if (vm.count("benchmark")) {
-    bench_duration = vm["benchmark"].as<int>();
+  if (vm.count("dero-benchmark")) {
+    bench_duration = vm["dero-benchmark"].as<int>();
     if(bench_duration <= 0) {
       printf("ERROR: Invalid benchmark arguments. Use -h for assistance\n");
       return 1;
@@ -1313,34 +1356,34 @@ waitForJob:
         counter.fetch_add(1);
         submit = devMine ? !submittingDev : !submitting;
 
-        // if (submit && CheckHash(&powHash[0], cmpDiff))
-        // {
-        //   // printf("work: %s, hash: %s\n", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str(), hexStr(powHash, 32).c_str());
-        //   if (devMine)
-        //   {
-        //     mutex.lock();
-        //     submittingDev = true;
-        //     setcolor(CYAN);
-        //     std::cout << "\n(DEV) Thread " << tid << " found a dev share\n";
-        //     setcolor(BRIGHT_WHITE);
-        //     mutex.unlock();
-        //     devShare = {
-        //         {"jobid", myJobDev.at("jobid")},
-        //         {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
-        //   }
-        //   else
-        //   {
-        //     mutex.lock();
-        //     submitting = true;
-        //     setcolor(BRIGHT_YELLOW);
-        //     std::cout << "\nThread " << tid << " found a nonce!\n";
-        //     setcolor(BRIGHT_WHITE);
-        //     mutex.unlock();
-        //     share = {
-        //         {"jobid", myJob.at("jobid")},
-        //         {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
-        //   }
-        // }
+        if (submit && CheckHash(&powHash[0], cmpDiff))
+        {
+          // printf("work: %s, hash: %s\n", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str(), hexStr(powHash, 32).c_str());
+          if (devMine)
+          {
+            mutex.lock();
+            submittingDev = true;
+            setcolor(CYAN);
+            std::cout << "\n(DEV) Thread " << tid << " found a dev share\n";
+            setcolor(BRIGHT_WHITE);
+            mutex.unlock();
+            devShare = {
+                {"jobid", myJobDev.at("jobid")},
+                {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
+          }
+          else
+          {
+            mutex.lock();
+            submitting = true;
+            setcolor(BRIGHT_YELLOW);
+            std::cout << "\nThread " << tid << " found a nonce!\n";
+            setcolor(BRIGHT_WHITE);
+            mutex.unlock();
+            share = {
+                {"jobid", myJob.at("jobid")},
+                {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
+          }
+        }
 
         if (!isConnected)
           break;

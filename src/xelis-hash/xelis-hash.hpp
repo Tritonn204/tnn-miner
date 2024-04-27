@@ -1,42 +1,29 @@
 #pragma once
 
-#include <openssl/evp.h>
-#include <openssl/aes.h>
+#include <inttypes.h>
+#include <algorithm>
 
 typedef unsigned char byte;
 
-inline byte* keccak256(const unsigned char* input, size_t input_len) {
-  EVP_MD_CTX* ctx = EVP_MD_CTX_new();
-  if (ctx == NULL) {
-      return NULL;
-  }
+const uint16_t MEMORY_SIZE = 32768;
+const uint16_t SCRATCHPAD_ITERS = 5000;
+const byte ITERS = 1;
+const uint16_t BUFFER_SIZE = 42;
+const uint16_t SLOT_LENGTH = 256;
 
-  if (EVP_DigestInit_ex(ctx, EVP_sha3_256(), NULL) != 1) {
-      EVP_MD_CTX_free(ctx);
-      return NULL;
-  }
+const byte KECCAK_WORDS = 25;
+const byte BYTES_ARRAY_INPUT = KECCAK_WORDS * 8;
+const byte HASH_SIZE = 32;
+const uint16_t STAGE_1_MAX = MEMORY_SIZE / KECCAK_WORDS;
 
-  if (EVP_DigestUpdate(ctx, input, input_len) != 1) {
-      EVP_MD_CTX_free(ctx);
-      return NULL;
-  }
+typedef struct workerData_xelis {
+  alignas(32) uint64_t scratchPad[MEMORY_SIZE] = {0};
+  uint64_t *int_input;
+  uint32_t *smallPad;
+  alignas(32) uint32_t slots[SLOT_LENGTH] = {0};
+  byte indices[SLOT_LENGTH] = {0};
+} workerData_xelis;
 
-  byte hash[EVP_MAX_MD_SIZE];
-  unsigned int hash_len;
-  if (EVP_DigestFinal_ex(ctx, hash, &hash_len) != 1) {
-      EVP_MD_CTX_free(ctx);
-      return NULL;
-  }
-
-  EVP_MD_CTX_free(ctx);
-
-  return hash;
-}
-
-inline void aes_round(uint8_t* block, const uint8_t* key) {
-  AES_KEY aes_key;
-  AES_set_encrypt_key(key, 128, &aes_key);
-  uint8_t temp[16];
-  AES_encrypt(block, temp, &aes_key);
-  std::copy(temp, temp+16, block);
-}
+void xelis_hash(byte* input, workerData_xelis &worker, byte *hashResult);
+void xelis_benchmark_cpu_hash();
+void xelis_runTests();

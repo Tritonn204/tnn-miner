@@ -27,6 +27,8 @@ project(
   DESCRIPTION "Open Source Astrobwt Miner"
 )
 
+enable_language(ASM)
+
 if(WIN32)
   include_directories(
     "C:/mingw64/include"
@@ -106,8 +108,13 @@ include_directories(
   "${PROJECT_SOURCE_DIR}/src"
   "${PROJECT_SOURCE_DIR}/src/headers"
   "${PROJECT_SOURCE_DIR}/src/astrobwtv3/"
+  "${PROJECT_SOURCE_DIR}/src/xelis-hash/"
   "${PROJECT_SOURCE_DIR}/src/miner/"
   "${BOOST_INCLUDE_DIRS}"
+)
+
+set(ASM_SOURCES 
+  "${PROJECT_SOURCE_DIR}/src/xelis-hash/*.s"
 )
 
 file(GLOB all_SRCS
@@ -118,6 +125,9 @@ file(GLOB all_SRCS
   "${PROJECT_SOURCE_DIR}/src/*.c"
   "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.c"
+  "${PROJECT_SOURCE_DIR}/src/xelis-hash/*.cpp"
+  "${PROJECT_SOURCE_DIR}/src/xelis-hash/*.c"
+  "${ASM_SOURCES}"
   # "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cu"
   # "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cuh"
   "${PROJECT_SOURCE_DIR}/src/miner/*.cpp"
