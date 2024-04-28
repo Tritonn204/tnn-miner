@@ -3,7 +3,7 @@ name: Build Tnn-miner on Ubuntu 22.04
 on:
   push:
     branches:
-    - '*dev*'
+    - '*'
     tags:
       - "v*.*.*"
 
