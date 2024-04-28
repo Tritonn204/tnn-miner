@@ -700,8 +700,12 @@ void do_session(
   switch(algo) {
     case DERO_HASH:
       dero_session(host, port, wallet, ioc, ctx, yield, isDev);
+      break;
     case XELIS_HASH:
+    {
       xelis_session(host, port, wallet, worker, ioc, yield, isDev);
+      break;
+    }
   }
 }
 
