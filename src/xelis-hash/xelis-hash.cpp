@@ -83,8 +83,8 @@ void print_reversed_words(const uint64_t* state, int num_words) {
 
 void keccakp_1600_12(uint64_t state[25]) {
     for (int round = 0; round < 12; ++round) {
-        uint64_t C[5] = {0};
-        uint64_t D[5] = {0};
+        alignas(32) uint64_t C[5] = {0};
+        alignas(32) uint64_t D[5] = {0};
 
         // Theta step
         for (int i = 0; i < 5; ++i) {
@@ -221,16 +221,16 @@ void stage_1(uint64_t* int_input, uint64_t* scratchPad,
 ) {
   for (size_t i = A1; i <= A2; ++i) {
     __builtin_prefetch(&int_input[0], 0, 3);
-    __builtin_prefetch(&scratchPad[(i+1)*KECCAK_WORDS], 1, 3);
+    __builtin_prefetch(&scratchPad[(i+1)*XELIS_KECCAK_WORDS], 1, 3);
 
     keccakp_1600_12(int_input);
 
     uint64_t rand_int = 0;
     for (size_t j = B1; j <= B2; ++j) {
-      byte pair_idx = (j + 1) % KECCAK_WORDS;
-      byte pair_idx2 = (j + 2) % KECCAK_WORDS;
+      byte pair_idx = (j + 1) % XELIS_KECCAK_WORDS;
+      byte pair_idx2 = (j + 2) % XELIS_KECCAK_WORDS;
 
-      size_t target_idx = i * KECCAK_WORDS + j;
+      size_t target_idx = i * XELIS_KECCAK_WORDS + j;
       uint64_t a = int_input[j] ^ rand_int;
 
       uint64_t left = int_input[pair_idx];
@@ -260,12 +260,12 @@ void stage_1(uint64_t* int_input, uint64_t* scratchPad,
 }
 
 void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots) {
-  for (byte iter = 0; iter < ITERS; ++iter) {
-    for (uint16_t j = 0; j < (MEMORY_SIZE * 2) / SLOT_LENGTH; ++j) {
-      __builtin_prefetch(&smallPad[(j+1)*SLOT_LENGTH], 0, 3);
-      std::iota(indices, indices+SLOT_LENGTH, 0);
-      for (int slot_idx = SLOT_LENGTH - 1; slot_idx >= 0; --slot_idx) {
-        uint16_t index_in_indices = smallPad[j * SLOT_LENGTH + slot_idx] % (slot_idx + 1);
+  for (byte iter = 0; iter < XELIS_ITERS; ++iter) {
+    for (uint16_t j = 0; j < (XELIS_MEMORY_SIZE * 2) / XELIS_SLOT_LENGTH; ++j) {
+      __builtin_prefetch(&smallPad[(j+1)*XELIS_SLOT_LENGTH], 0, 3);
+      std::iota(indices, indices+XELIS_SLOT_LENGTH, 0);
+      for (int slot_idx = XELIS_SLOT_LENGTH - 1; slot_idx >= 0; --slot_idx) {
+        uint16_t index_in_indices = smallPad[j * XELIS_SLOT_LENGTH + slot_idx] % (slot_idx + 1);
         uint16_t index = indices[index_in_indices];
         indices[index_in_indices] = indices[slot_idx];
 
@@ -273,9 +273,9 @@ void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots
         // AVX-512 implementation
         __m512i sum_buffer = _mm512_setzero_si512();
 
-        for (uint16_t k = 0; k < SLOT_LENGTH; k += 16) {
+        for (uint16_t k = 0; k < XELIS_SLOT_LENGTH; k += 16) {
           __m512i slot_vector = _mm512_load_si512(&slots[k]);
-          __m512i values = _mm512_load_si512(&smallPad[j * SLOT_LENGTH + k]);
+          __m512i values = _mm512_load_si512(&smallPad[j * XELIS_SLOT_LENGTH + k]);
 
           __mmask16 sign_mask = _mm512_cmpgt_epu32_mask(_mm512_setzero_si512(), _mm512_srli_epi32(slot_vector, 31));
           sum_buffer = _mm512_add_epi32(sum_buffer, _mm512_mask_blend_epi32(sign_mask, values, _mm512_sub_epi32(_mm512_setzero_si512(), values)));
@@ -287,15 +287,15 @@ void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots
         __m256i sum_buffer = _mm256_setzero_si256();
         int sign = slots[index] >> 31;
 
-        for (uint16_t k = 0; k < SLOT_LENGTH; k += 8) {
+        for (uint16_t k = 0; k < XELIS_SLOT_LENGTH; k += 8) {
             __m256i slot_vector = _mm256_load_si256((__m256i*)&slots[k]);
-            __m256i values = _mm256_load_si256((__m256i*)&smallPad[j * SLOT_LENGTH + k]);
+            __m256i values = _mm256_load_si256((__m256i*)&smallPad[j * XELIS_SLOT_LENGTH + k]);
 
             __m256i sign_mask = _mm256_cmpeq_epi32(_mm256_setzero_si256(), _mm256_srli_epi32(slot_vector, 31));
             sum_buffer = _mm256_blendv_epi8(_mm256_sub_epi32(sum_buffer, values), _mm256_add_epi32(sum_buffer, values), sign_mask);
         }
 
-        __m256i adjustment = _mm256_set1_epi32(smallPad[j * SLOT_LENGTH + index]);
+        __m256i adjustment = _mm256_set1_epi32(smallPad[j * XELIS_SLOT_LENGTH + index]);
         __m256i sign_bit = _mm256_load_si256((__m256i*)sign_bit_values[index % 8]);
       
         if (sign == 0) {
@@ -317,9 +317,9 @@ void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots
         // SSE implementation
         __m128i sum_buffer = _mm_setzero_si128();
 
-        for (size_t k = 0; k < SLOT_LENGTH; k += 4) {
+        for (size_t k = 0; k < XELIS_SLOT_LENGTH; k += 4) {
           __m128i slot_vector = _mm_load_si128((__m128i*)&slots[k]);
-          __m128i values = _mm_load_si128((__m128i*)&smallPad[j * SLOT_LENGTH + k]);
+          __m128i values = _mm_load_si128((__m128i*)&smallPad[j * XELIS_SLOT_LENGTH + k]);
 
           __m128i sign_mask = _mm_cmpgt_epi32(_mm_setzero_si128(), _mm_srli_epi32(slot_vector, 31));
           sum_buffer = _mm_add_epi32(sum_buffer, _mm_blendv_epi8(values, _mm_sub_epi32(_mm_setzero_si128(), values), sign_mask));
@@ -330,14 +330,14 @@ void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots
       #else
         // SCALAR implementation
         uint32_t sum = slots[index];
-        uint16_t offset = j * SLOT_LENGTH;
+        uint16_t offset = j * XELIS_SLOT_LENGTH;
 
         for (uint16_t k = 0; k < index; ++k) {
           uint32_t pad = smallPad[offset + k];
           sum = (slots[k] >> 31 == 0) ? sum + pad : sum - pad;
         }
 
-        for (uint16_t k = index + 1; k < SLOT_LENGTH; ++k) {
+        for (uint16_t k = index + 1; k < XELIS_SLOT_LENGTH; ++k) {
           uint32_t pad = smallPad[offset + k];
           sum = (slots[k] >> 31 == 0) ? sum + pad : sum - pad;
         }
@@ -349,29 +349,29 @@ void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots
   }
 
   // Copy slots back to the last SLOT_LENGTH elements of smallPad
-  std::copy(&slots[0], &slots[SLOT_LENGTH], &smallPad[MEMORY_SIZE*2-SLOT_LENGTH]);
+  std::copy(&slots[0], &slots[XELIS_SLOT_LENGTH], &smallPad[XELIS_MEMORY_SIZE*2-XELIS_SLOT_LENGTH]);
 }
 
 void stage_3(uint64_t* scratchPad, byte* hashResult) {
     const byte key[16] = {0};
     alignas(32) byte block[16] = {0};
 
-    uint64_t addr_a = (scratchPad[MEMORY_SIZE - 1] >> 15) & 0x7FFF;
-    uint64_t addr_b = scratchPad[MEMORY_SIZE - 1] & 0x7FFF;
+    alignas(32) uint64_t addr_a = (scratchPad[XELIS_MEMORY_SIZE - 1] >> 15) & 0x7FFF;
+    alignas(32) uint64_t addr_b = scratchPad[XELIS_MEMORY_SIZE - 1] & 0x7FFF;
 
-    uint64_t mem_buffer_a[BUFFER_SIZE];
-    uint64_t mem_buffer_b[BUFFER_SIZE];
+    alignas(32) uint64_t mem_buffer_a[XELIS_BUFFER_SIZE];
+    alignas(32) uint64_t mem_buffer_b[XELIS_BUFFER_SIZE];
 
-    for (byte i = 0; i < BUFFER_SIZE; ++i) {
-        mem_buffer_a[i] = scratchPad[(addr_a + i) % MEMORY_SIZE];
-        mem_buffer_b[i] = scratchPad[(addr_b + i) % MEMORY_SIZE];
+    for (byte i = 0; i < XELIS_BUFFER_SIZE; ++i) {
+        mem_buffer_a[i] = scratchPad[(addr_a + i) % XELIS_MEMORY_SIZE];
+        mem_buffer_b[i] = scratchPad[(addr_b + i) % XELIS_MEMORY_SIZE];
     }
 
-    for (uint16_t i = 0; i < SCRATCHPAD_ITERS; ++i) {
-        __builtin_prefetch(&mem_buffer_a[(i+1)%BUFFER_SIZE], 0, 3);
-        __builtin_prefetch(&mem_buffer_b[(i+1)%BUFFER_SIZE], 0, 3);
-        byte *mem_a = reinterpret_cast<byte*>(&mem_buffer_a[i % BUFFER_SIZE]);
-        byte *mem_b = reinterpret_cast<byte*>(&mem_buffer_b[i % BUFFER_SIZE]);
+    for (uint16_t i = 0; i < XELIS_SCRATCHPAD_ITERS; ++i) {
+        __builtin_prefetch(&mem_buffer_a[(i+1)%XELIS_BUFFER_SIZE], 0, 3);
+        __builtin_prefetch(&mem_buffer_b[(i+1)%XELIS_BUFFER_SIZE], 0, 3);
+        byte *mem_a = reinterpret_cast<byte*>(&mem_buffer_a[i % XELIS_BUFFER_SIZE]);
+        byte *mem_b = reinterpret_cast<byte*>(&mem_buffer_b[i % XELIS_BUFFER_SIZE]);
 
         std::copy(mem_b, mem_b + 8, block);
         std::copy(mem_a, mem_a + 8, block + 8);
@@ -383,9 +383,9 @@ void stage_3(uint64_t* scratchPad, byte* hashResult) {
 
         uint64_t result = ~(hash1 ^ hash2);
 
-        for (size_t j = 0; j < HASH_SIZE; ++j) {
-          uint64_t a = mem_buffer_a[(j + i) % BUFFER_SIZE];
-          uint64_t b = mem_buffer_b[(j + i) % BUFFER_SIZE];
+        for (size_t j = 0; j < XELIS_HASH_SIZE; ++j) {
+          uint64_t a = mem_buffer_a[(j + i) % XELIS_BUFFER_SIZE];
+          uint64_t b = mem_buffer_b[(j + i) % XELIS_BUFFER_SIZE];
 
           uint64_t v;
           switch ((result >> (j * 2)) & 0xf) {
@@ -443,13 +443,13 @@ void stage_3(uint64_t* scratchPad, byte* hashResult) {
         }
 
         addr_b = result & 0x7FFF;
-        mem_buffer_a[i % BUFFER_SIZE] = result;
-        mem_buffer_b[i % BUFFER_SIZE] = scratchPad[addr_b];
+        mem_buffer_a[i % XELIS_BUFFER_SIZE] = result;
+        mem_buffer_b[i % XELIS_BUFFER_SIZE] = scratchPad[addr_b];
 
         addr_a = (result >> 15) & 0x7FFF;
         scratchPad[addr_a] = result;
 
-        size_t index = SCRATCHPAD_ITERS - i - 1;
+        size_t index = XELIS_SCRATCHPAD_ITERS - i - 1;
         // printf("post result: %llu\n", result);
         if (index < 4) {
             uint64_t be_result = htonll(result);
@@ -474,7 +474,7 @@ void xelis_benchmark_cpu_hash() {
     const uint32_t ITERATIONS = 1000;
     byte input[200] = {0};
     alignas(32) workerData_xelis worker;
-    alignas(32) byte hash_result[HASH_SIZE] = {0};
+    alignas(32) byte hash_result[XELIS_HASH_SIZE] = {0};
     init_sign_bit_table();
 
     auto start = std::chrono::high_resolution_clock::now();
@@ -492,25 +492,30 @@ void xelis_benchmark_cpu_hash() {
 }
 
 void xelis_hash(byte* input, workerData_xelis &worker, byte *hashResult) {
+  // printf("input: ");
+  // for (int i = 0; i < 200; i++) {
+  //   printf("%02x", input[i]);
+  // }
+  // printf("\n\n");
   worker.int_input = reinterpret_cast<uint64_t*>(input);
   
   // Stage 1
   stage_1(worker.int_input, reinterpret_cast<uint64_t*>(worker.scratchPad), 
-    0, STAGE_1_MAX - 1,
-    0, KECCAK_WORDS - 1
+    0, XELIS_STAGE_1_MAX - 1,
+    0, XELIS_KECCAK_WORDS - 1
   );
   stage_1(worker.int_input, reinterpret_cast<uint64_t*>(worker.scratchPad), 
-    STAGE_1_MAX, STAGE_1_MAX,
+    XELIS_STAGE_1_MAX, XELIS_STAGE_1_MAX,
     0, 17
   );
 
   // Stage 2
   __builtin_prefetch(worker.slots, 1, 3);
   __builtin_prefetch(worker.smallPad, 1, 3);
-  std::fill_n(worker.slots, SLOT_LENGTH, 0);
+  std::fill_n(worker.slots, XELIS_SLOT_LENGTH, 0);
   worker.smallPad = reinterpret_cast<uint32_t*>(worker.scratchPad);
 
-  std::copy(&worker.smallPad[MEMORY_SIZE*2-SLOT_LENGTH], &worker.smallPad[MEMORY_SIZE*2], reinterpret_cast<uint32_t*>(worker.slots));
+  std::copy(&worker.smallPad[XELIS_MEMORY_SIZE*2-XELIS_SLOT_LENGTH], &worker.smallPad[XELIS_MEMORY_SIZE*2], reinterpret_cast<uint32_t*>(worker.slots));
 
   stage_2(worker.int_input, worker.smallPad, worker.indices, worker.slots);
   
@@ -518,24 +523,73 @@ void xelis_hash(byte* input, workerData_xelis &worker, byte *hashResult) {
   stage_3(reinterpret_cast<uint64_t*>(worker.scratchPad), hashResult);
 }
 
-namespace tests {
-    using Hash = std::array<byte, HASH_SIZE>;
+int char2int(char input)
+{
+  if(input >= '0' && input <= '9')
+    return input - '0';
+  if(input >= 'A' && input <= 'F')
+    return input - 'A' + 10;
+  if(input >= 'a' && input <= 'f')
+    return input - 'a' + 10;
+  throw std::invalid_argument("Invalid input string");
+}
 
-    bool test_input(const char* test_name, byte* input, size_t input_size, const Hash& expected_hash) {
+// This function assumes src to be a zero terminated sanitized string with
+// an even number of [0-9a-f] characters, and target to be sufficiently large
+void hex2bin(const char* src, char* target)
+{
+  while(*src && src[1])
+  {
+    *(target++) = char2int(*src)*16 + char2int(src[1]);
+    src += 2;
+  }
+}
+
+
+char* testTemplate = "97dff4761917c2692df3be38e72ca7a59c3f55252e2245cc21564ef65fa8ea6f0000018f22fe78f80000000000064202f2a40463ccfcea839c4950a56ee38fa69c7ce2d4ba45d4b060cc63c297fb73b8a09c69661b1690b0a238d096a7ccb3cb204ce5dd604da9bb6c79c4ab00000000";
+
+namespace tests {
+    using Hash = std::array<byte, XELIS_HASH_SIZE>;
+
+    bool test_real() {
         alignas(32) workerData_xelis worker;
-        byte hash_result[HASH_SIZE] = {0};
+        byte hash_result[XELIS_HASH_SIZE] = {0};
+        alignas(32) byte input[XELIS_BYTES_ARRAY_INPUT] = {0};
+
+        hex2bin(testTemplate,
+        (char*)input);
+
+        printf("sanity check: ");
+        for(int i = 0; i < 112; i++) {
+          printf("%02x", input[i]);
+        }
+        printf("\n");
 
         xelis_hash(input, worker, hash_result);
 
-        if (std::memcmp(hash_result, expected_hash.data(), HASH_SIZE) != 0) {
+        printf("hoping for: 446e381b592967518c2b184c7115f9446b65921358eeb751363663e3474e0300\ngot: ");
+        for(int i = 0; i < 32; i++) {
+          printf("%02x", hash_result[i]);
+        }
+        printf("\n");
+        return true;
+    }
+
+    bool test_input(const char* test_name, byte* input, size_t input_size, const Hash& expected_hash) {
+        alignas(32) workerData_xelis worker;
+        byte hash_result[XELIS_HASH_SIZE] = {0};
+
+        xelis_hash(input, worker, hash_result);
+
+        if (std::memcmp(hash_result, expected_hash.data(), XELIS_HASH_SIZE) != 0) {
             std::cout << "Test '" << test_name << "' failed!" << std::endl;
             std::cout << "Expected hash: ";
-            for (size_t i = 0; i < HASH_SIZE; ++i) {
+            for (size_t i = 0; i < XELIS_HASH_SIZE; ++i) {
                 printf("%02x ", expected_hash[i]);
             }
             std::cout << std::endl;
             std::cout << "Actual hash:   ";
-            for (size_t i = 0; i < HASH_SIZE; ++i) {
+            for (size_t i = 0; i < XELIS_HASH_SIZE; ++i) {
                 printf("%02x ", hash_result[i]);
             }
             std::cout << std::endl;
@@ -545,7 +599,7 @@ namespace tests {
     }
 
     bool test_zero_input() {
-        byte input[200] = {0};
+        alignas(32) byte input[200] = {0};
         Hash expected_hash = {
             0x0e, 0xbb, 0xbd, 0x8a, 0x31, 0xed, 0xad, 0xfe, 0x09, 0x8f, 0x2d, 0x77, 0x0d, 0x84,
             0xb7, 0x19, 0x58, 0x86, 0x75, 0xab, 0x88, 0xa0, 0xa1, 0x70, 0x67, 0xd0, 0x0a, 0x8f,
@@ -556,7 +610,7 @@ namespace tests {
     }
 
     bool test_xelis_input() {
-        byte input[BYTES_ARRAY_INPUT] = {0};
+        alignas(32) byte input[XELIS_BYTES_ARRAY_INPUT] = {0};
 
         const char* custom = "xelis-hashing-algorithm";
         std::memcpy(input, custom, std::strlen(custom));
@@ -574,6 +628,8 @@ void xelis_runTests() {
   init_sign_bit_table();
   all_tests_passed &= tests::test_zero_input();
   all_tests_passed &= tests::test_xelis_input();
+
+  tests::test_real();
 
   if (all_tests_passed) {
       std::cout << "XELIS-HASH: All tests passed!" << std::endl;

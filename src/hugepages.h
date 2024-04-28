@@ -113,7 +113,7 @@ inline void *malloc_huge_pages(size_t size)
   if (ptr == NULL) {
     #ifdef __cplusplus
     std::cout << GetLastErrorAsString() << std::endl;
-    printf("regular malloc");
+    // printf("regular malloc");
     #endif
     ptr = (char *)malloc(real_size);
     if (ptr == NULL) return NULL;
@@ -123,9 +123,9 @@ inline void *malloc_huge_pages(size_t size)
   ptr = (char *) mmap(0, real_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | 
      MAP_HUGETLB, -1, 0);
   if (ptr == MAP_FAILED) {
-    #ifdef __cplusplus
-    std::cerr << "failed to allocate hugepages... using regular malloc" << std::endl;
-    #endif
+    // #ifdef __cplusplus
+    // std::cerr << "failed to allocate hugepages... using regular malloc" << std::endl;
+    // #endif
     ptr = (char *)malloc(real_size);
     if (ptr == NULL) return NULL;
     real_size = 0;

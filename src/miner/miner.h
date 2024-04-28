@@ -45,6 +45,12 @@ int batchSize = 5000;
 double minFee = 1;
 double devFee = 2.5;
 const char *devPool = "dero.rabidmining.com";
+
+std::string defaultHost[] = {
+  "dero.rabidmining.com",
+  "127.0.0.1"
+};
+
 std::string devPort[] = {
   "10300",
   "8080"
@@ -52,13 +58,20 @@ std::string devPort[] = {
 // @ tritonn on Dero Name Service
 std::string devWallet[] = {
   "dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw4wjqqp6y2n7",
-  // "xel:xz9574c80c4xegnvurazpmxhw5dlg2n0g9qm60uwgt75uqyx3pcsqzzra9m"
-  "xet:5zwxjesmz6gtpg3c6zt20n9nevsyeewavpx6nwmv08z2hu2dpp3sq8w8ue6"
+  "xel:xz9574c80c4xegnvurazpmxhw5dlg2n0g9qm60uwgt75uqyx3pcsqzzra9m"
+  // "xet:5zwxjesmz6gtpg3c6zt20n9nevsyeewavpx6nwmv08z2hu2dpp3sq8w8ue6"
+};
+
+std::string coinNames[] = {
+  "DERO:",
+  "XELIS:"
 };
 
 const int MINIBLOCK_SIZE = 48;
 const int XELIS_TEMPLATE_SIZE = 112;
-Num oneLsh256;                                                   
+
+Num oneLsh256;      
+Num maxU256;                                                   
 
 void getWork(bool isDev, int algo);
 void sendWork();
@@ -72,16 +85,21 @@ void cudaMine();
 void benchmark(int i);
 void logSeconds(std::chrono::_V2::steady_clock::time_point start_time, int duration, bool *stop);
 
-inline Num ConvertDifficultyToBig(int64_t d)
+inline Num ConvertDifficultyToBig(int64_t d, int algo)
 {
-  // (1 << 256) / (difficultyNum )c
   Num difficulty = Num(std::to_string(d).c_str(), 10);
-  Num res = oneLsh256 / difficulty;
-  return res; 
+  switch(algo) {
+    case DERO_HASH:
+      return oneLsh256 / difficulty;
+    case XELIS_HASH:
+      return maxU256 / difficulty;
+    default:
+      return 0;
+  }
 }
 
 std::vector<std::string> supportCheck = {
-  "sse","sse2","sse3","avx","avx2","avx512bw"
+  "sse","sse2","sse3","avx","avx2","avx512f"
 };
 
 inline void pSupport(const char *check, bool res)
@@ -116,22 +134,27 @@ inline void printSupported()
 #endif
 }
 
-inline Num ConvertDifficultyToBig(Num d)
+inline Num ConvertDifficultyToBig(Num d, int algo)
 {
-  // (1 << 256) / (difficultyNum )
-  Num res = oneLsh256 / d;
-  return res;
+  switch(algo) {
+    case DERO_HASH:
+      return oneLsh256 / d;
+    case XELIS_HASH:
+      return maxU256 / d;
+    default:
+      return 0;
+  }
 }
 
-inline bool CheckHash(unsigned char *hash, int64_t diff)
+inline bool CheckHash(unsigned char *hash, int64_t diff, int algo)
 {
   if (littleEndian()) std::reverse(hash, hash+32);
-  bool cmp = Num(hexStr(hash, 32).c_str(), 16) < ConvertDifficultyToBig(diff);
+  bool cmp = Num(hexStr(hash, 32).c_str(), 16) < ConvertDifficultyToBig(diff, algo);
   if (littleEndian()) std::reverse(hash, hash+32);
   return (cmp);
 }
 
-inline bool CheckHash(unsigned char *hash, Num diff)
+inline bool CheckHash(unsigned char *hash, Num diff, int algo)
 {
   if (littleEndian()) std::reverse(hash, hash+32);
   bool cmp = Num(hexStr(hash, 32).c_str(), 16) < diff;
