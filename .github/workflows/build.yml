@@ -19,7 +19,8 @@ jobs:
         sudo update-alternatives --list clang
         sudo update-alternatives --list clang++
         sudo update-alternatives --get-selections
-        sudo apt update && sudo apt upgrade -y
+        sudo apt update
+        #sudo apt upgrade -y
     - name: 'Setup pre-reqs'
       run: |
         sudo apt install git wget build-essential cmake clang libssl-dev libudns-dev libfmt-dev libc++-dev
