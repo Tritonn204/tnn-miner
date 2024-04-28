@@ -49,14 +49,14 @@ jobs:
         sudo update-alternatives --display clang
         clang --version
         clang++ --version
-    - name: 'Compile boost'
-      run: |
-        wget -q https://github.com/boostorg/boost/releases/download/boost-1.82.0/boost-1.82.0.tar.gz
-        tar -xf boost-1.82.0.tar.gz
-        cd boost-1.82.0/
-        ./bootstrap.sh --with-toolset=clang 
-        ./b2 clean
-        ./b2 toolset=clang cxxflags=-std=c++20 -stdlib=libc++ linkflags=-stdlib=libc++ link=static
+    #- name: 'Compile boost'
+    #  run: |
+    #    wget -q https://github.com/boostorg/boost/releases/download/boost-1.82.0/boost-1.82.0.tar.gz
+    #    tar -xf boost-1.82.0.tar.gz
+    #    cd boost-1.82.0/
+    #    ./bootstrap.sh --with-toolset=clang 
+    #    ./b2 clean
+    #    ./b2 toolset=clang cxxflags=-std=c++20 -stdlib=libc++ linkflags=-stdlib=libc++ link=static
     - name: 'Compile Tnn-miner'
       run: |
         mkdir build
