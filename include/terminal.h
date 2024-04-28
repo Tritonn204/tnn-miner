@@ -124,7 +124,7 @@ inline po::options_description get_prog_opts()
   general.add_options()
     ("help", "produce help message")
     ("xelis", "Will mine Xelis instead of Dero")
-    ("daemon-address", po::value<std::string>(), "Dero node/pool URL or IP address to mine to") // todo: parse out port and/or wss:// or ws://
+    ("daemon-address", po::value<std::string>(), "Node/pool URL or IP address to mine to") // todo: parse out port and/or wss:// or ws://
     ("port", po::value<int>(), "The port used to connect to the Dero node")
     ("wallet", po::value<std::string>(), "Wallet address for receiving mining rewards")
     ("threads", po::value<int>(), "The amount of mining threads to create, default is 1")

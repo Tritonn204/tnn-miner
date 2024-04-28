@@ -269,7 +269,7 @@ void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots
         uint16_t index = indices[index_in_indices];
         indices[index_in_indices] = indices[slot_idx];
 
-      #ifdef __AVX5asdasdda12F__
+      #ifdef __AVX512F__
         // AVX-512 implementation
         __m512i sum_buffer = _mm512_setzero_si512();
 
@@ -277,11 +277,11 @@ void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots
           __m512i slot_vector = _mm512_load_si512(&slots[k]);
           __m512i values = _mm512_load_si512(&smallPad[j * XELIS_SLOT_LENGTH + k]);
 
-          __mmask16 sign_mask = _mm512_cmpgt_epu32_mask(_mm512_setzero_si512(), _mm512_srli_epi32(slot_vector, 31));
-          sum_buffer = _mm512_add_epi32(sum_buffer, _mm512_mask_blend_epi32(sign_mask, values, _mm512_sub_epi32(_mm512_setzero_si512(), values)));
+          __m512i sign_mask = _mm512_cmpeq_epu32(_mm512_setzero_si512(), _mm512_srli_epi32(slot_vector, 31));
+          sum_buffer = _mm512_blendv_epi32(_mm512_sub_epi32(sum_buffer, values), _mm512_add_epi32(sum_buffer, values), sign_mask);
         }
 
-        sum += _mm512_reduce_add_epi32(sum_buffer);
+        slots[index] += _mm512_reduce_add_epi32(sum_buffer);
       #elif defined(__AVX2__)
         // AVX2 implementation
         __m256i sum_buffer = _mm256_setzero_si256();
@@ -313,20 +313,35 @@ void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots
 
         uint32_t reduced_sum = _mm_extract_epi32(sum_128, 0);
         slots[index] += reduced_sum;
-      #elif defined(__SSasdadadasE2__)
-        // SSE implementation
-        __m128i sum_buffer = _mm_setzero_si128();
+      // TODO: fix below
+      // #elif defined(__SSE2__)
+      //   // SSE implementation
+      //   __m128i sum_buffer = _mm_setzero_si128();
 
-        for (size_t k = 0; k < XELIS_SLOT_LENGTH; k += 4) {
-          __m128i slot_vector = _mm_load_si128((__m128i*)&slots[k]);
-          __m128i values = _mm_load_si128((__m128i*)&smallPad[j * XELIS_SLOT_LENGTH + k]);
+      //   int sign = slots[index] >> 31;
+      //   for (size_t k = 0; k < XELIS_SLOT_LENGTH; k += 4) {
+      //     __m128i slot_vector = _mm_load_si128((__m128i*)&slots[k]);
+      //     __m128i values = _mm_load_si128((__m128i*)&smallPad[j * XELIS_SLOT_LENGTH + k]);
 
-          __m128i sign_mask = _mm_cmpgt_epi32(_mm_setzero_si128(), _mm_srli_epi32(slot_vector, 31));
-          sum_buffer = _mm_add_epi32(sum_buffer, _mm_blendv_epi8(values, _mm_sub_epi32(_mm_setzero_si128(), values), sign_mask));
-        }
+      //     __m128i sign_mask = _mm_cmpeq_epi32(_mm_setzero_si128(), _mm_srli_epi32(slot_vector, 31));
+      //     sum_buffer = _mm_blendv_epi8(_mm_sub_epi32(sum_buffer, values), _mm_add_epi32(sum_buffer, values), sign_mask);
+      //   }
 
-        sum += _mm_extract_epi32(sum_buffer, 0) + _mm_extract_epi32(sum_buffer, 1) +
-              _mm_extract_epi32(sum_buffer, 2) + _mm_extract_epi32(sum_buffer, 3);
+      //   __m128i adjustment = _mm_set1_epi32(smallPad[j * XELIS_SLOT_LENGTH + index]);
+      //   __m128i sign_bit = _mm_load_si128((__m128i*)sign_bit_values[index % 4]);
+      
+      //   if (sign == 0) {
+      //     sum_buffer = _mm_blendv_epi8(sum_buffer, _mm_sub_epi32(sum_buffer, adjustment), sign_bit);
+      //   } else {
+      //     sum_buffer = _mm_blendv_epi8(sum_buffer, _mm_add_epi32(sum_buffer, adjustment), sign_bit);
+      //   }
+
+      //   // Perform horizontal addition to reduce the sum
+      //   sum_buffer = _mm_hadd_epi32(sum_buffer, sum_buffer);
+
+      //   // Extract the reduced sum
+      //   uint32_t reduced_sum =  _mm_cvtsi128_si32(sum_buffer);
+      //   slots[index] += reduced_sum;
       #else
         // SCALAR implementation
         uint32_t sum = slots[index];
