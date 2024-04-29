@@ -9,7 +9,8 @@
 
 namespace po = boost::program_options;  // from <boost/program_options.hpp>
 
-const char *consoleLine = " TNN-MINER v0.3.0 ";
+const char *versionString = "v0.3.1";
+const char *consoleLine = " TNN-MINER ";
 const char *TNN = R"(
   
                                                             YB&&@5
@@ -124,8 +125,9 @@ inline po::options_description get_prog_opts()
   general.add_options()
     ("help", "produce help message")
     ("xelis", "Will mine Xelis instead of Dero")
+    ("testnet", "Adjusts in-house parameters to mine on testnets")
     ("daemon-address", po::value<std::string>(), "Node/pool URL or IP address to mine to") // todo: parse out port and/or wss:// or ws://
-    ("port", po::value<int>(), "The port used to connect to the Dero node")
+    ("port", po::value<int>(), "The port used to connect to the node")
     ("wallet", po::value<std::string>(), "Wallet address for receiving mining rewards")
     ("threads", po::value<int>(), "The amount of mining threads to create, default is 1")
     ("worker-name", po::value<std::string>(), "Sets the worker name for this instance when mining Xelis")
@@ -133,7 +135,12 @@ inline po::options_description get_prog_opts()
     ("no-lock", "Disables CPU affinity / CPU core binding")
     // ("gpu", "Mine with GPU instead of CPU")
     // ("batch-size", po::value<int>(), "(GPU Setting) Sets batch size used for GPU mining")
-    ("lookup", "Mine with lookup instead of regular C++")
+  ;
+
+  po::options_description dero("Dero", col_width);
+  dero.add_options()
+    ("lookup", "Mine with lookup tables instead of computation")
+    ("dero-benchmark", po::value<int>(), "Runs a mining benchmark for <arg> seconds (adheres to -t threads option)")
   ;
 
   po::options_description debug("DEBUG", col_width);
@@ -142,12 +149,19 @@ inline po::options_description get_prog_opts()
     ("op", po::value<int>(), "Sets which branch op to benchmark (0-255), benchmark will be skipped if unspecified")
     ("len", po::value<int>(), "Sets length of the processed chunk in said benchmark (default 15)")
     ("sabench", "Runs a benchmark for divsufsort on snapshot files in the 'tests' directory")
-    ("dero-benchmark", po::value<int>(), "Runs a mining benchmark for <arg> seconds (adheres to -t threads option)")
+  ;
+
+  po::options_description xelis("Xelis", col_width);
+  xelis.add_options()
+    ("xatum", "Required for mining to Xatum pools on Xelis")
     ("xelis-bench", "Run a benchmark of xelis-hash with 1 thread")
     ("xelis-test", "Run the xelis-hash tests from the official source code")
   ;
 
-  return general.add(debug);
+  dero.add(debug);
+  general.add(dero);
+  general.add(xelis);
+  return general;
 }
 
 inline int get_prog_style()
