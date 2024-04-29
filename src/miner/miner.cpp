@@ -1334,6 +1334,14 @@ Mining:
   printSupported();
   mutex.unlock();
 
+  if(miningAlgo == DERO_HASH && !(wallet.substr(0, 3) == "der" || wallet.substr(0, 3) == "det")) {
+    std::cout << "Provided wallet address is not valid for Dero" << std::endl;
+    return EXIT_FAILURE;
+  }
+  if(miningAlgo == XELIS_HASH && !(wallet.substr(0, 3) == "xel" || wallet.substr(0, 3) == "xet")) {
+    std::cout << "Provided wallet address is not valid for Xelis" << std::endl;
+    return EXIT_FAILURE;
+  }
   boost::thread GETWORK(getWork, false, miningAlgo);
   // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
