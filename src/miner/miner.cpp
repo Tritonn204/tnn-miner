@@ -23,6 +23,8 @@
 #include <boost/beast/http.hpp>
 #include <boost/beast/websocket.hpp>
 #include <boost/beast/websocket/ssl.hpp>
+#include <boost/asio.hpp>
+#include <boost/asio/ssl.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/ssl/error.hpp>
 #include <boost/json.hpp>
@@ -46,7 +48,6 @@
 #include <thread>
 
 #include <xelis-hash.hpp>
-#include <xatum.h>
 
 #include <chrono>
 #include <fmt/format.h>
@@ -119,10 +120,10 @@ int accepted;
 int firstRejected;
 
 uint64_t hashrate;
-int64_t ourHeight;
-int64_t devHeight;
-int64_t difficulty;
-int64_t difficultyDev;
+uint64_t ourHeight;
+uint64_t devHeight;
+uint64_t difficulty;
+uint64_t difficultyDev;
 
 std::vector<int64_t> rate5min;
 std::vector<int64_t> rate1min;
@@ -137,13 +138,15 @@ bool startBenchmark = false;
 bool stopBenchmark = false;
 //------------------------------------------------------------------------------
 
-void openssl_log_callback(const SSL* ssl, int where, int ret) {
-    if (ret <= 0) {
-        int error = SSL_get_error(ssl, ret);
-        char errbuf[256];
-        ERR_error_string_n(error, errbuf, sizeof(errbuf));
-        std::cerr << "OpenSSL Error: " << errbuf << std::endl;
-    }
+void openssl_log_callback(const SSL *ssl, int where, int ret)
+{
+  if (ret <= 0)
+  {
+    int error = SSL_get_error(ssl, ret);
+    char errbuf[256];
+    ERR_error_string_n(error, errbuf, sizeof(errbuf));
+    std::cerr << "OpenSSL Error: " << errbuf << std::endl;
+  }
 }
 // Report a failure
 void fail(beast::error_code ec, char const *what) noexcept
@@ -705,6 +708,14 @@ void xelis_session(
     return fail(ec, "close");
 }
 
+
+void xatumFailure(bool isDev) noexcept {
+  setcolor(RED);
+  if (isDev) printf("DEV | ");
+  printf("Xatum Disconnect\n");
+  setcolor(BRIGHT_WHITE);
+}
+
 void xatum_session(
     std::string host,
     std::string const &port,
@@ -724,7 +735,6 @@ void xatum_session(
   beast::error_code ec;
 
   // SSL_CTX_set_info_callback(ctx.native_handle(), openssl_log_callback);
-
 
   // These objects perform our I/O
   int addrCount = 0;
@@ -809,61 +819,125 @@ void xatum_session(
 #endif
 
   // Set the SNI hostname
-  if (!SSL_set_tlsext_host_name(stream.native_handle(), host.c_str())) {
-      throw beast::system_error{
-          static_cast<int>(::ERR_get_error()),
-          boost::asio::error::get_ssl_category()};
+  if (!SSL_set_tlsext_host_name(stream.native_handle(), host.c_str()))
+  {
+    throw beast::system_error{
+        static_cast<int>(::ERR_get_error()),
+        boost::asio::error::get_ssl_category()};
   }
 
   // Perform the SSL handshake
   beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(300));
   stream.async_handshake(ssl::stream_base::client, yield[ec]);
   if (ec)
-      return fail(ec, "handshake");
+    return fail(ec, "handshake");
 
   boost::json::object handshake_packet = {
       {"addr", wallet.c_str()},
       {"work", worker.c_str()},
       {"agent", (std::string("tnn-miner ") + versionString).c_str()},
-      {"algos", boost::json::array{"xel/0",}}
-  };
+      {"algos", boost::json::array{
+                    "xel/0",
+                }}};
 
   // std::string handshakeStr = handshake_packet.serialize();
-  std::string handshakeStr = "shake~" + boost::json::serialize(handshake_packet);
-
-  printf("packet: %s\n", handshakeStr.c_str());
+  std::string handshakeStr = "shake~" + boost::json::serialize(handshake_packet) + "\n";
 
   beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-  stream.async_write_some(boost::asio::buffer(handshakeStr), yield[ec]);
+  // stream.async_write_some(boost::asio::buffer(handshakeStr, 1024), yield[ec]);
+  // if (ec)
+  //     return fail(ec, "write");
+
+  size_t trans = boost::asio::async_write(stream, boost::asio::buffer(handshakeStr), yield[ec]);
   if (ec)
-      return fail(ec, "write");
-
-  boost::beast::flat_buffer buffer;
-
-  printf("after write\n");
-
-  std::stringstream workInfo;
+    return fail(ec, "Xatum C2S handshake");
 
   while (true)
   {
-    buffer.clear();
-    workInfo.str("");
-    workInfo.clear();
+    boost::asio::streambuf response;
+    std::stringstream workInfo;
     beast::get_lowest_layer(stream).expires_never();
-    stream.async_read_some(buffer.prepare(1024), yield[ec]);
-    if (ec)
-        return fail(ec, "write");
+    trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
+    if (ec && trans > 0)
+      return fail(ec, "Xatum async_read_until");
 
-    printf("after read\n");
+    if (trans > 0)
+    {
+      std::string data = beast::buffers_to_string(response.data());
+      // Consume the data from the buffer after processing it
+      response.consume(trans);
 
-    workInfo << beast::make_printable(buffer.data());
+      if (data == Xatum::pingPacket) {
+        boost::asio::async_write(stream, boost::asio::buffer(Xatum::pongPacket), yield[ec]);
+        if (ec)
+          return fail(ec, "Xatum pong");
+      } else {
+        Xatum::packet xPacket = Xatum::parsePacket(data, "~");
+        int r = handleXatumPacket(xPacket, isDev);
+        if (r == -1) {
+          return xatumFailure(isDev);
+        }
+      }
+    }
 
-    std::cout << "jobPacket: " << workInfo.str() << std::endl;
     boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
   }
+}
 
-  // Rest of the Xatum-specific logic
-  // ...
+int handleXatumPacket(Xatum::packet xPacket, bool isDev) {
+  std::string command = xPacket.command;
+  json data = xPacket.data;
+  int res = 0;
+
+  if (command == Xatum::print) {
+    mutex.lock();
+    int msgLevel = data.at("lvl").get<int>();
+    if (msgLevel < Xatum::logLevel) return 0;
+    
+    printf("\n");
+    if (isDev) {
+      setcolor(CYAN);
+      printf("DEV | ");
+    }
+
+    switch(msgLevel) {
+      case Xatum::ERROR_MSG:
+        if (!isDev) setcolor(RED);
+        res = -1;
+        printf("Xatum ERROR: ");
+        break;
+      case Xatum::WARN_MSG:
+        if (!isDev) setcolor(BRIGHT_YELLOW);
+        printf("Xatum WARNING: ");
+        break;
+      case Xatum::INFO_MSG:
+        if (!isDev) setcolor(BRIGHT_WHITE);
+        printf("Xatum INFO: ");
+        break;
+      case Xatum::VERBOSE_MSG:
+        if (!isDev) setcolor(BRIGHT_WHITE);
+        printf("Xatum INFO: ");
+        break;
+    }
+
+    printf("%s\n", data.at("msg").get<std::string>().c_str());
+
+    setcolor(BRIGHT_WHITE);
+    mutex.unlock();
+  }
+
+  else if (command == Xatum::newJob) {
+    uint64_t *diff = isDev ? &difficultyDev : &difficulty;
+    json *J = isDev ? &devJob : &job;
+
+    *diff = data.at("diff").get<uint64_t>();
+    *J = json::parse(data.at("blob").get<std::string>());
+
+    bool *C = isDev ? &devConnected : &isConnected;
+    *C = true;
+  }
+
+  return res;
 }
 
 void do_session(
@@ -1334,11 +1408,13 @@ Mining:
   printSupported();
   mutex.unlock();
 
-  if(miningAlgo == DERO_HASH && !(wallet.substr(0, 3) == "der" || wallet.substr(0, 3) == "det")) {
+  if (miningAlgo == DERO_HASH && !(wallet.substr(0, 3) == "der" || wallet.substr(0, 3) == "det"))
+  {
     std::cout << "Provided wallet address is not valid for Dero" << std::endl;
     return EXIT_FAILURE;
   }
-  if(miningAlgo == XELIS_HASH && !(wallet.substr(0, 3) == "xel" || wallet.substr(0, 3) == "xet")) {
+  if (miningAlgo == XELIS_HASH && !(wallet.substr(0, 3) == "xel" || wallet.substr(0, 3) == "xet"))
+  {
     std::cout << "Provided wallet address is not valid for Xelis" << std::endl;
     return EXIT_FAILURE;
   }
@@ -2018,8 +2094,7 @@ waitForJob:
 
         byte *WORK = devMine ? &devWork[0] : &work[0];
         byte *nonceBytes = &WORK[40];
-        *(uint32_t *)&WORK[XELIS_TEMPLATE_SIZE - (tid / (256 * 256))] = tid / 256;
-        uint64_t n = ((tid - 1) % 256) | (i << 8);
+        uint64_t n = ((tid - 1) % (256 * 256 * 256)) | (i << 24);
         memcpy(nonceBytes, &n, 8);
 
         if (littleEndian())

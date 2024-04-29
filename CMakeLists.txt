@@ -94,8 +94,6 @@ if("${LSB_RELEASE_CODENAME_SHORT}" STREQUAL "jammy")
     set(BOOST_INCLUDE_DIRS "${BOOST_ROOT}")
     set(BOOST_LIBRARY_DIRS "${BOOST_ROOT}/libs")
   endif (Boost_NO_SYSTEM_PATHS)
-else()
-  set(BOOST_INCLUDE_DIRS "")
 endif()
 
 set(Boost_USE_STATIC_LIBS ON)

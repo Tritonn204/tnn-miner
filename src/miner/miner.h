@@ -12,6 +12,7 @@
 #include <terminal.h>
 #include <string>
 #include <num.h>
+#include <xatum.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -63,7 +64,6 @@ std::string devPort[] = {
   "10300",
   "8080"
 };
-
 // @ tritonn on Dero Name Service
 std::string devWallet[] = {
   "dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw4wjqqp6y2n7",
@@ -88,6 +88,8 @@ Num maxU256;
 void getWork(bool isDev, int algo);
 void sendWork();
 void devWork();
+
+int handleXatumPacket(Xatum::packet xPacket, bool isDev);
 
 void mine(int tid, int algo = DERO_HASH);
 void mineDero(int tid);

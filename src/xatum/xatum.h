@@ -6,71 +6,44 @@
 #include <sstream>
 #include <iomanip>
 
-#include <xelis-hash.hpp>
+#include <nlohmann/json.hpp>
+
+using json = nlohmann::json;
 
 namespace Xatum
 {
-  typedef struct HandshakePacket
+  std::string handshake = "shake~";
+  std::string print = "print~";
+  std::string newJob = "job~";
+  std::string submission = "submit~";
+  std::string success = "success~";
+  std::string pingPacket = "ping~{}";
+  std::string pongPacket = "ping~{}";
+
+  const int ERROR_MSG = 3;
+  const int WARN_MSG = 2;
+  const int INFO_MSG = 1;
+  const int VERBOSE_MSG = 0;
+
+  int logLevel = 3;
+
+  typedef struct packet
   {
-    uint32_t packet_type;
-    std::string addr;
-    std::string work;
-    std::string agent;
-    std::vector<std::string> algos;
+    std::string command;
+    json data;
+  } packet;
 
-    std::string serialize() const
-    {
-      std::ostringstream oss;
-      oss << packet_type;
-      oss << addr;
-      oss << work;
-      oss << agent;
-      for (const auto &algo : algos)
-      {
-        oss << algo;
-      }
-      return oss.str();
-    }
-  } HandshakePacket;
-
-  typedef struct JobPacket
+  packet parsePacket(const std::string &str, const std::string &delimiter)
   {
-    std::string algo;
-    uint64_t diff;
-    uint8_t blob[XELIS_TEMPLATE_SIZE];
-
-    std::string serialize() const
+    size_t delimiterPos = str.find(delimiter);
+    if (delimiterPos != std::string::npos)
     {
-      std::ostringstream oss;
-      oss << algo;
-      oss << diff;
-      oss << std::hex;
-      for (size_t i = 0; i < XELIS_TEMPLATE_SIZE; ++i)
+      size_t halfPos = delimiterPos + delimiter.length();
+      if (halfPos < str.length())
       {
-        oss << std::setw(2) << std::setfill('0') << static_cast<int>(blob[i]);
+        return {str.substr(0, halfPos), json::parse(str.substr(halfPos))};
       }
-      return oss.str();
     }
-  } JobPacket;
-
-  typedef struct SubmitPacket
-  {
-    uint8_t data[XELIS_TEMPLATE_SIZE];
-    uint8_t hash[32];
-
-    std::string serialize() const
-    {
-      std::ostringstream oss;
-      oss << std::hex;
-      for (size_t i = 0; i < XELIS_TEMPLATE_SIZE; ++i)
-      {
-        oss << std::setw(2) << std::setfill('0') << static_cast<int>(data[i]);
-      }
-      for (size_t i = 0; i < 32; ++i)
-      {
-        oss << std::setw(2) << std::setfill('0') << static_cast<int>(hash[i]);
-      }
-      return oss.str();
-    }
-  } SubmitPacket;
+    return {str, json({})};
+  }
 }
