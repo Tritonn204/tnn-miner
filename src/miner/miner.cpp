@@ -34,7 +34,6 @@
 #include <iostream>
 #include <string>
 #include <miner.h>
-#include <nlohmann/json.hpp>
 
 #include <random>
 
@@ -83,13 +82,11 @@ namespace ssl = boost::asio::ssl;       // from <boost/asio/ssl.hpp>
 namespace po = boost::program_options;  // from <boost/program_options.hpp>
 using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
 
-using json = nlohmann::json;
-
 boost::mutex mutex;
 boost::mutex wsMutex;
 
-json job;
-json devJob;
+boost::json::value job;
+boost::json::value devJob;
 boost::json::object share;
 boost::json::object devShare;
 
@@ -151,6 +148,7 @@ void do_session(
     bool isDev,
     int fixedDiff = 0)
 {
+  boost::json::error_code jsonEc;
   beast::error_code ec;
   std::string fixedDiffStr = "";
   if(fixedDiff > 0) {
@@ -286,7 +284,7 @@ void do_session(
   // This buffer will hold the incoming message
   beast::flat_buffer buffer;
   std::stringstream workInfo;
-  json workData;
+  boost::json::value workData;
 
   while (true)
   {
@@ -321,9 +319,11 @@ void do_session(
 
         beast::get_lowest_layer(ws).expires_never();
         workInfo << beast::make_printable(buffer.data());
-        if (json::accept(workInfo.str()))
+
+        workData = boost::json::parse(workInfo.str(), jsonEc);
+        if (!jsonEc)
         {
-          workData = json::parse(workInfo.str());
+          //workData = boost::json::parse(workInfo.str());
           if ((isDev ? (workData.at("height") != devHeight) : (workData.at("height") != ourHeight)))
           {
             // mutex.lock();
@@ -331,7 +331,7 @@ void do_session(
               devJob = workData;
             else
               job = workData;
-            json *J = isDev ? &devJob : &job;
+            boost::json::value *J = isDev ? &devJob : &job;
             // mutex.unlock();
 
             if ((*J).at("lasterror") != "")
@@ -342,16 +342,16 @@ void do_session(
 
             if (!isDev)
             {
-              currentBlob = std::string((*J).at("blockhashing_blob"));
+              currentBlob = (*J).at("blockhashing_blob").as_string();
               //blockCounter = (*J).at("blocks");
               //miniBlockCounter = (*J).at("miniblocks");
               //rejected = (*J).at("rejected");
               //hashrate = (*J).at("difficultyuint64");
-              ourHeight = (*J).at("height");
-              difficulty = (*J).at("difficultyuint64");
+              ourHeight = (*J).at("height").as_int64();
+              difficulty = (*J).at("difficultyuint64").as_int64();
               // printf("NEW JOB RECEIVED | Height: %d | Difficulty %" PRIu64 "\n", ourHeight, difficulty);
-              accepted = (*J).at("miniblocks");
-              rejected = (*J).at("rejected");
+              accepted = (*J).at("miniblocks").as_int64();
+              rejected = (*J).at("rejected").as_int64();
               if (!isConnected)
               {
                 mutex.lock();
@@ -368,9 +368,9 @@ void do_session(
             }
             else
             {
-              difficultyDev = (*J).at("difficultyuint64");
-              devBlob = std::string((*J).at("blockhashing_blob"));
-              devHeight = (*J).at("height");
+              difficultyDev = (*J).at("difficultyuint64").as_int64();
+              devBlob = (*J).at("blockhashing_blob").as_string();
+              devHeight = (*J).at("height").as_int64();
               if (!devConnected)
               {
                 mutex.lock();
@@ -585,10 +585,6 @@ int main(int argc, char **argv)
       return 1;
     }
     goto Benchmarking;
-  }
-  if (vm.count("dero-verify")) {
-    int rc = runOpVerificationTests(useLookupMine);
-    return rc;
   }
 
 fillBlanks:
@@ -1196,12 +1192,12 @@ void benchmark(int tid)
   }
   while (true)
   {
-    json myJob = job;
-    json myJobDev = devJob;
+    boost::json::value myJob = job;
+    boost::json::value myJobDev = devJob;
     localJobCounter = jobCounter;
 
     byte *b2 = new byte[MINIBLOCK_SIZE];
-    hexstr_to_bytes(myJob.at("blockhashing_blob"), b2);
+    hexstr_to_bytes(std::string(myJob.at("blockhashing_blob").as_string()), b2);
     memcpy(work, b2, MINIBLOCK_SIZE);
     delete[] b2;
 
@@ -1267,24 +1263,24 @@ waitForJob:
     try
     {
       mutex.lock();
-      json myJob = job;
-      json myJobDev = devJob;
+      boost::json::value myJob = job;
+      boost::json::value myJobDev = devJob;
       localJobCounter = jobCounter;
       mutex.unlock();
 
       byte *b2 = new byte[MINIBLOCK_SIZE];
-      hexstr_to_bytes(myJob.at("blockhashing_blob"), b2);
+      hexstr_to_bytes(std::string(myJob.at("blockhashing_blob").as_string()), b2);
       memcpy(work, b2, MINIBLOCK_SIZE);
       delete[] b2;
-      //hexstr_to_bytes_direct(myJob.at("blockhashing_blob"), work);
+      //hexstr_to_bytes_direct(std::string(myJob.at("blockhashing_blob").as_string()), work);
 
       if (devConnected)
       {
         byte *b2d = new byte[MINIBLOCK_SIZE];
-        hexstr_to_bytes(myJobDev.at("blockhashing_blob"), b2d);
+        hexstr_to_bytes(std::string(myJobDev.at("blockhashing_blob").as_string()), b2d);
         memcpy(devWork, b2d, MINIBLOCK_SIZE);
         delete[] b2d;
-        //hexstr_to_bytes_direct(myJobDev.at("blockhashing_blob"), devWork);
+        //hexstr_to_bytes_direct(std::string(myJobDev.at("blockhashing_blob").as_string()), devWork);
       }
 
       memcpy(&work[MINIBLOCK_SIZE - 12], random_buf, 12);
