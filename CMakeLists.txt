@@ -122,6 +122,7 @@ include_directories(
   "${PROJECT_SOURCE_DIR}/src/xelis-hash/"
   "${PROJECT_SOURCE_DIR}/src/xatum/"
   "${PROJECT_SOURCE_DIR}/src/miner/"
+  "${PROJECT_SOURCE_DIR}/src/broadcast/"
   "${BOOST_INCLUDE_DIRS}"
 )
 
@@ -139,6 +140,7 @@ file(GLOB all_SRCS
   "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.c"
   "${PROJECT_SOURCE_DIR}/src/xelis-hash/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/xelis-hash/*.c"
+  "${PROJECT_SOURCE_DIR}/src/broadcast/*.cpp"
   "${ASM_SOURCES}"
   # "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cu"
   # "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cuh"
