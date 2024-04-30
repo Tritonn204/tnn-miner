@@ -844,7 +844,7 @@ void xatum_session(
         // if (lastHash.compare((*S).at("hash").get_string()) == 0) continue;
         // lastHash = (*S).at("hash").get_string();
 
-        printf("submitting share: %s\n", msg.c_str());
+        // printf("submitting share: %s\n", msg.c_str());
         // Acquire a lock before writing to the WebSocket
         boost::asio::async_write(stream, boost::asio::buffer(msg), [&](const boost::system::error_code &ec, std::size_t)
                                  {
