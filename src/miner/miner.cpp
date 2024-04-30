@@ -2305,9 +2305,7 @@ waitForJob:
         DIFF = devMine ? difficultyDev : difficulty;
         cmpDiff = ConvertDifficultyToBig(DIFF, XELIS_HASH);
 
-        uint64_t *nonce = &i;
-        if (devConnected && devMine)
-          nonce = &i_dev;
+        uint64_t *nonce = devMine ? &i_dev : &i;
         (*nonce)++;
 
         // printf("nonce = %llu\n", *nonce);
@@ -2352,6 +2350,10 @@ waitForJob:
           if (devMine)
           {
             mutex.lock();
+            if (localJobCounter != jobCounter || localDevHeight != devHeight) {
+              mutex.unlock();
+              break;
+            }
             setcolor(CYAN);
             std::cout << "\n(DEV) Thread " << tid << " found a dev share\n";
             setcolor(BRIGHT_WHITE);
@@ -2373,6 +2375,10 @@ waitForJob:
           else
           {
             mutex.lock();
+            if (localJobCounter != jobCounter || localOurHeight != ourHeight) {
+              mutex.unlock();
+              break;
+            }
             setcolor(BRIGHT_YELLOW);
             std::cout << "\nThread " << tid << " found a nonce!\n";
             setcolor(BRIGHT_WHITE);
