@@ -62,8 +62,6 @@ General:
   --port arg              The port used to connect to the node
   --wallet arg            Wallet address for receiving mining rewards
   --threads arg           The amount of mining threads to create, default is 1
-  --worker-name arg       Sets the worker name for this instance when mining
-                          Xelis
   --dev-fee arg           Your desired dev fee percentage, default is 2.5,
                           minimum is 1
   --no-lock               Disables CPU affinity / CPU core binding
@@ -88,6 +86,8 @@ Xelis:
   --xelis-bench           Run a benchmark of xelis-hash with 1 thread
   --xelis-test            Run the xelis-hash tests from the official source
                           code
+  --worker-name arg       Sets the worker name for this instance when mining
+                          Xelis
 ```
 ### If the miner is run without any args, a CLI wizard will simply ask you to provide the required options one at a time.
 
