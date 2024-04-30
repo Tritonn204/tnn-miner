@@ -938,6 +938,12 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
   if (command == Xatum::print)
   {
     mutex.lock();
+    if (Xatum::accepted.compare(data.at("msg").get<std::string>()) == 0)
+      accepted++;
+
+    if (Xatum::stale.compare(data.at("msg").get<std::string>()) == 0)
+      rejected++;
+    
     int msgLevel = data.at("lvl").get<int>();
     if (msgLevel < Xatum::logLevel)
       return 0;

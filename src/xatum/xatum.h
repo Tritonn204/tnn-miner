@@ -20,6 +20,9 @@ namespace Xatum
   std::string pingPacket = "ping~{}\n";
   std::string pongPacket = "pong~{}\n";
 
+  std::string accepted = "share accepted";
+  std::string stale = "invalid extra nonce";
+
   const int ERROR_MSG = 3;
   const int WARN_MSG = 2;
   const int INFO_MSG = 1;
