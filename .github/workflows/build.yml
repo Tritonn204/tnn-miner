@@ -3,7 +3,7 @@ name: Build Tnn-miner on Ubuntu 22.04
 on:
   push:
     branches:
-    - '*dev*'
+    - '*'
     tags:
       - "v*.*.*"
 
@@ -19,7 +19,8 @@ jobs:
         sudo update-alternatives --list clang
         sudo update-alternatives --list clang++
         sudo update-alternatives --get-selections
-        sudo apt update && sudo apt upgrade -y
+        sudo apt update
+        #sudo apt upgrade -y
     - name: 'Setup pre-reqs'
       run: |
         sudo apt install git wget build-essential cmake clang libssl-dev libudns-dev libfmt-dev libc++-dev
@@ -49,30 +50,25 @@ jobs:
         sudo update-alternatives --display clang
         clang --version
         clang++ --version
-    - name: 'Compile boost'
-      run: |
-        wget -q https://github.com/boostorg/boost/releases/download/boost-1.82.0/boost-1.82.0.tar.gz
-        tar -xf boost-1.82.0.tar.gz
-        cd boost-1.82.0/
-        ./bootstrap.sh --with-toolset=clang 
-        ./b2 clean
-        ./b2 toolset=clang cxxflags=-std=c++20 -stdlib=libc++ linkflags=-stdlib=libc++ link=static
     - name: 'Compile Tnn-miner'
       run: |
         mkdir build
         cd build
         cmake ..
         make -j$(nproc)
-        tar -zcvf ../tnn-miner.tar.gz Tnn-miner
+        tar -cvf ../tnn-miner.tar Tnn-miner
     - name: 'Archive tnn-miner.tar.gz'
       uses: actions/upload-artifact@v4
       with:
-        name: tnn-miner.tar.gz
-        path: ./tnn-miner.tar.gz
+        name: tnn-miner.tar
+        path: ./tnn-miner.tar
         retention-days: 5
-    - name: 'Test Tnn-miner'
+    - name: 'Dero Test'
       run: |
-        ./build/Tnn-miner --test
+        ./build/Tnn-miner --dero-test
+    - name: 'Xelis Test'
+      run: |
+        ./build/Tnn-miner --xelis-test
     - name: 'Release'
       uses: softprops/action-gh-release@v2
       if: startsWith(github.ref, 'refs/tags/')
