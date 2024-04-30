@@ -714,7 +714,6 @@ void xelis_session(
       }
       else
       {
-        printf("read error\n");
         bool *B = isDev ? &devConnected : &isConnected;
         (*B) = false;
         return fail(ec, "async_read");
