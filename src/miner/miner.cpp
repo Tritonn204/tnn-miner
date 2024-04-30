@@ -27,6 +27,7 @@
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/ssl/error.hpp>
+#include <boost/asio/ip/host_name.hpp>
 #include <boost/json.hpp>
 
 #include <boost/thread.hpp>
@@ -61,6 +62,7 @@
 
 #include <openssl/err.h>
 #include <openssl/ssl.h>
+#include <base64.hpp>
 
 #include <bit>
 
@@ -95,10 +97,11 @@ using json = nlohmann::json;
 boost::mutex mutex;
 boost::mutex wsMutex;
 
-json job;
-json devJob;
-boost::json::object share;
-boost::json::object devShare;
+json job = json({});
+json devJob = json({});
+;
+boost::json::object share = {};
+boost::json::object devShare = {};
 
 std::string currentBlob;
 std::string devBlob;
@@ -120,8 +123,8 @@ int accepted;
 int firstRejected;
 
 uint64_t hashrate;
-uint64_t ourHeight;
-uint64_t devHeight;
+uint64_t ourHeight = 0;
+uint64_t devHeight = 0;
 uint64_t difficulty;
 uint64_t difficultyDev;
 
@@ -153,7 +156,8 @@ void fail(beast::error_code ec, char const *what) noexcept
 {
   mutex.lock();
   setcolor(RED);
-  std::cerr << what << ": " << ec.message() << "\n";
+  std::cerr << '\n'
+            << what << ": " << ec.message() << "\n";
   setcolor(BRIGHT_WHITE);
   mutex.unlock();
 }
@@ -301,9 +305,11 @@ void dero_session(
 
   boost::thread submission_thread([&]
                                   {
+      bool *C = isDev ? &isConnected : &devConnected;
+      bool *B = isDev ? &submittingDev : &submitting;
       while (true) {
-          bool *B = isDev ? &submittingDev : &submitting;
-
+        try{
+          if (!(*C)) break;
           if (*B) {
               boost::json::object *S = isDev ? &devShare : &share;
               std::string msg = boost::json::serialize(*S);
@@ -314,13 +320,13 @@ void dero_session(
                       setcolor(RED);
                       printf("submission error\n");
                       setcolor(BRIGHT_WHITE);
-                  } else {
-                      *B = false;
                   }
               });
+              (*B) = false;
           }
+        } catch(...) {}
 
-          boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+        boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
       } });
 
   while (true)
@@ -572,12 +578,16 @@ void xelis_session(
   beast::flat_buffer buffer;
   std::stringstream workInfo;
 
+  bool subStart = false;
+
   boost::thread submission_thread([&]
                                   {
-        while (true) {
-            bool *B = isDev ? &submittingDev : &submitting;
-
-            if (*B) {
+          bool *C = isDev ? &isConnected : &devConnected;
+          bool *B = isDev ? &submittingDev : &submitting;
+          while (true) {
+            try {
+              if (!(*C)) break;
+              if (*B) {
                 boost::json::object *S = isDev ? &devShare : &share;
                 std::string msg = boost::json::serialize(*S);
 
@@ -585,18 +595,16 @@ void xelis_session(
                 ws.async_write(boost::asio::buffer(msg), [&](const boost::system::error_code& ec, std::size_t) {
                     if (ec) {
                         setcolor(RED);
-                        printf("async_write: submission error\n");
+                        printf("\nasync_write: submission error\n");
                         setcolor(BRIGHT_WHITE);
-                    } else {
-                        *B = false;
                     }
                 });
-            }
+                (*B) = false;
+              }
+            } catch(...){}
 
             boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
         } });
-
-  submission_thread.detach();
 
   while (true)
   {
@@ -638,7 +646,7 @@ void xelis_session(
               if (!isDev)
               {
                 currentBlob = (*J).at("template").get<std::string>();
-                ourHeight = (*J).at("height").get<uint64_t>();
+                ourHeight++;
                 difficulty = std::stoull((*J).at("difficulty").get<std::string>());
 
                 if (!isConnected)
@@ -658,7 +666,7 @@ void xelis_session(
               else
               {
                 devBlob = (*J).at("template").get<std::string>();
-                devHeight = (*J).at("height").get<uint64_t>();
+                devHeight++;
                 difficultyDev = std::stoull((*J).at("difficulty").get<std::string>());
 
                 if (!devConnected)
@@ -697,21 +705,24 @@ void xelis_session(
       setcolor(RED);
       std::cout << "ws error: " << e.what() << std::endl;
       setcolor(BRIGHT_WHITE);
+      submission_thread.interrupt();
     }
     boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
   }
 
   // Close the WebSocket connection
+  submission_thread.interrupt();
   ws.async_close(websocket::close_code::normal, yield[ec]);
   printf("loop broken\n");
   if (ec)
     return fail(ec, "close");
 }
 
-
-void xatumFailure(bool isDev) noexcept {
+void xatumFailure(bool isDev) noexcept
+{
   setcolor(RED);
-  if (isDev) printf("DEV | ");
+  if (isDev)
+    printf("DEV | ");
   printf("Xatum Disconnect\n");
   setcolor(BRIGHT_WHITE);
 }
@@ -852,72 +863,135 @@ void xatum_session(
   if (ec)
     return fail(ec, "Xatum C2S handshake");
 
+  // This buffer will hold the incoming message
+  beast::flat_buffer buffer;
+  std::stringstream workInfo;
+
+  boost::thread submission_thread([&]
+                                  {
+        // std::string lastHash;
+        bool *C = isDev ? &isConnected : &devConnected;
+        bool *B = isDev ? &submittingDev : &submitting;
+        while (true) {
+            try{
+              if (!(*C)) break;
+              if (*B)
+              {
+                boost::json::object *S = &share;
+                if (isDev) S = &devShare;
+                std::string msg = Xatum::submission + boost::json::serialize(*S) + "\n";
+                // if (lastHash.compare((*S).at("hash").get_string()) == 0) continue;
+                // lastHash = (*S).at("hash").get_string();
+
+                // printf("submitting share: %s\n", msg.c_str());
+                // Acquire a lock before writing to the WebSocket
+                boost::asio::async_write(stream, boost::asio::buffer(msg), [&](const boost::system::error_code& ec, std::size_t) {
+                      if (ec) {
+                          setcolor(RED);
+                          printf("\nasync_write: submission error\n");
+                          setcolor(BRIGHT_WHITE);
+                      }
+                  });
+                (*B) = false;
+              }
+              if (!(*C)) break;
+            } catch(...){}
+
+            boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+        } });
+
   while (true)
   {
-    boost::asio::streambuf response;
-    std::stringstream workInfo;
-    beast::get_lowest_layer(stream).expires_never();
-    trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
-    if (ec && trans > 0)
-      return fail(ec, "Xatum async_read_until");
-
-    if (trans > 0)
+    try
     {
-      std::string data = beast::buffers_to_string(response.data());
-      // Consume the data from the buffer after processing it
-      response.consume(trans);
+      boost::asio::streambuf response;
+      std::stringstream workInfo;
+      beast::get_lowest_layer(stream).expires_never();
+      trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
+      if (ec && trans > 0)
+        return fail(ec, "Xatum async_read_until");
 
-      if (data == Xatum::pingPacket) {
-        boost::asio::async_write(stream, boost::asio::buffer(Xatum::pongPacket), yield[ec]);
-        if (ec)
-          return fail(ec, "Xatum pong");
-      } else {
-        Xatum::packet xPacket = Xatum::parsePacket(data, "~");
-        int r = handleXatumPacket(xPacket, isDev);
-        if (r == -1) {
-          return xatumFailure(isDev);
+      if (trans > 0)
+      {
+        std::string data = beast::buffers_to_string(response.data());
+        // Consume the data from the buffer after processing it
+        response.consume(trans);
+
+        if (data.compare(Xatum::pingPacket) == 0)
+        {
+          boost::asio::async_write(stream, boost::asio::buffer(Xatum::pongPacket), yield[ec]);
+          if (ec)
+            return fail(ec, "Xatum pong");
+        }
+        else
+        {
+          Xatum::packet xPacket = Xatum::parsePacket(data, "~");
+          int r = handleXatumPacket(xPacket, isDev);
+          // if (r == -1) {
+          //   bool *B = isDev ? &devConnected : &isConnected;
+          //   (*B) = false;
+          //   // return xatumFailure(isDev);
+          // }
         }
       }
     }
-
+    catch (const std::exception &e)
+    {
+      setcolor(RED);
+      std::cout << "ws error: " << e.what() << std::endl;
+      setcolor(BRIGHT_WHITE);
+      submission_thread.interrupt();
+    }
     boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
   }
+
+  submission_thread.interrupt();
+  stream.async_shutdown(yield[ec]);
 }
 
-int handleXatumPacket(Xatum::packet xPacket, bool isDev) {
+int handleXatumPacket(Xatum::packet xPacket, bool isDev)
+{
   std::string command = xPacket.command;
   json data = xPacket.data;
   int res = 0;
 
-  if (command == Xatum::print) {
+  if (command == Xatum::print)
+  {
     mutex.lock();
     int msgLevel = data.at("lvl").get<int>();
-    if (msgLevel < Xatum::logLevel) return 0;
-    
+    if (msgLevel < Xatum::logLevel)
+      return 0;
+
     printf("\n");
-    if (isDev) {
+    if (isDev)
+    {
       setcolor(CYAN);
       printf("DEV | ");
     }
 
-    switch(msgLevel) {
-      case Xatum::ERROR_MSG:
-        if (!isDev) setcolor(RED);
-        res = -1;
-        printf("Xatum ERROR: ");
-        break;
-      case Xatum::WARN_MSG:
-        if (!isDev) setcolor(BRIGHT_YELLOW);
-        printf("Xatum WARNING: ");
-        break;
-      case Xatum::INFO_MSG:
-        if (!isDev) setcolor(BRIGHT_WHITE);
-        printf("Xatum INFO: ");
-        break;
-      case Xatum::VERBOSE_MSG:
-        if (!isDev) setcolor(BRIGHT_WHITE);
-        printf("Xatum INFO: ");
-        break;
+    switch (msgLevel)
+    {
+    case Xatum::ERROR_MSG:
+      if (!isDev)
+        setcolor(RED);
+      res = -1;
+      printf("Xatum ERROR: ");
+      break;
+    case Xatum::WARN_MSG:
+      if (!isDev)
+        setcolor(BRIGHT_YELLOW);
+      printf("Xatum WARNING: ");
+      break;
+    case Xatum::INFO_MSG:
+      if (!isDev)
+        setcolor(BRIGHT_WHITE);
+      printf("Xatum INFO: ");
+      break;
+    case Xatum::VERBOSE_MSG:
+      if (!isDev)
+        setcolor(BRIGHT_WHITE);
+      printf("Xatum INFO: ");
+      break;
     }
 
     printf("%s\n", data.at("msg").get<std::string>().c_str());
@@ -926,15 +1000,73 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev) {
     mutex.unlock();
   }
 
-  else if (command == Xatum::newJob) {
+  else if (command == Xatum::newJob)
+  {
     uint64_t *diff = isDev ? &difficultyDev : &difficulty;
     json *J = isDev ? &devJob : &job;
+    uint64_t *h = isDev ? &devHeight : &ourHeight;
 
+    std::string *B = isDev ? &devBlob : &currentBlob;
+
+    if (data.at("blob").get<std::string>().compare(*B) == 0)
+      return 0;
+    *B = data.at("blob").get<std::string>();
+
+    // std::cout << data << std::endl;
+    // printf("new job\n");
     *diff = data.at("diff").get<uint64_t>();
-    *J = json::parse(data.at("blob").get<std::string>());
+    (*J).emplace("template", (*B).c_str());
 
     bool *C = isDev ? &devConnected : &isConnected;
+
+    if (!*C)
+    {
+      if (!isDev)
+      {
+        mutex.lock();
+        setcolor(BRIGHT_YELLOW);
+        printf("Mining at: %s to wallet %s\n", host.c_str(), wallet.c_str());
+        setcolor(CYAN);
+        printf("Dev fee: %.2f", devFee);
+        std::cout << "%" << std::endl;
+        setcolor(BRIGHT_WHITE);
+        mutex.unlock();
+      }
+      else
+      {
+        mutex.lock();
+        setcolor(CYAN);
+        printf("Connected to dev node: %s\n", host.c_str());
+        setcolor(BRIGHT_WHITE);
+        mutex.unlock();
+      }
+    }
+
     *C = true;
+
+    (*h)++;
+    jobCounter++;
+  }
+
+  else if (!isDev && command == Xatum::success)
+  {
+    // std::cout << data << std::endl;
+    if (data.at("msg").get<std::string>() == "ok")
+    {
+      printf("accepted!");
+      accepted++;
+    }
+    else
+    {
+      rejected++;
+      setcolor(RED);
+      printf("\nXatum Share Rejected: %s\n", data.at("msg").get<std::string>().c_str());
+      setcolor(BRIGHT_WHITE);
+    }
+  }
+  else
+  {
+    printf("unknown command: %s\n", command.c_str());
   }
 
   return res;
@@ -962,8 +1094,10 @@ void do_session(
     {
     case XELIS_SOLO:
       xelis_session(host, port, wallet, worker, ioc, yield, isDev);
+      break;
     case XELIS_XATUM:
       xatum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+      break;
     case XELIS_STRATUM:
       // TODO
       break;
@@ -972,54 +1106,6 @@ void do_session(
   }
   }
 }
-
-#pragma clang optimize off
-void initMaskTable()
-{
-#if defined(__AVX2__)
-  alignas(16) uint32_t v[8];
-  for (int i = 0; i < 32; i++)
-  {
-    g_maskTable[i] = _mm256_setzero_si256(); // Initialize mask with all zeros
-
-    __m128i lower_part = _mm_set1_epi64x(0);
-    __m128i upper_part = _mm_set1_epi64x(0);
-
-    if (i > 24)
-    {
-      lower_part = _mm_set1_epi64x(-1ULL);
-      upper_part = _mm_set_epi64x(-1ULL >> (8 - (i % 8)) * 8, -1ULL);
-    }
-    else if (i > 16)
-    {
-      lower_part = _mm_set_epi64x(-1ULL, -1ULL);
-      upper_part = _mm_set_epi64x(0, -1ULL >> (8 - (i % 8)) * 8);
-    }
-    else if (i > 8)
-    {
-      lower_part = _mm_set_epi64x(-1ULL >> (8 - (i % 8)) * 8, -1ULL);
-    }
-    else
-    {
-      lower_part = _mm_set_epi64x(0, -1ULL >> (8 - (i % 8)) * 8);
-    }
-
-    g_maskTable[i] = _mm256_insertf128_si256(g_maskTable[i], lower_part, 0); // Set lower 128 bits
-    g_maskTable[i] = _mm256_insertf128_si256(g_maskTable[i], upper_part, 1); // Set upper 128 bits
-
-    // If this printf is removed, then the Clang compiler does it's weird optimizations again
-    //_mm256_storeu_si256((__m256i*)v, g_maskTable[i]);
-    // printf("%02d v8_u32: %x %x %x %x %x %x %x %x\n", i, v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
-  }
-
-  // printf("g_maskTable:\n");
-  // for(int i = 0; i < 32; i++) {
-  //   _mm256_storeu_si256((__m256i*)v, g_maskTable[i]);
-  //   printf("%02d v8_u32: %x %x %x %x %x %x %x %x\n", i, v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
-  // }
-#endif
-}
-#pragma clang optimize on
 
 //------------------------------------------------------------------------------
 
@@ -1053,8 +1139,6 @@ int main(int argc, char **argv)
   oneLsh256 = Num(1) << 256;
   maxU256 = Num(2).pow(256) - 1;
 
-  initMaskTable();
-
   // default values
   bool lockThreads = true;
   devFee = 2.5;
@@ -1087,9 +1171,14 @@ int main(int argc, char **argv)
     return 0;
   }
 
+  if (vm.count("dero"))
+  {
+    symbol = "DERO";
+  }
+
   if (vm.count("xelis"))
   {
-    miningAlgo = XELIS_HASH;
+    symbol = "XEL";
   }
 
   if (vm.count("xatum"))
@@ -1138,6 +1227,10 @@ int main(int argc, char **argv)
   if (vm.count("worker-name"))
   {
     workerName = vm["worker-name"].as<std::string>();
+  }
+  else
+  {
+    workerName = boost::asio::ip::host_name();
   }
   if (vm.count("threads"))
   {
@@ -1215,11 +1308,54 @@ int main(int argc, char **argv)
 
 fillBlanks:
 {
-  printf("%s %s\n", coinNames[miningAlgo].c_str(), inputIntro);
+  if (symbol == nullArg)
+  {
+    setcolor(CYAN);
+    printf("%s\n", coinPrompt);
+    setcolor(BRIGHT_WHITE);
+
+    std::string cmdLine;
+    std::getline(std::cin, cmdLine);
+    if (cmdLine != "" && cmdLine.find_first_not_of(' ') != std::string::npos)
+    {
+      symbol = cmdLine;
+    }
+    else
+    {
+      symbol = "DERO";
+      setcolor(BRIGHT_YELLOW);
+      printf("Default value will be used: %s\n\n", "DERO");
+      setcolor(BRIGHT_WHITE);
+    }
+  }
+
+  auto it = coinSelector.find(symbol);
+  if (it != coinSelector.end())
+  {
+    miningAlgo = it->second;
+  }
+  else
+  {
+    setcolor(RED);
+    std::cout << "ERROR: Invalid coin symbol: " << symbol << std::endl;
+    setcolor(BRIGHT_YELLOW);
+    it = coinSelector.begin();
+    printf("Supported symbols are:\n");
+    while (it != coinSelector.end())
+    {
+      printf("%s\n", it->first.c_str());
+      it++;
+    }
+    printf("\n");
+    setcolor(BRIGHT_WHITE);
+    symbol = nullArg;
+    goto fillBlanks;
+  }
+
+  int i = 0;
   std::vector<std::string *> stringParams = {&host, &port, &wallet};
   std::vector<const char *> stringDefaults = {defaultHost[miningAlgo].c_str(), devPort[miningAlgo].c_str(), devSelection[miningAlgo].c_str()};
   std::vector<const char *> stringPrompts = {daemonPrompt, portPrompt, walletPrompt};
-  int i = 0;
   for (std::string *param : stringParams)
   {
     if (*param == nullArg)
@@ -1240,6 +1376,32 @@ fillBlanks:
         setcolor(BRIGHT_YELLOW);
         printf("Default value will be used: %s\n\n", (*param).c_str());
         setcolor(BRIGHT_WHITE);
+      }
+
+      if (i == 0)
+      {
+        auto it = coinSelector.find(symbol);
+        if (it != coinSelector.end())
+        {
+          miningAlgo = it->second;
+        }
+        else
+        {
+          setcolor(RED);
+          std::cout << "ERROR: Invalid coin symbol: " << symbol << std::endl;
+          setcolor(BRIGHT_YELLOW);
+          it = coinSelector.begin();
+          printf("Supported symbols are:\n");
+          while (it != coinSelector.end())
+          {
+            printf("%s\n", it->first.c_str());
+            it++;
+          }
+          printf("\n");
+          setcolor(BRIGHT_WHITE);
+          symbol = nullArg;
+          goto fillBlanks;
+        }
       }
     }
     i++;
@@ -1286,8 +1448,9 @@ fillBlanks:
       }
     }
   }
-}
   printf("\n");
+}
+
   goto Mining;
 Testing:
 {
@@ -1421,7 +1584,7 @@ Mining:
   boost::thread GETWORK(getWork, false, miningAlgo);
   // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
-  // boost::thread DEVWORK(getWork, true, miningAlgo);
+  boost::thread DEVWORK(getWork, true, miningAlgo);
   // setPriority(DEVWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
   unsigned int n = std::thread::hardware_concurrency();
@@ -1699,7 +1862,7 @@ connectionAttempt:
       case XELIS_HASH:
       {
         HOST = host;
-        WORKER = workerName + "_tnn-dev";
+        WORKER = "tnn-dev";
         PORT = port;
         break;
       }
@@ -1849,7 +2012,7 @@ void benchmark(int tid)
     localJobCounter = jobCounter;
 
     byte *b2 = new byte[MINIBLOCK_SIZE];
-    hexstr_to_bytes(myJob.at("blockhashing_blob"), b2);
+    hexstrToBytes(myJob.at("blockhashing_blob"), b2);
     memcpy(work, b2, MINIBLOCK_SIZE);
     delete[] b2;
 
@@ -1932,14 +2095,14 @@ waitForJob:
       mutex.unlock();
 
       byte *b2 = new byte[MINIBLOCK_SIZE];
-      hexstr_to_bytes(myJob.at("blockhashing_blob"), b2);
+      hexstrToBytes(myJob.at("blockhashing_blob"), b2);
       memcpy(work, b2, MINIBLOCK_SIZE);
       delete[] b2;
 
       if (devConnected)
       {
         byte *b2d = new byte[MINIBLOCK_SIZE];
-        hexstr_to_bytes(myJobDev.at("blockhashing_blob"), b2d);
+        hexstrToBytes(myJobDev.at("blockhashing_blob"), b2d);
         memcpy(devWork, b2d, MINIBLOCK_SIZE);
         delete[] b2d;
       }
@@ -1999,25 +2162,25 @@ waitForJob:
           if (devMine)
           {
             mutex.lock();
-            submittingDev = true;
             setcolor(CYAN);
             std::cout << "\n(DEV) Thread " << tid << " found a dev share\n";
             setcolor(BRIGHT_WHITE);
             devShare = {
                 {"jobid", myJobDev.at("jobid")},
                 {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
+            submittingDev = true;
             mutex.unlock();
           }
           else
           {
             mutex.lock();
-            submitting = true;
             setcolor(BRIGHT_YELLOW);
             std::cout << "\nThread " << tid << " found a nonce!\n";
             setcolor(BRIGHT_WHITE);
             share = {
                 {"jobid", myJob.at("jobid")},
                 {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
+            submitting = true;
             mutex.unlock();
           }
         }
@@ -2040,9 +2203,15 @@ waitForJob:
 
 void mineXelis(int tid)
 {
-  alignas(32) byte work[XELIS_BYTES_ARRAY_INPUT] = {0};
   int64_t localJobCounter;
+  int64_t localOurHeight = 0;
+  int64_t localDevHeight = 0;
+
+  uint64_t i = 0;
+  uint64_t i_dev = 0;
+
   byte powHash[32];
+  alignas(32) byte work[XELIS_BYTES_ARRAY_INPUT] = {0};
   alignas(32) byte devWork[XELIS_BYTES_ARRAY_INPUT] = {0};
   alignas(32) byte FINALWORK[XELIS_BYTES_ARRAY_INPUT] = {0};
 
@@ -2062,19 +2231,52 @@ waitForJob:
       json myJob = job;
       json myJobDev = devJob;
       localJobCounter = jobCounter;
+
       mutex.unlock();
 
-      byte *b2 = new byte[XELIS_TEMPLATE_SIZE];
-      hexstr_to_bytes(myJob.at("template"), b2);
-      memcpy(work, b2, XELIS_TEMPLATE_SIZE);
-      delete[] b2;
+      // if (!myJob.contains("template")) continue;
+      if (ourHeight == 0 && devHeight == 0)
+        continue;
 
-      if (devConnected)
+      if (ourHeight == 0 || localOurHeight != ourHeight)
       {
-        byte *b2d = new byte[XELIS_TEMPLATE_SIZE];
-        hexstr_to_bytes(myJobDev.at("template"), b2d);
-        memcpy(devWork, b2d, XELIS_TEMPLATE_SIZE);
-        delete[] b2d;
+        byte *b2 = new byte[XELIS_TEMPLATE_SIZE];
+        switch (protocol)
+        {
+        case XELIS_SOLO:
+          hexstrToBytes(myJob.at("template"), b2);
+          break;
+        case XELIS_XATUM:
+          std::string b64 = base64::from_base64(myJob.at("template").get<std::string>());
+          memcpy(b2, b64.data(), b64.size());
+          break;
+        }
+        memcpy(work, b2, XELIS_TEMPLATE_SIZE);
+        delete[] b2;
+        localOurHeight = ourHeight;
+        i = 0;
+      }
+
+      if (devConnected && myJobDev.contains("template"))
+      {
+        if (devHeight == 0 || localDevHeight != devHeight)
+        {
+          byte *b2d = new byte[XELIS_TEMPLATE_SIZE];
+          switch (protocol)
+          {
+          case XELIS_SOLO:
+            hexstrToBytes(myJobDev.at("template"), b2d);
+            break;
+          case XELIS_XATUM:
+            std::string b64 = base64::from_base64(myJobDev.at("template").get<std::string>().c_str());
+            memcpy(b2d, b64.data(), b64.size());
+            break;
+          }
+          memcpy(devWork, b2d, XELIS_TEMPLATE_SIZE);
+          delete[] b2d;
+          localDevHeight = devHeight;
+          i_dev = 0;
+        }
       }
 
       bool devMine = false;
@@ -2083,18 +2285,23 @@ waitForJob:
       uint64_t DIFF;
       Num cmpDiff;
 
-      uint64_t i = 0;
       while (localJobCounter == jobCounter)
       {
-        ++i;
         which = (double)(rand() % 10000);
-        devMine = (devConnected && which < devFee * 100.0);
+        devMine = (devConnected && devHeight > 0 && which < devFee * 100.0);
         DIFF = devMine ? difficultyDev : difficulty;
         cmpDiff = ConvertDifficultyToBig(DIFF, XELIS_HASH);
 
-        byte *WORK = devMine ? &devWork[0] : &work[0];
+        uint64_t *nonce = &i;
+        if (devConnected && devMine)
+          nonce = &i_dev;
+        (*nonce)++;
+
+        // printf("nonce = %llu\n", *nonce);
+
+        byte *WORK = (devMine && devConnected) ? &devWork[0] : &work[0];
         byte *nonceBytes = &WORK[40];
-        uint64_t n = ((tid - 1) % (256 * 256 * 256)) | (i << 24);
+        uint64_t n = ((tid - 1) % (256 * 256 * 256)) | (*nonce << 24);
         memcpy(nonceBytes, &n, 8);
 
         if (littleEndian())
@@ -2107,9 +2314,6 @@ waitForJob:
 
         // std::copy(WORK, WORK + XELIS_TEMPLATE_SIZE, FINALWORK);
         memcpy(FINALWORK, WORK, XELIS_BYTES_ARRAY_INPUT);
-
-        // std::cout << "after nonce: " << hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str() << std::endl;
-
         xelis_hash(FINALWORK, *worker, powHash);
 
         if (littleEndian())
@@ -2118,37 +2322,60 @@ waitForJob:
         }
 
         counter.fetch_add(1);
-        submit = devMine ? !submittingDev : !submitting;
+        submit = (devMine && devConnected) ? !submittingDev : !submitting;
 
-        int prevAccepted = accepted;
         if (submit && CheckHash(powHash, cmpDiff, XELIS_HASH))
         {
-          if (accepted == prevAccepted)
+          if (protocol == XELIS_XATUM && littleEndian())
           {
-            if (devMine)
+            std::reverse(powHash, powHash + 32);
+          }
+
+          std::string b64 = base64::to_base64(std::string((char *)&WORK[0], XELIS_TEMPLATE_SIZE));
+          if (devMine)
+          {
+            mutex.lock();
+            setcolor(CYAN);
+            std::cout << "\n(DEV) Thread " << tid << " found a dev share\n";
+            setcolor(BRIGHT_WHITE);
+            switch (protocol)
             {
-              mutex.lock();
-              submittingDev = true;
-              setcolor(CYAN);
-              std::cout << "\n(DEV) Thread " << tid << " found a dev share\n";
-              setcolor(BRIGHT_WHITE);
+            case XELIS_SOLO:
+              devShare = {{"block_template", hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str()}};
+              break;
+            case XELIS_XATUM:
               devShare = {
-                  {"block_template", hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str()}};
-              mutex.unlock();
+                  {"data", b64.c_str()},
+                  {"hash", hexStr(&powHash[0], 32).c_str()},
+              };
+              break;
             }
-            else
+            submittingDev = true;
+            mutex.unlock();
+          }
+          else
+          {
+            mutex.lock();
+            setcolor(BRIGHT_YELLOW);
+            std::cout << "\nThread " << tid << " found a nonce!\n";
+            setcolor(BRIGHT_WHITE);
+            switch (protocol)
             {
-              mutex.lock();
-              submitting = true;
-              setcolor(BRIGHT_YELLOW);
-              std::cout << "\nThread " << tid << " found a nonce!\n";
-              setcolor(BRIGHT_WHITE);
+            case XELIS_SOLO:
+              share = {{"block_template", hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str()}};
+              break;
+            case XELIS_XATUM:
               share = {
-                  {"block_template", hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str()}};
-              mutex.unlock();
+                  {"data", b64.c_str()},
+                  {"hash", hexStr(&powHash[0], 32).c_str()},
+              };
+              break;
             }
+            submitting = true;
+            mutex.unlock();
           }
         }
+
         if (!isConnected)
           break;
       }
@@ -2157,7 +2384,9 @@ waitForJob:
     }
     catch (...)
     {
+      mutex.lock();
       std::cerr << "Error in POW Function" << std::endl;
+      mutex.unlock();
     }
     if (!isConnected)
       break;

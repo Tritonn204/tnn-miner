@@ -7528,8 +7528,8 @@ void TestAstroBWTv3()
 
   std::string c("7199110000261dfb0b02712100000000c09a113bf2050b1e55c79d15116bd94e00000000a9041027027fa800000314bb");
   std::string c2("7199110000261dfb0b02712100000000c09a113bf2050b1e55c79d15116bd94e00000000a9041027027fa800002388bb");
-  hexstr_to_bytes(c, data);
-  hexstr_to_bytes(c2, data2);
+  hexstrToBytes(c, data);
+  hexstrToBytes(c2, data2);
 
   printf("A: %s, B: %s\n", hexStr(data, 48).c_str(), hexStr(data2, 48).c_str());
 
@@ -7577,7 +7577,7 @@ void TestAstroBWTv3repeattest()
   byte random_data[48];
 
   std::string c("419ebb000000001bbdc9bf2200000000635d6e4e24829b4249fe0e67878ad4350000000043f53e5436cf610000086b00");
-  hexstr_to_bytes(c, data);
+  hexstrToBytes(c, data);
 
   std::random_device rd;
   std::mt19937 gen(rd());

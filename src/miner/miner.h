@@ -31,6 +31,8 @@ const int workerThreads = 2;
 const int reportInterval = 1;
 
 const char *nullArg = "NULL";
+
+std::string symbol = nullArg;
 std::string host = nullArg;
 std::string port = nullArg;
 std::string wallet = nullArg;
@@ -77,9 +79,11 @@ std::string testDevWallet[] = {
 
 std::string *devSelection = devWallet;
 
-std::string coinNames[] = {
-  "DERO:",
-  "XELIS:"
+std::unordered_map<std::string, int> coinSelector = {
+  {"dero", DERO_HASH},
+  {"DERO", DERO_HASH},
+  {"xel", XELIS_HASH},
+  {"XEL", XELIS_HASH}
 };
 
 Num oneLsh256;      

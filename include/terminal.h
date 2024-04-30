@@ -68,6 +68,7 @@ const char *DERO = R"(
                                                                 
 )";
 
+const char* coinPrompt = "Please enter the symbol for the coin you'd like to mine (i.e. DERO, XEL)";
 const char* daemonPrompt = "Please enter your mining deamon/host address: ";
 const char* portPrompt = "Please enter your mining port: ";
 const char* walletPrompt = "Please enter your wallet address for mining rewards: ";
@@ -124,7 +125,8 @@ inline po::options_description get_prog_opts()
   po::options_description general("General", col_width);
   general.add_options()
     ("help", "produce help message")
-    ("xelis", "Will mine Xelis instead of Dero")
+    ("dero", "Will mine Dero")
+    ("xelis", "Will mine Xelis")
     ("testnet", "Adjusts in-house parameters to mine on testnets")
     ("daemon-address", po::value<std::string>(), "Node/pool URL or IP address to mine to") // todo: parse out port and/or wss:// or ws://
     ("port", po::value<int>(), "The port used to connect to the node")

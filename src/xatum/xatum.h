@@ -17,15 +17,15 @@ namespace Xatum
   std::string newJob = "job~";
   std::string submission = "submit~";
   std::string success = "success~";
-  std::string pingPacket = "ping~{}";
-  std::string pongPacket = "ping~{}";
+  std::string pingPacket = "ping~{}\n";
+  std::string pongPacket = "pong~{}\n";
 
   const int ERROR_MSG = 3;
   const int WARN_MSG = 2;
   const int INFO_MSG = 1;
   const int VERBOSE_MSG = 0;
 
-  int logLevel = 3;
+  int logLevel = 0;
 
   typedef struct packet
   {
