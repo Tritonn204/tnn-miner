@@ -303,6 +303,32 @@ void dero_session(
   beast::flat_buffer buffer;
   std::stringstream workInfo;
 
+  boost::thread submission_thread([&]
+                                  {
+      bool *C = isDev ? &isConnected : &devConnected;
+      bool *B = isDev ? &submittingDev : &submitting;
+      while (true) {
+        try{
+          if (!(*C)) break;
+          if (*B) {
+              boost::json::object *S = isDev ? &devShare : &share;
+              std::string msg = boost::json::serialize(*S);
+
+              // Acquire a lock before writing to the WebSocket
+              ws.async_write(boost::asio::buffer(msg), [&](const boost::system::error_code& ec, std::size_t) {
+                  if (ec) {
+                      setcolor(RED);
+                      printf("submission error\n");
+                      setcolor(BRIGHT_WHITE);
+                  }
+              });
+              (*B) = false;
+          }
+        } catch(...) {}
+
+        boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+      } });
+
   while (true)
   {
     try
@@ -313,21 +339,20 @@ void dero_session(
 
       bool *B = isDev ? &submittingDev : &submitting;
 
-      if (*B)
-      {
-        boost::json::object *S = isDev ? &devShare : &share;
-        std::string msg = boost::json::serialize(*S);
-
-        // Acquire a lock before writing to the WebSocket
-        ws.async_write(boost::asio::buffer(msg), [&](const boost::system::error_code &ec, std::size_t)
-                       {
-                  if (ec) {
-                      setcolor(RED);
-                      printf("submission error\n");
-                      setcolor(BRIGHT_WHITE);
-                  } });
-        (*B) = false;
-      }
+      // if (*B)
+      // {
+      //   boost::json::object *S = isDev ? &devShare : &share;
+      //   std::string msg = boost::json::serialize(*S);
+      //   // mutex.lock();
+      //   // std::cout << msg;
+      //   // mutex.unlock();
+      //   ws.async_write(boost::asio::buffer(msg), yield[ec]);
+      //   if (ec)
+      //   {
+      //     return fail(ec, "async_write");
+      //   }
+      //   *B = false;
+      // }
 
       beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(60));
       ws.async_read(buffer, yield[ec]);
@@ -414,7 +439,7 @@ void dero_session(
       std::cout << "ws error\n";
       setcolor(BRIGHT_WHITE);
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(60));
+    boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
   }
 
   // // Close the WebSocket connection
@@ -553,25 +578,55 @@ void xelis_session(
   beast::flat_buffer buffer;
   std::stringstream workInfo;
 
+  bool subStart = false;
+
+  // boost::thread submission_thread([&]
+  //                                 {
+  //         bool *C = isDev ? &isConnected : &devConnected;
+  //         bool *B = isDev ? &submittingDev : &submitting;
+
+  //         bool keepLoop = true;
+
+  //         while (true) {
+  //           try {
+  //             if (!(*C)) break;
+  //             if (*B) {
+  //               boost::json::object *S = isDev ? &devShare : &share;
+  //               std::string msg = boost::json::serialize(*S);
+
+  //               // Acquire a lock before writing to the WebSocket
+  //               ws.async_write(boost::asio::buffer(msg), [&](const boost::system::error_code& ec, std::size_t) {
+  //                   if (ec) {
+  //                       setcolor(RED);
+  //                       printf("\nasync_write: submission error\n");
+  //                       setcolor(BRIGHT_WHITE);
+  //                   }
+  //               });
+  //               if (keepLoop == false) break;
+  //               (*B) = false;
+  //             }
+  //           } catch(...){}
+
+  //           boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+  //       } });
+
   while (true)
   {
     try
     {
       bool *B = isDev ? &submittingDev : &submitting;
-
-      if (*B)
-      {
+      if (*B) {
         boost::json::object *S = isDev ? &devShare : &share;
         std::string msg = boost::json::serialize(*S);
 
         // Acquire a lock before writing to the WebSocket
-        ws.async_write(boost::asio::buffer(msg), [&](const boost::system::error_code &ec, std::size_t)
-                       {
-                    if (ec) {
-                        setcolor(RED);
-                        printf("\nasync_write: submission error\n");
-                        setcolor(BRIGHT_WHITE);
-                    } });
+        ws.async_write(boost::asio::buffer(msg), [&](const boost::system::error_code& ec, std::size_t) {
+            if (ec) {
+                setcolor(RED);
+                printf("\nasync_write: submission error\n");
+                setcolor(BRIGHT_WHITE);
+            }
+        });
         (*B) = false;
       }
 
@@ -670,11 +725,13 @@ void xelis_session(
       setcolor(RED);
       std::cout << "ws error: " << e.what() << std::endl;
       setcolor(BRIGHT_WHITE);
+      // submission_thread.interrupt();
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(60));
+    boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
   }
 
   // Close the WebSocket connection
+  // submission_thread.interrupt();
   ws.async_close(websocket::close_code::normal, yield[ec]);
   printf("loop broken\n");
   if (ec)
@@ -870,6 +927,7 @@ void xatum_session(
 
         if (data.compare(Xatum::pingPacket) == 0)
         {
+          // printf("pinged\n");
           boost::asio::async_write(stream, boost::asio::buffer(Xatum::pongPacket), yield[ec]);
           if (ec)
             return fail(ec, "Xatum pong");
@@ -891,10 +949,12 @@ void xatum_session(
       setcolor(RED);
       std::cout << "ws error: " << e.what() << std::endl;
       setcolor(BRIGHT_WHITE);
+      // submission_thread.interrupt();
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(60));
+    boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
   }
 
+  // submission_thread.interrupt();
   stream.async_shutdown(yield[ec]);
 }
 
@@ -962,7 +1022,11 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
     *B = data.at("blob").get<std::string>();
 
     // std::cout << data << std::endl;
-    // printf("new job\n");
+    if (!isDev) {
+      setcolor(CYAN);
+      printf("\nNew Xatum job received\n");
+      setcolor(BRIGHT_WHITE);
+    }
     *diff = data.at("diff").get<uint64_t>();
     (*J).emplace("template", (*B).c_str());
 
@@ -2261,6 +2325,8 @@ waitForJob:
           std::swap(nonceBytes[4], nonceBytes[3]);
         }
 
+        if (localJobCounter != jobCounter || localOurHeight != ourHeight) break;
+
         // std::copy(WORK, WORK + XELIS_TEMPLATE_SIZE, FINALWORK);
         memcpy(FINALWORK, WORK, XELIS_BYTES_ARRAY_INPUT);
         xelis_hash(FINALWORK, *worker, powHash);
@@ -2272,6 +2338,8 @@ waitForJob:
 
         counter.fetch_add(1);
         submit = (devMine && devConnected) ? !submittingDev : !submitting;
+
+        if (localJobCounter != jobCounter || localOurHeight != ourHeight) break;
 
         if (submit && CheckHash(powHash, cmpDiff, XELIS_HASH))
         {
