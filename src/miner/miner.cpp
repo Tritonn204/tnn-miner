@@ -303,32 +303,6 @@ void dero_session(
   beast::flat_buffer buffer;
   std::stringstream workInfo;
 
-  boost::thread submission_thread([&]
-                                  {
-      bool *C = isDev ? &isConnected : &devConnected;
-      bool *B = isDev ? &submittingDev : &submitting;
-      while (true) {
-        try{
-          if (!(*C)) break;
-          if (*B) {
-              boost::json::object *S = isDev ? &devShare : &share;
-              std::string msg = boost::json::serialize(*S);
-
-              // Acquire a lock before writing to the WebSocket
-              ws.async_write(boost::asio::buffer(msg), [&](const boost::system::error_code& ec, std::size_t) {
-                  if (ec) {
-                      setcolor(RED);
-                      printf("submission error\n");
-                      setcolor(BRIGHT_WHITE);
-                  }
-              });
-              (*B) = false;
-          }
-        } catch(...) {}
-
-        boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
-      } });
-
   while (true)
   {
     try
@@ -339,20 +313,21 @@ void dero_session(
 
       bool *B = isDev ? &submittingDev : &submitting;
 
-      // if (*B)
-      // {
-      //   boost::json::object *S = isDev ? &devShare : &share;
-      //   std::string msg = boost::json::serialize(*S);
-      //   // mutex.lock();
-      //   // std::cout << msg;
-      //   // mutex.unlock();
-      //   ws.async_write(boost::asio::buffer(msg), yield[ec]);
-      //   if (ec)
-      //   {
-      //     return fail(ec, "async_write");
-      //   }
-      //   *B = false;
-      // }
+      if (*B)
+      {
+        boost::json::object *S = isDev ? &devShare : &share;
+        std::string msg = boost::json::serialize(*S);
+
+        // Acquire a lock before writing to the WebSocket
+        ws.async_write(boost::asio::buffer(msg), [&](const boost::system::error_code &ec, std::size_t)
+                       {
+                  if (ec) {
+                      setcolor(RED);
+                      printf("submission error\n");
+                      setcolor(BRIGHT_WHITE);
+                  } });
+        (*B) = false;
+      }
 
       beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(60));
       ws.async_read(buffer, yield[ec]);
@@ -439,7 +414,7 @@ void dero_session(
       std::cout << "ws error\n";
       setcolor(BRIGHT_WHITE);
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
+    boost::this_thread::sleep_for(boost::chrono::milliseconds(25));
   }
 
   // // Close the WebSocket connection
@@ -578,38 +553,28 @@ void xelis_session(
   beast::flat_buffer buffer;
   std::stringstream workInfo;
 
-  bool subStart = false;
-
-  boost::thread submission_thread([&]
-                                  {
-          bool *C = isDev ? &isConnected : &devConnected;
-          bool *B = isDev ? &submittingDev : &submitting;
-          while (true) {
-            try {
-              if (!(*C)) break;
-              if (*B) {
-                boost::json::object *S = isDev ? &devShare : &share;
-                std::string msg = boost::json::serialize(*S);
-
-                // Acquire a lock before writing to the WebSocket
-                ws.async_write(boost::asio::buffer(msg), [&](const boost::system::error_code& ec, std::size_t) {
-                    if (ec) {
-                        setcolor(RED);
-                        printf("\nasync_write: submission error\n");
-                        setcolor(BRIGHT_WHITE);
-                    }
-                });
-                (*B) = false;
-              }
-            } catch(...){}
-
-            boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
-        } });
-
   while (true)
   {
     try
     {
+      bool *B = isDev ? &submittingDev : &submitting;
+
+      if (*B)
+      {
+        boost::json::object *S = isDev ? &devShare : &share;
+        std::string msg = boost::json::serialize(*S);
+
+        // Acquire a lock before writing to the WebSocket
+        ws.async_write(boost::asio::buffer(msg), [&](const boost::system::error_code &ec, std::size_t)
+                       {
+                    if (ec) {
+                        setcolor(RED);
+                        printf("\nasync_write: submission error\n");
+                        setcolor(BRIGHT_WHITE);
+                    } });
+        (*B) = false;
+      }
+
       buffer.clear();
       workInfo.str("");
       workInfo.clear();
@@ -705,13 +670,11 @@ void xelis_session(
       setcolor(RED);
       std::cout << "ws error: " << e.what() << std::endl;
       setcolor(BRIGHT_WHITE);
-      submission_thread.interrupt();
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
+    boost::this_thread::sleep_for(boost::chrono::milliseconds(25));
   }
 
   // Close the WebSocket connection
-  submission_thread.interrupt();
   ws.async_close(websocket::close_code::normal, yield[ec]);
   printf("loop broken\n");
   if (ec)
@@ -867,43 +830,31 @@ void xatum_session(
   beast::flat_buffer buffer;
   std::stringstream workInfo;
 
-  boost::thread submission_thread([&]
-                                  {
-        // std::string lastHash;
-        bool *C = isDev ? &isConnected : &devConnected;
-        bool *B = isDev ? &submittingDev : &submitting;
-        while (true) {
-            try{
-              if (!(*C)) break;
-              if (*B)
-              {
-                boost::json::object *S = &share;
-                if (isDev) S = &devShare;
-                std::string msg = Xatum::submission + boost::json::serialize(*S) + "\n";
-                // if (lastHash.compare((*S).at("hash").get_string()) == 0) continue;
-                // lastHash = (*S).at("hash").get_string();
-
-                // printf("submitting share: %s\n", msg.c_str());
-                // Acquire a lock before writing to the WebSocket
-                boost::asio::async_write(stream, boost::asio::buffer(msg), [&](const boost::system::error_code& ec, std::size_t) {
-                      if (ec) {
-                          setcolor(RED);
-                          printf("\nasync_write: submission error\n");
-                          setcolor(BRIGHT_WHITE);
-                      }
-                  });
-                (*B) = false;
-              }
-              if (!(*C)) break;
-            } catch(...){}
-
-            boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
-        } });
-
   while (true)
   {
     try
     {
+      bool *B = isDev ? &submittingDev : &submitting;
+      if (*B)
+      {
+        boost::json::object *S = &share;
+        if (isDev)
+          S = &devShare;
+        std::string msg = Xatum::submission + boost::json::serialize(*S) + "\n";
+        // if (lastHash.compare((*S).at("hash").get_string()) == 0) continue;
+        // lastHash = (*S).at("hash").get_string();
+
+        // printf("submitting share: %s\n", msg.c_str());
+        // Acquire a lock before writing to the WebSocket
+        boost::asio::async_write(stream, boost::asio::buffer(msg), [&](const boost::system::error_code &ec, std::size_t)
+                                 {
+                      if (ec) {
+                          setcolor(RED);
+                          printf("\nasync_write: submission error\n");
+                          setcolor(BRIGHT_WHITE);
+                      } });
+        (*B) = false;
+      }
       boost::asio::streambuf response;
       std::stringstream workInfo;
       beast::get_lowest_layer(stream).expires_never();
@@ -940,12 +891,10 @@ void xatum_session(
       setcolor(RED);
       std::cout << "ws error: " << e.what() << std::endl;
       setcolor(BRIGHT_WHITE);
-      submission_thread.interrupt();
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
+    boost::this_thread::sleep_for(boost::chrono::milliseconds(25));
   }
 
-  submission_thread.interrupt();
   stream.async_shutdown(yield[ec]);
 }
 
