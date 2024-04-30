@@ -66,6 +66,8 @@ const int AMASK	= (1<<ABIT)-1;
 alignas(32) inline __m256i g_maskTable[32];
 #endif
 
+const int MINIBLOCK_SIZE = 48;
+
 typedef unsigned int suffix;
 typedef unsigned int t_index;
 typedef unsigned char byte;
