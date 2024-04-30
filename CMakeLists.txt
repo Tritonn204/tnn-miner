@@ -78,7 +78,7 @@ endif()
 
 include(${CPM_DOWNLOAD_LOCATION})
 
-CPMAddPackage("gh:nlohmann/json@3.11.3")
+CPMAddPackage("gh:nlohmann/json@3.10.5")
 
 set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL REQUIRED)

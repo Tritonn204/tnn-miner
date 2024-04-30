@@ -7,27 +7,29 @@
   - UDNS (UNIX only. sudo apt-get install libudns-dev)
   - FMT (header only)
 
+**Building the easy way**
+Use the prereqs.sh scripts (one-time only)
+```
+./scripts/prereqs.sh
+```
+Then build!
+```
+./scripts/build.sh
+```
+
+**For Ubuntu 24.04:**
+Install development dependencies for Ubuntu 22.04 below, but also install the Boost dev libraries
+```
+sudo apt install libboost1.83-all-dev
+```
+
 **For Ubuntu 22.04:**
 Install development dependencies
 ```
-sudo apt install git wget build-essential cmake clang libssl-dev libudns-dev libfmt-dev libc++-dev 
+sudo apt install git wget build-essential cmake clang libssl-dev libudns-dev libfmt-dev libc++-dev lld 
 # Checkout tnn-miner got from github
 git clone https://github.com/Tritonn204/tnn-miner.git
 cd tnn-miner
-```
-
-Download and compile Boost 1.82.  This is a one-time thing.
--- Newer versions of Boost exist, but there's some issue linking program_options
-```
-wget https://github.com/boostorg/boost/releases/download/boost-1.82.0/boost-1.82.0.tar.gz
-tar -xf boost-1.82.0.tar.gz
-cd boost-1.82.0/
-./bootstrap.sh --with-toolset=clang 
-./b2 clean
-./b2 toolset=clang cxxflags=-std=c++20 -stdlib=libc++ linkflags=-stdlib=libc++ link=static
-```
-Proceed with Tnn-miner build
-```
 mkdir build
 cd build
 cmake ..
