@@ -55,6 +55,15 @@ endif()
 
 include_directories(${CUDAToolkit_INCLUDE_DIRS})
 
+# download CPM.cmake
+file(
+  DOWNLOAD
+  https://github.com/cpm-cmake/CPM.cmake/releases/download/v0.38.3/CPM.cmake
+  ${CMAKE_CURRENT_BINARY_DIR}/cmake/CPM.cmake
+  EXPECTED_HASH SHA256=cc155ce02e7945e7b8967ddfaff0b050e958a723ef7aad3766d368940cb15494
+)
+include(${CMAKE_CURRENT_BINARY_DIR}/cmake/CPM.cmake)
+
 # This stores downloaded dependencies so we do not need to re-download them
 set(CPM_SOURCE_CACHE "${PROJECT_SOURCE_DIR}/.cache/CPM")
 
@@ -151,7 +160,6 @@ include_directories(
   "${PROJECT_SOURCE_DIR}/src/miner/"
   "${TNN_BOOST_INCLUDES}"
   "${PROJECT_SOURCE_DIR}/src/broadcast/"
-  "${BOOST_INCLUDE_DIRS}"
 )
 
 set(ASM_SOURCES 
