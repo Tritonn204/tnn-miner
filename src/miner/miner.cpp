@@ -414,7 +414,7 @@ void dero_session(
       std::cout << "ws error\n";
       setcolor(BRIGHT_WHITE);
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(25));
+    boost::this_thread::sleep_for(boost::chrono::milliseconds(60));
   }
 
   // // Close the WebSocket connection
@@ -671,7 +671,7 @@ void xelis_session(
       std::cout << "ws error: " << e.what() << std::endl;
       setcolor(BRIGHT_WHITE);
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(25));
+    boost::this_thread::sleep_for(boost::chrono::milliseconds(60));
   }
 
   // Close the WebSocket connection
@@ -846,7 +846,7 @@ void xatum_session(
 
         printf("submitting share: %s\n", msg.c_str());
         // Acquire a lock before writing to the WebSocket
-        boost::asio::write(stream, boost::asio::buffer(msg), [&](const boost::system::error_code &ec, std::size_t)
+        boost::asio::async_write(stream, boost::asio::buffer(msg), [&](const boost::system::error_code &ec, std::size_t)
                                  {
                       if (ec) {
                           setcolor(RED);
@@ -892,7 +892,7 @@ void xatum_session(
       std::cout << "ws error: " << e.what() << std::endl;
       setcolor(BRIGHT_WHITE);
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(25));
+    boost::this_thread::sleep_for(boost::chrono::milliseconds(60));
   }
 
   stream.async_shutdown(yield[ec]);
