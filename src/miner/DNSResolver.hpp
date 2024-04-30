@@ -37,11 +37,12 @@
 #include <udns.h>
 
 #include <boost/asio.hpp>
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 
 #define THROW_ERRNO	throw std::system_error(errno, std::system_category(), strerror(errno))
 
 namespace YukiWorkshop {
+	using namespace boost::placeholders;
 	class DNSResolver {
 	public:
 		struct MXRecord {
