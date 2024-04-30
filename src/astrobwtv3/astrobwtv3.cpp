@@ -136,7 +136,7 @@ void checkSIMDSupport() {
 */
 
 #if defined(__AVX2__)
-inline __m128i mullo_epi8(__m128i a, __m128i b)
+__m128i mullo_epi8(__m128i a, __m128i b)
 {
     // unpack and multiply
     __m128i dst_even = _mm_mullo_epi16(a, b);
@@ -150,7 +150,7 @@ inline __m128i mullo_epi8(__m128i a, __m128i b)
 #endif
 }
 
-inline __m256i _mm256_mul_epi8(__m256i x, __m256i y) {
+__m256i _mm256_mul_epi8(__m256i x, __m256i y) {
   // Unpack and isolate 2 8 bit numbers from a 16 bit block in each vector using masks
   __m256i mask1 = _mm256_set1_epi16(0xFF00);
   __m256i mask2 = _mm256_set1_epi16(0x00FF);
@@ -174,7 +174,7 @@ inline __m256i _mm256_mul_epi8(__m256i x, __m256i y) {
   return result;
 }
 
-inline __m256i _mm256_sllv_epi8(__m256i a, __m256i count) {
+__m256i _mm256_sllv_epi8(__m256i a, __m256i count) {
     __m256i mask_hi        = _mm256_set1_epi32(0xFF00FF00);
     __m256i multiplier_lut = _mm256_set_epi8(0,0,0,0, 0,0,0,0, 128,64,32,16, 8,4,2,1, 0,0,0,0, 0,0,0,0, 128,64,32,16, 8,4,2,1);
 
@@ -192,7 +192,7 @@ inline __m256i _mm256_sllv_epi8(__m256i a, __m256i count) {
 }
 
 
-inline __m256i _mm256_srlv_epi8(__m256i a, __m256i count) {
+__m256i _mm256_srlv_epi8(__m256i a, __m256i count) {
     __m256i mask_hi        = _mm256_set1_epi32(0xFF00FF00);
     __m256i multiplier_lut = _mm256_set_epi8(0,0,0,0, 0,0,0,0, 1,2,4,8, 16,32,64,128, 0,0,0,0, 0,0,0,0, 1,2,4,8, 16,32,64,128);
 
@@ -211,7 +211,7 @@ inline __m256i _mm256_srlv_epi8(__m256i a, __m256i count) {
     return x;
 }
 
-inline __m256i _mm256_rolv_epi8(__m256i x, __m256i y) {
+__m256i _mm256_rolv_epi8(__m256i x, __m256i y) {
     // Ensure the shift counts are within the range of 0 to 7
   __m256i y_mod = _mm256_and_si256(y, _mm256_set1_epi8(7));
 
@@ -231,7 +231,7 @@ inline __m256i _mm256_rolv_epi8(__m256i x, __m256i y) {
 }
 
 // Rotates x left by r bits
-inline __m256i _mm256_rol_epi8(__m256i x, int r) {
+__m256i _mm256_rol_epi8(__m256i x, int r) {
   // Unpack 2 8 bit numbers into their own vectors, and isolate them using masks
   __m256i mask1 = _mm256_set1_epi16(0x00FF);
   __m256i mask2 = _mm256_set1_epi16(0xFF00);
@@ -259,7 +259,7 @@ inline __m256i _mm256_rol_epi8(__m256i x, int r) {
 // parallelPopcnt16bytes - find population count for 8-bit groups in xmm (16 groups)
 //                         each byte of xmm result contains a value ranging from 0 to 8
 //
-inline __m128i parallelPopcnt16bytes (__m128i xmm)
+__m128i parallelPopcnt16bytes (__m128i xmm)
 {
   const __m128i mask4 = _mm_set1_epi8 (0x0F);
   const __m128i lookup = _mm_setr_epi8 (0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4);
@@ -271,7 +271,7 @@ inline __m128i parallelPopcnt16bytes (__m128i xmm)
   return count;
 }
 
-inline __m256i popcnt256_epi8(__m256i data) {
+__m256i popcnt256_epi8(__m256i data) {
   __m128i hi = _mm256_extractf128_si256(data, 1);
   __m128i lo = _mm256_castsi256_si128(data);
 
@@ -328,7 +328,7 @@ int check_results(__m256i avx_result, unsigned char* scalar_result, int num_elem
   return 1; 
 }
 
-inline __m256i _mm256_reverse_epi8(__m256i input) {
+__m256i _mm256_reverse_epi8(__m256i input) {
     const __m256i mask_0f = _mm256_set1_epi8(0x0F);
     const __m256i mask_33 = _mm256_set1_epi8(0x33);
     const __m256i mask_55 = _mm256_set1_epi8(0x55);
@@ -7528,8 +7528,8 @@ void TestAstroBWTv3()
 
   std::string c("7199110000261dfb0b02712100000000c09a113bf2050b1e55c79d15116bd94e00000000a9041027027fa800000314bb");
   std::string c2("7199110000261dfb0b02712100000000c09a113bf2050b1e55c79d15116bd94e00000000a9041027027fa800002388bb");
-  hexstr_to_bytes(c, data);
-  hexstr_to_bytes(c2, data2);
+  hexstrToBytes(c, data);
+  hexstrToBytes(c2, data2);
 
   printf("A: %s, B: %s\n", hexStr(data, 48).c_str(), hexStr(data2, 48).c_str());
 
@@ -7577,7 +7577,7 @@ void TestAstroBWTv3repeattest()
   byte random_data[48];
 
   std::string c("419ebb000000001bbdc9bf2200000000635d6e4e24829b4249fe0e67878ad4350000000043f53e5436cf610000086b00");
-  hexstr_to_bytes(c, data);
+  hexstrToBytes(c, data);
 
   std::random_device rd;
   std::mt19937 gen(rd());

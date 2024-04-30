@@ -12,6 +12,7 @@
 #include <terminal.h>
 #include <string>
 #include <num.h>
+#include <xatum.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -20,16 +21,26 @@
 #define DERO_HASH 0
 #define XELIS_HASH 1
 
+#define DERO_SOLO 0
+#define XELIS_SOLO 10
+#define XELIS_XATUM 11
+#define XELIS_STRATUM 12
+
 const int workerThreads = 2;
 
 const int reportInterval = 1;
 
 const char *nullArg = "NULL";
+
+std::string symbol = nullArg;
 std::string host = nullArg;
 std::string port = nullArg;
 std::string wallet = nullArg;
 std::string workerName = "default";
+
 int miningAlgo = DERO_HASH;
+int protocol = XELIS_SOLO;
+
 int threads = 0;
 int testOp = -1;
 int testLen = -1;
@@ -59,16 +70,21 @@ std::string devPort[] = {
 std::string devWallet[] = {
   "dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw4wjqqp6y2n7",
   "xel:xz9574c80c4xegnvurazpmxhw5dlg2n0g9qm60uwgt75uqyx3pcsqzzra9m"
-  // "xet:5zwxjesmz6gtpg3c6zt20n9nevsyeewavpx6nwmv08z2hu2dpp3sq8w8ue6"
 };
 
-std::string coinNames[] = {
-  "DERO:",
-  "XELIS:"
+std::string testDevWallet[] = {
+  "dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw4wjqqp6y2n7",
+  "xet:5zwxjesmz6gtpg3c6zt20n9nevsyeewavpx6nwmv08z2hu2dpp3sq8w8ue6"
 };
 
-const int MINIBLOCK_SIZE = 48;
-const int XELIS_TEMPLATE_SIZE = 112;
+std::string *devSelection = devWallet;
+
+std::unordered_map<std::string, int> coinSelector = {
+  {"dero", DERO_HASH},
+  {"DERO", DERO_HASH},
+  {"xel", XELIS_HASH},
+  {"XEL", XELIS_HASH}
+};
 
 Num oneLsh256;      
 Num maxU256;                                                   
@@ -76,6 +92,8 @@ Num maxU256;
 void getWork(bool isDev, int algo);
 void sendWork();
 void devWork();
+
+int handleXatumPacket(Xatum::packet xPacket, bool isDev);
 
 void mine(int tid, int algo = DERO_HASH);
 void mineDero(int tid);
