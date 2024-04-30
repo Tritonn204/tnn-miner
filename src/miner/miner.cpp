@@ -938,6 +938,12 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
   if (command == Xatum::print)
   {
     mutex.lock();
+    if (Xatum::accepted.compare(data.at("msg").get<std::string>()) == 0)
+      accepted++;
+
+    if (Xatum::stale.compare(data.at("msg").get<std::string>()) == 0)
+      rejected++;
+    
     int msgLevel = data.at("lvl").get<int>();
     if (msgLevel < Xatum::logLevel)
       return 0;
@@ -1000,7 +1006,11 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
       setcolor(BRIGHT_WHITE);
     }
     *diff = data.at("diff").get<uint64_t>();
-    (*J).emplace("template", (*B).c_str());
+
+    if ((*J).contains("template"))
+      (*J).at("template") = (*B).c_str();
+    else
+      (*J).emplace("template", (*B).c_str());
 
     bool *C = isDev ? &devConnected : &isConnected;
 
