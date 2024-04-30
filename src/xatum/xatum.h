@@ -23,6 +23,9 @@ namespace Xatum
   std::string accepted = "share accepted";
   std::string stale = "invalid extra nonce";
 
+  uint64_t lastReceivedJobTime = 0;
+  uint64_t jobTimeout = 45;
+
   const int ERROR_MSG = 3;
   const int WARN_MSG = 2;
   const int INFO_MSG = 1;
