@@ -39,7 +39,7 @@ inline std::string hexStr(const unsigned char *data, int len)
 // }
 
 // __host__ __device__ __forceinline__ CUDA hints
-inline void hexstr_to_bytes(std::string s, unsigned char *&b)
+inline void hexstrToBytes(std::string s, unsigned char *&b)
 {
   for (unsigned int i = 0; i < s.length(); i += 2)
   {
