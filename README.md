@@ -53,21 +53,41 @@ Do note that CMakeLists.txt will need to be altered if your libraries are instal
 This miner can be activated from the command line with the following parameters. Simply adjust the syntax for use with your shell or terminal of choice!
 ```
 General:
-  --help                 produce help message
-  --daemon-address arg   Dero node/pool URL or IP address to mine to
-  --port arg             The port used to connect to the Dero node
-  --wallet arg           Wallet address for receiving mining rewards
-  --threads arg          The amount of mining threads to create, default is 1
-  --dev-fee arg          Your desired dev fee percentage, default is 2.5, minimum is 1
-  --no-lock              Disables CPU affinity / CPU core binding
-  --lookup               Mine with lookup instead of regular C++
+  --help                  produce help message
+  --dero                  Will mine Dero
+  --xelis                 Will mine Xelis
+  --broadcast             Creates an http server to query miner stats
+  --testnet               Adjusts in-house parameters to mine on testnets
+  --daemon-address arg    Node/pool URL or IP address to mine to
+  --port arg              The port used to connect to the node
+  --wallet arg            Wallet address for receiving mining rewards
+  --threads arg           The amount of mining threads to create, default is 1
+  --dev-fee arg           Your desired dev fee percentage, default is 2.5,
+                          minimum is 1
+  --no-lock               Disables CPU affinity / CPU core binding
+
+Dero:
+  --lookup                Mine with lookup tables instead of computation
+  --dero-benchmark arg    Runs a mining benchmark for <arg> seconds (adheres to
+                          -t threads option)
 
 DEBUG:
-  --test                 Runs a set of tests to verify AstrobwtV3 is working (1 test expected to fail)
-  --op arg               Sets which branch op to benchmark (0-255), benchmark will be skipped if unspecified
-  --len arg              Sets length of the processed chunk in said benchmark (default 15)
-  --sabench              Runs a benchmark for divsufsort on snapshot files in the 'tests' directory
-  --benchmark arg        Runs a mining benchmark for <arg> seconds (adheres to -t threads option) 
+  --dero-test             Runs a set of tests to verify AstrobwtV3 is working
+                          (1 test expected to fail)
+  --op arg                Sets which branch op to benchmark (0-255), benchmark
+                          will be skipped if unspecified
+  --len arg               Sets length of the processed chunk in said benchmark
+                          (default 15)
+  --sabench               Runs a benchmark for divsufsort on snapshot files in
+                          the 'tests' directory
+
+Xelis:
+  --xatum                 Required for mining to Xatum pools on Xelis
+  --xelis-bench           Run a benchmark of xelis-hash with 1 thread
+  --xelis-test            Run the xelis-hash tests from the official source
+                          code
+  --worker-name arg       Sets the worker name for this instance when mining
+                          Xelis
 ```
 ### If the miner is run without any args, a CLI wizard will simply ask you to provide the required options one at a time.
 
