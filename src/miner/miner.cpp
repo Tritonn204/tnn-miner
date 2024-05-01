@@ -1116,9 +1116,6 @@ void do_session(
 
 int main(int argc, char **argv)
 {
-  SSL_load_error_strings();
-  ERR_load_crypto_strings();
-
 #if defined(_WIN32)
   SetConsoleOutputCP(CP_UTF8);
 #endif
@@ -1639,7 +1636,6 @@ Mining:
   if (broadcastStats) {
     boost::thread BROADCAST(BroadcastServer::serverThread, &rate30sec, &accepted, &rejected, versionString);
   }
-  // update(start_time);
 
   while (!isConnected)
   {
