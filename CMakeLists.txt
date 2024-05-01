@@ -53,8 +53,6 @@ if(WIN32)
   )
 endif()
 
-include_directories(${CUDAToolkit_INCLUDE_DIRS})
-
 # download CPM.cmake
 file(
   DOWNLOAD
@@ -112,6 +110,7 @@ find_package(Boost 1.80 COMPONENTS
   atomic
   program_options
 )
+
 if(Boost_FOUND)
   message("OS-provided Boost found")
   set(TNN_BOOST_INCLUDES ${Boost_INCLUDE_DIRS})
@@ -162,10 +161,6 @@ include_directories(
   "${PROJECT_SOURCE_DIR}/src/broadcast/"
 )
 
-set(ASM_SOURCES 
-  "${PROJECT_SOURCE_DIR}/src/xelis-hash/*.s"
-)
-
 file(GLOB all_SRCS
   "${PROJECT_SOURCE_DIR}/include/*.h"
   "${PROJECT_SOURCE_DIR}/include/*.hpp"
@@ -177,7 +172,6 @@ file(GLOB all_SRCS
   "${PROJECT_SOURCE_DIR}/src/xelis-hash/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/xelis-hash/*.c"
   "${PROJECT_SOURCE_DIR}/src/broadcast/*.cpp"
-  "${ASM_SOURCES}"
   # "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cu"
   # "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cuh"
   "${PROJECT_SOURCE_DIR}/src/miner/*.cpp"
