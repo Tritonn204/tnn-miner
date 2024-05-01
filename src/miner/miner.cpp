@@ -38,7 +38,6 @@
 #include <iostream>
 #include <string>
 #include <miner.h>
-#include <nlohmann/json.hpp>
 
 #include <random>
 
@@ -93,16 +92,14 @@ namespace ssl = boost::asio::ssl;       // from <boost/asio/ssl.hpp>
 namespace po = boost::program_options;  // from <boost/program_options.hpp>
 using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
 
-using json = nlohmann::json;
-
 boost::mutex mutex;
 boost::mutex wsMutex;
 
-json job = json({});
-json devJob = json({});
-;
-boost::json::object share = {};
-boost::json::object devShare = {};
+boost::json::value job = boost::json::value({});
+boost::json::value devJob = boost::json::value({});
+
+boost::json::object share;
+boost::json::object devShare;
 
 std::string currentBlob;
 std::string devBlob;
@@ -123,11 +120,10 @@ int rejected;
 int accepted;
 int firstRejected;
 
-uint64_t hashrate;
-uint64_t ourHeight = 0;
-uint64_t devHeight = 0;
-uint64_t difficulty;
-uint64_t difficultyDev;
+int64_t ourHeight = 0;
+int64_t devHeight = 0;
+int64_t difficulty;
+int64_t difficultyDev;
 
 std::vector<int64_t> rate5min;
 std::vector<int64_t> rate1min;
@@ -172,6 +168,7 @@ void dero_session(
     net::yield_context yield,
     bool isDev)
 {
+  boost::json::error_code jsonEc;
   beast::error_code ec;
 
   // These objects perform our I/O
@@ -303,6 +300,7 @@ void dero_session(
   // This buffer will hold the incoming message
   beast::flat_buffer buffer;
   std::stringstream workInfo;
+  boost::json::value workData;
 
   boost::thread submission_thread([&]
                                   {
@@ -363,9 +361,10 @@ void dero_session(
 
         beast::get_lowest_layer(ws).expires_never();
         workInfo << beast::make_printable(buffer.data());
-        if (json::accept(workInfo.str()))
+
+        workData = boost::json::parse(workInfo.str(), jsonEc);
+        if (!jsonEc)
         {
-          json workData = json::parse(workInfo.str());
           if ((isDev ? (workData.at("height") != devHeight) : (workData.at("height") != ourHeight)))
           {
             // mutex.lock();
@@ -373,7 +372,7 @@ void dero_session(
               devJob = workData;
             else
               job = workData;
-            json *J = isDev ? &devJob : &job;
+            boost::json::value *J = isDev ? &devJob : &job;
             // mutex.unlock();
 
             if ((*J).at("lasterror") != "")
@@ -384,16 +383,16 @@ void dero_session(
 
             if (!isDev)
             {
-              currentBlob = std::string((*J).at("blockhashing_blob"));
-              blockCounter = (*J).at("blocks");
-              miniBlockCounter = (*J).at("miniblocks");
-              rejected = (*J).at("rejected");
-              hashrate = (*J).at("difficultyuint64");
-              ourHeight = (*J).at("height");
-              difficulty = (*J).at("difficultyuint64");
+              currentBlob = (*J).at("blockhashing_blob").as_string();
+              //blockCounter = (*J).at("blocks");
+              //miniBlockCounter = (*J).at("miniblocks");
+              //rejected = (*J).at("rejected");
+              //hashrate = (*J).at("difficultyuint64");
+              ourHeight = (*J).at("height").as_int64();
+              difficulty = (*J).at("difficultyuint64").as_int64();
               // printf("NEW JOB RECEIVED | Height: %d | Difficulty %" PRIu64 "\n", ourHeight, difficulty);
-              accepted = (*J).at("miniblocks");
-              rejected = (*J).at("rejected");
+              accepted = (*J).at("miniblocks").as_int64();
+              rejected = (*J).at("rejected").as_int64();
               if (!isConnected)
               {
                 mutex.lock();
@@ -410,9 +409,9 @@ void dero_session(
             }
             else
             {
-              difficultyDev = (*J).at("difficultyuint64");
-              devBlob = std::string((*J).at("blockhashing_blob"));
-              devHeight = (*J).at("height");
+              difficultyDev = (*J).at("difficultyuint64").as_int64();
+              devBlob = (*J).at("blockhashing_blob").as_string();
+              devHeight = (*J).at("height").as_int64();
               if (!devConnected)
               {
                 mutex.lock();
@@ -615,31 +614,34 @@ void xelis_session(
         workInfo << beast::make_printable(buffer.data());
 
         // std::cout << "Received data: " << workInfo.str() << std::endl;
-        if (json::accept(workInfo.str()))
+        boost::json::error_code jsonEc;
+        boost::json::value response = boost::json::parse(workInfo.str(), jsonEc);
+        if (!jsonEc)
         {
-          json response = json::parse(workInfo.str());
-          if (response.contains("new_job"))
+          //boost::json::value response = boost::json::parse(workInfo.str());
+          if (response.at("new_job").is_object())
           {
-            json workData = response.at("new_job");
-            if ((isDev ? (workData.at("height") != devHeight) : (workData.at("height") != ourHeight)))
+            boost::json::value workData = response.at("new_job");
+            if ((isDev ? (workData.at("height").as_int64() != devHeight) : (workData.at("height").as_int64() != ourHeight)))
             {
               if (isDev)
                 devJob = workData;
               else
                 job = workData;
-              json *J = isDev ? &devJob : &job;
+              boost::json::value *J = isDev ? &devJob : &job;
 
-              if ((*J).contains("lasterror") && (*J).at("lasterror") != "")
+              auto lasterror = (*J).as_object().if_contains("lasterror");
+              if (nullptr != lasterror)
               {
-                std::cerr << "received error: " << (*J).at("lasterror") << std::endl
+                std::cerr << "received error: " << (*lasterror).as_string() << std::endl
                           << consoleLine << "v" << versionString << " ";
               }
 
               if (!isDev)
               {
-                currentBlob = (*J).at("template").get<std::string>();
+                currentBlob = (*J).at("template").as_string();
                 ourHeight++;
-                difficulty = std::stoull((*J).at("difficulty").get<std::string>());
+                difficulty = std::stoull(std::string((*J).at("difficulty").as_string()));
 
                 if (!isConnected)
                 {
@@ -657,9 +659,9 @@ void xelis_session(
               }
               else
               {
-                devBlob = (*J).at("template").get<std::string>();
+                devBlob = (*J).at("template").as_string();
                 devHeight++;
-                difficultyDev = std::stoull((*J).at("difficulty").get<std::string>());
+                difficultyDev = std::stoull(std::string((*J).at("difficulty").as_string()));
 
                 if (!devConnected)
                 {
@@ -676,7 +678,7 @@ void xelis_session(
           }
           else
           {
-            if (response.contains("block_rejected"))
+            if (response.at("block_rejected").is_primitive())
             {
               rejected++;
             }
@@ -940,19 +942,19 @@ void xatum_session(
 int handleXatumPacket(Xatum::packet xPacket, bool isDev)
 {
   std::string command = xPacket.command;
-  json data = xPacket.data;
+  boost::json::value data = xPacket.data;
   int res = 0;
 
   if (command == Xatum::print)
   {
     mutex.lock();
-    if (Xatum::accepted.compare(data.at("msg").get<std::string>()) == 0)
+    if (Xatum::accepted.compare(data.at("msg").as_string()) == 0)
       accepted++;
 
-    if (Xatum::stale.compare(data.at("msg").get<std::string>()) == 0)
+    if (Xatum::stale.compare(data.at("msg").as_string()) == 0)
       rejected++;
     
-    int msgLevel = data.at("lvl").get<int>();
+    int msgLevel = data.at("lvl").as_int64();
     if (msgLevel < Xatum::logLevel)
       return 0;
 
@@ -988,7 +990,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
       break;
     }
 
-    printf("%s\n", data.at("msg").get<std::string>().c_str());
+    printf("%s\n", data.at("msg").as_string().c_str());
 
     setcolor(BRIGHT_WHITE);
     mutex.unlock();
@@ -996,31 +998,27 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
 
   else if (command == Xatum::newJob)
   {
-    uint64_t *diff = isDev ? &difficultyDev : &difficulty;
-    json *J = isDev ? &devJob : &job;
-    uint64_t *h = isDev ? &devHeight : &ourHeight;
+    int64_t *diff = isDev ? &difficultyDev : &difficulty;
+    boost::json::value *J = isDev ? &devJob : &job;
+    int64_t *h = isDev ? &devHeight : &ourHeight;
 
     std::string *B = isDev ? &devBlob : &currentBlob;
 
-    if (data.at("blob").get<std::string>().compare(*B) == 0)
+    if (data.at("blob").as_string().compare(*B) == 0)
       return 0;
-    *B = data.at("blob").get<std::string>();
+    *B = data.at("blob").as_string();
 
     Xatum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
-    // std::cout << data << std::endl;
     if (!isDev)
     {
       setcolor(CYAN);
       printf("\nNew Xatum job received\n");
       setcolor(BRIGHT_WHITE);
     }
-    *diff = data.at("diff").get<uint64_t>();
+    *diff = data.at("diff").as_int64();
 
-    if ((*J).contains("template"))
-      (*J).at("template") = (*B).c_str();
-    else
-      (*J).emplace("template", (*B).c_str());
+    (*J).as_object().emplace("template", (*B).c_str());
 
     bool *C = isDev ? &devConnected : &isConnected;
 
@@ -1056,7 +1054,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
   else if (!isDev && command == Xatum::success)
   {
     // std::cout << data << std::endl;
-    if (data.at("msg").get<std::string>() == "ok")
+    if (data.at("msg").as_string() == "ok")
     {
       printf("accepted!");
       accepted++;
@@ -1065,7 +1063,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
     {
       rejected++;
       setcolor(RED);
-      printf("\nXatum Share Rejected: %s\n", data.at("msg").get<std::string>().c_str());
+      printf("\nXatum Share Rejected: %s\n", data.at("msg").as_string().c_str());
       setcolor(BRIGHT_WHITE);
     }
   }
@@ -2016,12 +2014,12 @@ void benchmark(int tid)
   work[MINIBLOCK_SIZE - 1] = (byte)tid;
   while (true)
   {
-    json myJob = job;
-    json myJobDev = devJob;
+    boost::json::value myJob = job;
+    boost::json::value myJobDev = devJob;
     localJobCounter = jobCounter;
 
     byte *b2 = new byte[MINIBLOCK_SIZE];
-    hexstrToBytes(myJob.at("blockhashing_blob"), b2);
+    hexstrToBytes(std::string(myJob.at("blockhashing_blob").as_string()), b2);
     memcpy(work, b2, MINIBLOCK_SIZE);
     delete[] b2;
 
@@ -2098,20 +2096,20 @@ waitForJob:
     try
     {
       mutex.lock();
-      json myJob = job;
-      json myJobDev = devJob;
+      boost::json::value myJob = job;
+      boost::json::value myJobDev = devJob;
       localJobCounter = jobCounter;
       mutex.unlock();
 
       byte *b2 = new byte[MINIBLOCK_SIZE];
-      hexstrToBytes(myJob.at("blockhashing_blob"), b2);
+      hexstrToBytes(std::string(myJob.at("blockhashing_blob").as_string()), b2);
       memcpy(work, b2, MINIBLOCK_SIZE);
       delete[] b2;
 
       if (devConnected)
       {
         byte *b2d = new byte[MINIBLOCK_SIZE];
-        hexstrToBytes(myJobDev.at("blockhashing_blob"), b2d);
+        hexstrToBytes(std::string(myJobDev.at("blockhashing_blob").as_string()), b2d);
         memcpy(devWork, b2d, MINIBLOCK_SIZE);
         delete[] b2d;
       }
@@ -2202,7 +2200,7 @@ waitForJob:
     }
     catch (...)
     {
-      std::cerr << "Error in POW Function" << std::endl;
+      std::cerr << "Error in Dero POW Function" << std::endl;
     }
     if (!isConnected)
       break;
@@ -2237,8 +2235,8 @@ waitForJob:
     try
     {
       mutex.lock();
-      json myJob = job;
-      json myJobDev = devJob;
+      boost::json::value myJob = job;
+      boost::json::value myJobDev = devJob;
       localJobCounter = jobCounter;
 
       mutex.unlock();
@@ -2253,10 +2251,10 @@ waitForJob:
         switch (protocol)
         {
         case XELIS_SOLO:
-          hexstrToBytes(myJob.at("template"), b2);
+          hexstrToBytes(std::string(myJob.at("template").as_string()), b2);
           break;
         case XELIS_XATUM:
-          std::string b64 = base64::from_base64(myJob.at("template").get<std::string>());
+          std::string b64 = base64::from_base64(std::string(myJob.at("template").as_string()));
           memcpy(b2, b64.data(), b64.size());
           break;
         }
@@ -2266,7 +2264,7 @@ waitForJob:
         i = 0;
       }
 
-      if (devConnected && myJobDev.contains("template"))
+      if (devConnected && myJobDev.at("template").is_string())
       {
         if (devHeight == 0 || localDevHeight != devHeight)
         {
@@ -2274,10 +2272,10 @@ waitForJob:
           switch (protocol)
           {
           case XELIS_SOLO:
-            hexstrToBytes(myJobDev.at("template"), b2d);
+            hexstrToBytes(std::string(myJobDev.at("template").as_string()), b2d);
             break;
           case XELIS_XATUM:
-            std::string b64 = base64::from_base64(myJobDev.at("template").get<std::string>().c_str());
+            std::string b64 = base64::from_base64(std::string(myJobDev.at("template").as_string()));
             memcpy(b2d, b64.data(), b64.size());
             break;
           }
@@ -2408,7 +2406,7 @@ waitForJob:
     catch (...)
     {
       mutex.lock();
-      std::cerr << "Error in POW Function" << std::endl;
+      std::cerr << "Error in Xelis/Xatum POW Function" << std::endl;
       mutex.unlock();
     }
     if (!isConnected)
