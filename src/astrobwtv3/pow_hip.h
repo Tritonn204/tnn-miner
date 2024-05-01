@@ -156,7 +156,7 @@ void ASTRO_2(void **cudaStore, workerData_hip *workers, int batchSize);
 void ASTRO_3(byte *work, byte *output, workerData_hip *workers, int inputLen, int batchSize, int device, int offset);
 
 __device__ void AstroBWTv3_hip_p1(unsigned char *input, int inputLen, workerData_hip *workers, int offset);
-__device__ void AstroBWTv3_hip_p2(workerData_hip *workers, byte *s3, int offset);
+__device__ void AstroBWTv3_hip_p2(unsigned char *input, int inputLen, unsigned char *outputHash, workerData_hip &worker);
 __device__ void AstroBWTv3_hip_p3(unsigned char *outputHash, workerData_hip *workers, int offset);
 
 __global__ void AstroBWTv3_hip(unsigned char *input, int inputLen, unsigned char *outputhash, workerData_hip &scratch);

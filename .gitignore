@@ -32,5 +32,11 @@
 /cmake
 /cpp_modules
 
+# Xelis rust resources
+/src/xelis-hash/**.rs
+/src/xelis-hash/**.toml
+/src/xelis-hash/**.lock
+/src/xelis-hash/target
+
 # Misc
 **.txt

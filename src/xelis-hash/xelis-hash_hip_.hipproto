@@ -1,0 +1,65 @@
+#define BLOCK_SIZE 128
+
+__global__ void stage_2_kernel(uint32_t *smallPad, uint32_t *slots) {
+  __shared__ uint32_t shared_slots[XELIS_SLOT_LENGTH];
+  __shared__ uint32_t shared_indices[XELIS_SLOT_LENGTH];
+
+  uint32_t tid = threadIdx.x;
+  uint32_t bid = blockIdx.x * blockDim.x + threadIdx.x;
+
+  // Load slots into shared memory
+  if (tid < XELIS_SLOT_LENGTH) {
+    shared_slots[tid] = slots[tid];
+  }
+  __syncthreads();
+
+  // Iterate over the memory
+  for (uint32_t j = bid; j < (XELIS_MEMORY_SIZE * 2) / XELIS_SLOT_LENGTH; j += blockDim.x * gridDim.x) {
+    // Initialize shared_indices
+    if (tid < XELIS_SLOT_LENGTH) {
+      shared_indices[tid] = tid;
+    }
+    __syncthreads();
+
+    // Fisher-Yates shuffle
+    for (int slot_idx = XELIS_SLOT_LENGTH - 1; slot_idx >= 0; --slot_idx) {
+      uint32_t index_in_indices = smallPad[j * XELIS_SLOT_LENGTH + slot_idx] % (slot_idx + 1);
+      uint32_t index = shared_indices[index_in_indices];
+      shared_indices[index_in_indices] = shared_indices[slot_idx];
+
+      // Compute the sum
+      uint32_t sum = shared_slots[index];
+      uint32_t offset = j * XELIS_SLOT_LENGTH;
+
+      for (uint32_t k = 0; k < index; ++k) {
+        uint32_t pad = smallPad[offset + k];
+        sum = (shared_slots[k] >> 31 == 0) ? sum + pad : sum - pad;
+      }
+
+      for (uint32_t k = index + 1; k < XELIS_SLOT_LENGTH; ++k) {
+        uint32_t pad = smallPad[offset + k];
+        sum = (shared_slots[k] >> 31 == 0) ? sum + pad : sum - pad;
+      }
+
+      shared_slots[index] = sum;
+      __syncthreads();
+    }
+  }
+
+  // Copy shared slots back to global memory
+  if (tid < XELIS_SLOT_LENGTH) {
+    slots[tid] = shared_slots[tid];
+  }
+}
+
+void stage_2(uint64_t *input, uint32_t *smallPad, uint32_t *slots) {
+  // Set grid and block dimensions
+  dim3 block(BLOCK_SIZE);
+  dim3 grid((XELIS_SLOT_LENGTH + BLOCK_SIZE - 1) / BLOCK_SIZE);
+
+  // Launch the kernel
+  stage_2_kernel<<<grid, block>>>(smallPad, slots);
+
+  // Copy slots back to the last SLOT_LENGTH elements of smallPad
+  cudaMemcpy(&smallPad[XELIS_MEMORY_SIZE*2-XELIS_SLOT_LENGTH], slots, XELIS_SLOT_LENGTH * sizeof(uint32_t), cudaMemcpyDeviceToDevice);
+}
