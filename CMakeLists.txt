@@ -85,8 +85,6 @@ endif()
 
 include(${CPM_DOWNLOAD_LOCATION})
 
-CPMAddPackage("gh:nlohmann/json@3.10.5")
-
 set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL REQUIRED)
 
@@ -186,4 +184,4 @@ endif()
 if(UNIX)
   target_link_libraries(${PROJECT_NAME} udns pthread)
 endif()
-target_link_libraries(${PROJECT_NAME} Threads::Threads nlohmann_json::nlohmann_json ${TNN_BOOST_LIBS} OpenSSL::SSL OpenSSL::Crypto)
+target_link_libraries(${PROJECT_NAME} Threads::Threads ${TNN_BOOST_LIBS} OpenSSL::SSL OpenSSL::Crypto)
