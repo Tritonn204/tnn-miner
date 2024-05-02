@@ -1,4 +1,4 @@
-#include "xelis-hash.hpp"
+#include "xelis-hash_hip.hpp"
 #include <stdlib.h>
 #include <iostream>
 
@@ -9,7 +9,8 @@
 #include <cstring>
 #include <array>
 #include <cassert>
-#include <hip/hip_runtime.h>
+
+#include "aes.tab"
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -18,8 +19,7 @@
 #endif
 #define rl64(x, a) (((x << a%64) | (x >> (64 - a%64))))
 
-#define htonll(x) ((1==htonl(1)) ? (x) : ((uint64_t)htonl((x) & 0xFFFFFFFF) << 32) | htonl((x) >> 32))
-#define ntohll(x) ((1==ntohl(1)) ? (x) : ((uint64_t)ntohl((x) & 0xFFFFFFFF) << 32) | ntohl((x) >> 32))
+#define SWAP_UINT64(x) (((uint64_t)__brev((uint32_t)(x)) << 32) | __brev((uint32_t)((x) >> 32)))
 
 __device__ const int sign_bit_values[8][8] = {
     {0, 0, 0, 0, 0, 0, 0, -1},
@@ -44,11 +44,21 @@ __device__ uint64_t swap_bytes(uint64_t value) {
 }
 
 
-__device__ void aes_round(uint8_t* block, const uint8_t* key) {
-    __m128i block_m128i = _mm_load_si128((__m128i*)block);
-    __m128i key_m128i = _mm_load_si128((__m128i*)key);
-    __m128i result = _mm_aesenc_si128(block_m128i, key_m128i);
-    _mm_store_si128((__m128i*)block, result);
+__device__ void aes_round(uint *block, const uint *key) {
+    uint s0 = block[0];
+    uint s1 = block[1];
+    uint s2 = block[2];
+    uint s3 = block[3];
+
+    uint t0 = cTe0[s0 >> 24] ^ cTe1[(s1 >> 16) & 0xff] ^ cTe2[(s2 >>  8) & 0xff] ^ cTe3[s3 & 0xff] ^ key[0];
+    uint t1 = cTe0[s1 >> 24] ^ cTe1[(s2 >> 16) & 0xff] ^ cTe2[(s3 >>  8) & 0xff] ^ cTe3[s0 & 0xff] ^ key[1];
+    uint t2 = cTe0[s2 >> 24] ^ cTe1[(s3 >> 16) & 0xff] ^ cTe2[(s0 >>  8) & 0xff] ^ cTe3[s1 & 0xff] ^ key[2];
+    uint t3 = cTe0[s3 >> 24] ^ cTe1[(s0 >> 16) & 0xff] ^ cTe2[(s1 >>  8) & 0xff] ^ cTe3[s2 & 0xff] ^ key[3];
+
+    block[0] = t0;
+    block[1] = t1;
+    block[2] = t2;
+    block[3] = t3;
 }
 
 __device__ static const  uint64_t RC[12] = {
@@ -217,10 +227,10 @@ __device__ void stage_1(uint64_t* int_input, uint64_t* scratchPad,
 
     uint64_t rand_int = 0;
     for (size_t j = B1; j <= B2; ++j) {
-      byte pair_idx = (j + 1) % XELIS_KECCAK_WORDS;
-      byte pair_idx2 = (j + 2) % XELIS_KECCAK_WORDS;
+      byte pair_idx = (j + 1) % XELIS_HIP_KECCAK_WORDS;
+      byte pair_idx2 = (j + 2) % XELIS_HIP_KECCAK_WORDS;
 
-      size_t target_idx = i * XELIS_KECCAK_WORDS + j;
+      size_t target_idx = i * XELIS_HIP_KECCAK_WORDS + j;
       uint64_t a = int_input[j] ^ rand_int;
 
       uint64_t left = int_input[pair_idx];
@@ -245,151 +255,88 @@ __device__ void stage_1(uint64_t* int_input, uint64_t* scratchPad,
       uint64_t b = a ^ v;
       rand_int = b;
       scratchPad[target_idx] = b;
+      if (target_idx == 7) printf("b = %llu\n", b);
+      // if (i == A1 && j < 5) 
+      //   printf("i = %llu, j = %llu, b = %llu\n", i, j, b);
     }
   }
 }
 
-__device__ void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots) {
-  for (byte iter = 0; iter < XELIS_ITERS; ++iter) {
-    for (uint16_t j = 0; j < (XELIS_MEMORY_SIZE * 2) / XELIS_SLOT_LENGTH; ++j) {
-      for (int i = 0; i < XELIS_SLOT_LENGTH; i++) {
+__device__ void stage_2(workerData_xelis_hip &worker, uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots) {
+  for (byte iter = 0; iter < XELIS_HIP_ITERS; ++iter) {
+    for (uint16_t j = 0; j < (XELIS_HIP_MEMORY_SIZE * 2) / XELIS_HIP_SLOT_LENGTH; ++j) {
+      if (j > 16) break;
+      for (int i = 0; i < XELIS_HIP_SLOT_LENGTH; i++) {
         indices[i] = i;
       }
-      for (int slot_idx = XELIS_SLOT_LENGTH - 1; slot_idx >= 0; --slot_idx) {
-        uint16_t index_in_indices = smallPad[j * XELIS_SLOT_LENGTH + slot_idx] % (slot_idx + 1);
-        uint16_t index = indices[index_in_indices];
-        indices[index_in_indices] = indices[slot_idx];
-
-      #ifdef __AVX512F__
-        // AVX-512 implementation
-        __m512i sum_buffer = _mm512_setzero_si512();
-
-        for (uint16_t k = 0; k < XELIS_SLOT_LENGTH; k += 16) {
-          __m512i slot_vector = _mm512_load_si512(&slots[k]);
-          __m512i values = _mm512_load_si512(&smallPad[j * XELIS_SLOT_LENGTH + k]);
-
-          __m512i sign_mask = _mm512_cmpeq_epu32(_mm512_setzero_si512(), _mm512_srli_epi32(slot_vector, 31));
-          sum_buffer = _mm512_blendv_epi32(_mm512_sub_epi32(sum_buffer, values), _mm512_add_epi32(sum_buffer, values), sign_mask);
+      for (int slot_idx = XELIS_HIP_SLOT_LENGTH - 1; slot_idx >= 0; --slot_idx) {
+        uint16_t index_in_indices = smallPad[j * XELIS_HIP_SLOT_LENGTH + slot_idx] % (slot_idx + 1);
+        if (slot_idx < 16 && j == 0) {
+          printf("sIndex: %d\n", (j * XELIS_HIP_SLOT_LENGTH + slot_idx)/2);
+          printf("scratchPad in question: %llu\n", *(uint64_t*)&smallPad[j * XELIS_HIP_SLOT_LENGTH + slot_idx]);
+          printf("smallPad in question: %lu\n", smallPad[j * XELIS_HIP_SLOT_LENGTH + slot_idx]);
         }
+        // uint16_t index = indices[index_in_indices];
+        // indices[index_in_indices] = indices[slot_idx];
 
-        slots[index] += _mm512_reduce_add_epi32(sum_buffer);
-      #elif defined(__AVX2__)
-        // AVX2 implementation
-        __m256i sum_buffer = _mm256_setzero_si256();
-        int sign = slots[index] >> 31;
+        // // SCALAR implementation
+        // uint32_t sum = slots[index];
+        // uint16_t offset = j * XELIS_HIP_SLOT_LENGTH;
 
-        for (uint16_t k = 0; k < XELIS_SLOT_LENGTH; k += 8) {
-            __m256i slot_vector = _mm256_load_si256((__m256i*)&slots[k]);
-            __m256i values = _mm256_load_si256((__m256i*)&smallPad[j * XELIS_SLOT_LENGTH + k]);
+        // for (uint16_t k = 0; k < index; ++k) {
+        //   uint32_t pad = smallPad[offset + k];
+        //   sum = (slots[k] >> 31 == 0) ? sum + pad : sum - pad;
+        // }
 
-            __m256i sign_mask = _mm256_cmpeq_epi32(_mm256_setzero_si256(), _mm256_srli_epi32(slot_vector, 31));
-            sum_buffer = _mm256_blendv_epi8(_mm256_sub_epi32(sum_buffer, values), _mm256_add_epi32(sum_buffer, values), sign_mask);
-        }
-
-        __m256i adjustment = _mm256_set1_epi32(smallPad[j * XELIS_SLOT_LENGTH + index]);
-        __m256i sign_bit = _mm256_load_si256((__m256i*)sign_bit_values[index % 8]);
-      
-        if (sign == 0) {
-          sum_buffer = _mm256_blendv_epi8(sum_buffer, _mm256_sub_epi32(sum_buffer, adjustment), sign_bit);
-        } else {
-          sum_buffer = _mm256_blendv_epi8(sum_buffer, _mm256_add_epi32(sum_buffer, adjustment), sign_bit);
-        }
-
-        __m128i sum_low = _mm256_extracti128_si256(sum_buffer, 0);
-        __m128i sum_high = _mm256_extracti128_si256(sum_buffer, 1);
-        __m128i sum_128 = _mm_add_epi32(sum_low, sum_high);
-
-        sum_128 = _mm_hadd_epi32(sum_128, sum_128);
-        sum_128 = _mm_hadd_epi32(sum_128, sum_128);
-
-        uint32_t reduced_sum = _mm_extract_epi32(sum_128, 0);
-        slots[index] += reduced_sum;
-      // TODO: fix below
-      // #elif defined(__SSE2__)
-      //   // SSE implementation
-      //   __m128i sum_buffer = _mm_setzero_si128();
-
-      //   int sign = slots[index] >> 31;
-      //   for (size_t k = 0; k < XELIS_SLOT_LENGTH; k += 4) {
-      //     __m128i slot_vector = _mm_load_si128((__m128i*)&slots[k]);
-      //     __m128i values = _mm_load_si128((__m128i*)&smallPad[j * XELIS_SLOT_LENGTH + k]);
-
-      //     __m128i sign_mask = _mm_cmpeq_epi32(_mm_setzero_si128(), _mm_srli_epi32(slot_vector, 31));
-      //     sum_buffer = _mm_blendv_epi8(_mm_sub_epi32(sum_buffer, values), _mm_add_epi32(sum_buffer, values), sign_mask);
-      //   }
-
-      //   __m128i adjustment = _mm_set1_epi32(smallPad[j * XELIS_SLOT_LENGTH + index]);
-      //   __m128i sign_bit = _mm_load_si128((__m128i*)sign_bit_values[index % 4]);
-      
-      //   if (sign == 0) {
-      //     sum_buffer = _mm_blendv_epi8(sum_buffer, _mm_sub_epi32(sum_buffer, adjustment), sign_bit);
-      //   } else {
-      //     sum_buffer = _mm_blendv_epi8(sum_buffer, _mm_add_epi32(sum_buffer, adjustment), sign_bit);
-      //   }
-
-      //   // Perform horizontal addition to reduce the sum
-      //   sum_buffer = _mm_hadd_epi32(sum_buffer, sum_buffer);
-
-      //   // Extract the reduced sum
-      //   uint32_t reduced_sum =  _mm_cvtsi128_si32(sum_buffer);
-      //   slots[index] += reduced_sum;
-      #else
-        // SCALAR implementation
-        uint32_t sum = slots[index];
-        uint16_t offset = j * XELIS_SLOT_LENGTH;
-
-        for (uint16_t k = 0; k < index; ++k) {
-          uint32_t pad = smallPad[offset + k];
-          sum = (slots[k] >> 31 == 0) ? sum + pad : sum - pad;
-        }
-
-        for (uint16_t k = index + 1; k < XELIS_SLOT_LENGTH; ++k) {
-          uint32_t pad = smallPad[offset + k];
-          sum = (slots[k] >> 31 == 0) ? sum + pad : sum - pad;
-        }
-        slots[index] = sum;
-      #endif
-        // printf("sum: %llu, index: %u\n", sum, index);
+        // for (uint16_t k = index + 1; k < XELIS_HIP_SLOT_LENGTH; ++k) {
+        //   uint32_t pad = smallPad[offset + k];
+        //   sum = (slots[k] >> 31 == 0) ? sum + pad : sum - pad;
+        // }
+        // slots[index] = sum;
+        // // if (slot_idx < 16 && j == 0) printf("sum: %llu, index: %u\n", sum, index);
       }
     }
   }
 
   // Copy slots back to the last SLOT_LENGTH elements of smallPad
-  std::copy(&slots[0], &slots[XELIS_SLOT_LENGTH], &smallPad[XELIS_MEMORY_SIZE*2-XELIS_SLOT_LENGTH]);
+  memcpy(&smallPad[XELIS_HIP_MEMORY_SIZE*2-XELIS_HIP_SLOT_LENGTH], &slots[0], XELIS_HIP_SLOT_LENGTH*4);
 }
 
 __device__ void stage_3(uint64_t* scratchPad, byte* hashResult) {
     const byte key[16] = {0};
     byte block[16] = {0};
 
-    uint64_t addr_a = (scratchPad[XELIS_MEMORY_SIZE - 1] >> 15) & 0x7FFF;
-    uint64_t addr_b = scratchPad[XELIS_MEMORY_SIZE - 1] & 0x7FFF;
+    uint64_t addr_a = (scratchPad[XELIS_HIP_MEMORY_SIZE - 1] >> 15) & 0x7FFF;
+    uint64_t addr_b = scratchPad[XELIS_HIP_MEMORY_SIZE - 1] & 0x7FFF;
 
-    uint64_t mem_buffer_a[XELIS_BUFFER_SIZE];
-    uint64_t mem_buffer_b[XELIS_BUFFER_SIZE];
+    uint64_t mem_buffer_a[XELIS_HIP_BUFFER_SIZE];
+    uint64_t mem_buffer_b[XELIS_HIP_BUFFER_SIZE];
 
-    for (byte i = 0; i < XELIS_BUFFER_SIZE; ++i) {
-        mem_buffer_a[i] = scratchPad[(addr_a + i) % XELIS_MEMORY_SIZE];
-        mem_buffer_b[i] = scratchPad[(addr_b + i) % XELIS_MEMORY_SIZE];
+    for (byte i = 0; i < XELIS_HIP_BUFFER_SIZE; ++i) {
+        mem_buffer_a[i] = scratchPad[(addr_a + i) % XELIS_HIP_MEMORY_SIZE];
+        mem_buffer_b[i] = scratchPad[(addr_b + i) % XELIS_HIP_MEMORY_SIZE];
     }
 
-    for (uint16_t i = 0; i < XELIS_SCRATCHPAD_ITERS; ++i) {
-        byte *mem_a = reinterpret_cast<byte*>(&mem_buffer_a[i % XELIS_BUFFER_SIZE]);
-        byte *mem_b = reinterpret_cast<byte*>(&mem_buffer_b[i % XELIS_BUFFER_SIZE]);
+    for (uint16_t i = 0; i < XELIS_HIP_SCRATCHPAD_ITERS; ++i) {
+        byte *mem_a = reinterpret_cast<byte*>(&mem_buffer_a[i % XELIS_HIP_BUFFER_SIZE]);
+        byte *mem_b = reinterpret_cast<byte*>(&mem_buffer_b[i % XELIS_HIP_BUFFER_SIZE]);
 
-        std::copy(mem_b, mem_b + 8, block);
-        std::copy(mem_a, mem_a + 8, block + 8);
+        memcpy(block, mem_b, 8);
+        memcpy(block + 8, mem_a, 8);
 
-        aes_round(block, key);
+        aes_round(
+          reinterpret_cast<uint*>(const_cast<byte*>(block)), 
+          reinterpret_cast<const uint*>(const_cast<const byte*>(key)
+        ));
 
         uint64_t hash1 = *(reinterpret_cast<uint64_t*>(&block[0]));
         uint64_t hash2 = *(reinterpret_cast<uint64_t*>(mem_a)) ^ *(reinterpret_cast<uint64_t*>(mem_b));
 
         uint64_t result = ~(hash1 ^ hash2);
 
-        for (size_t j = 0; j < XELIS_HASH_SIZE; ++j) {
-          uint64_t a = mem_buffer_a[(j + i) % XELIS_BUFFER_SIZE];
-          uint64_t b = mem_buffer_b[(j + i) % XELIS_BUFFER_SIZE];
+        for (size_t j = 0; j < XELIS_HIP_HASH_SIZE; ++j) {
+          uint64_t a = mem_buffer_a[(j + i) % XELIS_HIP_BUFFER_SIZE];
+          uint64_t b = mem_buffer_b[(j + i) % XELIS_HIP_BUFFER_SIZE];
 
           uint64_t v;
           switch ((result >> (j * 2)) & 0xf) {
@@ -447,17 +394,17 @@ __device__ void stage_3(uint64_t* scratchPad, byte* hashResult) {
         }
 
         addr_b = result & 0x7FFF;
-        mem_buffer_a[i % XELIS_BUFFER_SIZE] = result;
-        mem_buffer_b[i % XELIS_BUFFER_SIZE] = scratchPad[addr_b];
+        mem_buffer_a[i % XELIS_HIP_BUFFER_SIZE] = result;
+        mem_buffer_b[i % XELIS_HIP_BUFFER_SIZE] = scratchPad[addr_b];
 
         addr_a = (result >> 15) & 0x7FFF;
         scratchPad[addr_a] = result;
 
-        size_t index = XELIS_SCRATCHPAD_ITERS - i - 1;
+        size_t index = XELIS_HIP_SCRATCHPAD_ITERS - i - 1;
         // printf("post result: %llu\n", result);
         if (index < 4) {
-            uint64_t be_result = htonll(result);
-            std::copy(reinterpret_cast<byte*>(&be_result), reinterpret_cast<byte*>(&be_result) + 8, &hashResult[index * 8]);
+            uint64_t be_result = SWAP_UINT64(result);
+            memcpy(&hashResult[index * 8], reinterpret_cast<byte*>(&be_result), 8);
         }
     }
 }
@@ -465,8 +412,8 @@ __device__ void stage_3(uint64_t* scratchPad, byte* hashResult) {
 void xelis_benchmark_gpu_hash_hip() {
     // const uint32_t ITERATIONS = 1000;
     // byte input[200] = {0};
-    // workerData_xelis worker;
-    // byte hash_result[XELIS_HASH_SIZE] = {0};
+    // workerData_xelis_hip worker;
+    // byte hash_result[XELIS_HIP_HASH_SIZE] = {0};
 
     // auto start = std::chrono::high_resolution_clock::now();
     // for (uint32_t i = 0; i < ITERATIONS; ++i) {
@@ -482,41 +429,53 @@ void xelis_benchmark_gpu_hash_hip() {
     // std::cout << "ms per hash: " << (elapsed.count() / ITERATIONS) << std::endl;
 }
 
-__global__ void xelis_kernel(byte* input, workerData_xelis &worker, byte *hashResult) {
+__global__ void s1_kernel(uint64_t* int_input, uint64_t* scratchPad, 
+  uint16_t A1, uint16_t A2, byte B1, byte B2) {
+  stage_1(int_input, scratchPad, A1, A2, B1, B2);
+}
+
+__global__ void s2_kernel(uint64_t* input, workerData_xelis_hip &worker) {
+  // for (int i = 0; i < XELIS_HIP_BYTES_ARRAY_INPUT/8; i++) {
+  //   printf("%llu, ", input[i]);
+  // }
+  // printf("\n");
+
+  memcpy(worker.slots, &worker.smallPad[XELIS_HIP_MEMORY_SIZE*2-XELIS_HIP_SLOT_LENGTH], XELIS_HIP_SLOT_LENGTH*4);
+
+  stage_2(worker, input, worker.smallPad, worker.indices, worker.slots);
+}
+
+__global__ void s3_kernel(uint64_t* scratchPad, byte* hashResult) {
+  stage_3(scratchPad, hashResult);
+}
+
+void xelis_hash_hip(byte* input, workerData_xelis_hip &worker, byte *hashResult) {
   worker.int_input = reinterpret_cast<uint64_t*>(input);
-  
   // Stage 1
-  stage_1(worker.int_input, reinterpret_cast<uint64_t*>(worker.scratchPad), 
-    0, XELIS_STAGE_1_MAX - 1,
-    0, XELIS_KECCAK_WORDS - 1
+  s1_kernel<<<1,1>>>(worker.int_input, reinterpret_cast<uint64_t*>(worker.scratchPad), 
+    0, XELIS_HIP_STAGE_1_MAX - 1,
+    0, XELIS_HIP_KECCAK_WORDS - 1
   );
-  stage_1(worker.int_input, reinterpret_cast<uint64_t*>(worker.scratchPad), 
-    XELIS_STAGE_1_MAX, XELIS_STAGE_1_MAX,
+  hipDeviceSynchronize();
+
+  s1_kernel<<<1,1>>>(worker.int_input, reinterpret_cast<uint64_t*>(worker.scratchPad), 
+    XELIS_HIP_STAGE_1_MAX, XELIS_HIP_STAGE_1_MAX,
     0, 17
   );
+  hipDeviceSynchronize();
 
-  // Stage 2
-  memset(worker.slots, 0, XELIS_SLOT_LENGTH);
   worker.smallPad = reinterpret_cast<uint32_t*>(worker.scratchPad);
+  for (int i = 0; i < 200; i++) printf("a");
 
-  memcpy(reinterpret_cast<uint32_t*>(worker.slots), &worker.smallPad[XELIS_MEMORY_SIZE*2-XELIS_SLOT_LENGTH], XELIS_SLOT_LENGTH);
+  s2_kernel<<<1,1>>>(reinterpret_cast<uint64_t*>(input), worker);
+  hipDeviceSynchronize();
 
-  stage_2(worker.int_input, worker.smallPad, worker.indices, worker.slots);
-  
-  // Stage 3
-  stage_3(reinterpret_cast<uint64_t*>(worker.scratchPad), hashResult);
+  // // Stage 3
+  // s3_kernel<<<1,1>>>(reinterpret_cast<uint64_t*>(worker.scratchPad), hashResult);
+  // hipDeviceSynchronize();
 }
 
-void xelis_hash_hip(byte* input, workerData_xelis &worker, byte *hashResult) {
-  // printf("input: ");
-  // for (int i = 0; i < 200; i++) {
-  //   printf("%02x", input[i]);
-  // }
-  // printf("\n\n");
-  xelis_kernel<<<1,1>>>(input, worker, hashResult);
-}
-
-int char2int(char input)
+int char2int_hip(char input)
 {
   if(input >= '0' && input <= '9')
     return input - '0';
@@ -529,60 +488,48 @@ int char2int(char input)
 
 // This function assumes src to be a zero terminated sanitized string with
 // an even number of [0-9a-f] characters, and target to be sufficiently large
-void hex2bin(const char* src, char* target)
+void hex2bin_hip(const char* src, char* target)
 {
   while(*src && src[1])
   {
-    *(target++) = char2int(*src)*16 + char2int(src[1]);
+    *(target++) = char2int_hip(*src)*16 + char2int_hip(src[1]);
     src += 2;
   }
 }
 
 
-char* testTemplate = "97dff4761917c2692df3be38e72ca7a59c3f55252e2245cc21564ef65fa8ea6f0000018f22fe78f80000000000064202f2a40463ccfcea839c4950a56ee38fa69c7ce2d4ba45d4b060cc63c297fb73b8a09c69661b1690b0a238d096a7ccb3cb204ce5dd604da9bb6c79c4ab00000000";
-
-namespace tests {
-    using Hash = std::array<byte, XELIS_HASH_SIZE>;
-
-    bool test_real() {
-        workerData_xelis worker;
-        byte hash_result[XELIS_HASH_SIZE] = {0};
-        byte input[XELIS_BYTES_ARRAY_INPUT] = {0};
-
-        hex2bin(testTemplate,
-        (char*)input);
-
-        printf("sanity check: ");
-        for(int i = 0; i < 112; i++) {
-          printf("%02x", input[i]);
-        }
-        printf("\n");
-
-        xelis_hash_hip(input, worker, hash_result);
-
-        printf("hoping for: 446e381b592967518c2b184c7115f9446b65921358eeb751363663e3474e0300\ngot: ");
-        for(int i = 0; i < 32; i++) {
-          printf("%02x", hash_result[i]);
-        }
-        printf("\n");
-        return true;
-    }
+namespace tests_hip {
+    char* testTemplate = "97dff4761917c2692df3be38e72ca7a59c3f55252e2245cc21564ef65fa8ea6f0000018f22fe78f80000000000064202f2a40463ccfcea839c4950a56ee38fa69c7ce2d4ba45d4b060cc63c297fb73b8a09c69661b1690b0a238d096a7ccb3cb204ce5dd604da9bb6c79c4ab00000000";
+    using Hash = std::array<byte, XELIS_HIP_HASH_SIZE>;
 
     bool test_input(const char* test_name, byte* input, size_t input_size, const Hash& expected_hash) {
-        workerData_xelis worker;
-        byte hash_result[XELIS_HASH_SIZE] = {0};
+        workerData_xelis_hip worker_d;
+        byte dummyBytes[sizeof(workerData_xelis_hip)] = {0};
+        hipMalloc((void**)&worker_d, sizeof(workerData_xelis_hip));
+        hipMemcpy(&worker_d, dummyBytes, sizeof(workerData_xelis_hip), hipMemcpyHostToDevice);
 
-        xelis_hash_hip(input, worker, hash_result);
+        byte hash_result[XELIS_HIP_HASH_SIZE] = {0};
+        byte *hash_result_d;
 
-        if (std::memcmp(hash_result, expected_hash.data(), XELIS_HASH_SIZE) != 0) {
+        byte *input_d;
+        
+        hipMalloc((void**)&input_d, input_size);
+        hipMemcpy(input_d, input, input_size, hipMemcpyHostToDevice);
+
+        hipMalloc((void**)&hash_result_d, XELIS_HIP_HASH_SIZE);
+        xelis_hash_hip(input_d, worker_d, hash_result_d);
+
+        hipMemcpy(hash_result, hash_result_d, XELIS_HIP_HASH_SIZE, hipMemcpyDeviceToHost);
+
+        if (std::memcmp(hash_result, expected_hash.data(), XELIS_HIP_HASH_SIZE) != 0) {
             std::cout << "Test '" << test_name << "' failed!" << std::endl;
-            std::cout << "Expected hash: ";
-            for (size_t i = 0; i < XELIS_HASH_SIZE; ++i) {
+            std::cout << "HIP || Expected hash: ";
+            for (size_t i = 0; i < XELIS_HIP_HASH_SIZE; ++i) {
                 printf("%02x ", expected_hash[i]);
             }
             std::cout << std::endl;
-            std::cout << "Actual hash:   ";
-            for (size_t i = 0; i < XELIS_HASH_SIZE; ++i) {
+            std::cout << "HIP || Actual hash:   ";
+            for (size_t i = 0; i < XELIS_HIP_HASH_SIZE; ++i) {
                 printf("%02x ", hash_result[i]);
             }
             std::cout << std::endl;
@@ -599,11 +546,11 @@ namespace tests {
             0x36, 0x18, 0x22, 0x65
         };
 
-        return test_input("test_zero_input", input, sizeof(input), expected_hash);
+        return test_input("test_zero_input", input, 200, expected_hash);
     }
 
     bool test_xelis_input() {
-        byte input[XELIS_BYTES_ARRAY_INPUT] = {0};
+        byte input[XELIS_HIP_BYTES_ARRAY_INPUT] = {0};
 
         const char* custom = "xelis-hashing-algorithm";
         std::memcpy(input, custom, std::strlen(custom));
@@ -616,16 +563,14 @@ namespace tests {
     }
 }
 
-void xelis_runTests() {
+void xelis_runTests_hip() {
   bool all_tests_passed = true;
-  all_tests_passed &= tests::test_zero_input();
-  all_tests_passed &= tests::test_xelis_input();
-
-  tests::test_real();
+  all_tests_passed &= tests_hip::test_zero_input();
+  all_tests_passed &= tests_hip::test_xelis_input();
 
   if (all_tests_passed) {
-      std::cout << "XELIS-HASH: All tests passed!" << std::endl;
+      std::cout << "HIP || XELIS-HASH: All tests passed!" << std::endl;
   } else {
-      std::cout << "XELIS-HASH: Some tests failed!" << std::endl;
+      std::cout << "HIP || XELIS-HASH: Some tests failed!" << std::endl;
   }
 }

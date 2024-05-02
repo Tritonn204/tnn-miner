@@ -39,7 +39,3 @@ typedef struct xelis_BlockMiner {
 void xelis_hash(byte* input, workerData_xelis &worker, byte *hashResult);
 void xelis_benchmark_cpu_hash();
 void xelis_runTests();
-
-void xelis_hash_hip(byte* input, workerData_xelis &worker, byte *hashResult);
-void xelis_benchmark_gpu_hash_hip();
-void xelis_runTests_hip();

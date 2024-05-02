@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 3.21)
 cmake_policy(VERSION 3.21.3...3.27)
 
 set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_C_FLAGS_RELEASE "-fansi-escape-codes -fcolor-diagnostics -static -ggdb -O3 -ftree-vectorize")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fansi-escape-codes -fcolor-diagnostics -static -static-libgcc -m64 -ggdb -O3 -Wuninitialized -ftree-vectorize -march=native")
-set(CMAKE_HIP_FLAGS "-static -ggdb -fansi-escape-codes -fcolor-diagnostics -fgpu-rdc --hip-link -fuse-ld=lld -Wno-deprecated-register")
+set(CMAKE_C_FLAGS_RELEASE "-fansi-escape-codes -fcolor-diagnostics -static -fuse-ld=lld -O3 -ftree-vectorize")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fansi-escape-codes -fcolor-diagnostics -static -static-libgcc -fuse-ld=lld -m64 -O3 -Wuninitialized -ftree-vectorize -march=native")
+set(CMAKE_HIP_FLAGS "-static -fansi-escape-codes -fcolor-diagnostics -fgpu-rdc -fuse-ld=lld -Wno-deprecated-register")
 
 if(NOT DEFINED HIP_PATH)
     if(NOT DEFINED ENV{HIP_PATH})
@@ -178,9 +178,10 @@ file(GLOB all_SRCS
   "${PROJECT_SOURCE_DIR}/src/*.c"
   "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.c"
-  "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.hip"
+  # "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.hip"
   "${PROJECT_SOURCE_DIR}/src/xelis-hash/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/xelis-hash/*.c"
+  "${PROJECT_SOURCE_DIR}/src/xelis-hash/*.hip"
   "${PROJECT_SOURCE_DIR}/src/broadcast/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/miner/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/miner/*.c"
@@ -199,4 +200,4 @@ endif()
 target_link_libraries(${PROJECT_NAME} nlohmann_json::nlohmann_json ${TNN_BOOST_LIBS} OpenSSL::SSL OpenSSL::Crypto hip::host roc::rocprim roc::rocthrust)
 
 set_property(TARGET ${PROJECT_NAME} PROPERTY HIP_ARCHITECTURES gfx1100)
-set(CMAKE_EXE_LINKER_FLAGS "-fgpu-rdc")
+set(CMAKE_EXE_LINKER_FLAGS "-fgpu-rdc --hip-link")
