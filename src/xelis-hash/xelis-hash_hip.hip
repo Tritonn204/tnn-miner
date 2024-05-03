@@ -715,7 +715,7 @@ namespace tests_hip {
         hipMemcpy(input_d, input, input_size, hipMemcpyHostToDevice);
 
         hipMalloc((void**)&hash_result_d, XELIS_HIP_HASH_SIZE);
-        xelis_hash_hip_optimized(input_d, worker_d, hash_result_d);
+        xelis_hash_hip(input_d, worker_d, hash_result_d);
 
         hipMemcpy(hash_result, hash_result_d, XELIS_HIP_HASH_SIZE, hipMemcpyDeviceToHost);
 
@@ -736,6 +736,41 @@ namespace tests_hip {
         return true;
     }
 
+    bool test_input_optimized(const char* test_name, byte* input, size_t input_size, const Hash& expected_hash) {
+      workerData_xelis_hip *worker_d;
+      byte dummyBytes[sizeof(workerData_xelis_hip)] = {0};
+      hipMalloc((void**)&worker_d, sizeof(workerData_xelis_hip));
+
+      byte hash_result[XELIS_HIP_HASH_SIZE] = {0};
+      byte *hash_result_d;
+
+      byte *input_d;
+      
+      hipMalloc((void**)&input_d, input_size);
+      hipMemcpy(input_d, input, input_size, hipMemcpyHostToDevice);
+
+      hipMalloc((void**)&hash_result_d, XELIS_HIP_HASH_SIZE);
+      xelis_hash_hip_optimized(input_d, worker_d, hash_result_d);
+
+      hipMemcpy(hash_result, hash_result_d, XELIS_HIP_HASH_SIZE, hipMemcpyDeviceToHost);
+
+      if (std::memcmp(hash_result, expected_hash.data(), XELIS_HIP_HASH_SIZE) != 0) {
+          std::cout << "Test '" << test_name << "' failed!" << std::endl;
+          std::cout << "HIP (optimized) || Expected hash: ";
+          for (size_t i = 0; i < XELIS_HIP_HASH_SIZE; ++i) {
+              printf("%02x ", expected_hash[i]);
+          }
+          std::cout << std::endl;
+          std::cout << "HIP (optimized) || Actual hash:   ";
+          for (size_t i = 0; i < XELIS_HIP_HASH_SIZE; ++i) {
+              printf("%02x ", hash_result[i]);
+          }
+          std::cout << std::endl;
+          return false;
+      }
+      return true;
+    }
+
     bool test_zero_input() {
         byte input[200] = {0};
         Hash expected_hash = {
@@ -745,6 +780,17 @@ namespace tests_hip {
         };
 
         return test_input("test_zero_input", input, 200, expected_hash);
+    }
+
+      bool test_zero_input_optimized() {
+        byte input[200] = {0};
+        Hash expected_hash = {
+            0x0e, 0xbb, 0xbd, 0x8a, 0x31, 0xed, 0xad, 0xfe, 0x09, 0x8f, 0x2d, 0x77, 0x0d, 0x84,
+            0xb7, 0x19, 0x58, 0x86, 0x75, 0xab, 0x88, 0xa0, 0xa1, 0x70, 0x67, 0xd0, 0x0a, 0x8f,
+            0x36, 0x18, 0x22, 0x65
+        };
+
+        return test_input_optimized("test_zero_input", input, 200, expected_hash);
     }
 
     bool test_xelis_input() {
@@ -759,16 +805,40 @@ namespace tests_hip {
         };
         return test_input("test_xelis_input", input, sizeof(input), expected_hash);
     }
+
+    bool test_xelis_input_optimized() {
+        byte input[XELIS_HIP_BYTES_ARRAY_INPUT] = {0};
+
+        const char* custom = "xelis-hashing-algorithm";
+        std::memcpy(input, custom, std::strlen(custom));
+
+        Hash expected_hash = {
+            106, 106, 173, 8, 207, 59, 118, 108, 176, 196, 9, 124, 250, 195, 3,
+            61, 30, 146, 238, 182, 88, 83, 115, 81, 139, 56, 3, 28, 176, 86, 68, 21
+        };
+        return test_input_optimized("test_xelis_input", input, sizeof(input), expected_hash);
+    }
 }
 
 void xelis_runTests_hip() {
   bool all_tests_passed = true;
+  bool all_tests_passed_optimized = true;
+
   all_tests_passed &= tests_hip::test_zero_input();
   all_tests_passed &= tests_hip::test_xelis_input();
+
+  all_tests_passed_optimized &= tests_hip::test_zero_input_optimized();
+  all_tests_passed_optimized &= tests_hip::test_xelis_input_optimized();
 
   if (all_tests_passed) {
       std::cout << "HIP || XELIS-HASH: All tests passed!" << std::endl;
   } else {
       std::cout << "HIP || XELIS-HASH: Some tests failed!" << std::endl;
+  }
+
+  if (all_tests_passed_optimized) {
+      std::cout << "HIP (optimized) || XELIS-HASH: All tests passed!" << std::endl;
+  } else {
+      std::cout << "HIP (optimized) || XELIS-HASH: Some tests failed!" << std::endl;
   }
 }

@@ -28,6 +28,28 @@ typedef struct workerData_xelis_hip {
   byte indices[XELIS_HIP_SLOT_LENGTH] = {0};
 } workerData_xelis_hip;
 
+typedef struct workerData_xelis_hip_optimized {
+  uint64_t *scratchPad;
+  uint64_t **int_input;
+  uint32_t **smallPad;
+  uint32_t *slots;
+  byte *indices;
+} workerData_xelis_hip_optimized;
+
+__device__ void initOptimizedXelisWorker (workerData_xelis_hip_optimized &worker, int batchSize) {
+  worker.scratchPad = (uint64_t*)malloc(XELIS_HIP_MEMORY_SIZE*8*batchSize);
+  memset(worker.scratchPad, 0, XELIS_HIP_MEMORY_SIZE*8*batchSize);
+
+  worker.int_input = (uint64_t**)malloc(sizeof(uint64_t*)*batchSize);
+  worker.smallPad = (uint64_t**)malloc(sizeof(uint32_t*)*batchSize);
+
+  worker.slots = (uint32_t*)malloc(XELIS_HIP_SLOT_LENGTH*4*batchSize);
+  memset(worker.slots, 0, XELIS_HIP_SLOT_LENGTH*4*batchSize);
+
+  worker.indices = (byte*)malloc(XELIS_HIP_SLOT_LENGTH*batchSize);
+  memset(worker.indices, 0, XELIS_HIP_SLOT_LENGTH*batchSize);
+}
+
 typedef struct xelis_BlockMiner_hip {
     uint8_t header_work_hash[32];
     uint64_t timestamp;
