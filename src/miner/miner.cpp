@@ -66,6 +66,7 @@
 
 #include <bit>
 #include <broadcastServer.hpp>
+#include <stratum.h>
 
 #if defined(_WIN32)
 #include <Windows.h>
@@ -484,7 +485,7 @@ void xelis_session(
     std::promise<void> p;
 
     YukiWorkshop::DNSResolver d(ioc2);
-    d.resolve_a4(host, [&](int err, auto &addrs, auto &qname, auto &cname, uint ttl)
+    d.resolve_a4(host, [&](int err, auto &addrs, auto                &qname, auto &cname, uint ttl)
                  {
             if (!err) {
                 mutex.lock();
@@ -618,9 +619,15 @@ void xelis_session(
         if (json::accept(workInfo.str()))
         {
           json response = json::parse(workInfo.str());
-          if (response.contains("new_job"))
+          json workData;
+          if (response.contains("block_rejected"))
           {
-            json workData = response.at("new_job");
+            rejected++;
+          } else if (response.contains("new_job") || response.contains("template")) {
+            
+            if (response.contains("new_job")) workData = response.at("new_job");
+            else if (response.contains("template")) workData = response;
+            
             if ((isDev ? (workData.at("height") != devHeight) : (workData.at("height") != ourHeight)))
             {
               if (isDev)
@@ -673,13 +680,7 @@ void xelis_session(
                 jobCounter++;
               }
             }
-          }
-          else
-          {
-            if (response.contains("block_rejected"))
-            {
-              rejected++;
-            }
+          } else {
             accepted++;
           }
         }
@@ -1077,6 +1078,228 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
   return res;
 }
 
+void xelis_stratum_session(
+    std::string host,
+    std::string const &port,
+    std::string const &wallet,
+    std::string const &worker,
+    net::io_context &ioc,
+    ssl::context &ctx,
+    net::yield_context yield,
+    bool isDev)
+{
+  ctx.set_options(boost::asio::ssl::context::default_workarounds |
+                  boost::asio::ssl::context::no_sslv2 |
+                  boost::asio::ssl::context::no_sslv3 |
+                  boost::asio::ssl::context::no_tlsv1 |
+                  boost::asio::ssl::context::no_tlsv1_1);
+
+  beast::error_code ec;
+
+  // SSL_CTX_set_info_callback(ctx.native_handle(), openssl_log_callback);
+
+  // These objects perform our I/O
+  int addrCount = 0;
+  // bool resolved = false;
+  // Create a TCP socket
+  ctx.set_verify_mode(ssl::verify_none); // Accept self-signed certificates
+  tcp::socket socket(ioc);
+  boost::beast::ssl_stream<boost::beast::tcp_stream> stream(ioc, ctx);
+
+  net::ip::address ip_address;
+
+  // If the specified host/pool is not in IP address form, resolve to acquire the IP address
+#ifndef _WIN32
+  boost::asio::ip::address::from_string(host, ec);
+  if (ec)
+  {
+    // Using cpp-dns to circumvent the issues cause by combining static linking and getaddrinfo()
+    // A second io_context is used to enable std::promise
+    net::io_context ioc2;
+    std::string ip;
+    std::promise<void> p;
+
+    YukiWorkshop::DNSResolver d(ioc2);
+    d.resolve_a4(host, [&](int err, auto &addrs, auto &qname, auto &cname, uint ttl)
+                 {
+  if (!err) {
+      mutex.lock();
+      for (auto &it : addrs) {
+        addrCount++;
+        ip = it.to_string();
+      }
+      p.set_value();
+  } else {
+    p.set_value();
+  } });
+    ioc2.run();
+
+    std::future<void> f = p.get_future();
+    f.get();
+    mutex.unlock();
+
+    if (addrCount == 0)
+    {
+      mutex.lock();
+      setcolor(RED);
+      std::cerr << "ERROR: Could not resolve " << host << std::endl;
+      setcolor(BRIGHT_WHITE);
+      mutex.unlock();
+      return;
+    }
+
+    ip_address = net::ip::address::from_string(ip.c_str(), ec);
+  }
+  else
+  {
+    ip_address = net::ip::address::from_string(host, ec);
+  }
+
+  tcp::endpoint daemon(ip_address, (uint_least16_t)std::stoi(port.c_str()));
+  // Set a timeout on the operation
+  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
+
+  // Make the connection on the IP address we get from a lookup
+  beast::get_lowest_layer(stream).async_connect(daemon, yield[ec]);
+  if (ec)
+    return fail(ec, "connect");
+
+#else
+  // Look up the domain name
+  tcp::resolver resolver(ioc);
+  auto const results = resolver.async_resolve(host, port, yield[ec]);
+  if (ec)
+    return fail(ec, "resolve");
+
+  // Set a timeout on the operation
+  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
+
+  // Make the connection on the IP address we get from a lookup
+  auto daemon = beast::get_lowest_layer(stream).async_connect(results, yield[ec]);
+  if (ec)
+    return fail(ec, "connect");
+#endif
+
+  // Set the SNI hostname
+  if (!SSL_set_tlsext_host_name(stream.native_handle(), host.c_str()))
+  {
+    throw beast::system_error{
+        static_cast<int>(::ERR_get_error()),
+        boost::asio::error::get_ssl_category()};
+  }
+
+  // Perform the SSL handshake
+  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(300));
+  stream.async_handshake(ssl::stream_base::client, yield[ec]);
+  if (ec)
+    return fail(ec, "handshake");
+
+  printf("connected\n");
+
+  boost::json::object packet = XelisStratum::stratumCall;
+  packet.at("id") = XelisStratum::subscribe.id;
+  packet.at("method") = XelisStratum::subscribe.method;
+  std::string minerName = "tnn-miner/" + std::string(versionString);
+  packet.at("params") = {minerName, {"xel/0"}};
+  std::string subscription = boost::json::serialize(packet) + "\n";
+
+  std::cout << subscription << std::endl;
+
+  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
+  size_t trans = boost::asio::async_write(stream, boost::asio::buffer(subscription), yield[ec]);
+  if (ec)
+    return fail(ec, "Stratum subscribe");
+
+  packet = XelisStratum::stratumCall;
+  packet.at("id") = XelisStratum::authorize.id;
+  packet.at("method") = XelisStratum::authorize.method;
+  packet.at("params") = {wallet, worker, "x"};
+  std::string authorization = boost::json::serialize(packet) + "\n";
+
+  std::cout << authorization << std::endl;
+
+  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
+  trans = boost::asio::async_write(stream, boost::asio::buffer(authorization), yield[ec]);
+  if (ec)
+    return fail(ec, "Stratum authorize");
+
+  // This buffer will hold the incoming message
+  beast::flat_buffer buffer;
+  std::stringstream workInfo;
+
+  while (true)
+  {
+    try
+    {
+      bool *B = isDev ? &submittingDev : &submitting;
+      // if (*B)
+      // {
+      //   boost::json::object *S = &share;
+      //   if (isDev)
+      //     S = &devShare;
+      //   std::string msg = Xatum::submission + boost::json::serialize(*S) + "\n";
+      //   // if (lastHash.compare((*S).at("hash").get_string()) == 0) continue;
+      //   // lastHash = (*S).at("hash").get_string();
+
+      //   // printf("submitting share: %s\n", msg.c_str());
+      //   // Acquire a lock before writing to the WebSocket
+      //   beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(10));
+      //   boost::asio::async_write(stream, boost::asio::buffer(msg), [&](const boost::system::error_code &ec, std::size_t)
+      //                            {
+      //                 if (ec) {
+      //                     bool *C = isDev ? &devConnected : &isConnected;
+      //                     (*C) = false;
+      //                     return fail(ec, "Xatum submission error");
+      //                 } });
+      //   (*B) = false;
+      // }
+
+      boost::asio::streambuf response;
+      std::stringstream workInfo;
+      beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
+      trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
+      if (ec && trans > 0)
+        return fail(ec, "Stratum async_read");
+
+      if (trans > 0)
+      {
+        printf("trans = %lu\n", trans);
+        std::string data = beast::buffers_to_string(response.data());
+        // Consume the data from the buffer after processing it
+        response.consume(trans);
+
+        std::cout << data << std::endl;
+
+        // if (data.compare(Xatum::pingPacket) == 0)
+        // {
+        //   // printf("pinged\n");
+        //   boost::asio::async_write(stream, boost::asio::buffer(Xatum::pongPacket), yield[ec]);
+        // }
+        // else
+        // {
+        //   Xatum::packet xPacket = Xatum::parsePacket(data, "~");
+        //   int r = handleXatumPacket(xPacket, isDev);
+        //   // if (r == -1) {
+        //   //   bool *B = isDev ? &devConnected : &isConnected;
+        //   //   (*B) = false;
+        //   //   // return xatumFailure(isDev);
+        //   // }
+        // }
+      }
+    }
+    catch (const std::exception &e)
+    {
+      bool *C = isDev ? &devConnected : &isConnected;
+      (*C) = false;
+      return fail(ec, "Stratum session error");
+    }
+    boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
+  }
+
+  // submission_thread.interrupt();
+  stream.async_shutdown(yield[ec]);
+}
+
 void do_session(
     std::string host,
     std::string const &port,
@@ -1104,7 +1327,7 @@ void do_session(
       xatum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
       break;
     case XELIS_STRATUM:
-      // TODO
+      xelis_stratum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
       break;
     }
     break;
@@ -1186,6 +1409,11 @@ int main(int argc, char **argv)
   if (vm.count("xatum"))
   {
     protocol = XELIS_XATUM;
+  }
+
+  if (vm.count("stratum"))
+  {
+    useStratum = true;
   }
 
   if (vm.count("testnet"))
@@ -1357,6 +1585,14 @@ fillBlanks:
     setcolor(BRIGHT_WHITE);
     symbol = nullArg;
     goto fillBlanks;
+  }
+
+  if (useStratum) {
+    switch(miningAlgo) {
+      case XELIS_HASH:
+        protocol = XELIS_STRATUM;
+        break;
+    }
   }
 
   int i = 0;
@@ -1591,7 +1827,7 @@ Mining:
   boost::thread GETWORK(getWork, false, miningAlgo);
   // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
-  boost::thread DEVWORK(getWork, true, miningAlgo);
+  // boost::thread DEVWORK(getWork, true, miningAlgo);
   // setPriority(DEVWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
   unsigned int n = std::thread::hardware_concurrency();

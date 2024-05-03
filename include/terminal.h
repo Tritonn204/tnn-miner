@@ -11,7 +11,7 @@
 
 namespace po = boost::program_options;  // from <boost/program_options.hpp>
 
-const char *versionString = "0.3.1";
+const char *versionString = "0.3.2";
 const char *consoleLine = " TNN-MINER ";
 const char *TNN = R"(
   
@@ -129,6 +129,7 @@ inline po::options_description get_prog_opts()
     ("help", "produce help message")
     ("dero", "Will mine Dero")
     ("xelis", "Will mine Xelis")
+      ("stratum", "Required for mining to Stratum pools")
     ("broadcast", "Creates an http server to query miner stats")
     ("testnet", "Adjusts in-house parameters to mine on testnets")
     ("daemon-address", po::value<std::string>(), "Node/pool URL or IP address to mine to") // todo: parse out port and/or wss:// or ws://

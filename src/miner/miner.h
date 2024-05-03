@@ -38,6 +38,8 @@ std::string port = nullArg;
 std::string wallet = nullArg;
 std::string workerName = "default";
 
+bool useStratum = false;
+
 int miningAlgo = DERO_HASH;
 int protocol = XELIS_SOLO;
 

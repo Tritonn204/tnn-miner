@@ -24,7 +24,7 @@ typedef struct workerData_xelis {
   uint64_t *int_input;
   uint32_t *smallPad;
   alignas(32) uint32_t slots[XELIS_SLOT_LENGTH] = {0};
-  byte indices[XELIS_SLOT_LENGTH] = {0};
+  alignas(32) byte indices[XELIS_SLOT_LENGTH] = {0};
 } workerData_xelis;
 
 typedef struct xelis_BlockMiner {

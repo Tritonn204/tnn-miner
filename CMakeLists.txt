@@ -20,7 +20,7 @@ endif()
 
 project(
   Tnn-miner
-  VERSION 0.3.1
+  VERSION 0.3.2
   DESCRIPTION "Open Source Astrobwt Miner"
 )
 
@@ -156,6 +156,7 @@ include_directories(
   "${PROJECT_SOURCE_DIR}/src/astrobwtv3/"
   "${PROJECT_SOURCE_DIR}/src/xelis-hash/"
   "${PROJECT_SOURCE_DIR}/src/xatum/"
+  "${PROJECT_SOURCE_DIR}/src/stratum/"
   "${PROJECT_SOURCE_DIR}/src/miner/"
   "${TNN_BOOST_INCLUDES}"
   "${PROJECT_SOURCE_DIR}/src/broadcast/"
