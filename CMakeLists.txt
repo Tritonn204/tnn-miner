@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 3.21)
 cmake_policy(VERSION 3.21.3...3.27)
 
 set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_C_FLAGS_RELEASE "-fansi-escape-codes -fcolor-diagnostics -static -fuse-ld=lld -O3 -ftree-vectorize")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fansi-escape-codes -fcolor-diagnostics -static -static-libgcc -fuse-ld=lld -m64 -O3 -Wuninitialized -ftree-vectorize -march=native")
-set(CMAKE_HIP_FLAGS "-static -fansi-escape-codes -fcolor-diagnostics -fgpu-rdc -fuse-ld=lld -Wno-deprecated-register")
+set(CMAKE_C_FLAGS_RELEASE "-fansi-escape-codes -fcolor-diagnostics -static -ggdb -fuse-ld=lld -O3 -ftree-vectorize")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fansi-escape-codes -ggdb -fcolor-diagnostics -static -static-libgcc -fuse-ld=lld -m64 -O3 -Wuninitialized -ftree-vectorize -march=native")
+set(CMAKE_HIP_FLAGS "-static -fansi-escape-codes -fcolor-diagnostics -fgpu-rdc -ggdb -fuse-ld=lld -Wno-deprecated-register")
 
 if(NOT DEFINED HIP_PATH)
     if(NOT DEFINED ENV{HIP_PATH})

@@ -10,6 +10,9 @@
 #include <array>
 #include <cassert>
 
+#include <stdio.h>
+#include <stdint.h>
+
 #include "aes.tab"
 
 #ifdef _WIN32
@@ -19,7 +22,15 @@
 #endif
 #define rl64(x, a) (((x << a%64) | (x >> (64 - a%64))))
 
-#define SWAP_UINT64(x) (((uint64_t)__brev((uint32_t)(x)) << 32) | __brev((uint32_t)((x) >> 32)))
+#define REVERSE_BYTES_64(value) \
+    ((((value) & 0xFF00000000000000ULL) >> 56) | \
+     (((value) & 0x00FF000000000000ULL) >> 40) | \
+     (((value) & 0x0000FF0000000000ULL) >> 24) | \
+     (((value) & 0x000000FF00000000ULL) >>  8) | \
+     (((value) & 0x00000000FF000000ULL) <<  8) | \
+     (((value) & 0x0000000000FF0000ULL) << 24) | \
+     (((value) & 0x000000000000FF00ULL) << 40) | \
+     (((value) & 0x00000000000000FFULL) << 56))
 
 __device__ const int sign_bit_values[8][8] = {
     {0, 0, 0, 0, 0, 0, 0, -1},
@@ -43,22 +54,96 @@ __device__ uint64_t swap_bytes(uint64_t value) {
            ((value & 0x00000000000000FFULL) << 56);
 }
 
+	__device__ int sbox[256] =   {
+	//0     1    2      3     4    5     6     7      8    9     A      B    C     D     E     F
+	0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76, //0
+	0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0, 0xad, 0xd4, 0xa2, 0xaf, 0x9c, 0xa4, 0x72, 0xc0, //1
+	0xb7, 0xfd, 0x93, 0x26, 0x36, 0x3f, 0xf7, 0xcc, 0x34, 0xa5, 0xe5, 0xf1, 0x71, 0xd8, 0x31, 0x15, //2
+	0x04, 0xc7, 0x23, 0xc3, 0x18, 0x96, 0x05, 0x9a, 0x07, 0x12, 0x80, 0xe2, 0xeb, 0x27, 0xb2, 0x75, //3
+	0x09, 0x83, 0x2c, 0x1a, 0x1b, 0x6e, 0x5a, 0xa0, 0x52, 0x3b, 0xd6, 0xb3, 0x29, 0xe3, 0x2f, 0x84, //4
+	0x53, 0xd1, 0x00, 0xed, 0x20, 0xfc, 0xb1, 0x5b, 0x6a, 0xcb, 0xbe, 0x39, 0x4a, 0x4c, 0x58, 0xcf, //5
+	0xd0, 0xef, 0xaa, 0xfb, 0x43, 0x4d, 0x33, 0x85, 0x45, 0xf9, 0x02, 0x7f, 0x50, 0x3c, 0x9f, 0xa8, //6
+	0x51, 0xa3, 0x40, 0x8f, 0x92, 0x9d, 0x38, 0xf5, 0xbc, 0xb6, 0xda, 0x21, 0x10, 0xff, 0xf3, 0xd2, //7
+	0xcd, 0x0c, 0x13, 0xec, 0x5f, 0x97, 0x44, 0x17, 0xc4, 0xa7, 0x7e, 0x3d, 0x64, 0x5d, 0x19, 0x73, //8
+	0x60, 0x81, 0x4f, 0xdc, 0x22, 0x2a, 0x90, 0x88, 0x46, 0xee, 0xb8, 0x14, 0xde, 0x5e, 0x0b, 0xdb, //9
+	0xe0, 0x32, 0x3a, 0x0a, 0x49, 0x06, 0x24, 0x5c, 0xc2, 0xd3, 0xac, 0x62, 0x91, 0x95, 0xe4, 0x79, //A
+	0xe7, 0xc8, 0x37, 0x6d, 0x8d, 0xd5, 0x4e, 0xa9, 0x6c, 0x56, 0xf4, 0xea, 0x65, 0x7a, 0xae, 0x08, //B
+	0xba, 0x78, 0x25, 0x2e, 0x1c, 0xa6, 0xb4, 0xc6, 0xe8, 0xdd, 0x74, 0x1f, 0x4b, 0xbd, 0x8b, 0x8a, //C
+	0x70, 0x3e, 0xb5, 0x66, 0x48, 0x03, 0xf6, 0x0e, 0x61, 0x35, 0x57, 0xb9, 0x86, 0xc1, 0x1d, 0x9e, //D
+	0xe1, 0xf8, 0x98, 0x11, 0x69, 0xd9, 0x8e, 0x94, 0x9b, 0x1e, 0x87, 0xe9, 0xce, 0x55, 0x28, 0xdf, //E
+	0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16 }; //F
 
-__device__ void aes_round(uint *block, const uint *key) {
-    uint s0 = block[0];
-    uint s1 = block[1];
-    uint s2 = block[2];
-    uint s3 = block[3];
+// Function to perform the AddRoundKey step
+__device__ void AddRoundKey(uint8_t state[], const uint8_t roundKey[]) {
+    for (int i = 0; i < 16; i++) {
+        state[i] ^= roundKey[i];
+    }
+}
 
-    uint t0 = cTe0[s0 >> 24] ^ cTe1[(s1 >> 16) & 0xff] ^ cTe2[(s2 >>  8) & 0xff] ^ cTe3[s3 & 0xff] ^ key[0];
-    uint t1 = cTe0[s1 >> 24] ^ cTe1[(s2 >> 16) & 0xff] ^ cTe2[(s3 >>  8) & 0xff] ^ cTe3[s0 & 0xff] ^ key[1];
-    uint t2 = cTe0[s2 >> 24] ^ cTe1[(s3 >> 16) & 0xff] ^ cTe2[(s0 >>  8) & 0xff] ^ cTe3[s1 & 0xff] ^ key[2];
-    uint t3 = cTe0[s3 >> 24] ^ cTe1[(s0 >> 16) & 0xff] ^ cTe2[(s1 >>  8) & 0xff] ^ cTe3[s2 & 0xff] ^ key[3];
+// Function to perform the SubBytes step
+__device__ void SubBytes(uint8_t state[]) {
+    for (int i = 0; i < 16; i++) {
+        state[i] = sbox[state[i]];
+    }
+}
 
-    block[0] = t0;
-    block[1] = t1;
-    block[2] = t2;
-    block[3] = t3;
+// Function to perform the ShiftRows step
+__device__ void ShiftRows(uint8_t state[]) {
+    uint8_t temp;
+
+    // Rotate first row 1 column to the left
+    temp = state[1];
+    state[1] = state[5];
+    state[5] = state[9];
+    state[9] = state[13];
+    state[13] = temp;
+
+    // Rotate second row 2 columns to the left
+    temp = state[2];
+    state[2] = state[10];
+    state[10] = temp;
+
+    temp = state[6];
+    state[6] = state[14];
+    state[14] = temp;
+
+    // Rotate third row 3 columns to the left
+    temp = state[3];
+    state[3] = state[15];
+    state[15] = state[11];
+    state[11] = state[7];
+    state[7] = temp;
+}
+
+// Function to perform the MixColumns step
+__device__ void MixColumns(uint8_t state[]) {
+    uint8_t i;
+    uint8_t Tmp, Tm;
+
+    for (i = 0; i < 16; i += 4) {
+        uint8_t t = state[i];
+        Tmp = state[i] ^ state[i + 1] ^ state[i + 2] ^ state[i + 3];
+        Tm = state[i] ^ state[i + 1];
+        Tm = (Tm << 1) ^ (((Tm >> 7) & 1) * 0x1B);
+        state[i] ^= Tm ^ Tmp;
+        Tm = state[i + 1] ^ state[i + 2];
+        Tm = (Tm << 1) ^ (((Tm >> 7) & 1) * 0x1B);
+        state[i + 1] ^= Tm ^ Tmp;
+        Tm = state[i + 2] ^ state[i + 3];
+        Tm = (Tm << 1) ^ (((Tm >> 7) & 1) * 0x1B);
+        state[i + 2] ^= Tm ^ Tmp;
+        Tm = state[i + 3] ^ t;
+        Tm = (Tm << 1) ^ (((Tm >> 7) & 1) * 0x1B);
+        state[i + 3] ^= Tm ^ Tmp;
+    }
+}
+
+// Function to perform a single round of AES encryption
+__device__ void aes_single_round(uint8_t block[], const uint8_t roundKey[]) {
+    AddRoundKey(block, roundKey);
+    SubBytes(block);
+    ShiftRows(block);
+    MixColumns(block);
 }
 
 __device__ static const  uint64_t RC[12] = {
@@ -255,46 +340,40 @@ __device__ void stage_1(uint64_t* int_input, uint64_t* scratchPad,
       uint64_t b = a ^ v;
       rand_int = b;
       scratchPad[target_idx] = b;
-      if (target_idx == 7) printf("b = %llu\n", b);
+      // if (target_idx == 7) printf("b = %llu\n", b);
+      // if (target_idx == 7) printf("assigned b = %llu\n", scratchPad[target_idx]);
       // if (i == A1 && j < 5) 
       //   printf("i = %llu, j = %llu, b = %llu\n", i, j, b);
     }
   }
+  // printf("%llu\n", scratchPad[7]);
 }
 
-__device__ void stage_2(workerData_xelis_hip &worker, uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots) {
-  for (byte iter = 0; iter < XELIS_HIP_ITERS; ++iter) {
-    for (uint16_t j = 0; j < (XELIS_HIP_MEMORY_SIZE * 2) / XELIS_HIP_SLOT_LENGTH; ++j) {
-      if (j > 16) break;
-      for (int i = 0; i < XELIS_HIP_SLOT_LENGTH; i++) {
-        indices[i] = i;
+__device__ void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots) {
+  for (uint16_t j = 0; j < (XELIS_HIP_MEMORY_SIZE * 2) / XELIS_HIP_SLOT_LENGTH; ++j) {
+    for (int i = 0; i < XELIS_HIP_SLOT_LENGTH; i++) {
+      indices[i] = i;
+    }
+    for (int slot_idx = XELIS_HIP_SLOT_LENGTH - 1; slot_idx >= 0; --slot_idx) {
+      uint16_t index_in_indices = smallPad[j * XELIS_HIP_SLOT_LENGTH + slot_idx] % (slot_idx + 1);
+      uint16_t index = indices[index_in_indices];
+      indices[index_in_indices] = indices[slot_idx];
+
+      // SCALAR implementation
+      uint32_t sum = slots[index];
+      uint16_t offset = j * XELIS_HIP_SLOT_LENGTH;
+
+      for (uint16_t k = 0; k < index; ++k) {
+        uint32_t pad = smallPad[offset + k];
+        sum = (slots[k] >> 31 == 0) ? sum + pad : sum - pad;
       }
-      for (int slot_idx = XELIS_HIP_SLOT_LENGTH - 1; slot_idx >= 0; --slot_idx) {
-        uint16_t index_in_indices = smallPad[j * XELIS_HIP_SLOT_LENGTH + slot_idx] % (slot_idx + 1);
-        if (slot_idx < 16 && j == 0) {
-          printf("sIndex: %d\n", (j * XELIS_HIP_SLOT_LENGTH + slot_idx)/2);
-          printf("scratchPad in question: %llu\n", *(uint64_t*)&smallPad[j * XELIS_HIP_SLOT_LENGTH + slot_idx]);
-          printf("smallPad in question: %lu\n", smallPad[j * XELIS_HIP_SLOT_LENGTH + slot_idx]);
-        }
-        // uint16_t index = indices[index_in_indices];
-        // indices[index_in_indices] = indices[slot_idx];
 
-        // // SCALAR implementation
-        // uint32_t sum = slots[index];
-        // uint16_t offset = j * XELIS_HIP_SLOT_LENGTH;
-
-        // for (uint16_t k = 0; k < index; ++k) {
-        //   uint32_t pad = smallPad[offset + k];
-        //   sum = (slots[k] >> 31 == 0) ? sum + pad : sum - pad;
-        // }
-
-        // for (uint16_t k = index + 1; k < XELIS_HIP_SLOT_LENGTH; ++k) {
-        //   uint32_t pad = smallPad[offset + k];
-        //   sum = (slots[k] >> 31 == 0) ? sum + pad : sum - pad;
-        // }
-        // slots[index] = sum;
-        // // if (slot_idx < 16 && j == 0) printf("sum: %llu, index: %u\n", sum, index);
+      for (uint16_t k = index + 1; k < XELIS_HIP_SLOT_LENGTH; ++k) {
+        uint32_t pad = smallPad[offset + k];
+        sum = (slots[k] >> 31 == 0) ? sum + pad : sum - pad;
       }
+      slots[index] = sum;
+      // if (slot_idx < 16 && j == 0) printf("sum: %llu, index: %u\n", sum, index);
     }
   }
 
@@ -324,10 +403,10 @@ __device__ void stage_3(uint64_t* scratchPad, byte* hashResult) {
         memcpy(block, mem_b, 8);
         memcpy(block + 8, mem_a, 8);
 
-        aes_round(
-          reinterpret_cast<uint*>(const_cast<byte*>(block)), 
-          reinterpret_cast<const uint*>(const_cast<const byte*>(key)
-        ));
+        aes_single_round(
+          block,
+          key
+        );
 
         uint64_t hash1 = *(reinterpret_cast<uint64_t*>(&block[0]));
         uint64_t hash2 = *(reinterpret_cast<uint64_t*>(mem_a)) ^ *(reinterpret_cast<uint64_t*>(mem_b));
@@ -403,7 +482,7 @@ __device__ void stage_3(uint64_t* scratchPad, byte* hashResult) {
         size_t index = XELIS_HIP_SCRATCHPAD_ITERS - i - 1;
         // printf("post result: %llu\n", result);
         if (index < 4) {
-            uint64_t be_result = SWAP_UINT64(result);
+            uint64_t be_result = REVERSE_BYTES_64(result);
             memcpy(&hashResult[index * 8], reinterpret_cast<byte*>(&be_result), 8);
         }
     }
@@ -429,50 +508,170 @@ void xelis_benchmark_gpu_hash_hip() {
     // std::cout << "ms per hash: " << (elapsed.count() / ITERATIONS) << std::endl;
 }
 
-__global__ void s1_kernel(uint64_t* int_input, uint64_t* scratchPad, 
+__global__ void s1_kernel(workerData_xelis_hip *worker, 
   uint16_t A1, uint16_t A2, byte B1, byte B2) {
-  stage_1(int_input, scratchPad, A1, A2, B1, B2);
+  stage_1(worker->int_input, worker->scratchPad, A1, A2, B1, B2);
 }
 
-__global__ void s2_kernel(uint64_t* input, workerData_xelis_hip &worker) {
+__global__ void s2_kernel(workerData_xelis_hip *worker) {
   // for (int i = 0; i < XELIS_HIP_BYTES_ARRAY_INPUT/8; i++) {
   //   printf("%llu, ", input[i]);
   // }
   // printf("\n");
 
-  memcpy(worker.slots, &worker.smallPad[XELIS_HIP_MEMORY_SIZE*2-XELIS_HIP_SLOT_LENGTH], XELIS_HIP_SLOT_LENGTH*4);
+  worker->smallPad = reinterpret_cast<uint32_t*>(worker->scratchPad);
+  memcpy(worker->slots, &worker->smallPad[XELIS_HIP_MEMORY_SIZE*2-XELIS_HIP_SLOT_LENGTH], XELIS_HIP_SLOT_LENGTH*4);
 
-  stage_2(worker, input, worker.smallPad, worker.indices, worker.slots);
+  stage_2(worker->int_input, worker->smallPad, worker->indices, worker->slots);
 }
 
-__global__ void s3_kernel(uint64_t* scratchPad, byte* hashResult) {
-  stage_3(scratchPad, hashResult);
+__global__ void s3_kernel(workerData_xelis_hip *worker, byte* hashResult) {
+  stage_3(worker->scratchPad, hashResult);
 }
 
-void xelis_hash_hip(byte* input, workerData_xelis_hip &worker, byte *hashResult) {
-  worker.int_input = reinterpret_cast<uint64_t*>(input);
+void printArrayToFile(const uint64_t* arr, size_t size, const char* filename) {
+    FILE* file = fopen(filename, "w");
+    if (file == NULL) {
+        // Handle file opening error
+        return;
+    }
+
+    for (size_t i = 0; i < size; ++i) {
+        fprintf(file, "%llu", (unsigned long long)arr[i]);
+        if (i < size - 1) {
+            fprintf(file, ",");
+        }
+    }
+
+    fclose(file);
+}
+
+__global__ void s2_kernel_optimized(workerData_xelis_hip *worker) {
+  __shared__ uint32_t shared_slots[XELIS_HIP_SLOT_LENGTH];
+  __shared__ uint32_t shared_indices[XELIS_HIP_SLOT_LENGTH];
+
+  __shared__ uint32_t sum;
+  __shared__  byte index_in_indices;
+  __shared__  byte index;
+
+  uint32_t tid = threadIdx.x;
+  uint32_t bid = blockIdx.x * blockDim.x + threadIdx.x;
+
+
+  if (tid == 0) {
+    worker->smallPad = reinterpret_cast<uint32_t*>(worker->scratchPad);
+  }
+  __syncthreads();
+
+  shared_slots[tid] = worker->smallPad[XELIS_HIP_MEMORY_SIZE*2-XELIS_HIP_SLOT_LENGTH + tid];
+  __syncthreads();
+
+// Iterate over the memory
+  for (uint16_t j = 0; j < (XELIS_HIP_MEMORY_SIZE * 2) / XELIS_HIP_SLOT_LENGTH; ++j)
+  {
+    shared_indices[tid] = tid;
+    __syncthreads();
+
+    for (int slot_idx = XELIS_HIP_SLOT_LENGTH - 1; slot_idx >= 0; --slot_idx)
+    {
+      if (tid == 0) {
+        // Fisher-Yates shuffle
+        index_in_indices = worker->smallPad[j * XELIS_HIP_SLOT_LENGTH + slot_idx] % (slot_idx + 1);
+        index = shared_indices[index_in_indices];
+        shared_indices[index_in_indices] = shared_indices[slot_idx];
+        sum = shared_slots[index];
+      }
+      __syncthreads();
+
+      if (tid != index) {
+        uint32_t pad = worker->smallPad[XELIS_HIP_SLOT_LENGTH * j + tid];
+        if (shared_slots[tid] >> 31 == 0) atomicAdd(&sum, pad);
+        else atomicSub(&sum, pad);
+      }
+      __syncthreads();
+      if (tid == 0) {
+        shared_slots[index] = sum;
+      }
+      __syncthreads();      
+    }
+  }
+
+  worker->slots[tid] = shared_slots[tid];
+  __syncthreads();
+  if (tid == 0) memcpy(
+    &worker->smallPad[XELIS_HIP_MEMORY_SIZE*2-XELIS_HIP_SLOT_LENGTH], 
+    worker->slots, XELIS_HIP_SLOT_LENGTH * sizeof(uint32_t)
+  );
+}
+
+__global__ void iCopy_kernel(workerData_xelis_hip *worker, byte *input) {
+  worker->int_input = reinterpret_cast<uint64_t*>(input);
+}
+
+void xelis_hash_hip(byte* input, workerData_xelis_hip *worker, byte *hashResult) {
+  // worker.int_input = reinterpret_cast<uint64_t*>(input);
+
+  iCopy_kernel<<<1,1>>>(worker, input);
+
   // Stage 1
-  s1_kernel<<<1,1>>>(worker.int_input, reinterpret_cast<uint64_t*>(worker.scratchPad), 
+  s1_kernel<<<1,1>>>(worker, 
     0, XELIS_HIP_STAGE_1_MAX - 1,
     0, XELIS_HIP_KECCAK_WORDS - 1
   );
   hipDeviceSynchronize();
 
-  s1_kernel<<<1,1>>>(worker.int_input, reinterpret_cast<uint64_t*>(worker.scratchPad), 
+  s1_kernel<<<1,1>>>(worker, 
     XELIS_HIP_STAGE_1_MAX, XELIS_HIP_STAGE_1_MAX,
     0, 17
   );
   hipDeviceSynchronize();
 
-  worker.smallPad = reinterpret_cast<uint32_t*>(worker.scratchPad);
-  for (int i = 0; i < 200; i++) printf("a");
+  // workerData_xelis_hip *tempWorker = (workerData_xelis_hip*)malloc(sizeof(workerData_xelis_hip));
+  // hipMemcpy(tempWorker, worker, sizeof(workerData_xelis_hip), hipMemcpyDeviceToHost);
 
-  s2_kernel<<<1,1>>>(reinterpret_cast<uint64_t*>(input), worker);
+  // printArrayToFile(tempWorker->scratchPad, XELIS_HIP_MEMORY_SIZE, "scratchPad.txt");
+
+  // memcpy(worker.scratchPad, worker.smallPad, XELIS_HIP_MEMORY_SIZE*8);
+
+  // printf("\n");
+
+  
+  s2_kernel<<<1,1>>>(worker);
   hipDeviceSynchronize();
 
-  // // Stage 3
-  // s3_kernel<<<1,1>>>(reinterpret_cast<uint64_t*>(worker.scratchPad), hashResult);
-  // hipDeviceSynchronize();
+  // Stage 3
+  s3_kernel<<<1,1>>>(worker, hashResult);
+  hipDeviceSynchronize();
+}
+
+void xelis_hash_hip_optimized(byte* input, workerData_xelis_hip *worker, byte *hashResult) {
+  iCopy_kernel<<<1,1>>>(worker, input);
+
+  // Stage 1
+  s1_kernel<<<1,1>>>(worker, 
+    0, XELIS_HIP_STAGE_1_MAX - 1,
+    0, XELIS_HIP_KECCAK_WORDS - 1
+  );
+  hipDeviceSynchronize();
+
+  s1_kernel<<<1,1>>>(worker, 
+    XELIS_HIP_STAGE_1_MAX, XELIS_HIP_STAGE_1_MAX,
+    0, 17
+  );
+  hipDeviceSynchronize();
+
+  dim3 block(XELIS_HIP_SLOT_LENGTH);
+  dim3 grid(1);
+
+  s2_kernel_optimized<<<grid, block>>>(worker);
+  hipDeviceSynchronize();
+  // Stage 3
+  s3_kernel<<<1,1>>>(worker, hashResult);
+  hipDeviceSynchronize();
+}
+
+void xelis_hash_hip_batch(byte* input, workerData_xelis_hip *worker, byte *hashResult) {
+
 }
 
 int char2int_hip(char input)
@@ -503,10 +702,9 @@ namespace tests_hip {
     using Hash = std::array<byte, XELIS_HIP_HASH_SIZE>;
 
     bool test_input(const char* test_name, byte* input, size_t input_size, const Hash& expected_hash) {
-        workerData_xelis_hip worker_d;
+        workerData_xelis_hip *worker_d;
         byte dummyBytes[sizeof(workerData_xelis_hip)] = {0};
         hipMalloc((void**)&worker_d, sizeof(workerData_xelis_hip));
-        hipMemcpy(&worker_d, dummyBytes, sizeof(workerData_xelis_hip), hipMemcpyHostToDevice);
 
         byte hash_result[XELIS_HIP_HASH_SIZE] = {0};
         byte *hash_result_d;
@@ -517,7 +715,7 @@ namespace tests_hip {
         hipMemcpy(input_d, input, input_size, hipMemcpyHostToDevice);
 
         hipMalloc((void**)&hash_result_d, XELIS_HIP_HASH_SIZE);
-        xelis_hash_hip(input_d, worker_d, hash_result_d);
+        xelis_hash_hip_optimized(input_d, worker_d, hash_result_d);
 
         hipMemcpy(hash_result, hash_result_d, XELIS_HIP_HASH_SIZE, hipMemcpyDeviceToHost);
 
