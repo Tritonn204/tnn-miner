@@ -1263,7 +1263,7 @@ void xelis_stratum_session(
         // printf("submitting share: %s\n", msg.c_str());
         // Acquire a lock before writing to the WebSocket
 
-        // std::cout << msg << std::endl;
+        std::cout << msg << std::endl;
         beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(10));
         boost::asio::async_write(stream, boost::asio::buffer(msg), [&](const boost::system::error_code &ec, std::size_t)
                                  {
@@ -2743,8 +2743,7 @@ waitForJob:
         if (DIFF == 0) continue;
         cmpDiff = ConvertDifficultyToBig(DIFF, XELIS_HASH);
 
-        uint64_t *nonce = devMine ? &i_dev : &i;
-        (*nonce)++;
+        uint64_t *nonce = &i;
 
         // printf("nonce = %llu\n", *nonce);
 
