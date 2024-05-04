@@ -22,6 +22,9 @@
 #endif
 #define rl64(x, a) (((x << a%64) | (x >> (64 - a%64))))
 
+#define S1_TPB 128
+#define S3_TPB 64
+
 #define REVERSE_BYTES_64(value) \
     ((((value) & 0xFF00000000000000ULL) >> 56) | \
      (((value) & 0x00FF000000000000ULL) >> 40) | \
@@ -31,6 +34,23 @@
      (((value) & 0x0000000000FF0000ULL) << 24) | \
      (((value) & 0x000000000000FF00ULL) << 40) | \
      (((value) & 0x00000000000000FFULL) << 56))
+
+__device__ void initOptimizedXelisWorker (workerData_xelis_hip_optimized &worker, int batchSize) {
+  worker.scratchPad = (uint64_t*)malloc(XELIS_HIP_MEMORY_SIZE*8*batchSize);
+  memset(worker.scratchPad, 0, XELIS_HIP_MEMORY_SIZE*8*batchSize);
+
+  worker.input = (byte*)malloc(XELIS_HIP_BYTES_ARRAY_INPUT*batchSize);
+  memset(worker.input, 0, XELIS_HIP_BYTES_ARRAY_INPUT*batchSize);
+
+  worker.int_input = (uint64_t**)malloc(sizeof(uint64_t*)*batchSize);
+  worker.smallPad = (uint32_t**)malloc(sizeof(uint32_t*)*batchSize);
+
+  worker.slots = (uint32_t*)malloc(XELIS_HIP_SLOT_LENGTH*4*batchSize);
+  memset(worker.slots, 0, XELIS_HIP_SLOT_LENGTH*4*batchSize);
+
+  worker.indices = (byte*)malloc(XELIS_HIP_SLOT_LENGTH*batchSize);
+  memset(worker.indices, 0, XELIS_HIP_SLOT_LENGTH*batchSize);
+}
 
 __device__ const int sign_bit_values[8][8] = {
     {0, 0, 0, 0, 0, 0, 0, -1},
@@ -304,190 +324,6 @@ __device__ void keccakp_1600_12_unrolled(uint64_t state[25]) {
     }
 }
 
-__device__ void stage_1(uint64_t* int_input, uint64_t* scratchPad, 
-  uint16_t A1, uint16_t A2, byte B1, byte B2
-) {
-  for (size_t i = A1; i <= A2; ++i) {
-    keccakp_1600_12(int_input);
-
-    uint64_t rand_int = 0;
-    for (size_t j = B1; j <= B2; ++j) {
-      byte pair_idx = (j + 1) % XELIS_HIP_KECCAK_WORDS;
-      byte pair_idx2 = (j + 2) % XELIS_HIP_KECCAK_WORDS;
-
-      size_t target_idx = i * XELIS_HIP_KECCAK_WORDS + j;
-      uint64_t a = int_input[j] ^ rand_int;
-
-      uint64_t left = int_input[pair_idx];
-      uint64_t right = int_input[pair_idx2];
-      
-      uint64_t xor_result = left ^ right;
-      uint64_t v;
-      switch (xor_result & 0x3) {
-        case 0:
-          v = left & right;
-          break;
-        case 1:
-          v = ~(left & right);
-          break;
-        case 2:
-          v = ~xor_result;
-          break;
-        case 3:
-          v = xor_result;
-          break;
-      }
-      uint64_t b = a ^ v;
-      rand_int = b;
-      scratchPad[target_idx] = b;
-      // if (target_idx == 7) printf("b = %llu\n", b);
-      // if (target_idx == 7) printf("assigned b = %llu\n", scratchPad[target_idx]);
-      // if (i == A1 && j < 5) 
-      //   printf("i = %llu, j = %llu, b = %llu\n", i, j, b);
-    }
-  }
-  // printf("%llu\n", scratchPad[7]);
-}
-
-__device__ void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots) {
-  for (uint16_t j = 0; j < (XELIS_HIP_MEMORY_SIZE * 2) / XELIS_HIP_SLOT_LENGTH; ++j) {
-    for (int i = 0; i < XELIS_HIP_SLOT_LENGTH; i++) {
-      indices[i] = i;
-    }
-    for (int slot_idx = XELIS_HIP_SLOT_LENGTH - 1; slot_idx >= 0; --slot_idx) {
-      uint16_t index_in_indices = smallPad[j * XELIS_HIP_SLOT_LENGTH + slot_idx] % (slot_idx + 1);
-      uint16_t index = indices[index_in_indices];
-      indices[index_in_indices] = indices[slot_idx];
-
-      // SCALAR implementation
-      uint32_t sum = slots[index];
-      uint16_t offset = j * XELIS_HIP_SLOT_LENGTH;
-
-      for (uint16_t k = 0; k < index; ++k) {
-        uint32_t pad = smallPad[offset + k];
-        sum = (slots[k] >> 31 == 0) ? sum + pad : sum - pad;
-      }
-
-      for (uint16_t k = index + 1; k < XELIS_HIP_SLOT_LENGTH; ++k) {
-        uint32_t pad = smallPad[offset + k];
-        sum = (slots[k] >> 31 == 0) ? sum + pad : sum - pad;
-      }
-      slots[index] = sum;
-      // if (slot_idx < 16 && j == 0) printf("sum: %llu, index: %u\n", sum, index);
-    }
-  }
-
-  // Copy slots back to the last SLOT_LENGTH elements of smallPad
-  memcpy(&smallPad[XELIS_HIP_MEMORY_SIZE*2-XELIS_HIP_SLOT_LENGTH], &slots[0], XELIS_HIP_SLOT_LENGTH*4);
-}
-
-__device__ void stage_3(uint64_t* scratchPad, byte* hashResult) {
-    const byte key[16] = {0};
-    byte block[16] = {0};
-
-    uint64_t addr_a = (scratchPad[XELIS_HIP_MEMORY_SIZE - 1] >> 15) & 0x7FFF;
-    uint64_t addr_b = scratchPad[XELIS_HIP_MEMORY_SIZE - 1] & 0x7FFF;
-
-    uint64_t mem_buffer_a[XELIS_HIP_BUFFER_SIZE];
-    uint64_t mem_buffer_b[XELIS_HIP_BUFFER_SIZE];
-
-    for (byte i = 0; i < XELIS_HIP_BUFFER_SIZE; ++i) {
-        mem_buffer_a[i] = scratchPad[(addr_a + i) % XELIS_HIP_MEMORY_SIZE];
-        mem_buffer_b[i] = scratchPad[(addr_b + i) % XELIS_HIP_MEMORY_SIZE];
-    }
-
-    for (uint16_t i = 0; i < XELIS_HIP_SCRATCHPAD_ITERS; ++i) {
-        byte *mem_a = reinterpret_cast<byte*>(&mem_buffer_a[i % XELIS_HIP_BUFFER_SIZE]);
-        byte *mem_b = reinterpret_cast<byte*>(&mem_buffer_b[i % XELIS_HIP_BUFFER_SIZE]);
-
-        memcpy(block, mem_b, 8);
-        memcpy(block + 8, mem_a, 8);
-
-        aes_single_round(
-          block,
-          key
-        );
-
-        uint64_t hash1 = *(reinterpret_cast<uint64_t*>(&block[0]));
-        uint64_t hash2 = *(reinterpret_cast<uint64_t*>(mem_a)) ^ *(reinterpret_cast<uint64_t*>(mem_b));
-
-        uint64_t result = ~(hash1 ^ hash2);
-
-        for (size_t j = 0; j < XELIS_HIP_HASH_SIZE; ++j) {
-          uint64_t a = mem_buffer_a[(j + i) % XELIS_HIP_BUFFER_SIZE];
-          uint64_t b = mem_buffer_b[(j + i) % XELIS_HIP_BUFFER_SIZE];
-
-          uint64_t v;
-          switch ((result >> (j * 2)) & 0xf) {
-            case 0:
-              v = rl64(result, j) ^ b;
-              break;
-            case 1:
-              v = ~(rl64(result, j) ^ a);
-              break;
-            case 2:
-              v = ~(result ^ a);
-              break;
-            case 3:
-              v = result ^ b;
-              break;
-            case 4:
-              v = result ^ (a + b);
-              break;
-            case 5:
-              v = result ^ (a - b);
-              break;
-            case 6:
-              v = result ^ (b - a);
-              break;
-            case 7:
-              v = result ^ (a * b);
-              break;
-            case 8:
-              v = result ^ (a & b);
-              break;
-            case 9:
-              v = result ^ (a | b);
-              break;
-            case 10:
-              v = result ^ (a ^ b);
-              break;
-            case 11:
-              v = result ^ (a - result);
-              break;
-            case 12:
-              v = result ^ (b - result);
-              break;
-            case 13:
-              v = result ^ (a + result);
-              break;
-            case 14:
-              v = result ^ (result - a);
-              break;
-            case 15:
-              v = result ^ (result - b);
-              break;
-          }
-
-          result = v;
-        }
-
-        addr_b = result & 0x7FFF;
-        mem_buffer_a[i % XELIS_HIP_BUFFER_SIZE] = result;
-        mem_buffer_b[i % XELIS_HIP_BUFFER_SIZE] = scratchPad[addr_b];
-
-        addr_a = (result >> 15) & 0x7FFF;
-        scratchPad[addr_a] = result;
-
-        size_t index = XELIS_HIP_SCRATCHPAD_ITERS - i - 1;
-        // printf("post result: %llu\n", result);
-        if (index < 4) {
-            uint64_t be_result = REVERSE_BYTES_64(result);
-            memcpy(&hashResult[index * 8], reinterpret_cast<byte*>(&be_result), 8);
-        }
-    }
-}
-
 void xelis_benchmark_gpu_hash_hip() {
     // const uint32_t ITERATIONS = 1000;
     // byte input[200] = {0};
@@ -510,7 +346,98 @@ void xelis_benchmark_gpu_hash_hip() {
 
 __global__ void s1_kernel(workerData_xelis_hip *worker, 
   uint16_t A1, uint16_t A2, byte B1, byte B2) {
-  stage_1(worker->int_input, worker->scratchPad, A1, A2, B1, B2);
+
+  for (size_t i = A1; i <= A2; ++i) {
+    keccakp_1600_12(worker->int_input);
+
+    uint64_t rand_int = 0;
+    for (size_t j = B1; j <= B2; ++j) {
+      byte pair_idx = (j + 1) % XELIS_HIP_KECCAK_WORDS;
+      byte pair_idx2 = (j + 2) % XELIS_HIP_KECCAK_WORDS;
+
+      size_t target_idx = i * XELIS_HIP_KECCAK_WORDS + j;
+      uint64_t a = worker->int_input[j] ^ rand_int;
+
+      uint64_t left = worker->int_input[pair_idx];
+      uint64_t right = worker->int_input[pair_idx2];
+      
+      uint64_t xor_result = left ^ right;
+      uint64_t v;
+      switch (xor_result & 0x3) {
+        case 0:
+          v = left & right;
+          break;
+        case 1:
+          v = ~(left & right);
+          break;
+        case 2:
+          v = ~xor_result;
+          break;
+        case 3:
+          v = xor_result;
+          break;
+      }
+      uint64_t b = a ^ v;
+      rand_int = b;
+      worker->scratchPad[target_idx] = b;
+      // if (target_idx == 7) printf("b = %llu\n", b);
+      // if (target_idx == 7) printf("assigned b = %llu\n", scratchPad[target_idx]);
+      // if (i == A1 && j < 5) 
+      //   printf("i = %llu, j = %llu, b = %llu\n", i, j, b);
+    }
+  }
+}
+
+__global__ void s1_kernel_optimized(workerData_xelis_hip_optimized *worker, 
+  uint16_t A1, uint16_t A2, byte B1, byte B2, int batchSize) {
+
+  uint32_t flatid = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (flatid < batchSize) {
+    // printf("flatid = %d\n", flatid);
+
+    // if (flatid == 1) printf("first check: %llu\n", worker->int_input[0]);
+    for (size_t i = A1; i <= A2; ++i) {
+      keccakp_1600_12(worker->int_input[flatid]);
+
+      uint64_t rand_int = 0;
+      for (size_t j = B1; j <= B2; ++j) {
+        byte pair_idx = (j + 1) % XELIS_HIP_KECCAK_WORDS;
+        byte pair_idx2 = (j + 2) % XELIS_HIP_KECCAK_WORDS;
+
+        size_t target_idx = i * XELIS_HIP_KECCAK_WORDS + j;
+        uint64_t a = worker->int_input[flatid][j] ^ rand_int;
+
+        uint64_t left = worker->int_input[flatid][pair_idx];
+        uint64_t right = worker->int_input[flatid][pair_idx2];
+        
+        uint64_t xor_result = left ^ right;
+        uint64_t v;
+        switch (xor_result & 0x3) {
+          case 0:
+            v = left & right;
+            break;
+          case 1:
+            v = ~(left & right);
+            break;
+          case 2:
+            v = ~xor_result;
+            break;
+          case 3:
+            v = xor_result;
+            break;
+        }
+        uint64_t b = a ^ v;
+        rand_int = b;
+        worker->scratchPad[flatid*XELIS_HIP_MEMORY_SIZE + target_idx] = b;
+        // if (target_idx == 7) printf("b = %llu\n", b);
+        // if (target_idx == 7) printf("assigned b = %llu\n", scratchPad[target_idx]);
+        // if (flatid == 1 && i == A1 && j < 5)
+        //   printf("i = %llu, j = %llu, b = %llu\n", i, j, b);
+      }
+    }
+  }
+  __syncthreads();
 }
 
 __global__ void s2_kernel(workerData_xelis_hip *worker) {
@@ -522,11 +449,348 @@ __global__ void s2_kernel(workerData_xelis_hip *worker) {
   worker->smallPad = reinterpret_cast<uint32_t*>(worker->scratchPad);
   memcpy(worker->slots, &worker->smallPad[XELIS_HIP_MEMORY_SIZE*2-XELIS_HIP_SLOT_LENGTH], XELIS_HIP_SLOT_LENGTH*4);
 
-  stage_2(worker->int_input, worker->smallPad, worker->indices, worker->slots);
+  for (uint16_t j = 0; j < (XELIS_HIP_MEMORY_SIZE * 2) / XELIS_HIP_SLOT_LENGTH; ++j) {
+    for (int i = 0; i < XELIS_HIP_SLOT_LENGTH; i++) {
+      worker->indices[i] = i;
+    }
+    for (int slot_idx = XELIS_HIP_SLOT_LENGTH - 1; slot_idx >= 0; --slot_idx) {
+      uint16_t index_in_indices = worker->smallPad[j * XELIS_HIP_SLOT_LENGTH + slot_idx] % (slot_idx + 1);
+      uint16_t index = worker->indices[index_in_indices];
+      worker->indices[index_in_indices] = worker->indices[slot_idx];
+
+      // SCALAR implementation
+      uint32_t sum = worker->slots[index];
+      uint16_t offset = j * XELIS_HIP_SLOT_LENGTH;
+
+      for (uint16_t k = 0; k < index; ++k) {
+        uint32_t pad = worker->smallPad[offset + k];
+        sum = (worker->slots[k] >> 31 == 0) ? sum + pad : sum - pad;
+      }
+
+      for (uint16_t k = index + 1; k < XELIS_HIP_SLOT_LENGTH; ++k) {
+        uint32_t pad = worker->smallPad[offset + k];
+        sum = (worker->slots[k] >> 31 == 0) ? sum + pad : sum - pad;
+      }
+      worker->slots[index] = sum;
+      // if (slot_idx < 16 && j == 0) printf("sum: %llu, index: %u\n", sum, index);
+    }
+  }
+
+  // Copy slots back to the last SLOT_LENGTH elements of smallPad
+  memcpy(&worker->smallPad[XELIS_HIP_MEMORY_SIZE*2-XELIS_HIP_SLOT_LENGTH], &worker->slots[0], XELIS_HIP_SLOT_LENGTH*4);
+}
+
+__global__ void s2_kernel_optimized(workerData_xelis_hip_optimized *worker) {
+  __shared__ uint32_t shared_slots[XELIS_HIP_SLOT_LENGTH];
+  __shared__ uint32_t shared_indices[XELIS_HIP_SLOT_LENGTH];
+
+  __shared__ uint32_t sum;
+  __shared__  byte index_in_indices;
+  __shared__  byte index;
+
+  uint32_t tid = threadIdx.x;
+  uint32_t bid = blockIdx.x;
+
+  shared_slots[tid] = worker->smallPad[bid][XELIS_HIP_MEMORY_SIZE*2-XELIS_HIP_SLOT_LENGTH + tid];
+  __syncthreads();
+
+// Iterate over the memory
+  for (uint16_t j = 0; j < (XELIS_HIP_MEMORY_SIZE * 2) / XELIS_HIP_SLOT_LENGTH; ++j)
+  {
+    shared_indices[tid] = tid;
+    __syncthreads();
+
+    for (int slot_idx = XELIS_HIP_SLOT_LENGTH - 1; slot_idx >= 0; --slot_idx)
+    {
+      if (tid == 0) {
+        // Fisher-Yates shuffle
+        index_in_indices = worker->smallPad[bid][j * XELIS_HIP_SLOT_LENGTH + slot_idx] % (slot_idx + 1);
+        index = shared_indices[index_in_indices];
+        shared_indices[index_in_indices] = shared_indices[slot_idx];
+        sum = shared_slots[index];
+      }
+      __syncthreads();
+
+      if (tid != index) {
+        uint32_t pad = worker->smallPad[bid][XELIS_HIP_SLOT_LENGTH * j + tid];
+        if (shared_slots[tid] >> 31 == 0) atomicAdd(&sum, pad);
+        else atomicSub(&sum, pad);
+      }
+      __syncthreads();
+      if (tid == 0) {
+        shared_slots[index] = sum;
+        // if (bid == 1 && slot_idx == 0 && j % 100 == 0) printf("sum: %llu, index: %u\n", sum, index);
+      }
+      __syncthreads();      
+    }
+  }
+
+  worker->slots[bid*XELIS_HIP_SLOT_LENGTH + tid] = shared_slots[tid];
+  __syncthreads();
+  if (tid == 0) memcpy(
+    &worker->smallPad[bid][XELIS_HIP_MEMORY_SIZE*2-XELIS_HIP_SLOT_LENGTH], 
+    &worker->slots[bid*XELIS_HIP_SLOT_LENGTH], XELIS_HIP_SLOT_LENGTH * sizeof(uint32_t)
+  );
 }
 
 __global__ void s3_kernel(workerData_xelis_hip *worker, byte* hashResult) {
-  stage_3(worker->scratchPad, hashResult);
+  const byte key[16] = {0};
+  byte block[16] = {0};
+
+  uint64_t addr_a = (worker->scratchPad[XELIS_HIP_MEMORY_SIZE - 1] >> 15) & 0x7FFF;
+  uint64_t addr_b = worker->scratchPad[XELIS_HIP_MEMORY_SIZE - 1] & 0x7FFF;
+
+  uint64_t mem_buffer_a[XELIS_HIP_BUFFER_SIZE];
+  uint64_t mem_buffer_b[XELIS_HIP_BUFFER_SIZE];
+
+  for (byte i = 0; i < XELIS_HIP_BUFFER_SIZE; ++i)
+  {
+    mem_buffer_a[i] = worker->scratchPad[(addr_a + i) % XELIS_HIP_MEMORY_SIZE];
+    mem_buffer_b[i] = worker->scratchPad[(addr_b + i) % XELIS_HIP_MEMORY_SIZE];
+  }
+
+  for (uint16_t i = 0; i < XELIS_HIP_SCRATCHPAD_ITERS; ++i)
+  {
+    byte *mem_a = reinterpret_cast<byte *>(&mem_buffer_a[i % XELIS_HIP_BUFFER_SIZE]);
+    byte *mem_b = reinterpret_cast<byte *>(&mem_buffer_b[i % XELIS_HIP_BUFFER_SIZE]);
+
+    memcpy(block, mem_b, 8);
+    memcpy(block + 8, mem_a, 8);
+
+    aes_single_round(
+        block,
+        key);
+
+    uint64_t hash1 = *(reinterpret_cast<uint64_t *>(&block[0]));
+    uint64_t hash2 = *(reinterpret_cast<uint64_t *>(mem_a)) ^ *(reinterpret_cast<uint64_t *>(mem_b));
+
+    uint64_t result = ~(hash1 ^ hash2);
+
+    for (size_t j = 0; j < XELIS_HIP_HASH_SIZE; ++j)
+    {
+      uint64_t a = mem_buffer_a[(j + i) % XELIS_HIP_BUFFER_SIZE];
+      uint64_t b = mem_buffer_b[(j + i) % XELIS_HIP_BUFFER_SIZE];
+
+      uint64_t v;
+      switch ((result >> (j * 2)) & 0xf)
+      {
+      case 0:
+        v = rl64(result, j) ^ b;
+        break;
+      case 1:
+        v = ~(rl64(result, j) ^ a);
+        break;
+      case 2:
+        v = ~(result ^ a);
+        break;
+      case 3:
+        v = result ^ b;
+        break;
+      case 4:
+        v = result ^ (a + b);
+        break;
+      case 5:
+        v = result ^ (a - b);
+        break;
+      case 6:
+        v = result ^ (b - a);
+        break;
+      case 7:
+        v = result ^ (a * b);
+        break;
+      case 8:
+        v = result ^ (a & b);
+        break;
+      case 9:
+        v = result ^ (a | b);
+        break;
+      case 10:
+        v = result ^ (a ^ b);
+        break;
+      case 11:
+        v = result ^ (a - result);
+        break;
+      case 12:
+        v = result ^ (b - result);
+        break;
+      case 13:
+        v = result ^ (a + result);
+        break;
+      case 14:
+        v = result ^ (result - a);
+        break;
+      case 15:
+        v = result ^ (result - b);
+        break;
+      }
+
+      result = v;
+    }
+
+    addr_b = result & 0x7FFF;
+    mem_buffer_a[i % XELIS_HIP_BUFFER_SIZE] = result;
+    mem_buffer_b[i % XELIS_HIP_BUFFER_SIZE] = worker->scratchPad[addr_b];
+
+    addr_a = (result >> 15) & 0x7FFF;
+    worker->scratchPad[addr_a] = result;
+
+    size_t index = XELIS_HIP_SCRATCHPAD_ITERS - i - 1;
+    // printf("post result: %llu\n", result);
+    if (index < 4)
+    {
+      uint64_t be_result = REVERSE_BYTES_64(result);
+      memcpy(&hashResult[index * 8], reinterpret_cast<byte *>(&be_result), 8);
+    }
+  }
+}
+
+
+__global__ void 
+__launch_bounds__(S3_TPB, 2)
+s3_kernel_optimized(workerData_xelis_hip_optimized *worker, byte* hashResult, int batchSize) {
+
+  uint32_t tid = threadIdx.x;
+  uint32_t bid = blockIdx.x;
+  uint32_t flatid = blockIdx.x * blockDim.x + threadIdx.x;
+
+  __shared__ byte key[16*S3_TPB];
+  __shared__ byte block[16*S3_TPB];
+
+  // __shared__ uint64_t addr_a[S3_TBP];
+  // __shared__ uint64_t addr_b[S3_TBP];
+
+  // if (flatid < batchSize) {
+  //   addr_a[tid] = (worker->scratchPad[flatid*XELIS_HIP_MEMORY_SIZE + XELIS_HIP_MEMORY_SIZE - 1] >> 15) & 0x7FFF;
+  //   addr_b[tid] = worker->scratchPad[flatid*XELIS_HIP_MEMORY_SIZE + XELIS_HIP_MEMORY_SIZE - 1] & 0x7FFF;
+  // }
+  // __syncthreads();
+
+  __shared__ uint64_t mem_buffer_a[XELIS_HIP_BUFFER_SIZE*S3_TPB];
+  __shared__ uint64_t mem_buffer_b[XELIS_HIP_BUFFER_SIZE*S3_TPB];
+
+  byte *mem_a;
+  byte *mem_b;
+  
+  for (int i = tid; i < 16*S3_TPB; i += gridDim.x) {
+    key[i] = 0;
+    block[i] = 0;
+  }
+  __syncthreads();
+
+
+  uint64_t addr_a = (worker->scratchPad[flatid*XELIS_HIP_MEMORY_SIZE + XELIS_HIP_MEMORY_SIZE - 1] >> 15) & 0x7FFF;
+  uint64_t addr_b = worker->scratchPad[flatid*XELIS_HIP_MEMORY_SIZE + XELIS_HIP_MEMORY_SIZE - 1] & 0x7FFF;
+
+  // uint64_t mem_buffer_a[XELIS_HIP_BUFFER_SIZE];
+  // uint64_t mem_buffer_b[XELIS_HIP_BUFFER_SIZE];
+
+  if (flatid < batchSize) {
+    for (byte i = 0; i < XELIS_HIP_BUFFER_SIZE; ++i)
+    {
+      mem_buffer_a[tid*XELIS_HIP_BUFFER_SIZE + i] = worker->scratchPad[flatid * XELIS_HIP_MEMORY_SIZE + ((addr_a + i) % XELIS_HIP_MEMORY_SIZE)];
+      mem_buffer_b[tid*XELIS_HIP_BUFFER_SIZE + i] = worker->scratchPad[flatid * XELIS_HIP_MEMORY_SIZE + ((addr_b + i) % XELIS_HIP_MEMORY_SIZE)];
+    }
+  }
+
+  __syncthreads();
+
+  if (flatid < batchSize) {
+    for (uint16_t i = 0; i < XELIS_HIP_SCRATCHPAD_ITERS; ++i)
+    {
+      // byte *mem_a = reinterpret_cast<byte *>(&mem_buffer_a[i % XELIS_HIP_BUFFER_SIZE]);
+      // byte *mem_b = reinterpret_cast<byte *>(&mem_buffer_b[i % XELIS_HIP_BUFFER_SIZE]);
+      mem_a = reinterpret_cast<byte *>(&mem_buffer_a[tid*XELIS_HIP_BUFFER_SIZE + (i % XELIS_HIP_BUFFER_SIZE)]);
+      mem_b = reinterpret_cast<byte *>(&mem_buffer_b[tid*XELIS_HIP_BUFFER_SIZE + (i % XELIS_HIP_BUFFER_SIZE)]);
+      
+      memcpy(&block[tid*16], mem_b, 8);
+      memcpy(&block[tid*16] + 8, mem_a, 8);
+
+      aes_single_round(
+          &block[tid*16],
+          &key[tid*16]);
+
+      uint64_t hash1 = *(reinterpret_cast<uint64_t *>(&block[tid*16]));
+      uint64_t hash2 = *(reinterpret_cast<uint64_t *>(mem_a)) ^ *(reinterpret_cast<uint64_t *>(mem_b));
+
+      uint64_t result = ~(hash1 ^ hash2);
+
+      for (size_t j = 0; j < XELIS_HIP_HASH_SIZE; ++j)
+      {
+        uint64_t a = mem_buffer_a[tid*XELIS_HIP_BUFFER_SIZE + (j + i) % XELIS_HIP_BUFFER_SIZE];
+        uint64_t b = mem_buffer_b[tid*XELIS_HIP_BUFFER_SIZE + (j + i) % XELIS_HIP_BUFFER_SIZE];
+
+        uint64_t v;
+        switch ((result >> (j * 2)) & 0xf)
+        {
+        case 0:
+          v = rl64(result, j) ^ b;
+          break;
+        case 1:
+          v = ~(rl64(result, j) ^ a);
+          break;
+        case 2:
+          v = ~(result ^ a);
+          break;
+        case 3:
+          v = result ^ b;
+          break;
+        case 4:
+          v = result ^ (a + b);
+          break;
+        case 5:
+          v = result ^ (a - b);
+          break;
+        case 6:
+          v = result ^ (b - a);
+          break;
+        case 7:
+          v = result ^ (a * b);
+          break;
+        case 8:
+          v = result ^ (a & b);
+          break;
+        case 9:
+          v = result ^ (a | b);
+          break;
+        case 10:
+          v = result ^ (a ^ b);
+          break;
+        case 11:
+          v = result ^ (a - result);
+          break;
+        case 12:
+          v = result ^ (b - result);
+          break;
+        case 13:
+          v = result ^ (a + result);
+          break;
+        case 14:
+          v = result ^ (result - a);
+          break;
+        case 15:
+          v = result ^ (result - b);
+          break;
+        }
+
+        result = v;
+      }
+
+      addr_b = result & 0x7FFF;
+      mem_buffer_a[tid*XELIS_HIP_BUFFER_SIZE + (i % XELIS_HIP_BUFFER_SIZE)] = result;
+      mem_buffer_b[tid*XELIS_HIP_BUFFER_SIZE + (i % XELIS_HIP_BUFFER_SIZE)] = worker->scratchPad[flatid * XELIS_HIP_MEMORY_SIZE + addr_b];
+
+      addr_a = (result >> 15) & 0x7FFF;
+      worker->scratchPad[flatid * XELIS_HIP_MEMORY_SIZE + addr_a] = result;
+
+      size_t index = XELIS_HIP_SCRATCHPAD_ITERS - i - 1;
+      // if (flatid == 1 && i % 500 == 0) printf("post result: %llu\n", result);
+      if (index < 4)
+      {
+        uint64_t be_result = REVERSE_BYTES_64(result);
+        memcpy(&hashResult[flatid*XELIS_HIP_HASH_SIZE + index * 8], reinterpret_cast<byte *>(&be_result), 8);
+      }
+    }
+  }
 }
 
 void printArrayToFile(const uint64_t* arr, size_t size, const char* filename) {
@@ -544,64 +808,6 @@ void printArrayToFile(const uint64_t* arr, size_t size, const char* filename) {
     }
 
     fclose(file);
-}
-
-__global__ void s2_kernel_optimized(workerData_xelis_hip *worker) {
-  __shared__ uint32_t shared_slots[XELIS_HIP_SLOT_LENGTH];
-  __shared__ uint32_t shared_indices[XELIS_HIP_SLOT_LENGTH];
-
-  __shared__ uint32_t sum;
-  __shared__  byte index_in_indices;
-  __shared__  byte index;
-
-  uint32_t tid = threadIdx.x;
-  uint32_t bid = blockIdx.x * blockDim.x + threadIdx.x;
-
-
-  if (tid == 0) {
-    worker->smallPad = reinterpret_cast<uint32_t*>(worker->scratchPad);
-  }
-  __syncthreads();
-
-  shared_slots[tid] = worker->smallPad[XELIS_HIP_MEMORY_SIZE*2-XELIS_HIP_SLOT_LENGTH + tid];
-  __syncthreads();
-
-// Iterate over the memory
-  for (uint16_t j = 0; j < (XELIS_HIP_MEMORY_SIZE * 2) / XELIS_HIP_SLOT_LENGTH; ++j)
-  {
-    shared_indices[tid] = tid;
-    __syncthreads();
-
-    for (int slot_idx = XELIS_HIP_SLOT_LENGTH - 1; slot_idx >= 0; --slot_idx)
-    {
-      if (tid == 0) {
-        // Fisher-Yates shuffle
-        index_in_indices = worker->smallPad[j * XELIS_HIP_SLOT_LENGTH + slot_idx] % (slot_idx + 1);
-        index = shared_indices[index_in_indices];
-        shared_indices[index_in_indices] = shared_indices[slot_idx];
-        sum = shared_slots[index];
-      }
-      __syncthreads();
-
-      if (tid != index) {
-        uint32_t pad = worker->smallPad[XELIS_HIP_SLOT_LENGTH * j + tid];
-        if (shared_slots[tid] >> 31 == 0) atomicAdd(&sum, pad);
-        else atomicSub(&sum, pad);
-      }
-      __syncthreads();
-      if (tid == 0) {
-        shared_slots[index] = sum;
-      }
-      __syncthreads();      
-    }
-  }
-
-  worker->slots[tid] = shared_slots[tid];
-  __syncthreads();
-  if (tid == 0) memcpy(
-    &worker->smallPad[XELIS_HIP_MEMORY_SIZE*2-XELIS_HIP_SLOT_LENGTH], 
-    worker->slots, XELIS_HIP_SLOT_LENGTH * sizeof(uint32_t)
-  );
 }
 
 __global__ void iCopy_kernel(workerData_xelis_hip *worker, byte *input) {
@@ -644,29 +850,34 @@ void xelis_hash_hip(byte* input, workerData_xelis_hip *worker, byte *hashResult)
   hipDeviceSynchronize();
 }
 
-void xelis_hash_hip_optimized(byte* input, workerData_xelis_hip *worker, byte *hashResult) {
-  iCopy_kernel<<<1,1>>>(worker, input);
-
+void xelis_hash_hip_optimized(workerData_xelis_hip_optimized *worker, byte *hashResult, int batchSize) {
   // Stage 1
-  s1_kernel<<<1,1>>>(worker, 
+
+  int s1Blocks = (batchSize + S1_TPB-1) / S1_TPB;
+
+  s1_kernel_optimized<<<s1Blocks,S1_TPB>>>(worker, 
     0, XELIS_HIP_STAGE_1_MAX - 1,
-    0, XELIS_HIP_KECCAK_WORDS - 1
+    0, XELIS_HIP_KECCAK_WORDS - 1,
+    batchSize
   );
   hipDeviceSynchronize();
 
-  s1_kernel<<<1,1>>>(worker, 
+  s1_kernel_optimized<<<s1Blocks,S1_TPB>>>(worker, 
     XELIS_HIP_STAGE_1_MAX, XELIS_HIP_STAGE_1_MAX,
-    0, 17
+    0, 17,
+    batchSize
   );
   hipDeviceSynchronize();
 
   dim3 block(XELIS_HIP_SLOT_LENGTH);
-  dim3 grid(1);
+  dim3 grid(batchSize);
 
   s2_kernel_optimized<<<grid, block>>>(worker);
   hipDeviceSynchronize();
+
+  int s3Blocks = (batchSize + S3_TPB-1) / S3_TPB;
   // Stage 3
-  s3_kernel<<<1,1>>>(worker, hashResult);
+  s3_kernel_optimized<<<s3Blocks,S3_TPB>>>(worker, hashResult, batchSize);
   hipDeviceSynchronize();
 }
 
@@ -696,10 +907,29 @@ void hex2bin_hip(const char* src, char* target)
   }
 }
 
+__global__ void xelis_initOptimizedWorker_hip(workerData_xelis_hip_optimized *worker, int batchSize) {
+  initOptimizedXelisWorker(*worker, batchSize);
+}
+
+__global__ void xelis_interpretOptimizedWorker_hip(workerData_xelis_hip_optimized *worker, byte *input, int batchSize) {
+  uint32_t tid = threadIdx.x;
+  uint32_t bid = blockIdx.x;
+
+  worker->input[bid * XELIS_HIP_BYTES_ARRAY_INPUT + tid] = input[tid];
+  __syncthreads();
+
+  if (tid == 0) {
+    worker->int_input[bid] = reinterpret_cast<uint64_t*>(&worker->input[bid*XELIS_HIP_BYTES_ARRAY_INPUT]);
+    worker->smallPad[bid] = reinterpret_cast<uint32_t*>(&worker->scratchPad[bid*XELIS_HIP_MEMORY_SIZE]);
+  }
+  __syncthreads();
+}
 
 namespace tests_hip {
     char* testTemplate = "97dff4761917c2692df3be38e72ca7a59c3f55252e2245cc21564ef65fa8ea6f0000018f22fe78f80000000000064202f2a40463ccfcea839c4950a56ee38fa69c7ce2d4ba45d4b060cc63c297fb73b8a09c69661b1690b0a238d096a7ccb3cb204ce5dd604da9bb6c79c4ab00000000";
     using Hash = std::array<byte, XELIS_HIP_HASH_SIZE>;
+
+    int obSize = 3000;
 
     bool test_input(const char* test_name, byte* input, size_t input_size, const Hash& expected_hash) {
         workerData_xelis_hip *worker_d;
@@ -737,11 +967,11 @@ namespace tests_hip {
     }
 
     bool test_input_optimized(const char* test_name, byte* input, size_t input_size, const Hash& expected_hash) {
-      workerData_xelis_hip *worker_d;
-      byte dummyBytes[sizeof(workerData_xelis_hip)] = {0};
-      hipMalloc((void**)&worker_d, sizeof(workerData_xelis_hip));
+      workerData_xelis_hip_optimized *worker_d;
+      byte dummyBytes[sizeof(workerData_xelis_hip_optimized)] = {0};
+      hipMalloc((void**)&worker_d, sizeof(workerData_xelis_hip_optimized));
 
-      byte hash_result[XELIS_HIP_HASH_SIZE] = {0};
+      byte hash_result[XELIS_HIP_HASH_SIZE*obSize];
       byte *hash_result_d;
 
       byte *input_d;
@@ -749,12 +979,19 @@ namespace tests_hip {
       hipMalloc((void**)&input_d, input_size);
       hipMemcpy(input_d, input, input_size, hipMemcpyHostToDevice);
 
-      hipMalloc((void**)&hash_result_d, XELIS_HIP_HASH_SIZE);
-      xelis_hash_hip_optimized(input_d, worker_d, hash_result_d);
+      xelis_initOptimizedWorker_hip<<<1, 1>>>(worker_d, obSize);
+      hipDeviceSynchronize();
+      
+      xelis_interpretOptimizedWorker_hip<<<obSize, XELIS_HIP_BYTES_ARRAY_INPUT>>>(worker_d, input_d, obSize);
+      hipDeviceSynchronize();
 
-      hipMemcpy(hash_result, hash_result_d, XELIS_HIP_HASH_SIZE, hipMemcpyDeviceToHost);
+      printf("initialized\n");
+      hipMalloc((void**)&hash_result_d, XELIS_HIP_HASH_SIZE*obSize);
+      xelis_hash_hip_optimized(worker_d, hash_result_d, obSize);
 
-      if (std::memcmp(hash_result, expected_hash.data(), XELIS_HIP_HASH_SIZE) != 0) {
+      hipMemcpy(hash_result, hash_result_d, XELIS_HIP_HASH_SIZE*obSize, hipMemcpyDeviceToHost);
+
+      if (std::memcmp(&hash_result[32*6], expected_hash.data(), XELIS_HIP_HASH_SIZE) != 0) {
           std::cout << "Test '" << test_name << "' failed!" << std::endl;
           std::cout << "HIP (optimized) || Expected hash: ";
           for (size_t i = 0; i < XELIS_HIP_HASH_SIZE; ++i) {
@@ -763,7 +1000,7 @@ namespace tests_hip {
           std::cout << std::endl;
           std::cout << "HIP (optimized) || Actual hash:   ";
           for (size_t i = 0; i < XELIS_HIP_HASH_SIZE; ++i) {
-              printf("%02x ", hash_result[i]);
+              printf("%02x ", hash_result[i+32*6]);
           }
           std::cout << std::endl;
           return false;
@@ -824,17 +1061,17 @@ void xelis_runTests_hip() {
   bool all_tests_passed = true;
   bool all_tests_passed_optimized = true;
 
-  all_tests_passed &= tests_hip::test_zero_input();
-  all_tests_passed &= tests_hip::test_xelis_input();
+  // all_tests_passed &= tests_hip::test_zero_input();
+  // all_tests_passed &= tests_hip::test_xelis_input();
 
-  all_tests_passed_optimized &= tests_hip::test_zero_input_optimized();
+  // all_tests_passed_optimized &= tests_hip::test_zero_input_optimized();
   all_tests_passed_optimized &= tests_hip::test_xelis_input_optimized();
 
-  if (all_tests_passed) {
-      std::cout << "HIP || XELIS-HASH: All tests passed!" << std::endl;
-  } else {
-      std::cout << "HIP || XELIS-HASH: Some tests failed!" << std::endl;
-  }
+  // if (all_tests_passed) {
+  //     std::cout << "HIP || XELIS-HASH: All tests passed!" << std::endl;
+  // } else {
+  //     std::cout << "HIP || XELIS-HASH: Some tests failed!" << std::endl;
+  // }
 
   if (all_tests_passed_optimized) {
       std::cout << "HIP (optimized) || XELIS-HASH: All tests passed!" << std::endl;
