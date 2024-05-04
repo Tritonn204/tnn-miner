@@ -5,8 +5,19 @@
 
 using byte = unsigned char;
 
-namespace XelisStratum{
+int handleXStratumPacket(boost::json::object packet, bool isDev);
+int handleXStratumResponse(boost::json::object packet, bool isDev);
+
+namespace XelisStratum {
   using bJson = boost::json::object;
+
+  const byte STRATUM_DEBUG = 3;
+  const byte STRATUM_ERROR = 2;
+  const byte STRATUM_WARN = 1;
+  const byte STRATUM_INFO = 0;
+
+  int logLevel = 2;
+
   bJson stratumCall({
     {"id", 0},
     {"method", ""},
@@ -34,11 +45,6 @@ namespace XelisStratum{
     .method = "mining.submit"
   };
 
-  method pong = {
-    .id = 4,
-    .method = "mining.pong"
-  };
-
   method reportHashrate = {
     .id = 4,
     .method = "mining.hashrate"
@@ -51,8 +57,10 @@ namespace XelisStratum{
   std::string s_ping = "mining.ping";
   std::string s_print = "mining.print";
 
+  std::string c_pong = R"({"id":4,"method":"mining.pong"})";
+
   // Server responses IDs
-  byte s_subscribeResult = 1;
-  byte s_authorizeResult = 2;
-  byte s_submitResult = 4;
+  const byte s_subscribeResult = 1;
+  const byte s_authorizeResult = 2;
+  const byte s_submitResult = 4;
 }

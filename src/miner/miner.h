@@ -89,6 +89,8 @@ std::unordered_map<std::string, int> coinSelector = {
   {"XEL", XELIS_HASH}
 };
 
+const char* devWorkerName = "tnn-dev";
+
 Num oneLsh256;      
 Num maxU256;                                                   
 
