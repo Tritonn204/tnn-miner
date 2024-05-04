@@ -35,23 +35,6 @@
      (((value) & 0x000000000000FF00ULL) << 40) | \
      (((value) & 0x00000000000000FFULL) << 56))
 
-__device__ void initOptimizedXelisWorker (workerData_xelis_hip_optimized &worker, int batchSize) {
-  worker.scratchPad = (uint64_t*)malloc(XELIS_HIP_MEMORY_SIZE*8*batchSize);
-  memset(worker.scratchPad, 0, XELIS_HIP_MEMORY_SIZE*8*batchSize);
-
-  worker.input = (byte*)malloc(XELIS_HIP_BYTES_ARRAY_INPUT*batchSize);
-  memset(worker.input, 0, XELIS_HIP_BYTES_ARRAY_INPUT*batchSize);
-
-  worker.int_input = (uint64_t**)malloc(sizeof(uint64_t*)*batchSize);
-  worker.smallPad = (uint32_t**)malloc(sizeof(uint32_t*)*batchSize);
-
-  worker.slots = (uint32_t*)malloc(XELIS_HIP_SLOT_LENGTH*4*batchSize);
-  memset(worker.slots, 0, XELIS_HIP_SLOT_LENGTH*4*batchSize);
-
-  worker.indices = (byte*)malloc(XELIS_HIP_SLOT_LENGTH*batchSize);
-  memset(worker.indices, 0, XELIS_HIP_SLOT_LENGTH*batchSize);
-}
-
 __device__ const int sign_bit_values[8][8] = {
     {0, 0, 0, 0, 0, 0, 0, -1},
     {0, 0, 0, 0, 0, 0, -1, 0},
@@ -908,7 +891,26 @@ void hex2bin_hip(const char* src, char* target)
 }
 
 __global__ void xelis_initOptimizedWorker_hip(workerData_xelis_hip_optimized *worker, int batchSize) {
-  initOptimizedXelisWorker(*worker, batchSize);
+  worker->scratchPad = (uint64_t*)malloc(XELIS_HIP_MEMORY_SIZE*8*batchSize);
+  memset(worker->scratchPad, 0, XELIS_HIP_MEMORY_SIZE*8*batchSize);
+}
+
+__global__ void xelis_initOptimizedWorker_hip2(workerData_xelis_hip_optimized *worker, int batchSize) {
+  worker->input = (byte*)malloc(XELIS_HIP_BYTES_ARRAY_INPUT*batchSize);
+  memset(worker->input, 0, XELIS_HIP_BYTES_ARRAY_INPUT*batchSize);
+}
+
+__global__ void xelis_initOptimizedWorker_hip3(workerData_xelis_hip_optimized *worker, int batchSize) {
+  worker->int_input = (uint64_t**)malloc(sizeof(uint64_t*)*batchSize);
+  worker->smallPad = (uint32_t**)malloc(sizeof(uint32_t*)*batchSize);
+
+  worker->slots = (uint32_t*)malloc(XELIS_HIP_SLOT_LENGTH*4*batchSize);
+  memset(worker->slots, 0, XELIS_HIP_SLOT_LENGTH*4*batchSize);
+}
+
+__global__ void xelis_initOptimizedWorker_hip4(workerData_xelis_hip_optimized *worker, int batchSize) {
+  worker->indices = (byte*)malloc(XELIS_HIP_SLOT_LENGTH*batchSize);
+  memset(worker->indices, 0, XELIS_HIP_SLOT_LENGTH*batchSize);
 }
 
 __global__ void xelis_interpretOptimizedWorker_hip(workerData_xelis_hip_optimized *worker, byte *input, int batchSize) {
@@ -929,7 +931,7 @@ namespace tests_hip {
     char* testTemplate = "97dff4761917c2692df3be38e72ca7a59c3f55252e2245cc21564ef65fa8ea6f0000018f22fe78f80000000000064202f2a40463ccfcea839c4950a56ee38fa69c7ce2d4ba45d4b060cc63c297fb73b8a09c69661b1690b0a238d096a7ccb3cb204ce5dd604da9bb6c79c4ab00000000";
     using Hash = std::array<byte, XELIS_HIP_HASH_SIZE>;
 
-    int obSize = 3000;
+    int obSize = 4096;
 
     bool test_input(const char* test_name, byte* input, size_t input_size, const Hash& expected_hash) {
         workerData_xelis_hip *worker_d;
@@ -981,13 +983,25 @@ namespace tests_hip {
 
       xelis_initOptimizedWorker_hip<<<1, 1>>>(worker_d, obSize);
       hipDeviceSynchronize();
+      xelis_initOptimizedWorker_hip2<<<1, 1>>>(worker_d, obSize);
+      hipDeviceSynchronize();
+      xelis_initOptimizedWorker_hip3<<<1, 1>>>(worker_d, obSize);
+      hipDeviceSynchronize();
+      xelis_initOptimizedWorker_hip4<<<1, 1>>>(worker_d, obSize);
+      hipDeviceSynchronize();
       
       xelis_interpretOptimizedWorker_hip<<<obSize, XELIS_HIP_BYTES_ARRAY_INPUT>>>(worker_d, input_d, obSize);
       hipDeviceSynchronize();
 
       printf("initialized\n");
       hipMalloc((void**)&hash_result_d, XELIS_HIP_HASH_SIZE*obSize);
+
+      auto start = std::chrono::high_resolution_clock::now();
       xelis_hash_hip_optimized(worker_d, hash_result_d, obSize);
+      auto end = std::chrono::high_resolution_clock::now();
+      std::chrono::duration<double, std::milli> elapsed = end - start;
+
+      std::cout << "Time took: " << elapsed.count() << " ms for " << obSize << " hashes" << std::endl;
 
       hipMemcpy(hash_result, hash_result_d, XELIS_HIP_HASH_SIZE*obSize, hipMemcpyDeviceToHost);
 
