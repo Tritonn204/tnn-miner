@@ -30,6 +30,13 @@ alignas(32) const int sign_bit_values[8][8] = {
     {0, 0, -1, 0, 0, 0, 0, 0},
     {0, -1, 0, 0, 0, 0, 0, 0},
     {-1, 0, 0, 0, 0, 0, 0, 0}};
+
+alignas(16) const int sign_bit_values_sse[4][4] = {
+    {0, 0, 0, -1},
+    {0, 0, -1, 0},
+    {0, -1, 0, 0},
+    {-1, 0, 0, 0}};
+
 __m256i sign_bit_table[8];
 
 uint64_t swap_bytes(uint64_t value)
@@ -330,8 +337,10 @@ void stage_1(uint64_t *int_input, uint64_t *scratchPad,
     __builtin_prefetch(&int_input[0], 0, 3);
     __builtin_prefetch(&scratchPad[(i + 1) * XELIS_KECCAK_WORDS], 1, 3);
 
-    if (i == 0) keccakp_1600_first(int_input);
-    else keccakp_1600_12(int_input);
+    if (i == 0)
+      keccakp_1600_first(int_input);
+    else
+      keccakp_1600_12(int_input);
 
     uint64_t rand_int = 0;
     for (size_t j = B1; j <= B2; ++j)
@@ -433,34 +442,39 @@ void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots
         uint32_t reduced_sum = _mm_extract_epi32(sum_128, 0);
         slots[index] += reduced_sum;
 // TODO: fix below
-// #elif defined(__SSE2__)
-//   // SSE implementation
-//   __m128i sum_buffer = _mm_setzero_si128();
+#elif defined(__SSE2__)
+        // SSE implementation
+        __m128i sum_buffer = _mm_setzero_si128();
+        byte sign = slots[index] >> 31;
 
-//   int sign = slots[index] >> 31;
-//   for (size_t k = 0; k < XELIS_SLOT_LENGTH; k += 4) {
-//     __m128i slot_vector = _mm_load_si128((__m128i*)&slots[k]);
-//     __m128i values = _mm_load_si128((__m128i*)&smallPad[j * XELIS_SLOT_LENGTH + k]);
+        for (size_t k = 0; k < XELIS_SLOT_LENGTH; k += 4)
+        {
+          __m128i slot_vector = _mm_load_si128((__m128i *)&slots[k]);
+          __m128i values = _mm_load_si128((__m128i *)&smallPad[j * XELIS_SLOT_LENGTH + k]);
 
-//     __m128i sign_mask = _mm_cmpeq_epi32(_mm_setzero_si128(), _mm_srli_epi32(slot_vector, 31));
-//     sum_buffer = _mm_blendv_epi8(_mm_sub_epi32(sum_buffer, values), _mm_add_epi32(sum_buffer, values), sign_mask);
-//   }
+          __m128i sign_mask = _mm_cmpeq_epi32(_mm_setzero_si128(), _mm_srli_epi32(slot_vector, 31));
+          sum_buffer = _mm_blendv_epi8(_mm_sub_epi32(sum_buffer, values), _mm_add_epi32(sum_buffer, values), sign_mask);
+        }
 
-//   __m128i adjustment = _mm_set1_epi32(smallPad[j * XELIS_SLOT_LENGTH + index]);
-//   __m128i sign_bit = _mm_load_si128((__m128i*)sign_bit_values[index % 4]);
+        __m128i adjustment = _mm_set1_epi32(smallPad[j * XELIS_SLOT_LENGTH + index]);
+        __m128i sign_bit = _mm_load_si128((__m128i *)sign_bit_values_sse[index % 4]);
 
-//   if (sign == 0) {
-//     sum_buffer = _mm_blendv_epi8(sum_buffer, _mm_sub_epi32(sum_buffer, adjustment), sign_bit);
-//   } else {
-//     sum_buffer = _mm_blendv_epi8(sum_buffer, _mm_add_epi32(sum_buffer, adjustment), sign_bit);
-//   }
+        if (sign == 0)
+        {
+          sum_buffer = _mm_blendv_epi8(sum_buffer, _mm_sub_epi32(sum_buffer, adjustment), sign_bit);
+        }
+        else
+        {
+          sum_buffer = _mm_blendv_epi8(sum_buffer, _mm_add_epi32(sum_buffer, adjustment), sign_bit);
+        }
 
-//   // Perform horizontal addition to reduce the sum
-//   sum_buffer = _mm_hadd_epi32(sum_buffer, sum_buffer);
+        // Perform horizontal addition to reduce the sum
+        sum_buffer = _mm_hadd_epi32(sum_buffer, sum_buffer);
+        sum_buffer = _mm_hadd_epi32(sum_buffer, sum_buffer);
 
-//   // Extract the reduced sum
-//   uint32_t reduced_sum =  _mm_cvtsi128_si32(sum_buffer);
-//   slots[index] += reduced_sum;
+        // Extract the reduced sum
+        uint32_t reduced_sum = _mm_extract_epi32(sum_buffer, 0);
+        slots[index] += reduced_sum;
 #else
         // SCALAR implementation
         uint32_t sum = slots[index];

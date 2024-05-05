@@ -1503,7 +1503,6 @@ int handleXStratumResponse(boost::json::object packet, bool isDev)
       }
       else
       {
-        std::cout << boost::json::serialize(packet).c_str() << std::endl;
         rejected++;
         if (!isDev) setcolor(RED);
         std::cout << "Stratum: share rejected: " << packet.at("error").get_array()[1].as_string() << std::endl;
