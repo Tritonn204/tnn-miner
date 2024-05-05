@@ -21,7 +21,25 @@
 #define htonll(x) ((1 == htonl(1)) ? (x) : ((uint64_t)htonl((x) & 0xFFFFFFFF) << 32) | htonl((x) >> 32))
 #define ntohll(x) ((1 == ntohl(1)) ? (x) : ((uint64_t)ntohl((x) & 0xFFFFFFFF) << 32) | ntohl((x) >> 32))
 
-alignas(32) const int sign_bit_values[8][8] = {
+alignas(64) const int sign_bit_values_avx512[16][16] = {
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1},
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0},
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0},
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {-1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}};
+
+alignas(64) const int sign_bit_values_avx2[8][8] = {
     {0, 0, 0, 0, 0, 0, 0, -1},
     {0, 0, 0, 0, 0, 0, -1, 0},
     {0, 0, 0, 0, 0, -1, 0, 0},
@@ -59,7 +77,7 @@ void aes_round(uint8_t *block, const uint8_t *key)
   _mm_store_si128((__m128i *)block, result);
 }
 
-alignas(32) static const uint64_t RC[12] = {
+alignas(64) static const uint64_t RC[12] = {
     0x000000008000808bULL,
     0x800000000000008bULL,
     0x8000000000008089ULL,
@@ -73,10 +91,10 @@ alignas(32) static const uint64_t RC[12] = {
     0x0000000080000001ULL,
     0x8000000080008008ULL};
 
-alignas(32) static const uint32_t RHO[24] = {
+alignas(64) static const uint32_t RHO[24] = {
     1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14, 27, 41, 56, 8, 25, 43, 62, 18, 39, 61, 20, 44};
 
-alignas(32) static const uint32_t PI[24] = {
+alignas(64) static const uint32_t PI[24] = {
     10, 7, 11, 17, 18, 3, 5, 16, 8, 21, 24, 4, 15, 23, 19, 13, 12, 2, 20, 14, 22, 9, 6, 1};
 
 void print_reversed_words(const uint64_t *state, int num_words)
@@ -91,8 +109,8 @@ void print_reversed_words(const uint64_t *state, int num_words)
 void keccakp_1600_first(uint64_t state[25])
 {
   {
-    alignas(32) uint64_t C[5] = {0};
-    alignas(32) uint64_t D[5] = {0};
+    alignas(64) uint64_t C[5] = {0};
+    alignas(64) uint64_t D[5] = {0};
 
     // Theta step
     for (int i = 0; i < 5; ++i)
@@ -137,8 +155,8 @@ void keccakp_1600_first(uint64_t state[25])
 
   for (int round = 1; round < 12; ++round)
   {
-    alignas(32) uint64_t C[5] = {0};
-    alignas(32) uint64_t D[5] = {0};
+    alignas(64) uint64_t C[5] = {0};
+    alignas(64) uint64_t D[5] = {0};
 
     // Theta step
     for (int i = 0; i < 5; ++i)
@@ -186,8 +204,8 @@ void keccakp_1600_12(uint64_t state[25])
 {
   for (int round = 0; round < 12; ++round)
   {
-    alignas(32) uint64_t C[5] = {0};
-    alignas(32) uint64_t D[5] = {0};
+    alignas(64) uint64_t C[5] = {0};
+    alignas(64) uint64_t D[5] = {0};
 
     // Theta step
     for (int i = 0; i < 5; ++i)
@@ -378,7 +396,7 @@ void stage_1(uint64_t *int_input, uint64_t *scratchPad,
   }
 }
 
-void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots)
+__attribute__((target("avx512f"))) void stage_2_avx512(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots)
 {
   for (byte iter = 0; iter < XELIS_ITERS; ++iter)
   {
@@ -392,21 +410,66 @@ void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots
         byte index = indices[index_in_indices];
         indices[index_in_indices] = indices[slot_idx];
 
-#ifdef __AVX512F__
         // AVX-512 implementation
         __m512i sum_buffer = _mm512_setzero_si512();
+        byte sign = slots[index] >> 31;
 
         for (uint16_t k = 0; k < XELIS_SLOT_LENGTH; k += 16)
         {
-          __m512i slot_vector = _mm512_load_si512(&slots[k]);
-          __m512i values = _mm512_load_si512(&smallPad[j * XELIS_SLOT_LENGTH + k]);
+        __m512i slot_vector = _mm512_load_si512(&slots[k]);
+        __m512i values = _mm512_load_si512(&smallPad[j * XELIS_SLOT_LENGTH + k]);
 
-          __m512i sign_mask = _mm512_cmpeq_epu32(_mm512_setzero_si512(), _mm512_srli_epi32(slot_vector, 31));
-          sum_buffer = _mm512_blendv_epi32(_mm512_sub_epi32(sum_buffer, values), _mm512_add_epi32(sum_buffer, values), sign_mask);
+        __mmask16 sign_mask = _mm512_cmpeq_epi32_mask(_mm512_setzero_si512(), _mm512_srli_epi32(slot_vector, 31));
+        sum_buffer = _mm512_mask_add_epi32(sum_buffer, sign_mask, sum_buffer, values);
+        sum_buffer = _mm512_mask_sub_epi32(sum_buffer, ~sign_mask, sum_buffer, values);
         }
 
-        slots[index] += _mm512_reduce_add_epi32(sum_buffer);
-#elif defined(__AVX2__)
+        __m512i adjustment = _mm512_set1_epi32(smallPad[j * XELIS_SLOT_LENGTH + index]);
+        __m512i sign_bit = _mm512_load_si512((__m512i *)sign_bit_values_avx512[index % 16]);
+
+        if (sign == 0)
+        {
+            sum_buffer = _mm512_sub_epi32(sum_buffer, _mm512_and_si512(adjustment, sign_bit));
+        }
+        else
+        {
+            sum_buffer = _mm512_add_epi32(sum_buffer, _mm512_and_si512(adjustment, sign_bit));
+        }
+
+        __m256i sum_low_256 = _mm512_extracti64x4_epi64(sum_buffer, 0);
+        __m256i sum_high_256 = _mm512_extracti64x4_epi64(sum_buffer, 1);
+        __m256i sum_256 = _mm256_add_epi32(sum_low_256, sum_high_256);
+
+        __m128i sum_low = _mm256_extracti128_si256(sum_256, 0);
+        __m128i sum_high = _mm256_extracti128_si256(sum_256, 1);
+        __m128i sum_128 = _mm_add_epi32(sum_low, sum_high);
+
+        sum_128 = _mm_hadd_epi32(sum_128, sum_128);
+        sum_128 = _mm_hadd_epi32(sum_128, sum_128);
+
+        uint32_t reduced_sum = _mm_extract_epi32(sum_128, 0);
+        slots[index] += reduced_sum;
+      }
+    }
+  }
+
+  // Copy slots back to the last SLOT_LENGTH elements of smallPad
+  std::copy(&slots[0], &slots[XELIS_SLOT_LENGTH], &smallPad[XELIS_MEMORY_SIZE * 2 - XELIS_SLOT_LENGTH]);
+}
+__attribute__((target("avx2"))) void stage_2_avx2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots)
+{
+  for (byte iter = 0; iter < XELIS_ITERS; ++iter)
+  {
+    for (uint16_t j = 0; j < (XELIS_MEMORY_SIZE * 2) / XELIS_SLOT_LENGTH; ++j)
+    {
+      __builtin_prefetch(&smallPad[(j + 1) * XELIS_SLOT_LENGTH], 0, 3);
+      std::iota(indices, indices + XELIS_SLOT_LENGTH, 0);
+      for (int slot_idx = XELIS_SLOT_LENGTH - 1; slot_idx >= 0; --slot_idx)
+      {
+        byte index_in_indices = smallPad[j * XELIS_SLOT_LENGTH + slot_idx] % (slot_idx + 1);
+        byte index = indices[index_in_indices];
+        indices[index_in_indices] = indices[slot_idx];
+
         // AVX2 implementation
         __m256i sum_buffer = _mm256_setzero_si256();
         byte sign = slots[index] >> 31;
@@ -421,7 +484,7 @@ void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots
         }
 
         __m256i adjustment = _mm256_set1_epi32(smallPad[j * XELIS_SLOT_LENGTH + index]);
-        __m256i sign_bit = _mm256_load_si256((__m256i *)sign_bit_values[index % 8]);
+        __m256i sign_bit = _mm256_load_si256((__m256i *)sign_bit_values_avx2[index % 8]);
 
         if (sign == 0)
         {
@@ -441,8 +504,28 @@ void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots
 
         uint32_t reduced_sum = _mm_extract_epi32(sum_128, 0);
         slots[index] += reduced_sum;
-// TODO: fix below
-#elif defined(__SSE2__)
+      
+      }
+    }
+  }
+
+  // Copy slots back to the last SLOT_LENGTH elements of smallPad
+  std::copy(&slots[0], &slots[XELIS_SLOT_LENGTH], &smallPad[XELIS_MEMORY_SIZE * 2 - XELIS_SLOT_LENGTH]);
+}
+__attribute__((target("sse2"))) void stage_2_sse2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots)
+{
+  for (byte iter = 0; iter < XELIS_ITERS; ++iter)
+  {
+    for (uint16_t j = 0; j < (XELIS_MEMORY_SIZE * 2) / XELIS_SLOT_LENGTH; ++j)
+    {
+      __builtin_prefetch(&smallPad[(j + 1) * XELIS_SLOT_LENGTH], 0, 3);
+      std::iota(indices, indices + XELIS_SLOT_LENGTH, 0);
+      for (int slot_idx = XELIS_SLOT_LENGTH - 1; slot_idx >= 0; --slot_idx)
+      {
+        byte index_in_indices = smallPad[j * XELIS_SLOT_LENGTH + slot_idx] % (slot_idx + 1);
+        byte index = indices[index_in_indices];
+        indices[index_in_indices] = indices[slot_idx];
+
         // SSE implementation
         __m128i sum_buffer = _mm_setzero_si128();
         byte sign = slots[index] >> 31;
@@ -475,7 +558,27 @@ void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots
         // Extract the reduced sum
         uint32_t reduced_sum = _mm_extract_epi32(sum_buffer, 0);
         slots[index] += reduced_sum;
-#else
+      }
+    }
+  }
+
+  // Copy slots back to the last SLOT_LENGTH elements of smallPad
+  std::copy(&slots[0], &slots[XELIS_SLOT_LENGTH], &smallPad[XELIS_MEMORY_SIZE * 2 - XELIS_SLOT_LENGTH]);
+}
+void stage_2_scalar(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots)
+{
+  for (byte iter = 0; iter < XELIS_ITERS; ++iter)
+  {
+    for (uint16_t j = 0; j < (XELIS_MEMORY_SIZE * 2) / XELIS_SLOT_LENGTH; ++j)
+    {
+      __builtin_prefetch(&smallPad[(j + 1) * XELIS_SLOT_LENGTH], 0, 3);
+      std::iota(indices, indices + XELIS_SLOT_LENGTH, 0);
+      for (int slot_idx = XELIS_SLOT_LENGTH - 1; slot_idx >= 0; --slot_idx)
+      {
+        byte index_in_indices = smallPad[j * XELIS_SLOT_LENGTH + slot_idx] % (slot_idx + 1);
+        byte index = indices[index_in_indices];
+        indices[index_in_indices] = indices[slot_idx];
+        
         // SCALAR implementation
         uint32_t sum = slots[index];
         uint16_t offset = j * XELIS_SLOT_LENGTH;
@@ -492,26 +595,24 @@ void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots
           sum = (slots[k] >> 31 == 0) ? sum + pad : sum - pad;
         }
         slots[index] = sum;
-#endif
-        // printf("sum: %llu, index: %u\n", sum, index);
       }
     }
   }
-
   // Copy slots back to the last SLOT_LENGTH elements of smallPad
   std::copy(&slots[0], &slots[XELIS_SLOT_LENGTH], &smallPad[XELIS_MEMORY_SIZE * 2 - XELIS_SLOT_LENGTH]);
 }
 
+
 void stage_3(uint64_t *scratchPad, byte *hashResult)
 {
   const byte key[16] = {0};
-  alignas(32) byte block[16] = {0};
+  alignas(64) byte block[16] = {0};
 
-  alignas(32) uint64_t addr_a = (scratchPad[XELIS_MEMORY_SIZE - 1] >> 15) & 0x7FFF;
-  alignas(32) uint64_t addr_b = scratchPad[XELIS_MEMORY_SIZE - 1] & 0x7FFF;
+  alignas(64) uint64_t addr_a = (scratchPad[XELIS_MEMORY_SIZE - 1] >> 15) & 0x7FFF;
+  alignas(64) uint64_t addr_b = scratchPad[XELIS_MEMORY_SIZE - 1] & 0x7FFF;
 
-  alignas(32) uint64_t mem_buffer_a[XELIS_BUFFER_SIZE];
-  alignas(32) uint64_t mem_buffer_b[XELIS_BUFFER_SIZE];
+  alignas(64) uint64_t mem_buffer_a[XELIS_BUFFER_SIZE];
+  alignas(64) uint64_t mem_buffer_b[XELIS_BUFFER_SIZE];
 
   for (byte i = 0; i < XELIS_BUFFER_SIZE; ++i)
   {
@@ -630,8 +731,8 @@ void xelis_benchmark_cpu_hash()
 {
   const uint32_t ITERATIONS = 1000;
   byte input[200] = {0};
-  alignas(32) workerData_xelis worker;
-  alignas(32) byte hash_result[XELIS_HASH_SIZE] = {0};
+  alignas(64) workerData_xelis worker;
+  alignas(64) byte hash_result[XELIS_HASH_SIZE] = {0};
   init_sign_bit_table();
 
   auto start = std::chrono::high_resolution_clock::now();
@@ -673,7 +774,10 @@ void xelis_hash(byte *input, workerData_xelis &worker, byte *hashResult)
 
   std::copy(&worker.smallPad[XELIS_MEMORY_SIZE * 2 - XELIS_SLOT_LENGTH], &worker.smallPad[XELIS_MEMORY_SIZE * 2], worker.slots);
 
-  stage_2(worker.int_input, worker.smallPad, worker.indices, worker.slots);
+  if (__builtin_cpu_supports("avx512f")) stage_2_avx512(worker.int_input, worker.smallPad, worker.indices, worker.slots);
+  else if (__builtin_cpu_supports("avx2")) stage_2_avx2(worker.int_input, worker.smallPad, worker.indices, worker.slots);
+  else if (__builtin_cpu_supports("sse2")) stage_2_sse2(worker.int_input, worker.smallPad, worker.indices, worker.slots);
+  else stage_2_scalar(worker.int_input, worker.smallPad, worker.indices, worker.slots);
 
   // Stage 3
   stage_3(worker.scratchPad, hashResult);
@@ -709,9 +813,9 @@ namespace tests
 
   bool test_real()
   {
-    alignas(32) workerData_xelis worker;
+    alignas(64) workerData_xelis worker;
     byte hash_result[XELIS_HASH_SIZE] = {0};
-    alignas(32) byte input[XELIS_BYTES_ARRAY_INPUT] = {0};
+    alignas(64) byte input[XELIS_BYTES_ARRAY_INPUT] = {0};
 
     hex2bin(testTemplate,
             (char *)input);
@@ -736,7 +840,7 @@ namespace tests
 
   bool test_input(const char *test_name, byte *input, size_t input_size, const Hash &expected_hash)
   {
-    alignas(32) workerData_xelis worker;
+    alignas(64) workerData_xelis worker;
     byte hash_result[XELIS_HASH_SIZE] = {0};
 
     xelis_hash(input, worker, hash_result);
@@ -763,7 +867,7 @@ namespace tests
 
   bool test_zero_input()
   {
-    alignas(32) byte input[200] = {0};
+    alignas(64) byte input[200] = {0};
     Hash expected_hash = {
         0x0e, 0xbb, 0xbd, 0x8a, 0x31, 0xed, 0xad, 0xfe, 0x09, 0x8f, 0x2d, 0x77, 0x0d, 0x84,
         0xb7, 0x19, 0x58, 0x86, 0x75, 0xab, 0x88, 0xa0, 0xa1, 0x70, 0x67, 0xd0, 0x0a, 0x8f,
@@ -774,7 +878,7 @@ namespace tests
 
   bool test_xelis_input()
   {
-    alignas(32) byte input[XELIS_BYTES_ARRAY_INPUT] = {0};
+    alignas(64) byte input[XELIS_BYTES_ARRAY_INPUT] = {0};
 
     const char *custom = "xelis-hashing-algorithm";
     std::memcpy(input, custom, std::strlen(custom));

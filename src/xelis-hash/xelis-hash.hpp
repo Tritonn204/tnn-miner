@@ -20,11 +20,11 @@ const uint16_t XELIS_STAGE_1_MAX = XELIS_MEMORY_SIZE / XELIS_KECCAK_WORDS;
 
 
 typedef struct workerData_xelis {
-  alignas(32) uint64_t scratchPad[XELIS_MEMORY_SIZE] = {0};
+  alignas(64) uint64_t scratchPad[XELIS_MEMORY_SIZE] = {0};
   uint64_t *int_input;
   uint32_t *smallPad;
-  alignas(32) uint32_t slots[XELIS_SLOT_LENGTH] = {0};
-  alignas(32) byte indices[XELIS_SLOT_LENGTH] = {0};
+  alignas(64) uint32_t slots[XELIS_SLOT_LENGTH] = {0};
+  alignas(64) byte indices[XELIS_SLOT_LENGTH] = {0};
 } workerData_xelis;
 
 typedef struct xelis_BlockMiner {

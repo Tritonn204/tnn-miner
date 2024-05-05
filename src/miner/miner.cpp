@@ -2671,11 +2671,11 @@ void mineXelis(int tid)
   uint64_t i_dev = 0;
 
   byte powHash[32];
-  alignas(32) byte work[XELIS_BYTES_ARRAY_INPUT] = {0};
-  alignas(32) byte devWork[XELIS_BYTES_ARRAY_INPUT] = {0};
-  alignas(32) byte FINALWORK[XELIS_BYTES_ARRAY_INPUT] = {0};
+  alignas(64) byte work[XELIS_BYTES_ARRAY_INPUT] = {0};
+  alignas(64) byte devWork[XELIS_BYTES_ARRAY_INPUT] = {0};
+  alignas(64) byte FINALWORK[XELIS_BYTES_ARRAY_INPUT] = {0};
 
-  alignas(32) workerData_xelis *worker = (workerData_xelis *)malloc_huge_pages(sizeof(workerData_xelis));
+  alignas(64) workerData_xelis *worker = (workerData_xelis *)malloc_huge_pages(sizeof(workerData_xelis));
 waitForJob:
 
   while (!isConnected)
