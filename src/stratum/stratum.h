@@ -57,6 +57,9 @@ namespace XelisStratum {
   std::string s_ping = "mining.ping";
   std::string s_print = "mining.print";
 
+  std::string k1ping = "ping~{}\n";
+  std::string k1pong = "pong~{}\n";
+
   std::string c_pong = R"({"id":4,"method":"mining.pong"})";
 
   // Server responses IDs
