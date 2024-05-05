@@ -1337,7 +1337,7 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
   std::string M = packet.at("method").get_string().c_str();
   if (M.compare(XelisStratum::s_notify) == 0) {
 
-    if (!packet.at("params").as_array()[4].get_bool()) return 0;
+    if (packet.at("params").as_array()[4].get_bool() != true) return 0;
 
     mutex.lock();
     setcolor(CYAN);
@@ -1495,7 +1495,7 @@ int handleXStratumResponse(boost::json::object packet, bool isDev)
         setcolor(CYAN);
         printf("DEV | ");
       }
-      if (packet.at("result").get_bool())
+      if (!packet["result"].is_null() && packet.at("result").get_bool())
       {
         accepted++;
         std::cout << "Stratum: share accepted" << std::endl;
@@ -1503,9 +1503,10 @@ int handleXStratumResponse(boost::json::object packet, bool isDev)
       }
       else
       {
+        std::cout << boost::json::serialize(packet).c_str() << std::endl;
         rejected++;
         if (!isDev) setcolor(RED);
-        std::cout << "Stratum: share rejected: " << packet.at("error").get_array()[1] << std::endl;
+        std::cout << "Stratum: share rejected: " << packet.at("error").get_array()[1].as_string() << std::endl;
         setcolor(BRIGHT_WHITE);
       }
       mutex.unlock();

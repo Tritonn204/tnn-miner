@@ -397,7 +397,7 @@ void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots
         }
 
         slots[index] += _mm512_reduce_add_epi32(sum_buffer);
-#elif defined(__AadadsaVX2__)
+#elif defined(__AVX2__)
         // AVX2 implementation
         __m256i sum_buffer = _mm256_setzero_si256();
         byte sign = slots[index] >> 31;
