@@ -2675,7 +2675,7 @@ void mineXelis(int tid)
   alignas(64) byte devWork[XELIS_BYTES_ARRAY_INPUT] = {0};
   alignas(64) byte FINALWORK[XELIS_BYTES_ARRAY_INPUT] = {0};
 
-  alignas(64) workerData_xelis *worker = (workerData_xelis *)malloc_huge_pages(sizeof(workerData_xelis));
+  alignas(64) workerData_xelis worker;
 waitForJob:
 
   while (!isConnected)
@@ -2775,7 +2775,7 @@ waitForJob:
 
         // std::copy(WORK, WORK + XELIS_TEMPLATE_SIZE, FINALWORK);
         memcpy(FINALWORK, WORK, XELIS_BYTES_ARRAY_INPUT);
-        xelis_hash(FINALWORK, *worker, powHash);
+        xelis_hash(FINALWORK, worker, powHash);
 
         if (littleEndian())
         {

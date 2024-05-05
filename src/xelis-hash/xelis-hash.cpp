@@ -39,7 +39,7 @@ alignas(64) const int sign_bit_values_avx512[16][16] = {
     {0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
     {-1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}};
 
-alignas(64) const int sign_bit_values_avx2[8][8] = {
+alignas(32) const int sign_bit_values_avx2[8][8] = {
     {0, 0, 0, 0, 0, 0, 0, -1},
     {0, 0, 0, 0, 0, 0, -1, 0},
     {0, 0, 0, 0, 0, -1, 0, 0},
@@ -54,8 +54,6 @@ alignas(16) const int sign_bit_values_sse[4][4] = {
     {0, 0, -1, 0},
     {0, -1, 0, 0},
     {-1, 0, 0, 0}};
-
-__m256i sign_bit_table[8];
 
 uint64_t swap_bytes(uint64_t value)
 {
@@ -413,28 +411,29 @@ __attribute__((target("avx512f"))) void stage_2_avx512(uint64_t *input, uint32_t
         // AVX-512 implementation
         __m512i sum_buffer = _mm512_setzero_si512();
         byte sign = slots[index] >> 31;
+        __m512i sign_bit = _mm512_load_si512((__m512i *)sign_bit_values_avx512[15 - (index % 16)]);
 
         for (uint16_t k = 0; k < XELIS_SLOT_LENGTH; k += 16)
         {
-        __m512i slot_vector = _mm512_load_si512(&slots[k]);
-        __m512i values = _mm512_load_si512(&smallPad[j * XELIS_SLOT_LENGTH + k]);
+          __m512i slot_vector = _mm512_load_si512(&slots[k]);
+          __m512i values = _mm512_load_si512(&smallPad[j * XELIS_SLOT_LENGTH + k]);
+          if (index >= k && index-k < 16) values = _mm512_and_si512(values, sign_bit);
 
-        __mmask16 sign_mask = _mm512_cmpeq_epi32_mask(_mm512_setzero_si512(), _mm512_srli_epi32(slot_vector, 31));
-        sum_buffer = _mm512_mask_add_epi32(sum_buffer, sign_mask, sum_buffer, values);
-        sum_buffer = _mm512_mask_sub_epi32(sum_buffer, ~sign_mask, sum_buffer, values);
+          __mmask16 sign_mask = _mm512_cmpeq_epi32_mask(_mm512_setzero_si512(), _mm512_srli_epi32(slot_vector, 31));
+          sum_buffer = _mm512_mask_add_epi32(sum_buffer, sign_mask, sum_buffer, values);
+          sum_buffer = _mm512_mask_sub_epi32(sum_buffer, ~sign_mask, sum_buffer, values);
         }
 
-        __m512i adjustment = _mm512_set1_epi32(smallPad[j * XELIS_SLOT_LENGTH + index]);
-        __m512i sign_bit = _mm512_load_si512((__m512i *)sign_bit_values_avx512[index % 16]);
+        // __m512i adjustment = _mm512_set1_epi32(smallPad[j * XELIS_SLOT_LENGTH + index]);
 
-        if (sign == 0)
-        {
-            sum_buffer = _mm512_sub_epi32(sum_buffer, _mm512_and_si512(adjustment, sign_bit));
-        }
-        else
-        {
-            sum_buffer = _mm512_add_epi32(sum_buffer, _mm512_and_si512(adjustment, sign_bit));
-        }
+        // if (sign == 0)
+        // {
+        //     sum_buffer = _mm512_sub_epi32(sum_buffer, _mm512_and_si512(adjustment, sign_bit));
+        // }
+        // else
+        // {
+        //     sum_buffer = _mm512_add_epi32(sum_buffer, _mm512_and_si512(adjustment, sign_bit));
+        // }
 
         __m256i sum_low_256 = _mm512_extracti64x4_epi64(sum_buffer, 0);
         __m256i sum_high_256 = _mm512_extracti64x4_epi64(sum_buffer, 1);
@@ -472,28 +471,29 @@ __attribute__((target("avx2"))) void stage_2_avx2(uint64_t *input, uint32_t *sma
 
         // AVX2 implementation
         __m256i sum_buffer = _mm256_setzero_si256();
-        byte sign = slots[index] >> 31;
+        // byte sign = slots[index] >> 31;
+        __m256i sign_bit = _mm256_loadu_si256((__m256i *)sign_bit_values_avx2[7 - (index % 8)]);
 
         for (uint16_t k = 0; k < XELIS_SLOT_LENGTH; k += 8)
         {
           __m256i slot_vector = _mm256_load_si256((__m256i *)&slots[k]);
           __m256i values = _mm256_load_si256((__m256i *)&smallPad[j * XELIS_SLOT_LENGTH + k]);
+          if (index >= k && index-k < 8) values = _mm256_and_si256(values, ~sign_bit);
 
           __m256i sign_mask = _mm256_cmpeq_epi32(_mm256_setzero_si256(), _mm256_srli_epi32(slot_vector, 31));
           sum_buffer = _mm256_blendv_epi8(_mm256_sub_epi32(sum_buffer, values), _mm256_add_epi32(sum_buffer, values), sign_mask);
         }
 
-        __m256i adjustment = _mm256_set1_epi32(smallPad[j * XELIS_SLOT_LENGTH + index]);
-        __m256i sign_bit = _mm256_load_si256((__m256i *)sign_bit_values_avx2[index % 8]);
+        // __m256i adjustment = _mm256_set1_epi32(smallPad[j * XELIS_SLOT_LENGTH + index]);
 
-        if (sign == 0)
-        {
-          sum_buffer = _mm256_blendv_epi8(sum_buffer, _mm256_sub_epi32(sum_buffer, adjustment), sign_bit);
-        }
-        else
-        {
-          sum_buffer = _mm256_blendv_epi8(sum_buffer, _mm256_add_epi32(sum_buffer, adjustment), sign_bit);
-        }
+        // if (sign == 0)
+        // {
+        //   sum_buffer = _mm256_blendv_epi8(sum_buffer, _mm256_sub_epi32(sum_buffer, adjustment), sign_bit);
+        // }
+        // else
+        // {
+        //   sum_buffer = _mm256_blendv_epi8(sum_buffer, _mm256_add_epi32(sum_buffer, adjustment), sign_bit);
+        // }
 
         __m128i sum_low = _mm256_extracti128_si256(sum_buffer, 0);
         __m128i sum_high = _mm256_extracti128_si256(sum_buffer, 1);
@@ -530,26 +530,28 @@ __attribute__((target("sse2"))) void stage_2_sse2(uint64_t *input, uint32_t *sma
         __m128i sum_buffer = _mm_setzero_si128();
         byte sign = slots[index] >> 31;
 
+        __m128i sign_bit = _mm_load_si128((__m128i *)sign_bit_values_sse[3 - (index % 4)]);
+
         for (size_t k = 0; k < XELIS_SLOT_LENGTH; k += 4)
         {
           __m128i slot_vector = _mm_load_si128((__m128i *)&slots[k]);
           __m128i values = _mm_load_si128((__m128i *)&smallPad[j * XELIS_SLOT_LENGTH + k]);
+          if (index >= k && index-k < 4) values = _mm_and_si128(values, ~sign_bit);
 
           __m128i sign_mask = _mm_cmpeq_epi32(_mm_setzero_si128(), _mm_srli_epi32(slot_vector, 31));
           sum_buffer = _mm_blendv_epi8(_mm_sub_epi32(sum_buffer, values), _mm_add_epi32(sum_buffer, values), sign_mask);
         }
 
-        __m128i adjustment = _mm_set1_epi32(smallPad[j * XELIS_SLOT_LENGTH + index]);
-        __m128i sign_bit = _mm_load_si128((__m128i *)sign_bit_values_sse[index % 4]);
+        // __m128i adjustment = _mm_set1_epi32(smallPad[j * XELIS_SLOT_LENGTH + index]);
 
-        if (sign == 0)
-        {
-          sum_buffer = _mm_blendv_epi8(sum_buffer, _mm_sub_epi32(sum_buffer, adjustment), sign_bit);
-        }
-        else
-        {
-          sum_buffer = _mm_blendv_epi8(sum_buffer, _mm_add_epi32(sum_buffer, adjustment), sign_bit);
-        }
+        // if (sign == 0)
+        // {
+        //   sum_buffer = _mm_blendv_epi8(sum_buffer, _mm_sub_epi32(sum_buffer, adjustment), sign_bit);
+        // }
+        // else
+        // {
+        //   sum_buffer = _mm_blendv_epi8(sum_buffer, _mm_add_epi32(sum_buffer, adjustment), sign_bit);
+        // }
 
         // Perform horizontal addition to reduce the sum
         sum_buffer = _mm_hadd_epi32(sum_buffer, sum_buffer);
@@ -715,25 +717,12 @@ void stage_3(uint64_t *scratchPad, byte *hashResult)
   }
 }
 
-void init_sign_bit_table()
-{
-  sign_bit_table[0] = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, 0xFFFFFFFF);
-  sign_bit_table[1] = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0xFFFFFFFF, 0);
-  sign_bit_table[2] = _mm256_set_epi32(0, 0, 0, 0, 0, 0xFFFFFFFF, 0, 0);
-  sign_bit_table[3] = _mm256_set_epi32(0, 0, 0, 0, 0xFFFFFFFF, 0, 0, 0);
-  sign_bit_table[4] = _mm256_set_epi32(0, 0, 0, 0xFFFFFFFF, 0, 0, 0, 0);
-  sign_bit_table[5] = _mm256_set_epi32(0, 0, 0xFFFFFFFF, 0, 0, 0, 0, 0);
-  sign_bit_table[6] = _mm256_set_epi32(0, 0xFFFFFFFF, 0, 0, 0, 0, 0, 0);
-  sign_bit_table[7] = _mm256_set_epi32(0xFFFFFFFF, 0, 0, 0, 0, 0, 0, 0);
-}
-
 void xelis_benchmark_cpu_hash()
 {
   const uint32_t ITERATIONS = 1000;
   byte input[200] = {0};
   alignas(64) workerData_xelis worker;
   alignas(64) byte hash_result[XELIS_HASH_SIZE] = {0};
-  init_sign_bit_table();
 
   auto start = std::chrono::high_resolution_clock::now();
   for (uint32_t i = 0; i < ITERATIONS; ++i)
@@ -893,7 +882,6 @@ namespace tests
 void xelis_runTests()
 {
   bool all_tests_passed = true;
-  init_sign_bit_table();
   all_tests_passed &= tests::test_zero_input();
   all_tests_passed &= tests::test_xelis_input();
 
