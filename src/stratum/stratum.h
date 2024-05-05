@@ -25,7 +25,7 @@ namespace XelisStratum {
   });
 
   typedef struct method{
-    byte id;
+    int64_t id;
     std::string method;
   } method;
 

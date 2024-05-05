@@ -1264,7 +1264,7 @@ void xelis_stratum_session(
         // printf("submitting share: %s\n", msg.c_str());
         // Acquire a lock before writing to the WebSocket
 
-        // std::cout << msg << std::endl;
+        std::cout << "sending in: " << msg << std::endl;
         beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(10));
         boost::asio::async_write(stream, boost::asio::buffer(msg), yield[ec]);
         if (ec) {
@@ -1288,7 +1288,7 @@ void xelis_stratum_session(
         // Consume the data from the buffer after processing it
         response.consume(trans);
 
-        // std::cout << data << std::endl;
+        std::cout << data << std::endl;
 
         if (data.compare(XelisStratum::k1ping) == 0) {
           trans = boost::asio::async_write(
@@ -1338,6 +1338,8 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
   if (M.compare(XelisStratum::s_notify) == 0) {
 
     if (packet.at("params").as_array()[4].get_bool() != true) return 0;
+
+    // std::cout << "jobe: " << boost::json::serialize(packet).c_str() << std::endl;
 
     mutex.lock();
     setcolor(CYAN);
@@ -2694,7 +2696,7 @@ waitForJob:
 
       mutex.unlock();
 
-      // if (!myJob.contains("template")) continue;
+      if (!myJob.contains("template")) continue;
       if (ourHeight == 0 && devHeight == 0)
         continue;
 
@@ -2703,13 +2705,18 @@ waitForJob:
         byte *b2 = new byte[XELIS_TEMPLATE_SIZE];
         switch (protocol)
         {
-        case XELIS_SOLO:
-          hexstrToBytes(myJob.at("template"), b2);
-          break;
-        case XELIS_XATUM:
-          std::string b64 = base64::from_base64(myJob.at("template").get<std::string>());
-          memcpy(b2, b64.data(), b64.size());
-          break;
+          case XELIS_SOLO:
+            hexstrToBytes(myJob.at("template"), b2);
+            break;
+          case XELIS_XATUM:
+          {
+            std::string b64 = base64::from_base64(myJob.at("template").get<std::string>());
+            memcpy(b2, b64.data(), b64.size());
+            break;
+          }
+          case XELIS_STRATUM:
+            hexstrToBytes(myJob.at("template"), b2);
+            break;
         }
         memcpy(work, b2, XELIS_TEMPLATE_SIZE);
         delete[] b2;
@@ -2724,13 +2731,18 @@ waitForJob:
           byte *b2d = new byte[XELIS_TEMPLATE_SIZE];
           switch (protocol)
           {
-          case XELIS_SOLO:
-            hexstrToBytes(myJobDev.at("template"), b2d);
-            break;
-          case XELIS_XATUM:
-            std::string b64 = base64::from_base64(myJobDev.at("template").get<std::string>().c_str());
-            memcpy(b2d, b64.data(), b64.size());
-            break;
+            case XELIS_SOLO:
+              hexstrToBytes(myJobDev.at("template"), b2d);
+              break;
+            case XELIS_XATUM:
+            {
+              std::string b64 = base64::from_base64(myJobDev.at("template").get<std::string>().c_str());
+              memcpy(b2d, b64.data(), b64.size());
+              break;
+            }
+            case XELIS_STRATUM:
+              hexstrToBytes(myJobDev.at("template"), b2d);
+              break;
           }
           memcpy(devWork, b2d, XELIS_TEMPLATE_SIZE);
           delete[] b2d;
@@ -2794,6 +2806,10 @@ waitForJob:
           {
             std::reverse(powHash, powHash + 32);
           }
+          if (protocol == XELIS_STRATUM && littleEndian())
+          {
+            std::reverse((byte*)&n, (byte*)n + 8);
+          }
 
           std::string b64 = base64::to_base64(std::string((char *)&WORK[0], XELIS_TEMPLATE_SIZE));
           if (devMine)
@@ -2824,7 +2840,7 @@ waitForJob:
                 {"method", XelisStratum::submit.method},
                 {"params", {
                   devWorkerName, // WORKER
-                  devJob.at("jobId"), // JOB ID
+                  devJob.at("jobId").get<std::string>().c_str(), // JOB ID
                   hexStr((byte*)&n, 8).c_str()
                 }}
               }};
@@ -2861,7 +2877,7 @@ waitForJob:
                 {"method", XelisStratum::submit.method},
                 {"params", {
                   workerName, // WORKER
-                  devJob.at("jobId"), // JOB ID
+                  myJob.at("jobId"), // JOB ID
                   hexStr((byte*)&n, 8).c_str()
                 }}
               }};
