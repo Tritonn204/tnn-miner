@@ -888,15 +888,13 @@ void xatum_session(
         beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(10));
         boost::asio::async_write(stream, boost::asio::buffer(msg), yield[ec]);
         if (ec) {
-            setcolor(RED);
-            printf("submission error\n");
-            setcolor(BRIGHT_WHITE);
+            return fail(ec, "Xatum submission");
         }
         (*B) = false;
       }
       boost::asio::streambuf response;
       std::stringstream workInfo;
-      beast::get_lowest_layer(stream).expires_after(std::chrono::milliseconds(1250));
+      beast::get_lowest_layer(stream).expires_after(std::chrono::milliseconds(35000));
       trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
       // if (ec && trans > 0)
       //   return fail(ec, "Xatum async_read_until");
@@ -1272,7 +1270,7 @@ void xelis_stratum_session(
 
       boost::asio::streambuf response;
       std::stringstream workInfo;
-      beast::get_lowest_layer(stream).expires_after(std::chrono::milliseconds(1250));
+      beast::get_lowest_layer(stream).expires_after(std::chrono::milliseconds(35000));
       trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
       // if (ec && trans > 0)
       //   return fail(ec, "Stratum async_read");
@@ -1407,8 +1405,8 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
     const char *en = packet.at("params").as_array()[0].as_string().c_str();
     int enLen = packet.at("params").as_array()[0].as_string().size();
 
-    memset(&blob[160], '0', 64);
-    memcpy(&blob[160], en, enLen);
+    memset(&blob[48], '0', 64);
+    memcpy(&blob[48], en, enLen);
 
     (*J).at("template") = std::string(blob).c_str();
 
@@ -1483,9 +1481,9 @@ int handleXStratumResponse(boost::json::object packet, bool isDev)
       int enLen = packet.at("result").get_array()[2].get_int64();
       const char *pubKey = packet.at("result").get_array()[3].get_string().c_str();
 
-      memset(&blob[160], '0', 64);
-      memcpy(&blob[160], extraNonce, enLen*2);
-      memcpy(&blob[96], pubKey, 64);
+      memset(&blob[96], '0', 64);
+      memcpy(&blob[96], extraNonce, enLen*2);
+      memcpy(&blob[160], pubKey, 64);
 
       (*J).at("template") = std::string(blob).c_str();
     }
