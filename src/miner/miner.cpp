@@ -485,7 +485,7 @@ void xelis_session(
     std::promise<void> p;
 
     YukiWorkshop::DNSResolver d(ioc2);
-    d.resolve_a4(host, [&](int err, auto &addrs, auto                &qname, auto &cname, uint ttl)
+    d.resolve_a4(host, [&](int err, auto &addrs, auto &qname, auto &cname, uint ttl)
                  {
             if (!err) {
                 mutex.lock();
@@ -623,11 +623,15 @@ void xelis_session(
           if (response.contains("block_rejected"))
           {
             rejected++;
-          } else if (response.contains("new_job") || response.contains("template")) {
-            
-            if (response.contains("new_job")) workData = response.at("new_job");
-            else if (response.contains("template")) workData = response;
-            
+          }
+          else if (response.contains("new_job") || response.contains("template"))
+          {
+
+            if (response.contains("new_job"))
+              workData = response.at("new_job");
+            else if (response.contains("template"))
+              workData = response;
+
             if ((isDev ? (workData.at("height") != devHeight) : (workData.at("height") != ourHeight)))
             {
               if (isDev)
@@ -680,7 +684,9 @@ void xelis_session(
                 jobCounter++;
               }
             }
-          } else {
+          }
+          else
+          {
             accepted++;
           }
         }
@@ -746,6 +752,7 @@ void xatum_session(
   ctx.set_verify_mode(ssl::verify_none); // Accept self-signed certificates
   tcp::socket socket(ioc);
   boost::beast::ssl_stream<boost::beast::tcp_stream> stream(ioc, ctx);
+  boost::asio::deadline_timer deadline(ioc, boost::posix_time::seconds(1));
 
   net::ip::address ip_address;
 
@@ -866,9 +873,9 @@ void xatum_session(
     try
     {
       if (
-        Xatum::lastReceivedJobTime > 0 &&
-        std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count() 
-        - Xatum::lastReceivedJobTime > Xatum::jobTimeout) {
+          Xatum::lastReceivedJobTime > 0 &&
+          std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count() - Xatum::lastReceivedJobTime > Xatum::jobTimeout)
+      {
         bool *C = isDev ? &devConnected : &isConnected;
         (*C) = false;
         return fail(ec, "Xatum session timed out");
@@ -887,14 +894,24 @@ void xatum_session(
         // Acquire a lock before writing to the WebSocket
         beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(10));
         boost::asio::async_write(stream, boost::asio::buffer(msg), yield[ec]);
-        if (ec) {
-            return fail(ec, "Xatum submission");
+        if (ec)
+        {
+          bool *C = isDev ? &devConnected : &isConnected;
+          (*C) = false;
+          return fail(ec, "Xatum submission");
         }
         (*B) = false;
       }
       boost::asio::streambuf response;
       std::stringstream workInfo;
       beast::get_lowest_layer(stream).expires_after(std::chrono::milliseconds(45000));
+
+      deadline.expires_from_now(boost::posix_time::seconds(1));
+      deadline.async_wait([&](beast::error_code ec)
+                          {
+          if (!ec) {
+              beast::get_lowest_layer(stream).cancel();
+          } });
       trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
       // if (ec && trans > 0)
       //   return fail(ec, "Xatum async_read_until");
@@ -949,7 +966,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
 
     if (Xatum::stale.compare(data.at("msg").get<std::string>()) == 0)
       rejected++;
-    
+
     int msgLevel = data.at("lvl").get<int>();
     if (msgLevel < Xatum::logLevel)
       return 0;
@@ -1093,6 +1110,7 @@ void xelis_stratum_session(
 
   beast::error_code ec;
   boost::json::error_code jsonEc;
+  boost::asio::deadline_timer deadline(ioc, boost::posix_time::seconds(1));
 
   // SSL_CTX_set_info_callback(ctx.native_handle(), openssl_log_callback);
 
@@ -1206,7 +1224,6 @@ void xelis_stratum_session(
   if (ec)
     return fail(ec, "Stratum subscribe");
 
-
   // Make sure subscription is successful
   boost::asio::streambuf subRes;
   beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
@@ -1215,13 +1232,13 @@ void xelis_stratum_session(
   std::string subResString = beast::buffers_to_string(subRes.data());
   subRes.consume(trans);
   boost::json::object subResJson = boost::json::parse(subResString.c_str(), jsonEc).as_object();
-  if (jsonEc) {
+  if (jsonEc)
+  {
     std::cerr << jsonEc.message() << std::endl;
   }
 
   std::cout << boost::json::serialize(subResJson).c_str() << std::endl;
   handleXStratumResponse(subResJson, isDev);
-
 
   // Authorize Stratum Worker
   packet = XelisStratum::stratumCall;
@@ -1240,6 +1257,8 @@ void xelis_stratum_session(
   // This buffer will hold the incoming message
   beast::flat_buffer buffer;
   std::stringstream workInfo;
+
+  bool isWaiting = false;
 
   while (true)
   {
@@ -1262,15 +1281,25 @@ void xelis_stratum_session(
         std::cout << "sending in: " << msg << std::endl;
         beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(10));
         boost::asio::async_write(stream, boost::asio::buffer(msg), yield[ec]);
-        if (ec) {
-            return fail(ec, "Stratum submit");
+        if (ec)
+        {
+          bool *C = isDev ? &devConnected : &isConnected;
+          (*C) = false;
+          return fail(ec, "Stratum submit");
         }
         (*B) = false;
       }
 
       boost::asio::streambuf response;
       std::stringstream workInfo;
-      beast::get_lowest_layer(stream).expires_after(std::chrono::milliseconds(45000));
+      beast::get_lowest_layer(stream).expires_after(std::chrono::milliseconds(60000));
+
+      deadline.expires_from_now(boost::posix_time::seconds(1));
+      deadline.async_wait([&](beast::error_code ec)
+                          {
+          if (!ec) {
+              beast::get_lowest_layer(stream).cancel();
+          } });
       trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
       // if (ec && trans > 0)
       //   return fail(ec, "Stratum async_read");
@@ -1283,32 +1312,37 @@ void xelis_stratum_session(
 
         std::cout << data << std::endl;
 
-        if (data.compare(XelisStratum::k1ping) == 0) {
+        if (data.compare(XelisStratum::k1ping) == 0)
+        {
           trans = boost::asio::async_write(
-            stream, 
-            boost::asio::buffer(XelisStratum::k1pong), 
-            yield[ec]
-          );
+              stream,
+              boost::asio::buffer(XelisStratum::k1pong),
+              yield[ec]);
           if (ec && trans > 0)
             return fail(ec, "Stratum pong (K1 style)");
-        } else {
+        }
+        else
+        {
           boost::json::object sRPC = boost::json::parse(data).as_object();
-          if (sRPC.contains("method")) {
-            if (std::string(sRPC.at("method").as_string().c_str()).compare(XelisStratum::s_ping) == 0) {
-              boost::json::object pong({
-                {"id", sRPC.at("id").get_uint64()},
-                {"method", XelisStratum::pong.method}
-              });
+          if (sRPC.contains("method"))
+          {
+            if (std::string(sRPC.at("method").as_string().c_str()).compare(XelisStratum::s_ping) == 0)
+            {
+              boost::json::object pong({{"id", sRPC.at("id").get_uint64()},
+                                        {"method", XelisStratum::pong.method}});
               std::string pongPacket = std::string(boost::json::serialize(pong).c_str()) + "\n";
               trans = boost::asio::async_write(
-                stream, 
-                boost::asio::buffer(pongPacket), 
-                yield[ec]
-              );
+                  stream,
+                  boost::asio::buffer(pongPacket),
+                  yield[ec]);
               if (ec && trans > 0)
                 return fail(ec, "Stratum pong");
-            } else handleXStratumPacket(sRPC, isDev);
-          } else {
+            }
+            else
+              handleXStratumPacket(sRPC, isDev);
+          }
+          else
+          {
             handleXStratumResponse(sRPC, isDev);
           }
         }
@@ -1335,13 +1369,16 @@ void xelis_stratum_session(
 int handleXStratumPacket(boost::json::object packet, bool isDev)
 {
   std::string M = packet.at("method").get_string().c_str();
-  if (M.compare(XelisStratum::s_notify) == 0) {
+  if (M.compare(XelisStratum::s_notify) == 0)
+  {
 
-    if (ourHeight > 0 && packet.at("params").as_array()[4].get_bool() != true) return 0;
+    if (ourHeight > 0 && packet.at("params").as_array()[4].get_bool() != true)
+      return 0;
 
     mutex.lock();
     setcolor(CYAN);
-    if (!isDev) printf("\nStratum: new job received\n");
+    if (!isDev)
+      printf("\nStratum: new job received\n");
     setcolor(BRIGHT_WHITE);
     mutex.unlock();
 
@@ -1349,7 +1386,7 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
     uint64_t *h = isDev ? &devHeight : &ourHeight;
 
     std::string bs = (*J).at("template").get<std::string>();
-    char *blob = (char*)bs.c_str();
+    char *blob = (char *)bs.c_str();
 
     const char *jobId = packet.at("params").as_array()[0].get_string().c_str();
     const char *ts = packet.at("params").as_array()[1].get_string().c_str();
@@ -1390,18 +1427,23 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
     *C = true;
     (*h)++;
     jobCounter++;
-  } else if (M.compare(XelisStratum::s_setDifficulty) == 0) {
+  }
+  else if (M.compare(XelisStratum::s_setDifficulty) == 0)
+  {
 
     uint64_t *d = isDev ? &difficultyDev : &difficulty;
     (*d) = packet.at("params").as_array()[0].get_double();
-    if ((*d) == 0) (*d) = packet.at("params").as_array()[0].get_uint64();
-  } else if (M.compare(XelisStratum::s_setExtraNonce) == 0) {
+    if ((*d) == 0)
+      (*d) = packet.at("params").as_array()[0].get_uint64();
+  }
+  else if (M.compare(XelisStratum::s_setExtraNonce) == 0)
+  {
 
     json *J = isDev ? &devJob : &job;
     uint64_t *h = isDev ? &devHeight : &ourHeight;
 
     std::string bs = (*J).at("template").get<std::string>();
-    char *blob = (char*)bs.c_str();
+    char *blob = (char *)bs.c_str();
     const char *en = packet.at("params").as_array()[0].as_string().c_str();
     int enLen = packet.at("params").as_array()[0].as_string().size();
 
@@ -1412,10 +1454,13 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
 
     (*h)++;
     jobCounter++;
-  } else if (M.compare(XelisStratum::s_print) == 0) {
+  }
+  else if (M.compare(XelisStratum::s_print) == 0)
+  {
 
     int lLevel = packet.at("params").as_array()[0].as_int64();
-    if (lLevel != XelisStratum::STRATUM_DEBUG) {
+    if (lLevel != XelisStratum::STRATUM_DEBUG)
+    {
       int res = 0;
       printf("\n");
       if (isDev)
@@ -1425,25 +1470,26 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
       }
 
       mutex.lock();
-      switch(lLevel) {
-        case XelisStratum::STRATUM_INFO:
-          if (!isDev)
-            setcolor(BRIGHT_WHITE);
-          printf("Stratum INFO: ");
-          break;
-        case XelisStratum::STRATUM_WARN:
-          if (!isDev)
-            setcolor(BRIGHT_YELLOW);
-          printf("Stratum WARNING: ");
-          break;
-        case XelisStratum::STRATUM_ERROR:
-          if (!isDev)
-            setcolor(RED);
-          printf("Stratum ERROR: ");
-          res = -1;
-          break;
-        case XelisStratum::STRATUM_DEBUG:
-          break;
+      switch (lLevel)
+      {
+      case XelisStratum::STRATUM_INFO:
+        if (!isDev)
+          setcolor(BRIGHT_WHITE);
+        printf("Stratum INFO: ");
+        break;
+      case XelisStratum::STRATUM_WARN:
+        if (!isDev)
+          setcolor(BRIGHT_YELLOW);
+        printf("Stratum WARNING: ");
+        break;
+      case XelisStratum::STRATUM_ERROR:
+        if (!isDev)
+          setcolor(RED);
+        printf("Stratum ERROR: ");
+        res = -1;
+        break;
+      case XelisStratum::STRATUM_DEBUG:
+        break;
       }
       printf("%s\n", packet.at("params").as_array()[1].as_string().c_str());
 
@@ -1464,54 +1510,57 @@ int handleXStratumResponse(boost::json::object packet, bool isDev)
 
   switch (id)
   {
-    case XelisStratum::subscribeID:
+  case XelisStratum::subscribeID:
+  {
+    json *J = isDev ? &devJob : &job;
+    if (!(*J).contains("template"))
     {
-      json *J = isDev ? &devJob : &job;
-      if (!(*J).contains("template")) {
-        byte blankBlob[XELIS_TEMPLATE_SIZE*2];
-        memset(blankBlob, '0', XELIS_TEMPLATE_SIZE*2);
-        std::string base = std::string((char*)blankBlob);
-        base.resize(XELIS_TEMPLATE_SIZE*2);
-        (*J).emplace("template", base.c_str());
-      }
-
-      std::string bs = (*J).at("template").get<std::string>();
-      char *blob = (char*)bs.c_str();
-      const char *extraNonce = packet.at("result").get_array()[1].get_string().c_str();
-      int enLen = packet.at("result").get_array()[2].get_int64();
-      const char *pubKey = packet.at("result").get_array()[3].get_string().c_str();
-
-      memset(&blob[96], '0', 64);
-      memcpy(&blob[96], extraNonce, enLen*2);
-      memcpy(&blob[160], pubKey, 64);
-
-      (*J).at("template") = std::string(blob).c_str();
+      byte blankBlob[XELIS_TEMPLATE_SIZE * 2];
+      memset(blankBlob, '0', XELIS_TEMPLATE_SIZE * 2);
+      std::string base = std::string((char *)blankBlob);
+      base.resize(XELIS_TEMPLATE_SIZE * 2);
+      (*J).emplace("template", base.c_str());
     }
+
+    std::string bs = (*J).at("template").get<std::string>();
+    char *blob = (char *)bs.c_str();
+    const char *extraNonce = packet.at("result").get_array()[1].get_string().c_str();
+    int enLen = packet.at("result").get_array()[2].get_int64();
+    const char *pubKey = packet.at("result").get_array()[3].get_string().c_str();
+
+    memset(&blob[96], '0', 64);
+    memcpy(&blob[96], extraNonce, enLen * 2);
+    memcpy(&blob[160], pubKey, 64);
+
+    (*J).at("template") = std::string(blob).c_str();
+  }
+  break;
+  case XelisStratum::submitID:
+  {
+    mutex.lock();
+    printf("\n");
+    if (isDev)
+    {
+      setcolor(CYAN);
+      printf("DEV | ");
+    }
+    if (!packet["result"].is_null() && packet.at("result").get_bool())
+    {
+      accepted++;
+      std::cout << "Stratum: share accepted" << std::endl;
+      setcolor(BRIGHT_WHITE);
+    }
+    else
+    {
+      rejected++;
+      if (!isDev)
+        setcolor(RED);
+      std::cout << "Stratum: share rejected: " << packet.at("error").get_object()["message"].get_string() << std::endl;
+      setcolor(BRIGHT_WHITE);
+    }
+    mutex.unlock();
     break;
-    case XelisStratum::submitID:
-    {
-      mutex.lock();
-      printf("\n");
-      if (isDev) {
-        setcolor(CYAN);
-        printf("DEV | ");
-      }
-      if (!packet["result"].is_null() && packet.at("result").get_bool())
-      {
-        accepted++;
-        std::cout << "Stratum: share accepted" << std::endl;
-        setcolor(BRIGHT_WHITE);
-      }
-      else
-      {
-        rejected++;
-        if (!isDev) setcolor(RED);
-        std::cout << "Stratum: share rejected: " << packet.at("error").get_object()["message"].get_string() << std::endl;
-        setcolor(BRIGHT_WHITE);
-      }
-      mutex.unlock();
-      break;
-    }
+  }
   }
   return 0;
 }
@@ -1803,11 +1852,13 @@ fillBlanks:
     goto fillBlanks;
   }
 
-  if (useStratum) {
-    switch(miningAlgo) {
-      case XELIS_HASH:
-        protocol = XELIS_STRATUM;
-        break;
+  if (useStratum)
+  {
+    switch (miningAlgo)
+    {
+    case XELIS_HASH:
+      protocol = XELIS_STRATUM;
+      break;
     }
   }
 
@@ -2085,7 +2136,8 @@ Mining:
   mutex.unlock();
 
   auto start_time = std::chrono::steady_clock::now();
-  if (broadcastStats) {
+  if (broadcastStats)
+  {
     boost::thread BROADCAST(BroadcastServer::serverThread, &rate30sec, &accepted, &rejected, versionString);
   }
 
@@ -2695,7 +2747,8 @@ waitForJob:
 
       mutex.unlock();
 
-      if (!myJob.contains("template")) continue;
+      if (!myJob.contains("template"))
+        continue;
       if (ourHeight == 0 && devHeight == 0)
         continue;
 
@@ -2704,18 +2757,18 @@ waitForJob:
         byte *b2 = new byte[XELIS_TEMPLATE_SIZE];
         switch (protocol)
         {
-          case XELIS_SOLO:
-            hexstrToBytes(myJob.at("template"), b2);
-            break;
-          case XELIS_XATUM:
-          {
-            std::string b64 = base64::from_base64(myJob.at("template").get<std::string>());
-            memcpy(b2, b64.data(), b64.size());
-            break;
-          }
-          case XELIS_STRATUM:
-            hexstrToBytes(myJob.at("template"), b2);
-            break;
+        case XELIS_SOLO:
+          hexstrToBytes(myJob.at("template"), b2);
+          break;
+        case XELIS_XATUM:
+        {
+          std::string b64 = base64::from_base64(myJob.at("template").get<std::string>());
+          memcpy(b2, b64.data(), b64.size());
+          break;
+        }
+        case XELIS_STRATUM:
+          hexstrToBytes(myJob.at("template"), b2);
+          break;
         }
         memcpy(work, b2, XELIS_TEMPLATE_SIZE);
         delete[] b2;
@@ -2730,18 +2783,18 @@ waitForJob:
           byte *b2d = new byte[XELIS_TEMPLATE_SIZE];
           switch (protocol)
           {
-            case XELIS_SOLO:
-              hexstrToBytes(myJobDev.at("template"), b2d);
-              break;
-            case XELIS_XATUM:
-            {
-              std::string b64 = base64::from_base64(myJobDev.at("template").get<std::string>().c_str());
-              memcpy(b2d, b64.data(), b64.size());
-              break;
-            }
-            case XELIS_STRATUM:
-              hexstrToBytes(myJobDev.at("template"), b2d);
-              break;
+          case XELIS_SOLO:
+            hexstrToBytes(myJobDev.at("template"), b2d);
+            break;
+          case XELIS_XATUM:
+          {
+            std::string b64 = base64::from_base64(myJobDev.at("template").get<std::string>().c_str());
+            memcpy(b2d, b64.data(), b64.size());
+            break;
+          }
+          case XELIS_STRATUM:
+            hexstrToBytes(myJobDev.at("template"), b2d);
+            break;
           }
           memcpy(devWork, b2d, XELIS_TEMPLATE_SIZE);
           delete[] b2d;
@@ -2761,7 +2814,8 @@ waitForJob:
         which = (double)(rand() % 10000);
         devMine = (devConnected && devHeight > 0 && which < devFee * 100.0);
         DIFF = devMine ? difficultyDev : difficulty;
-        if (DIFF == 0) continue;
+        if (DIFF == 0)
+          continue;
         cmpDiff = ConvertDifficultyToBig(DIFF, XELIS_HASH);
 
         uint64_t *nonce = devMine ? &i_dev : &i;
@@ -2772,7 +2826,7 @@ waitForJob:
         byte *WORK = (devMine && devConnected) ? &devWork[0] : &work[0];
         byte *nonceBytes = &WORK[40];
         uint64_t n = ((tid - 1) % (256 * 256 * 256)) | ((*nonce) << 24);
-        memcpy(nonceBytes, (byte*)&n, 8);
+        memcpy(nonceBytes, (byte *)&n, 8);
 
         // if (littleEndian())
         // {
@@ -2836,15 +2890,11 @@ waitForJob:
               };
               break;
             case XELIS_STRATUM:
-              devShare = {{
-                {"id", XelisStratum::submitID},
-                {"method", XelisStratum::submit.method.c_str()},
-                {"params", {
-                  devWorkerName, // WORKER
-                  devJob.at("jobId").get<std::string>().c_str(), // JOB ID
-                  hexStr((byte*)&n, 8).c_str()
-                }}
-              }};
+              devShare = {{{"id", XelisStratum::submitID},
+                           {"method", XelisStratum::submit.method.c_str()},
+                           {"params", {devWorkerName,                                 // WORKER
+                                       devJob.at("jobId").get<std::string>().c_str(), // JOB ID
+                                       hexStr((byte *)&n, 8).c_str()}}}};
               break;
             }
             submittingDev = true;
@@ -2873,15 +2923,11 @@ waitForJob:
               };
               break;
             case XELIS_STRATUM:
-              share = {{
-                {"id", XelisStratum::submitID},
-                {"method", XelisStratum::submit.method.c_str()},
-                {"params", {
-                  workerName, // WORKER
-                  myJob.at("jobId").get<std::string>().c_str(), // JOB ID
-                  hexStr((byte*)&n, 8).c_str()
-                }}
-              }};
+              share = {{{"id", XelisStratum::submitID},
+                        {"method", XelisStratum::submit.method.c_str()},
+                        {"params", {workerName,                                   // WORKER
+                                    myJob.at("jobId").get<std::string>().c_str(), // JOB ID
+                                    hexStr((byte *)&n, 8).c_str()}}}};
 
               // std::cout << "blob: " << hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str() << std::endl;
               // std::cout << "hash: " << hexStr(&powHash[0], 32) << std::endl;
@@ -2890,7 +2936,7 @@ waitForJob:
               std::cout << "difficulty (LE): " << std::string(diffHex.data()).c_str() << std::endl;
               printf("blob: %s\n", foundBlob.c_str());
               printf("hash (BE): %s\n", hexStr(&powHash[0], 32).c_str());
-              printf("nonce (Full bytes for injection): %s\n", hexStr((byte*)&n, 8).c_str());
+              printf("nonce (Full bytes for injection): %s\n", hexStr((byte *)&n, 8).c_str());
 
               break;
             }
