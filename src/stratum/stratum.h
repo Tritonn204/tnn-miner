@@ -25,29 +25,34 @@ namespace XelisStratum {
   });
 
   typedef struct method{
-    int64_t id;
+    int id;
     std::string method;
   } method;
 
   // Client calls
-  method subscribe = {
+  const method subscribe = {
     .id = 1,
     .method = "mining.subscribe"
   };
 
-  method authorize = {
+  const method authorize = {
     .id = 2,
     .method = "mining.authorize"
   };
 
-  method submit = {
-    .id = 4,
+  const method submit = {
+    .id = 7,
     .method = "mining.submit"
   };
 
-  method reportHashrate = {
-    .id = 4,
+  const method reportHashrate = {
+    .id = 5,
     .method = "mining.hashrate"
+  };
+
+  const method pong = {
+    .id = 100,
+    .method = "mining.pong"
   };
 
   // Server calls
@@ -60,10 +65,8 @@ namespace XelisStratum {
   std::string k1ping = "ping~{}\n";
   std::string k1pong = "pong~{}\n";
 
-  std::string c_pong = R"({"id":4,"method":"mining.pong"})";
-
   // Server responses IDs
-  const byte s_subscribeResult = 1;
-  const byte s_authorizeResult = 2;
-  const byte s_submitResult = 4;
+  const byte subscribeID = 1;
+  const byte authorizeID = 2;
+  const byte submitID = 7;
 }
