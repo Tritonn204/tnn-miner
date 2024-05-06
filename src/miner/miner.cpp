@@ -894,7 +894,7 @@ void xatum_session(
       }
       boost::asio::streambuf response;
       std::stringstream workInfo;
-      beast::get_lowest_layer(stream).expires_after(std::chrono::milliseconds(35000));
+      beast::get_lowest_layer(stream).expires_after(std::chrono::milliseconds(45000));
       trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
       // if (ec && trans > 0)
       //   return fail(ec, "Xatum async_read_until");
@@ -1270,7 +1270,7 @@ void xelis_stratum_session(
 
       boost::asio::streambuf response;
       std::stringstream workInfo;
-      beast::get_lowest_layer(stream).expires_after(std::chrono::milliseconds(35000));
+      beast::get_lowest_layer(stream).expires_after(std::chrono::milliseconds(45000));
       trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
       // if (ec && trans > 0)
       //   return fail(ec, "Stratum async_read");
@@ -2774,13 +2774,13 @@ waitForJob:
         uint64_t n = ((tid - 1) % (256 * 256 * 256)) | ((*nonce) << 24);
         memcpy(nonceBytes, (byte*)&n, 8);
 
-        if (littleEndian())
-        {
-          std::swap(nonceBytes[7], nonceBytes[0]);
-          std::swap(nonceBytes[6], nonceBytes[1]);
-          std::swap(nonceBytes[5], nonceBytes[2]);
-          std::swap(nonceBytes[4], nonceBytes[3]);
-        }
+        // if (littleEndian())
+        // {
+        //   std::swap(nonceBytes[7], nonceBytes[0]);
+        //   std::swap(nonceBytes[6], nonceBytes[1]);
+        //   std::swap(nonceBytes[5], nonceBytes[2]);
+        //   std::swap(nonceBytes[4], nonceBytes[3]);
+        // }
 
         if (localJobCounter != jobCounter)
           break;
