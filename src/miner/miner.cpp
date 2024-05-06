@@ -1258,12 +1258,20 @@ void xelis_stratum_session(
   beast::flat_buffer buffer;
   std::stringstream workInfo;
 
-  bool isWaiting = false;
+  XelisStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
   while (true)
   {
     try
     {
+      if (
+          XelisStratum::lastReceivedJobTime > 0 &&
+          std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count() - XelisStratum::lastReceivedJobTime > XelisStratum::jobTimeout)
+      {
+        bool *C = isDev ? &devConnected : &isConnected;
+        (*C) = false;
+        return fail(ec, "Stratum session timed out");
+      }
       bool *B = isDev ? &submittingDev : &submitting;
       if (*B)
       {
@@ -1301,8 +1309,8 @@ void xelis_stratum_session(
               beast::get_lowest_layer(stream).cancel();
           } });
       trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
-      // if (ec && trans > 0)
-      //   return fail(ec, "Stratum async_read");
+      if (ec && trans > 0)
+        return fail(ec, "Stratum async_read");
 
       if (trans > 0)
       {
@@ -1381,6 +1389,8 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
       printf("\nStratum: new job received\n");
     setcolor(BRIGHT_WHITE);
     mutex.unlock();
+
+    XelisStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
     json *J = isDev ? &devJob : &job;
     uint64_t *h = isDev ? &devHeight : &ourHeight;

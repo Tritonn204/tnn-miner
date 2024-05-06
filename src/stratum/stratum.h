@@ -69,4 +69,7 @@ namespace XelisStratum {
   const byte subscribeID = 1;
   const byte authorizeID = 2;
   const byte submitID = 7;
+
+  uint64_t lastReceivedJobTime = 0;
+  int jobTimeout = 90;
 }

@@ -24,7 +24,7 @@ namespace Xatum
   std::string stale = "invalid extra nonce";
 
   uint64_t lastReceivedJobTime = 0;
-  uint64_t jobTimeout = 60;
+  uint64_t jobTimeout = 90;
 
   const int ERROR_MSG = 3;
   const int WARN_MSG = 2;
