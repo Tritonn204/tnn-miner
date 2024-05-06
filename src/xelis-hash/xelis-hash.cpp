@@ -394,7 +394,7 @@ void stage_1(uint64_t *int_input, uint64_t *scratchPad,
   }
 }
 
-__attribute__((target("avx512f"))) void stage_2_avx512(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots)
+__attribute__((target("avx512f"))) void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots)
 {
   for (byte iter = 0; iter < XELIS_ITERS; ++iter)
   {
@@ -411,29 +411,28 @@ __attribute__((target("avx512f"))) void stage_2_avx512(uint64_t *input, uint32_t
         // AVX-512 implementation
         __m512i sum_buffer = _mm512_setzero_si512();
         byte sign = slots[index] >> 31;
-        __m512i sign_bit = _mm512_load_si512((__m512i *)sign_bit_values_avx512[15 - (index % 16)]);
 
         for (uint16_t k = 0; k < XELIS_SLOT_LENGTH; k += 16)
         {
           __m512i slot_vector = _mm512_load_si512(&slots[k]);
           __m512i values = _mm512_load_si512(&smallPad[j * XELIS_SLOT_LENGTH + k]);
-          if (index >= k && index-k < 16) values = _mm512_and_si512(values, sign_bit);
 
           __mmask16 sign_mask = _mm512_cmpeq_epi32_mask(_mm512_setzero_si512(), _mm512_srli_epi32(slot_vector, 31));
           sum_buffer = _mm512_mask_add_epi32(sum_buffer, sign_mask, sum_buffer, values);
           sum_buffer = _mm512_mask_sub_epi32(sum_buffer, ~sign_mask, sum_buffer, values);
         }
 
-        // __m512i adjustment = _mm512_set1_epi32(smallPad[j * XELIS_SLOT_LENGTH + index]);
+        __m512i adjustment = _mm512_set1_epi32(smallPad[j * XELIS_SLOT_LENGTH + index]);
+        __m512i sign_bit = _mm512_load_si512((__m512i *)sign_bit_values_avx512[index % 16]);
 
-        // if (sign == 0)
-        // {
-        //     sum_buffer = _mm512_sub_epi32(sum_buffer, _mm512_and_si512(adjustment, sign_bit));
-        // }
-        // else
-        // {
-        //     sum_buffer = _mm512_add_epi32(sum_buffer, _mm512_and_si512(adjustment, sign_bit));
-        // }
+        if (sign == 0)
+        {
+            sum_buffer = _mm512_sub_epi32(sum_buffer, _mm512_and_si512(adjustment, sign_bit));
+        }
+        else
+        {
+            sum_buffer = _mm512_add_epi32(sum_buffer, _mm512_and_si512(adjustment, sign_bit));
+        }
 
         __m256i sum_low_256 = _mm512_extracti64x4_epi64(sum_buffer, 0);
         __m256i sum_high_256 = _mm512_extracti64x4_epi64(sum_buffer, 1);
@@ -455,7 +454,7 @@ __attribute__((target("avx512f"))) void stage_2_avx512(uint64_t *input, uint32_t
   // Copy slots back to the last SLOT_LENGTH elements of smallPad
   std::copy(&slots[0], &slots[XELIS_SLOT_LENGTH], &smallPad[XELIS_MEMORY_SIZE * 2 - XELIS_SLOT_LENGTH]);
 }
-__attribute__((target("avx2"))) void stage_2_avx2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots)
+__attribute__((target("avx2"))) void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots)
 {
   for (byte iter = 0; iter < XELIS_ITERS; ++iter)
   {
@@ -471,29 +470,28 @@ __attribute__((target("avx2"))) void stage_2_avx2(uint64_t *input, uint32_t *sma
 
         // AVX2 implementation
         __m256i sum_buffer = _mm256_setzero_si256();
-        // byte sign = slots[index] >> 31;
-        __m256i sign_bit = _mm256_loadu_si256((__m256i *)sign_bit_values_avx2[7 - (index % 8)]);
+        byte sign = slots[index] >> 31;
 
         for (uint16_t k = 0; k < XELIS_SLOT_LENGTH; k += 8)
         {
           __m256i slot_vector = _mm256_load_si256((__m256i *)&slots[k]);
           __m256i values = _mm256_load_si256((__m256i *)&smallPad[j * XELIS_SLOT_LENGTH + k]);
-          if (index >= k && index-k < 8) values = _mm256_and_si256(values, ~sign_bit);
 
           __m256i sign_mask = _mm256_cmpeq_epi32(_mm256_setzero_si256(), _mm256_srli_epi32(slot_vector, 31));
           sum_buffer = _mm256_blendv_epi8(_mm256_sub_epi32(sum_buffer, values), _mm256_add_epi32(sum_buffer, values), sign_mask);
         }
 
-        // __m256i adjustment = _mm256_set1_epi32(smallPad[j * XELIS_SLOT_LENGTH + index]);
+        __m256i adjustment = _mm256_set1_epi32(smallPad[j * XELIS_SLOT_LENGTH + index]);
+        __m256i sign_bit = _mm256_load_si256((__m256i *)sign_bit_values_avx2[index % 8]);
 
-        // if (sign == 0)
-        // {
-        //   sum_buffer = _mm256_blendv_epi8(sum_buffer, _mm256_sub_epi32(sum_buffer, adjustment), sign_bit);
-        // }
-        // else
-        // {
-        //   sum_buffer = _mm256_blendv_epi8(sum_buffer, _mm256_add_epi32(sum_buffer, adjustment), sign_bit);
-        // }
+        if (sign == 0)
+        {
+          sum_buffer = _mm256_blendv_epi8(sum_buffer, _mm256_sub_epi32(sum_buffer, adjustment), sign_bit);
+        }
+        else
+        {
+          sum_buffer = _mm256_blendv_epi8(sum_buffer, _mm256_add_epi32(sum_buffer, adjustment), sign_bit);
+        }
 
         __m128i sum_low = _mm256_extracti128_si256(sum_buffer, 0);
         __m128i sum_high = _mm256_extracti128_si256(sum_buffer, 1);
@@ -512,7 +510,7 @@ __attribute__((target("avx2"))) void stage_2_avx2(uint64_t *input, uint32_t *sma
   // Copy slots back to the last SLOT_LENGTH elements of smallPad
   std::copy(&slots[0], &slots[XELIS_SLOT_LENGTH], &smallPad[XELIS_MEMORY_SIZE * 2 - XELIS_SLOT_LENGTH]);
 }
-__attribute__((target("sse2"))) void stage_2_sse2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots)
+__attribute__((target("sse2"))) void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots)
 {
   for (byte iter = 0; iter < XELIS_ITERS; ++iter)
   {
@@ -530,28 +528,26 @@ __attribute__((target("sse2"))) void stage_2_sse2(uint64_t *input, uint32_t *sma
         __m128i sum_buffer = _mm_setzero_si128();
         byte sign = slots[index] >> 31;
 
-        __m128i sign_bit = _mm_load_si128((__m128i *)sign_bit_values_sse[3 - (index % 4)]);
-
         for (size_t k = 0; k < XELIS_SLOT_LENGTH; k += 4)
         {
           __m128i slot_vector = _mm_load_si128((__m128i *)&slots[k]);
           __m128i values = _mm_load_si128((__m128i *)&smallPad[j * XELIS_SLOT_LENGTH + k]);
-          if (index >= k && index-k < 4) values = _mm_and_si128(values, ~sign_bit);
 
           __m128i sign_mask = _mm_cmpeq_epi32(_mm_setzero_si128(), _mm_srli_epi32(slot_vector, 31));
           sum_buffer = _mm_blendv_epi8(_mm_sub_epi32(sum_buffer, values), _mm_add_epi32(sum_buffer, values), sign_mask);
         }
 
-        // __m128i adjustment = _mm_set1_epi32(smallPad[j * XELIS_SLOT_LENGTH + index]);
+        __m128i adjustment = _mm_set1_epi32(smallPad[j * XELIS_SLOT_LENGTH + index]);
+        __m128i sign_bit = _mm_load_si128((__m128i *)sign_bit_values_sse[index % 4]);
 
-        // if (sign == 0)
-        // {
-        //   sum_buffer = _mm_blendv_epi8(sum_buffer, _mm_sub_epi32(sum_buffer, adjustment), sign_bit);
-        // }
-        // else
-        // {
-        //   sum_buffer = _mm_blendv_epi8(sum_buffer, _mm_add_epi32(sum_buffer, adjustment), sign_bit);
-        // }
+        if (sign == 0)
+        {
+          sum_buffer = _mm_blendv_epi8(sum_buffer, _mm_sub_epi32(sum_buffer, adjustment), sign_bit);
+        }
+        else
+        {
+          sum_buffer = _mm_blendv_epi8(sum_buffer, _mm_add_epi32(sum_buffer, adjustment), sign_bit);
+        }
 
         // Perform horizontal addition to reduce the sum
         sum_buffer = _mm_hadd_epi32(sum_buffer, sum_buffer);
@@ -567,7 +563,8 @@ __attribute__((target("sse2"))) void stage_2_sse2(uint64_t *input, uint32_t *sma
   // Copy slots back to the last SLOT_LENGTH elements of smallPad
   std::copy(&slots[0], &slots[XELIS_SLOT_LENGTH], &smallPad[XELIS_MEMORY_SIZE * 2 - XELIS_SLOT_LENGTH]);
 }
-void stage_2_scalar(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots)
+
+__attribute__((target("default"))) void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots)
 {
   for (byte iter = 0; iter < XELIS_ITERS; ++iter)
   {
@@ -717,28 +714,6 @@ void stage_3(uint64_t *scratchPad, byte *hashResult)
   }
 }
 
-void xelis_benchmark_cpu_hash()
-{
-  const uint32_t ITERATIONS = 1000;
-  byte input[200] = {0};
-  alignas(64) workerData_xelis worker;
-  alignas(64) byte hash_result[XELIS_HASH_SIZE] = {0};
-
-  auto start = std::chrono::high_resolution_clock::now();
-  for (uint32_t i = 0; i < ITERATIONS; ++i)
-  {
-    input[0] = i & 0xFF;
-    input[1] = (i >> 8) & 0xFF;
-    xelis_hash(input, worker, hash_result);
-  }
-  auto end = std::chrono::high_resolution_clock::now();
-
-  std::chrono::duration<double, std::milli> elapsed = end - start;
-  std::cout << "Time took: " << elapsed.count() << " ms" << std::endl;
-  std::cout << "H/s: " << (ITERATIONS * 1000.0 / elapsed.count()) << std::endl;
-  std::cout << "ms per hash: " << (elapsed.count() / ITERATIONS) << std::endl;
-}
-
 void xelis_hash(byte *input, workerData_xelis &worker, byte *hashResult)
 {
   // printf("input: ");
@@ -763,13 +738,35 @@ void xelis_hash(byte *input, workerData_xelis &worker, byte *hashResult)
 
   std::copy(&worker.smallPad[XELIS_MEMORY_SIZE * 2 - XELIS_SLOT_LENGTH], &worker.smallPad[XELIS_MEMORY_SIZE * 2], worker.slots);
 
-  if (__builtin_cpu_supports("avx512f")) stage_2_avx512(worker.int_input, worker.smallPad, worker.indices, worker.slots);
-  else if (__builtin_cpu_supports("avx2")) stage_2_avx2(worker.int_input, worker.smallPad, worker.indices, worker.slots);
-  else if (__builtin_cpu_supports("sse2")) stage_2_sse2(worker.int_input, worker.smallPad, worker.indices, worker.slots);
-  else stage_2_scalar(worker.int_input, worker.smallPad, worker.indices, worker.slots);
+  // if (__builtin_cpu_supports("avx512f")) stage_2_avx512(worker.int_input, worker.smallPad, worker.indices, worker.slots);
+  stage_2(worker.int_input, worker.smallPad, worker.indices, worker.slots);
+  // else if (__builtin_cpu_supports("sse2")) stage_2_sse2(worker.int_input, worker.smallPad, worker.indices, worker.slots);
+  // else stage_2_scalar(worker.int_input, worker.smallPad, worker.indices, worker.slots);
 
   // Stage 3
   stage_3(worker.scratchPad, hashResult);
+}
+
+void xelis_benchmark_cpu_hash()
+{
+  const uint32_t ITERATIONS = 1000;
+  byte input[200] = {0};
+  alignas(64) workerData_xelis worker;
+  alignas(64) byte hash_result[XELIS_HASH_SIZE] = {0};
+
+  auto start = std::chrono::high_resolution_clock::now();
+  for (uint32_t i = 0; i < ITERATIONS; ++i)
+  {
+    input[0] = i & 0xFF;
+    input[1] = (i >> 8) & 0xFF;
+    xelis_hash(input, worker, hash_result);
+  }
+  auto end = std::chrono::high_resolution_clock::now();
+
+  std::chrono::duration<double, std::milli> elapsed = end - start;
+  std::cout << "Time took: " << elapsed.count() << " ms" << std::endl;
+  std::cout << "H/s: " << (ITERATIONS * 1000.0 / elapsed.count()) << std::endl;
+  std::cout << "ms per hash: " << (elapsed.count() / ITERATIONS) << std::endl;
 }
 
 int char2int(char input)

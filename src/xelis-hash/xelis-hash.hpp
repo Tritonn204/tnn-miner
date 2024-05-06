@@ -6,6 +6,11 @@
 
 typedef unsigned char byte;
 
+#define XELIS_USE_AVX512 4
+#define XELIS_USE_AVX2 3
+#define XELIS_USE_SSE2 2
+#define XELIS_USE_SCALAR 1
+
 const uint16_t XELIS_MEMORY_SIZE = 32768;
 const uint16_t XELIS_SCRATCHPAD_ITERS = 5000;
 const byte XELIS_ITERS = 1;
@@ -17,7 +22,6 @@ const byte XELIS_KECCAK_WORDS = 25;
 const byte XELIS_BYTES_ARRAY_INPUT = XELIS_KECCAK_WORDS * 8;
 const byte XELIS_HASH_SIZE = 32;
 const uint16_t XELIS_STAGE_1_MAX = XELIS_MEMORY_SIZE / XELIS_KECCAK_WORDS;
-
 
 typedef struct workerData_xelis {
   alignas(64) uint64_t scratchPad[XELIS_MEMORY_SIZE] = {0};
