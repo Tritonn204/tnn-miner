@@ -155,6 +155,7 @@ include_directories(
   "${PROJECT_SOURCE_DIR}/src/headers"
   "${PROJECT_SOURCE_DIR}/src/astrobwtv3/"
   "${PROJECT_SOURCE_DIR}/src/xelis-hash/"
+  "${PROJECT_SOURCE_DIR}/src/spectrex/"
   "${PROJECT_SOURCE_DIR}/src/xatum/"
   "${PROJECT_SOURCE_DIR}/src/stratum/"
   "${PROJECT_SOURCE_DIR}/src/miner/"

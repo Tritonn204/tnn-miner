@@ -13,6 +13,8 @@ using byte = unsigned char;
 
 namespace SpectreX
 {
+  const int INPUT_SIZE = 80;
+
   const byte matSize = 64;
   using matrix = uint16_t[matSize][matSize];
   const double epsilon = 1e-9;
