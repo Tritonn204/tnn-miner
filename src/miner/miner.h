@@ -20,11 +20,16 @@
 
 #define DERO_HASH 0
 #define XELIS_HASH 1
+#define SPECTRE_X 2
 
 #define DERO_SOLO 0
+
 #define XELIS_SOLO 10
 #define XELIS_XATUM 11
 #define XELIS_STRATUM 12
+
+#define SPECTRE_SOLO 20
+#define SPECTRE_STRATUM 21
 
 const int workerThreads = 2;
 
@@ -62,22 +67,26 @@ const char *devPool = "dero.rabidmining.com";
 
 std::string defaultHost[] = {
   "dero.rabidmining.com",
+  "127.0.0.1",
   "127.0.0.1"
 };
 
 std::string devPort[] = {
   "10300",
-  "8080"
+  "8080",
+  "5555"
 };
 // @ tritonn on Dero Name Service
 std::string devWallet[] = {
   "dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw4wjqqp6y2n7",
-  "xel:xz9574c80c4xegnvurazpmxhw5dlg2n0g9qm60uwgt75uqyx3pcsqzzra9m"
+  "xel:xz9574c80c4xegnvurazpmxhw5dlg2n0g9qm60uwgt75uqyx3pcsqzzra9m",
+  "spectre:qr5l7q4s6mrfs9r7n0l090nhxrjdkxwacyxgk8lt2wt57ka6xr0ucvr0cmgnf"
 };
 
 std::string testDevWallet[] = {
   "dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw4wjqqp6y2n7",
-  "xet:5zwxjesmz6gtpg3c6zt20n9nevsyeewavpx6nwmv08z2hu2dpp3sq8w8ue6"
+  "xet:5zwxjesmz6gtpg3c6zt20n9nevsyeewavpx6nwmv08z2hu2dpp3sq8w8ue6",
+  "spectre:qr5l7q4s6mrfs9r7n0l090nhxrjdkxwacyxgk8lt2wt57ka6xr0ucvr0cmgnf"
 };
 
 std::string *devSelection = devWallet;
@@ -86,7 +95,9 @@ std::unordered_map<std::string, int> coinSelector = {
   {"dero", DERO_HASH},
   {"DERO", DERO_HASH},
   {"xel", XELIS_HASH},
-  {"XEL", XELIS_HASH}
+  {"XEL", XELIS_HASH},
+  {"spr", SPECTRE_X},
+  {"SPR", SPECTRE_X}
 };
 
 const char* devWorkerName = "tnn-dev";

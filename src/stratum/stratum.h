@@ -73,3 +73,7 @@ namespace XelisStratum {
   uint64_t lastReceivedJobTime = 0;
   int jobTimeout = 90;
 }
+
+namespace Spectre {
+  using bJson = boost::json::object;
+}

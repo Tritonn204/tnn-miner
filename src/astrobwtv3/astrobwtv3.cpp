@@ -13,7 +13,7 @@
 
 #include <fnv1a.h>
 #include <xxhash64.h>
-#include "pow.h"
+#include "astrobwtv3.h"
 #include "powtest.h"
 
 #include <unordered_map>
