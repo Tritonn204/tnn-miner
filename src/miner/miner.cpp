@@ -1916,38 +1916,30 @@ int handleSpectreStratumPacket(boost::json::object packet, bool isDev)
     std::vector<char> tsStr;
 
 
-    Num(h1).print(h1Str, 16);
-    Num(h2).print(h2Str, 16);
-    Num(h3).print(h3Str, 16);
-    Num(h4).print(h4Str, 16);
+    Num(std::to_string(h1).c_str(), 10).print(h1Str, 16);
+    Num(std::to_string(h2).c_str(), 10).print(h2Str, 16);
+    Num(std::to_string(h3).c_str(), 10).print(h3Str, 16);
+    Num(std::to_string(h4).c_str(), 10).print(h4Str, 16);
 
-    Num(ts).print(tsStr, 16);
+    Num(std::to_string(ts).c_str(), 10).print(tsStr, 16);
 
-    // std::string headerStr = 
-    //   hexStr((byte*)&h1, 8) + 
-    //   hexStr((byte*)&h2, 8) + 
-    //   hexStr((byte*)&h3, 8) +
-    //   hexStr((byte*)&h4, 8);
+    char newTemplate[160];
+    memset(newTemplate, '0', 160);
 
-    // printf("headerStr = %s\n", headerStr.c_str());
+    memcpy(newTemplate + 16 - h1Str.size(), h1Str.data(), h1Str.size());
+    memcpy(newTemplate + 16 + 16 - h2Str.size(), h2Str.data(), h2Str.size());
+    memcpy(newTemplate + 32 + 16 - h3Str.size(), h3Str.data(), h3Str.size());
+    memcpy(newTemplate + 48 + 16 - h4Str.size(), h4Str.data(), h4Str.size());
 
-    byte newTemplate[80];
-    memset(newTemplate, 0, 80);
+    memcpy(newTemplate + 64 + 16 - tsStr.size(), tsStr.data(), tsStr.size());
 
-    memcpy(newTemplate + 8 - h1Str.size(), h1Str.data(), 8);
-    memcpy(newTemplate + 8 + 8 - h2Str.size(), h2Str.data(), 8);
-    memcpy(newTemplate + 16 + 8 - h3Str.size(), h3Str.data(), 8);
-    memcpy(newTemplate + 24 + 8 - h4Str.size(), h4Str.data(), 8);
+    (*J)["template"] = newTemplate;
+    // printf("parsed template %s\n", std::string(newTemplate).c_str());
+    for (int i = 0; i < 160; i++) {
+      std::cout << newTemplate[i];
+    }
 
-    memcpy(newTemplate + 32 + 16 - tsStr.size(), tsStr.data(), 8);
-
-    (*J)["template"] = hexStr(newTemplate, 80).c_str();
-    printf("parsed template %s\n", hexStr(newTemplate, 80).c_str());
-    // for (int i = 0; i < 80; i++) {
-    //   std::cout << newTemplate[i];
-    // }
-
-    // printf("\n");
+    printf("\n");
 
     // std::string bs = (*J).at("template").get<std::string>();
     // char *blob = (char *)bs.c_str();
