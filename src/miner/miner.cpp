@@ -1802,22 +1802,23 @@ void spectre_stratum_session(
         response.consume(trans);
         std::cout << data << std::endl;
 
+        deadline.cancel();
+
         try {
           boost::json::object sRPC = boost::json::parse(data.c_str()).as_object();
           if (sRPC.contains("method"))
           {
             if (std::string(sRPC.at("method").as_string().c_str()).compare(SpectreStratum::s_ping) == 0)
             {
-              printf("pinged\n");
-              // boost::json::object pong({{"id", sRPC.at("id").get_uint64()},
-              //                           {"method", SpectreStratum::pong.method}});
-              // std::string pongPacket = std::string(boost::json::serialize(pong).c_str()) + "\r\n";
-              // trans = boost::asio::async_write(
-              //     stream,
-              //     boost::asio::buffer(pongPacket),
-              //     yield[ec]);
-              // if (ec && trans > 0)
-              //   return fail(ec, "Stratum pong");
+              boost::json::object pong({{"id", sRPC.at("id").get_uint64()},
+                                        {"method", SpectreStratum::pong.method}});
+              std::string pongPacket = std::string(boost::json::serialize(pong).c_str()) + "\r\n";
+              trans = boost::asio::async_write(
+                  stream,
+                  boost::asio::buffer(pongPacket),
+                  yield[ec]);
+              if (ec && trans > 0)
+                return fail(ec, "Stratum pong");
             }
             else
               handleSpectreStratumPacket(sRPC, isDev);
@@ -1901,7 +1902,7 @@ int handleSpectreStratumPacket(boost::json::object packet, bool isDev)
     setcolor(BRIGHT_WHITE);
     mutex.unlock();
 
-    XelisStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    SpectreStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
     json *J = isDev ? &devJob : &job;
     uint64_t *h = isDev ? &devHeight : &ourHeight;
@@ -1913,13 +1914,31 @@ int handleSpectreStratumPacket(boost::json::object packet, bool isDev)
     uint64_t h3 = packet["params"].as_array()[1].as_array()[2].get_uint64();
     uint64_t h4 = packet["params"].as_array()[1].as_array()[3].get_uint64();
 
+    uint64_t timestamp = packet["params"].as_array()[2].get_uint64();
+
     std::string headerStr = 
       hexStr((byte*)&h1, 8) + 
       hexStr((byte*)&h2, 8) + 
       hexStr((byte*)&h3, 8) +
       hexStr((byte*)&h4, 8);
 
-    printf("headerStr = %s\n", headerStr.c_str());
+    // printf("headerStr = %s\n", headerStr.c_str());
+
+    byte newTemplate[80] = {'0'};
+    memcpy(newTemplate, &h1, 8);
+    memcpy(newTemplate + 8, &h2, 8);
+    memcpy(newTemplate + 16, &h3, 8);
+    memcpy(newTemplate + 24, &h4, 8);
+
+    memcpy(&newTemplate[32], &timestamp, 8);
+
+    (*J)["template"] = std::string((char*)newTemplate).c_str();
+    printf("parsed template %s\n", hexStr(newTemplate, 80).c_str());
+    // for (int i = 0; i < 80; i++) {
+    //   std::cout << newTemplate[i];
+    // }
+
+    printf("\n");
 
     // std::string bs = (*J).at("template").get<std::string>();
     // char *blob = (char *)bs.c_str();
