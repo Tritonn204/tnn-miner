@@ -80,6 +80,13 @@ namespace XelisStratum {
 namespace SpectreStratum {
   using bJson = boost::json::object;
 
+  const byte STRATUM_DEBUG = 3;
+  const byte STRATUM_ERROR = 2;
+  const byte STRATUM_WARN = 1;
+  const byte STRATUM_INFO = 0;
+
+  int logLevel = 2;
+
   bJson stratumCall({
     {"id", 0},
     {"method", ""},

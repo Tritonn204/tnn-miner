@@ -1305,7 +1305,7 @@ void xelis_stratum_session(
         }
         else
         {
-          boost::json::object sRPC = boost::json::parse(data).as_object();
+          boost::json::object sRPC = boost::json::parse(data.c_str()).as_object();
           if (sRPC.contains("method"))
           {
             if (std::string(sRPC.at("method").as_string().c_str()).compare(XelisStratum::s_ping) == 0)
@@ -1712,7 +1712,7 @@ void spectre_stratum_session(
   // packet.at("id") = SpectreStratum::subscribe.id;
   // packet.at("method") = SpectreStratum::subscribe.method;
   // packet.at("params") = {minerName};
-  std::string subscription = boost::json::serialize(packet) + "\r\n";
+  std::string subscription = boost::json::serialize(packet) + "\n";
 
   // std::cout << subscription << std::endl;
 
@@ -1723,7 +1723,7 @@ void spectre_stratum_session(
 
   // Make sure subscription is successful
   beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-  trans = boost::asio::read_until(stream, subRes, "\r\n");
+  trans = boost::asio::read_until(stream, subRes, "\n");
 
   std::string subResString = beast::buffers_to_string(subRes.data());
   subRes.consume(trans);
@@ -1791,7 +1791,7 @@ void spectre_stratum_session(
           if (!ec) {
               beast::get_lowest_layer(stream).cancel();
           } });
-      trans = boost::asio::async_read_until(stream, response, "\r\n", yield[ec]);
+      trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
       if (ec && trans > 0)
         return fail(ec, "Stratum async_read");
 
@@ -1800,30 +1800,33 @@ void spectre_stratum_session(
         std::string data = beast::buffers_to_string(response.data());
         // Consume the data from the buffer after processing it
         response.consume(trans);
-
         std::cout << data << std::endl;
-        boost::json::object sRPC = boost::json::parse(data).as_object();
-        if (sRPC.contains("method"))
-        {
-          if (std::string(sRPC.at("method").as_string().c_str()).compare(SpectreStratum::s_ping) == 0)
+
+        try {
+          boost::json::object sRPC = boost::json::parse(data.c_str()).as_object();
+          if (sRPC.contains("method"))
           {
-            boost::json::object pong({{"id", sRPC.at("id").get_uint64()},
-                                      {"method", SpectreStratum::pong.method}});
-            std::string pongPacket = std::string(boost::json::serialize(pong).c_str()) + "\r\n";
-            trans = boost::asio::async_write(
-                stream,
-                boost::asio::buffer(pongPacket),
-                yield[ec]);
-            if (ec && trans > 0)
-              return fail(ec, "Stratum pong");
+            if (std::string(sRPC.at("method").as_string().c_str()).compare(SpectreStratum::s_ping) == 0)
+            {
+              printf("pinged\n");
+              // boost::json::object pong({{"id", sRPC.at("id").get_uint64()},
+              //                           {"method", SpectreStratum::pong.method}});
+              // std::string pongPacket = std::string(boost::json::serialize(pong).c_str()) + "\r\n";
+              // trans = boost::asio::async_write(
+              //     stream,
+              //     boost::asio::buffer(pongPacket),
+              //     yield[ec]);
+              // if (ec && trans > 0)
+              //   return fail(ec, "Stratum pong");
+            }
+            else
+              handleSpectreStratumPacket(sRPC, isDev);
           }
           else
-            handleSpectreStratumPacket(sRPC, isDev);
-        }
-        else
-        {
-          handleSpectreStratumResponse(sRPC, isDev);
-        }
+          {
+            handleSpectreStratumResponse(sRPC, isDev);
+          } 
+        } catch(...){}
       }
     }
     catch (const std::exception &e)
@@ -1885,7 +1888,7 @@ void do_session(
 int handleSpectreStratumPacket(boost::json::object packet, bool isDev)
 {
   std::string M = packet.at("method").get_string().c_str();
-  if (M.compare(XelisStratum::s_notify) == 0)
+  if (M.compare(SpectreStratum::s_notify) == 0)
   {
 
     // if (ourHeight > 0 && packet.at("params").as_array()[4].get_bool() != true)
@@ -1902,6 +1905,21 @@ int handleSpectreStratumPacket(boost::json::object packet, bool isDev)
 
     json *J = isDev ? &devJob : &job;
     uint64_t *h = isDev ? &devHeight : &ourHeight;
+
+    uint64_t id = std::stoull(packet["params"].as_array()[0].get_string().c_str());
+
+    uint64_t h1 = packet["params"].as_array()[1].as_array()[0].get_uint64();
+    uint64_t h2 = packet["params"].as_array()[1].as_array()[1].get_uint64();
+    uint64_t h3 = packet["params"].as_array()[1].as_array()[2].get_uint64();
+    uint64_t h4 = packet["params"].as_array()[1].as_array()[3].get_uint64();
+
+    std::string headerStr = 
+      hexStr((byte*)&h1, 8) + 
+      hexStr((byte*)&h2, 8) + 
+      hexStr((byte*)&h3, 8) +
+      hexStr((byte*)&h4, 8);
+
+    printf("headerStr = %s\n", headerStr.c_str());
 
     // std::string bs = (*J).at("template").get<std::string>();
     // char *blob = (char *)bs.c_str();
@@ -1946,7 +1964,7 @@ int handleSpectreStratumPacket(boost::json::object packet, bool isDev)
     // (*h)++;
     // jobCounter++;
   }
-  else if (M.compare(XelisStratum::s_setDifficulty) == 0)
+  else if (M.compare(SpectreStratum::s_setDifficulty) == 0)
   {
     uint64_t *d = isDev ? &difficultyDev : &difficulty;
     (*d) = packet.at("params").as_array()[0].get_uint64();
@@ -1969,11 +1987,11 @@ int handleSpectreStratumPacket(boost::json::object packet, bool isDev)
     // (*h)++;
     // jobCounter++;
   }
-  else if (M.compare(XelisStratum::s_print) == 0)
+  else if (M.compare(SpectreStratum::s_print) == 0)
   {
 
     int lLevel = packet.at("params").as_array()[0].as_int64();
-    if (lLevel != XelisStratum::STRATUM_DEBUG)
+    if (lLevel != SpectreStratum::STRATUM_DEBUG)
     {
       int res = 0;
       printf("\n");
