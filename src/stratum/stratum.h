@@ -8,6 +8,9 @@ using byte = unsigned char;
 int handleXStratumPacket(boost::json::object packet, bool isDev);
 int handleXStratumResponse(boost::json::object packet, bool isDev);
 
+int handleSpectreStratumPacket(boost::json::object packet, bool isDev);
+int handleSpectreStratumResponse(boost::json::object packet, bool isDev);
+
 namespace XelisStratum {
   using bJson = boost::json::object;
 
@@ -130,5 +133,5 @@ namespace SpectreStratum {
   const byte submitID = 7;
 
   uint64_t lastReceivedJobTime = 0;
-  int jobTimeout = 90;
+  int jobTimeout = 30;
 }
