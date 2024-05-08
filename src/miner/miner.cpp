@@ -1706,8 +1706,6 @@ void spectre_stratum_session(
     std::cerr << jsonEc.message() << std::endl;
   }
 
-  std::cout << "AUTH" <<boost::json::serialize(authResJson).c_str() << std::endl;
-
   // SpectreStratum::stratumCall;
   // packet.at("id") = SpectreStratum::subscribe.id;
   // packet.at("method") = SpectreStratum::subscribe.method;
@@ -1732,8 +1730,6 @@ void spectre_stratum_session(
     std::cerr << jsonEc.message() << std::endl;
   }
 
-  std::cout << "SUB" <<boost::json::serialize(subResJson).c_str() << std::endl;
-
   // handleXStratumPacket(subResJson, isDev);
 
   // // This buffer will hold the incoming message
@@ -1755,30 +1751,30 @@ void spectre_stratum_session(
         return fail(ec, "Stratum session timed out");
       }
       bool *B = isDev ? &submittingDev : &submitting;
-      // if (*B)
-      // {
-      //   boost::json::object *S = &share;
-      //   if (isDev)
-      //     S = &devShare;
+      if (*B)
+      {
+        boost::json::object *S = &share;
+        if (isDev)
+          S = &devShare;
 
-      //   std::string msg = boost::json::serialize((*S)) + "\n";
-      //   // if (lastHash.compare((*S).at("hash").get_string()) == 0) continue;
-      //   // lastHash = (*S).at("hash").get_string();
+        std::string msg = boost::json::serialize((*S)) + "\n";
+        // if (lastHash.compare((*S).at("hash").get_string()) == 0) continue;
+        // lastHash = (*S).at("hash").get_string();
 
-      //   // printf("submitting share: %s\n", msg.c_str());
-      //   // Acquire a lock before writing to the WebSocket
+        // printf("submitting share: %s\n", msg.c_str());
+        // Acquire a lock before writing to the WebSocket
 
-      //   // std::cout << "sending in: " << msg << std::endl;
-      //   beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(10));
-      //   boost::asio::async_write(stream, boost::asio::buffer(msg), yield[ec]);
-      //   if (ec)
-      //   {
-      //     bool *C = isDev ? &devConnected : &isConnected;
-      //     (*C) = false;
-      //     return fail(ec, "Stratum submit");
-      //   }
-      //   (*B) = false;
-      // }
+        // std::cout << "sending in: " << msg << std::endl;
+        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(10));
+        boost::asio::async_write(stream, boost::asio::buffer(msg), yield[ec]);
+        if (ec)
+        {
+          bool *C = isDev ? &devConnected : &isConnected;
+          (*C) = false;
+          return fail(ec, "Stratum submit");
+        }
+        (*B) = false;
+      }
 
       boost::asio::streambuf response;
       std::stringstream workInfo;
@@ -2123,7 +2119,7 @@ int handleSpectreStratumResponse(boost::json::object packet, bool isDev)
       rejected++;
       if (!isDev)
         setcolor(RED);
-      std::cout << "Stratum: share rejected: " << packet.at("error").get_object()["message"].get_string() << std::endl;
+      std::cout << "Stratum: share rejected: " << packet.at("error").get_array()[1].get_string() << std::endl;
       setcolor(BRIGHT_WHITE);
     }
     mutex.unlock();
@@ -3608,7 +3604,7 @@ waitForJob:
         devMine = (devConnected && devHeight > 0 && which < devFee * 100.0);
         DIFF = devMine ? difficultyDev : difficulty;
         if (DIFF == 0)
-          // continue;
+          continue;
         cmpDiff = ConvertDifficultyToBig(DIFF, SPECTRE_X);
 
         uint64_t *nonce = devMine ? &i_dev : &i;
@@ -3636,6 +3632,8 @@ waitForJob:
 
         SpectreX::worker &usedWorker = devMine ? *devWorker : *worker;
         SpectreX::hash(*worker, WORK, SpectreX::INPUT_SIZE, powHash);
+
+        // printf("powHash: %s\n", hexStr(powHash, 32).c_str());
 
         // if (littleEndian())
         // {
@@ -3678,14 +3676,14 @@ waitForJob:
               devShare = {{"block_template", hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str()}};
               break;
             case SPECTRE_STRATUM:
-              devShare = {{{"id", XelisStratum::submitID},
-                           {"method", XelisStratum::submit.method.c_str()},
+              devShare = {{{"id", SpectreStratum::submitID},
+                           {"method", SpectreStratum::submit.method.c_str()},
                            {"params", {devWorkerName,                                 // WORKER
                                        devJob.at("jobId").get<std::string>().c_str(), // JOB ID
                                        hexStr((byte *)&n, 8).c_str()}}}};
               break;
             }
-            // submittingDev = true;
+            submittingDev = true;
             mutex.unlock();
           }
           else
@@ -3705,10 +3703,10 @@ waitForJob:
               share = {{"block_template", hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str()}};
               break;
             case SPECTRE_STRATUM:
-              share = {{{"id", XelisStratum::submitID},
-                        {"method", XelisStratum::submit.method.c_str()},
+              share = {{{"id", SpectreStratum::submitID},
+                        {"method", SpectreStratum::submit.method.c_str()},
                         {"params", {workerName,                                   // WORKER
-                                    myJob.at("jobId").get<std::string>().c_str(), // JOB ID
+                                    std::to_string(myJob["jobId"].get<uint64_t>()).c_str(), // JOB ID
                                     hexStr((byte *)&n, 8).c_str()}}}};
 
               // std::cout << "blob: " << hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str() << std::endl;
@@ -3722,7 +3720,7 @@ waitForJob:
 
               break;
             }
-            // submitting = true;
+            submitting = true;
             mutex.unlock();
           }
         }

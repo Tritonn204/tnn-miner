@@ -2,12 +2,14 @@
 #include <openssl/evp.h>
 #include <openssl/sha.h>
 
-void blake2b(const byte *input, int inputLen, byte *output)
+void blake2b(const byte *input, int inputLen, byte *output, const byte *key, int keyLen)
 {
   uint32_t digest_length = SHA256_DIGEST_LENGTH;
   const EVP_MD *algorithm = EVP_blake2b512();
   EVP_MD_CTX *context = EVP_MD_CTX_new();
   EVP_DigestInit_ex(context, algorithm, nullptr);
+  EVP_PKEY_CTX *pctx = EVP_MD_CTX_pkey_ctx(context);
+  EVP_PKEY_CTX_ctrl(pctx, -1, EVP_PKEY_OP_KEYGEN, EVP_PKEY_CTRL_SET_MAC_KEY, keyLen, (void *)key);
   EVP_DigestUpdate(context, input, inputLen);
   EVP_DigestFinal_ex(context, output, &digest_length);
   EVP_MD_CTX_destroy(context);
@@ -79,7 +81,7 @@ namespace SpectreX
   }
 
   void genPrePowHash(byte *in, worker &worker) {
-    blake2b(in, 32, worker.prePowHash);
+    blake2b(in, 32, worker.prePowHash, (byte*)"BlockHash", 9);
     memcpy(worker.prePowHash, in, 32);
   }
 

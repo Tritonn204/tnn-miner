@@ -125,6 +125,8 @@ inline Num ConvertDifficultyToBig(int64_t d, int algo)
       return oneLsh256 / difficulty;
     case XELIS_HASH:
       return maxU256 / difficulty;
+    case SPECTRE_X:
+      return oneLsh256 / (difficulty+1);
     default:
       return 0;
   }
