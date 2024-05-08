@@ -68,7 +68,12 @@ namespace SpectreX
     heavyHash(w.astrobwtv3Hash, w.mat, out);
 
     printf("POW hash: %s\n", hexStr(w.sha3Hash, 32).c_str());
+    printf("WANT    : 91e7bb140b1da77f7c8f1978547f5785d26528293f34fc7fe34f3de8dafe4831\n\n");
+
     printf("BWT hash: %s\n", hexStr(w.astrobwtv3Hash, 32).c_str());
+    printf("WANT    : aee657f5887c509482a3186ca6a789f1fd545995badb5a6bc8d139e15dc177ab\n\n");
+
     printf("Heavy hash: %s\n", hexStr(out, 32).c_str());
+    printf("WANT      : 07c304468e7d49e936c16ad4beefe0b87ee0bad5d2dcace1881e0ae728000000\n\n");
   }
 }
