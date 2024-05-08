@@ -22,6 +22,7 @@ namespace SpectreX
   typedef struct worker
   {
     alignas(64) matrix mat;
+    alignas(64) byte prePowHash[64];
     alignas(64) byte sha3Hash[64];
     alignas(64) byte astrobwtv3Hash[32];
     workerData *astroWorker;
@@ -60,9 +61,9 @@ namespace SpectreX
     }
   };
 
-  int calculateRank(const matrix mat)
+  inline int calculateRank(const matrix mat)
   {
-    std::array<std::array<double, 64>, matSize> copied;
+    std::array<std::array<double, matSize>, matSize> copied;
     for (int i = 0; i < matSize; i++)
     {
       for (int j = 0; j < matSize; j++)
@@ -111,20 +112,16 @@ namespace SpectreX
     return rank;
   }
 
-  void newMatrix(byte *hash, matrix out)
+  inline void newMatrix(byte *hash, matrix out)
   {
-    uint64_t s0 = hash[0] | (hash[1] << 8) | (hash[2] << 16) | (hash[3] << 24) |
-                  (static_cast<uint64_t>(hash[4]) << 32) | (static_cast<uint64_t>(hash[5]) << 40) |
-                  (static_cast<uint64_t>(hash[6]) << 48) | (static_cast<uint64_t>(hash[7]) << 56);
-    uint64_t s1 = hash[8] | (hash[9] << 8) | (hash[10] << 16) | (hash[11] << 24) |
-                  (static_cast<uint64_t>(hash[12]) << 32) | (static_cast<uint64_t>(hash[13]) << 40) |
-                  (static_cast<uint64_t>(hash[14]) << 48) | (static_cast<uint64_t>(hash[15]) << 56);
-    uint64_t s2 = hash[16] | (hash[17] << 8) | (hash[18] << 16) | (hash[19] << 24) |
-                  (static_cast<uint64_t>(hash[20]) << 32) | (static_cast<uint64_t>(hash[21]) << 40) |
-                  (static_cast<uint64_t>(hash[22]) << 48) | (static_cast<uint64_t>(hash[23]) << 56);
-    uint64_t s3 = hash[24] | (hash[25] << 8) | (hash[26] << 16) | (hash[27] << 24) |
-                  (static_cast<uint64_t>(hash[28]) << 32) | (static_cast<uint64_t>(hash[29]) << 40) |
-                  (static_cast<uint64_t>(hash[30]) << 48) | (static_cast<uint64_t>(hash[31]) << 56);
+    for(int i = 0; i < matSize; i++) {
+      memset(out[i], 0, matSize);
+    }
+
+    uint64_t s0 = *(uint64_t*)&hash[0];
+    uint64_t s1 = *(uint64_t*)&hash[8];
+    uint64_t s2 = *(uint64_t*)&hash[16];
+    uint64_t s3 = *(uint64_t*)&hash[24];
                   
     Xoshiro256PlusPlusHasher hasher(s0, s1, s2, s3);
 
@@ -132,15 +129,20 @@ namespace SpectreX
     {
       for (int i = 0; i < matSize; i++)
       {
-        for (int j = 0; j < matSize; j += 64)
+        for (int j = 0; j < matSize; j += matSize/4)
         {
           uint64_t value = hasher.next();
           for (int k = 0; k < 64; k++)
           {
-            out[i][j + k] = (value >> (4 * k)) & 0x0f;
+            out[i][j + k] = uint16_t((value >> (4 * k)) & 0x0f);
           }
         }
       }
     }
   }
+
+  void genPrePowHash(byte *in, worker &worker);
+  void hash(worker &worker, byte *in, int len, byte *out);
 }
+
+void mineSpectre(int tid);

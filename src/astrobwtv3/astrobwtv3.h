@@ -471,6 +471,8 @@ inline void insertElement(T* arr, int& size, int capacity, int index, const T& e
     }
 }
 
+void mineDero(int tid);
+
 void processAfterMarker(workerData& worker);
 void lookupCompute(workerData &worker);
 void lookupCompute_SA(workerData &worker);

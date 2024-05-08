@@ -112,8 +112,6 @@ void devWork();
 int handleXatumPacket(Xatum::packet xPacket, bool isDev);
 
 void mine(int tid, int algo = DERO_HASH);
-void mineDero(int tid);
-void mineXelis(int tid);
 void cudaMine();
 
 void benchmark(int i);
@@ -175,6 +173,8 @@ inline Num ConvertDifficultyToBig(Num d, int algo)
       return oneLsh256 / d;
     case XELIS_HASH:
       return maxU256 / d;
+    case SPECTRE_X:
+      return oneLsh256 / (d+1);
     default:
       return 0;
   }

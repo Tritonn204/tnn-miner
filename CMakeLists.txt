@@ -173,6 +173,7 @@ file(GLOB all_SRCS
   "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.c"
   "${PROJECT_SOURCE_DIR}/src/xelis-hash/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/xelis-hash/*.c"
+  "${PROJECT_SOURCE_DIR}/src/spectrex/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/broadcast/*.cpp"
   # "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cu"
   # "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cuh"
