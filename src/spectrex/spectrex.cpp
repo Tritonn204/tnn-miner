@@ -91,4 +91,9 @@ namespace SpectreX
     AstroBWTv3(worker.sha3Hash, 64, worker.astrobwtv3Hash, *worker.astroWorker, false);
     heavyHash(worker.astrobwtv3Hash, worker.mat, out);
   }
+
+  void test() {
+    const char* input = "d63cad780f8bad8b6e6ba9d24dacb6eb6e7da1290e06e942943c8516787d1da96332bb538f0100000000000000000000000000000000000000000000000000000000000000000000aab7d5ff52ec2f8a";
+    
+  }
 }

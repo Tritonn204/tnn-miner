@@ -1929,20 +1929,12 @@ int handleSpectreStratumPacket(boost::json::object packet, bool isDev)
 
     uint64_t ts = packet["params"].as_array()[2].get_uint64();
 
-    std::vector<char> h1Str;
-    std::vector<char> h2Str;
-    std::vector<char> h3Str;
-    std::vector<char> h4Str;
+    std::string h1Str = hexStr((byte*)&h1, 8);
+    std::string h2Str = hexStr((byte*)&h2, 8);
+    std::string h3Str = hexStr((byte*)&h3, 8);
+    std::string h4Str = hexStr((byte*)&h4, 8);
 
-    std::vector<char> tsStr;
-
-
-    Num(std::to_string(h1).c_str(), 10).print(h1Str, 16);
-    Num(std::to_string(h2).c_str(), 10).print(h2Str, 16);
-    Num(std::to_string(h3).c_str(), 10).print(h3Str, 16);
-    Num(std::to_string(h4).c_str(), 10).print(h4Str, 16);
-
-    Num(std::to_string(ts).c_str(), 10).print(tsStr, 16);
+    std::string tsStr = hexStr((byte*)&ts, 8);
 
     char newTemplate[160];
     memset(newTemplate, '0', 160);
@@ -1954,11 +1946,17 @@ int handleSpectreStratumPacket(boost::json::object packet, bool isDev)
 
     memcpy(newTemplate + 64 + 16 - tsStr.size(), tsStr.data(), tsStr.size());
 
-    (*J)["template"] = std::string(newTemplate);
-    // printf("parsed template %s\n", std::string(newTemplate).c_str());
+    (*J)["template"] = std::string(newTemplate, SpectreX::INPUT_SIZE*2);
+    std::string testPrint = (*J)["template"].get<std::string>();
+
+    // byte testOut[160];
+    // memcpy(testOut, testPrint.data(), 160);
     // for (int i = 0; i < 160; i++) {
-    //   std::cout << newTemplate[i];
+    //   std::cout << testOut[i];
     // }
+    // printf("\n");
+    std::cout << testPrint;
+    printf("\n");
 
     // std::string bs = (*J).at("template").get<std::string>();
     // char *blob = (char *)bs.c_str();
@@ -3562,8 +3560,8 @@ waitForJob:
           break;
         }
         memcpy(work, b2, SpectreX::INPUT_SIZE);
-        SpectreX::genPrePowHash(b2, *worker);
-        SpectreX::newMatrix(worker->prePowHash, worker->mat);
+        // SpectreX::genPrePowHash(b2, *worker);/
+        SpectreX::newMatrix(b2, worker->mat);
         delete[] b2;
         localOurHeight = ourHeight;
         i = 0;
@@ -3584,7 +3582,7 @@ waitForJob:
             break;
           }
           memcpy(devWork, b2d, SpectreX::INPUT_SIZE);
-          SpectreX::genPrePowHash(b2d, *devWorker);
+          // SpectreX::genPrePowHash(b2d, *devWorker);
           SpectreX::newMatrix(devWorker->prePowHash, devWorker->mat);
           delete[] b2d;
           localDevHeight = devHeight;
@@ -3648,10 +3646,10 @@ waitForJob:
 
         if (submit && CheckHash(powHash, cmpDiff, XELIS_HASH))
         {
-        //   if (protocol == XELIS_XATUM && littleEndian())
-        //   {
-        //     std::reverse(powHash, powHash + 32);
-        //   }
+          if (littleEndian())
+          {
+            std::reverse(powHash, powHash + 32);
+          }
         //   // if (protocol == XELIS_STRATUM && littleEndian())
         //   // {
         //   //   std::reverse((byte*)&n, (byte*)n + 8);
