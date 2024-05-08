@@ -165,9 +165,15 @@ inline po::options_description get_prog_opts()
     ("worker-name", po::value<std::string>(), "Sets the worker name for this instance when mining Xelis")
   ;
 
+  po::options_description spectre("Spectre", col_width);
+  xelis.add_options()
+    ("spectre-test", "Run detailed diagnostics for SpectreX")
+  ;
+
   dero.add(debug);
   general.add(dero);
   general.add(xelis);
+  general.add(spectre);
   return general;
 }
 

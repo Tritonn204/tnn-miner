@@ -21,10 +21,10 @@ namespace SpectreX
 
   typedef struct worker
   {
-    alignas(64) matrix mat;
-    alignas(64) byte prePowHash[64];
-    alignas(64) byte sha3Hash[64];
-    alignas(64) byte astrobwtv3Hash[32];
+    matrix mat;
+    byte prePowHash[32];
+    byte sha3Hash[32];
+    byte astrobwtv3Hash[32];
     workerData *astroWorker;
   } worker;
 
@@ -143,6 +143,7 @@ namespace SpectreX
 
   void genPrePowHash(byte *in, worker &worker);
   void hash(worker &worker, byte *in, int len, byte *out);
+  void test();
 }
 
 void mineSpectre(int tid);

@@ -2219,6 +2219,12 @@ int main(int argc, char **argv)
     devSelection = testDevWallet;
   }
 
+  if (vm.count("spectre-test"))
+  {
+    SpectreX::test();
+    return 0;
+  }
+
   if (vm.count("xelis-test"))
   {
     xelis_runTests();

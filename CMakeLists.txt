@@ -166,6 +166,7 @@ include_directories(
 file(GLOB all_SRCS
   "${PROJECT_SOURCE_DIR}/include/*.h"
   "${PROJECT_SOURCE_DIR}/include/*.hpp"
+  "${PROJECT_SOURCE_DIR}/include/libkeccak/*.c"
   # "${PROJECT_SOURCE_DIR}/include/*.cuh"
   "${PROJECT_SOURCE_DIR}/src/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/*.c"
@@ -174,6 +175,7 @@ file(GLOB all_SRCS
   "${PROJECT_SOURCE_DIR}/src/xelis-hash/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/xelis-hash/*.c"
   "${PROJECT_SOURCE_DIR}/src/spectrex/*.cpp"
+  "${PROJECT_SOURCE_DIR}/src/spectrex/*.c"
   "${PROJECT_SOURCE_DIR}/src/broadcast/*.cpp"
   # "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cu"
   # "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cuh"
