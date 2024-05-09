@@ -9,7 +9,9 @@
 */
 
 //#define SUFCHECK
-#define NDEBUG
+#ifndef NDEBUG
+  #define NDEBUG
+#endif
 #define VERBLEV	0
 
 #include <stdio.h>
@@ -247,7 +249,7 @@ void deep_ray(workerData &worker, int *A, int *B, uchar *boff)	{
 	int *x,*y,*z; ulong w,w2;
 	call_deep_ray++; assert(lucky);
 	while(B-A > INSERT)	{
-		int s = median(A[0],A[B-A>>1],B[-1],boff);
+		int s = median(A[0],A[(B-A)>>1],B[-1],boff);
 		x=A; y=A; z=B; w = p4b(s+boff);
 		w2 = p4b(s-4+boff);
 		while(y<z)	{
@@ -445,7 +447,7 @@ void smart_ins(workerData &worker, int A[], int B[], uchar *bof)	{
 void ray(workerData &worker, int *A, int *B, uchar *boff)	{
 	int *x,*y,*z;
 	while(B-A > INSERT)	{
-		int s = median(A[0],A[B-A>>1],B[-1],boff);
+		int s = median(A[0],A[(B-A)>>1],B[-1],boff);
 		ulong w = p4b(s+boff);
 		x=y=A; z=B; do	{
 			ulong q = p4b((s=*y)+boff);
