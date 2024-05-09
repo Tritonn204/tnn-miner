@@ -2267,6 +2267,9 @@ int main(int argc, char **argv)
     if(wallet.find("dero", 0) != std::string::npos) {
       symbol = "DERO";
     }
+    if(wallet.find("xel", 0) != std::string::npos || wallet.find("xet", 0) != std::string::npos) {
+      symbol = "XEL";
+    }
     if(wallet.find("spectre", 0) != std::string::npos) {
       symbol = "SPR";
       protocol = SPECTRE_STRATUM;
