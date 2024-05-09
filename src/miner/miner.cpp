@@ -47,7 +47,7 @@
 #include <xelis-hash.hpp>
 #include <spectrex.h>
 
-#include <powtest.h>
+#include <astrotest.hpp>
 #include <thread>
 
 #include <chrono>
@@ -1087,7 +1087,7 @@ void xelis_stratum_session(
                   boost::asio::ssl::context::no_tlsv1_1);
 
   beast::error_code ec;
-  boost::json::error_code jsonEc;
+  boost::system::error_code jsonEc;
   boost::asio::deadline_timer deadline(ioc, boost::posix_time::seconds(1));
 
   // SSL_CTX_set_info_callback(ctx.native_handle(), openssl_log_callback);
@@ -1570,7 +1570,7 @@ void spectre_stratum_session(
                   boost::asio::ssl::context::no_tlsv1_1);
 
   beast::error_code ec;
-  boost::json::error_code jsonEc;
+  boost::system::error_code jsonEc;
   boost::asio::deadline_timer deadline(ioc, boost::posix_time::seconds(1));
 
   // SSL_CTX_set_info_callback(ctx.native_handle(), openssl_log_callback);
@@ -2349,7 +2349,11 @@ int main(int argc, char **argv)
   // Ensure we capture *all* of the other options before we start using goto
   if (vm.count("dero-test"))
   {
-    goto Testing;
+    int rc = DeroTesting(testOp, testLen, useLookupMine);
+    if(rc > 255) {
+      rc = 1;
+    }
+    return rc;
   }
   if (vm.count("dero-benchmark"))
   {
@@ -2521,27 +2525,7 @@ fillBlanks:
 }
 
   goto Mining;
-Testing:
-{
-  Num diffTest("20000", 10);
 
-  if (testOp >= 0)
-  {
-    if (testLen >= 0)
-    {
-      runOpTests(testOp, testLen);
-    }
-    else
-    {
-      runOpTests(testOp);
-    }
-  }
-  TestAstroBWTv3();
-  // TestAstroBWTv3_cuda();
-  // TestAstroBWTv3repeattest();
-  boost::this_thread::sleep_for(boost::chrono::seconds(3));
-  return 0;
-}
 Benchmarking:
 {
   if (threads <= 0)

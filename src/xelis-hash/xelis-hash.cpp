@@ -2,8 +2,10 @@
 #include <stdlib.h>
 #include <iostream>
 
-#include <emmintrin.h>
-#include <immintrin.h>
+#if defined(__x86_64__)
+  #include <emmintrin.h>
+  #include <immintrin.h>
+#endif
 #include <numeric>
 #include <chrono>
 #include <cstring>
@@ -15,6 +17,8 @@
 #else
 #include <arpa/inet.h>
 #endif
+
+#if defined(__x86_64__)
 
 #define rl64(x, a) (((x << a % 64) | (x >> (64 - a % 64))))
 
@@ -99,7 +103,7 @@ void print_reversed_words(const uint64_t *state, int num_words)
 {
   for (int i = 0; i < num_words; ++i)
   {
-    printf("%016llx ", state[i]);
+    printf("%016lx ", state[i]);
   }
   printf("\n");
 }
@@ -791,7 +795,7 @@ void hex2bin(const char *src, char *target)
   }
 }
 
-char *testTemplate = "97dff4761917c2692df3be38e72ca7a59c3f55252e2245cc21564ef65fa8ea6f0000018f22fe78f80000000000064202f2a40463ccfcea839c4950a56ee38fa69c7ce2d4ba45d4b060cc63c297fb73b8a09c69661b1690b0a238d096a7ccb3cb204ce5dd604da9bb6c79c4ab00000000";
+const char *testTemplate = "97dff4761917c2692df3be38e72ca7a59c3f55252e2245cc21564ef65fa8ea6f0000018f22fe78f80000000000064202f2a40463ccfcea839c4950a56ee38fa69c7ce2d4ba45d4b060cc63c297fb73b8a09c69661b1690b0a238d096a7ccb3cb204ce5dd604da9bb6c79c4ab00000000";
 
 namespace tests
 {
@@ -893,3 +897,16 @@ void xelis_runTests()
     std::cout << "XELIS-HASH: Some tests failed!" << std::endl;
   }
 }
+
+#else
+// These are just to satisfy compilation on AARCH64
+void xelis_hash(byte* input, workerData_xelis &worker, byte *hashResult) {
+}
+
+void xelis_benchmark_cpu_hash() {
+}
+
+void xelis_runTests() {
+}
+
+#endif // __x86_64__

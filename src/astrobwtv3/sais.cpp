@@ -24,7 +24,7 @@ void timer_start() {
 	start = clock();
 }
 
-void timer_finish(char *str) {
+void timer_finish(const char *str) {
 	finish = clock(); 
 	duration = (double)(finish - start) / CLOCKS_PER_SEC; 
 	fprintf( stderr, "\n%s: %.3lf seconds", str, duration);
