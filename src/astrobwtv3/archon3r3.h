@@ -6,7 +6,7 @@ typedef unsigned int uint;
 typedef unsigned long ulong;
 typedef int trax2[0x10001];
 
-#include "pow.h"
+#include "astrobwtv3.h"
 
 
 void encode(workerData &worker);
