@@ -41,18 +41,45 @@ namespace SpectreX
     // hash the digest a final time, reverse bytes
 
     cshake256_nil_function_name(out, 32, "HeavyHash", out, 32*8);
+    std::reverse(out, out+32);
   }
 
   void hash(worker &worker, byte *in, int len, byte *out)
   {
     // cshake256("ProofOfWorkHash", in, len, worker.sha3Hash, 32);
-    cshake256_nil_function_name(in, 80, "ProofOfWorkHash", worker.sha3Hash, 32*8);
-    AstroBWTv3(worker.sha3Hash, 64, worker.astrobwtv3Hash, *worker.astroWorker, false);
+    newMatrix(in, worker.mat);
+    cshake256_nil_function_name(in, len, "ProofOfWorkHash", worker.sha3Hash, 32*8);
+    AstroBWTv3(worker.sha3Hash, 32, worker.astrobwtv3Hash, *worker.astroWorker, false);
     heavyHash(worker.astrobwtv3Hash, worker.mat, out);
   }
 
+  void testWithInput(const char* input, byte *out) {
+    byte *in = new byte[80];
+
+    hexstrToBytes(std::string(input), in);
+
+    worker w;
+    workerData *aw = (workerData*)malloc(sizeof(workerData));
+    w.astroWorker = aw;
+    newMatrix(in, w.mat);
+
+    hash(w, in, 80, out);
+    free(aw);
+    free(in);
+  }
+
+  void testWithInput(byte* in, byte *out) {
+    worker w;
+    workerData *aw = (workerData*)malloc(sizeof(workerData));
+    w.astroWorker = aw;
+    newMatrix(in, w.mat);
+
+    hash(w, in, 80, out);
+    free(aw);
+  }
+
   void test() {
-    const char* input = "d63cad780f8bad8b6e6ba9d24dacb6eb6e7da1290e06e942943c8516787d1da96332bb538f0100000000000000000000000000000000000000000000000000000000000000000000aab7d5ff52ec2f8a";
+    const char* input = "cb75500eabb7db4d2df02372d033c64085a9cec8f29d66a84ed9a8e38d2be6fcab42ea598f01000000000000000000000000000000000000000000000000000000000000000000000300000103000000";
     byte *in = new byte[80];
     byte out[32];
 
@@ -63,9 +90,7 @@ namespace SpectreX
     w.astroWorker = aw;
     newMatrix(in, w.mat);
 
-    cshake256_nil_function_name(in, 80, "ProofOfWorkHash", w.sha3Hash, 32*8);
-    AstroBWTv3(w.sha3Hash, 32, w.astrobwtv3Hash, *w.astroWorker, false);
-    heavyHash(w.astrobwtv3Hash, w.mat, out);
+    hash(w, in, 80, out);
 
     printf("POW hash: %s\n", hexStr(w.sha3Hash, 32).c_str());
     printf("WANT    : 91e7bb140b1da77f7c8f1978547f5785d26528293f34fc7fe34f3de8dafe4831\n\n");
@@ -74,6 +99,6 @@ namespace SpectreX
     printf("WANT    : aee657f5887c509482a3186ca6a789f1fd545995badb5a6bc8d139e15dc177ab\n\n");
 
     printf("Heavy hash: %s\n", hexStr(out, 32).c_str());
-    printf("WANT      : 07c304468e7d49e936c16ad4beefe0b87ee0bad5d2dcace1881e0ae728000000\n\n");
+    printf("WANT      : b68c38a0d359b9ef74fecfae4b2b0a0ea026fdcee22c1d48bcc824f32050ef5\n\n");
   }
 }

@@ -22,7 +22,6 @@ namespace SpectreX
   typedef struct worker
   {
     matrix mat;
-    byte prePowHash[32];
     byte sha3Hash[32];
     byte astrobwtv3Hash[32];
     workerData *astroWorker;
@@ -44,7 +43,8 @@ namespace SpectreX
 
     uint64_t next()
     {
-      const uint64_t result = s[0] + s[3];
+      uint64_t tmp = s[0] + s[3];
+      const uint64_t result = (tmp << 23 | tmp >> 41) + s[0];
 
       const uint64_t t = s[1] << 17;
 
@@ -54,7 +54,6 @@ namespace SpectreX
       s[0] ^= s[3];
 
       s[2] ^= t;
-
       s[3] = (s[3] << 45) | (s[3] >> 19);
 
       return result;
@@ -114,7 +113,7 @@ namespace SpectreX
 
   inline void newMatrix(byte *hash, matrix out)
   {
-    for(int i = 0; i < matSize; i++) {
+    for (int i = 0; i < matSize; i++) {
       memset(out[i], 0, matSize);
     }
 
@@ -141,6 +140,8 @@ namespace SpectreX
     }
   }
 
+  void testWithInput(const char* input, byte *out);
+  void testWithInput(byte* in, byte *out);
   void genPrePowHash(byte *in, worker &worker);
   void hash(worker &worker, byte *in, int len, byte *out);
   void test();

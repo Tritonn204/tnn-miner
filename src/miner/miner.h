@@ -117,6 +117,29 @@ void cudaMine();
 void benchmark(int i);
 void logSeconds(std::chrono::_V2::steady_clock::time_point start_time, int duration, bool *stop);
 
+Num CompactToBig(uint32_t compact) {
+    // Extract the mantissa, sign bit, and exponent
+    uint32_t mantissa = compact & 0x007fffff;
+    bool isNegative = (compact & 0x00800000) != 0;
+    uint32_t exponent = compact >> 24;
+
+    Num target;
+
+    if (exponent <= 3) {
+        mantissa >>= 8 * (3 - exponent);
+        target = Num(mantissa);
+    } else {
+        target = Num(mantissa);
+        target <<= 8 * (exponent - 3);
+    }
+
+    if (isNegative) {
+        target = -target;
+    }
+
+    return target;
+}
+
 inline Num ConvertDifficultyToBig(int64_t d, int algo)
 {
   Num difficulty = Num(std::to_string(d).c_str(), 10);
@@ -126,7 +149,7 @@ inline Num ConvertDifficultyToBig(int64_t d, int algo)
     case XELIS_HASH:
       return maxU256 / difficulty;
     case SPECTRE_X:
-      return oneLsh256 / (difficulty+1);
+      return (oneLsh256-1) / difficulty;
     default:
       return 0;
   }
@@ -185,7 +208,7 @@ inline Num ConvertDifficultyToBig(Num d, int algo)
 inline bool CheckHash(unsigned char *hash, int64_t diff, int algo)
 {
   if (littleEndian()) std::reverse(hash, hash+32);
-  bool cmp = Num(hexStr(hash, 32).c_str(), 16) < ConvertDifficultyToBig(diff, algo);
+  bool cmp = Num(hexStr(hash, 32).c_str(), 16) <= ConvertDifficultyToBig(diff, algo);
   if (littleEndian()) std::reverse(hash, hash+32);
   return (cmp);
 }
