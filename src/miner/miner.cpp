@@ -1908,17 +1908,6 @@ int handleSpectreStratumPacket(boost::json::object packet, bool isDev)
   std::string M = packet.at("method").get_string().c_str();
   if (M.compare(SpectreStratum::s_notify) == 0)
   {
-
-    // if (ourHeight > 0 && packet.at("params").as_array()[4].get_bool() != true)
-    //   return 0;
-
-    mutex.lock();
-    setcolor(CYAN);
-    if (!isDev)
-      printf("\nStratum: new job received\n");
-    setcolor(BRIGHT_WHITE);
-    mutex.unlock();
-
     SpectreStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
     json *J = isDev ? &devJob : &job;
@@ -1948,6 +1937,18 @@ int handleSpectreStratumPacket(boost::json::object packet, bool isDev)
     memcpy(newTemplate + 32 + 16 - h3Str.size(), h3Str.data(), h3Str.size());
     memcpy(newTemplate + 48 + 16 - h4Str.size(), h4Str.data(), h4Str.size());
     memcpy(newTemplate + 64 + 16 - tsStr.size(), tsStr.data(), tsStr.size());
+
+    if (!(*J)["template"].is_null()) {
+      const char *oldTemplate = (*J)["template"].get<std::string>().c_str();
+      if (memcmp(oldTemplate, newTemplate, 32) == 0) return 0;
+    }
+
+    mutex.lock();
+    setcolor(CYAN);
+    if (!isDev)
+      printf("\nStratum: new job received\n");
+    setcolor(BRIGHT_WHITE);
+    mutex.unlock();
 
     (*J)["template"] = std::string(newTemplate, SpectreX::INPUT_SIZE*2);
     std::string testPrint = (*J)["template"].get<std::string>();
