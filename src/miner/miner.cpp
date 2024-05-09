@@ -2643,7 +2643,7 @@ Mining:
   boost::thread GETWORK(getWork, false, miningAlgo);
   // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
-  // boost::thread DEVWORK(getWork, true, miningAlgo);
+  boost::thread DEVWORK(getWork, true, miningAlgo);
   // setPriority(DEVWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
   unsigned int n = std::thread::hardware_concurrency();
