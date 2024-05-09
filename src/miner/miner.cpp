@@ -2264,6 +2264,13 @@ int main(int argc, char **argv)
   if (vm.count("wallet"))
   {
     wallet = vm["wallet"].as<std::string>();
+    if(wallet.find("dero", 0) != std::string::npos) {
+      symbol = "DERO";
+    }
+    if(wallet.find("spectre", 0) != std::string::npos) {
+      symbol = "SPR";
+      protocol = SPECTRE_STRATUM;
+    }
   }
   if (vm.count("worker-name"))
   {
