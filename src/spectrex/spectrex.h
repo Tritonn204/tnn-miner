@@ -2,6 +2,7 @@
 
 #include <inttypes.h>
 #include <astrobwtv3.h>
+#include <num.h>
 
 // NOTES
 
@@ -145,6 +146,10 @@ namespace SpectreX
   void genPrePowHash(byte *in, worker &worker);
   void hash(worker &worker, byte *in, int len, byte *out);
   void test();
+
+  bool checkPow(Num in, Num diff);
+  Num diffToTarget(double diff);
+  Num diffToHash(double diff);
 }
 
 void mineSpectre(int tid);

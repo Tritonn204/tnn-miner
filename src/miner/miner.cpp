@@ -127,8 +127,12 @@ int firstRejected;
 uint64_t hashrate;
 uint64_t ourHeight = 0;
 uint64_t devHeight = 0;
+
 uint64_t difficulty;
 uint64_t difficultyDev;
+
+double doubleDiff;
+double doubleDiffDev;
 
 std::vector<int64_t> rate5min;
 std::vector<int64_t> rate1min;
@@ -1764,7 +1768,7 @@ void spectre_stratum_session(
         // printf("submitting share: %s\n", msg.c_str());
         // Acquire a lock before writing to the WebSocket
 
-        std::cout << "sending in: " << msg << std::endl;
+        // std::cout << "sending in: " << msg << std::endl;
         beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(10));
         boost::asio::async_write(stream, boost::asio::buffer(msg), yield[ec]);
         if (ec)
@@ -2002,8 +2006,12 @@ int handleSpectreStratumPacket(boost::json::object packet, bool isDev)
   }
   else if (M.compare(SpectreStratum::s_setDifficulty) == 0)
   {
-    uint64_t *d = isDev ? &difficultyDev : &difficulty;
-    (*d) = packet.at("params").as_array()[0].get_uint64();
+    // std::cout << boost::json::serialize(packet).c_str() << std::endl;
+    double *d = isDev ? &doubleDiffDev : &doubleDiff;
+    (*d) = packet.at("params").as_array()[0].get_double();
+    if ((*d) < 0.00000000001) (*d) = packet.at("params").as_array()[0].get_uint64();
+
+    // printf("%f\n", (*d));
   }
   else if (M.compare(SpectreStratum::s_setExtraNonce) == 0)
   {
@@ -2799,8 +2807,21 @@ startReporting:
       }
 
       std::string uptime = fmt::sprintf("%dd-%dh-%dm-%ds >> ", daysUp, hoursUp, minutesUp, secondsUp);
+
+      double dPrint;
+
+      switch(miningAlgo) {
+        case DERO_HASH:
+        case XELIS_HASH:
+          dPrint = difficulty;
+          break;
+        case SPECTRE_X:
+          dPrint = doubleDiff;
+          break;
+      }
+
       std::cout << std::setw(2) << "ACCEPTED " << accepted << std::setw(2) << " | REJECTED " << rejected
-                << std::setw(2) << " | DIFFICULTY " << (difficulty) << std::setw(2) << " | UPTIME " << uptime << std::flush;
+                << std::setw(2) << " | DIFFICULTY " << dPrint << std::setw(2) << " | UPTIME " << uptime << std::flush;
       setcolor(BRIGHT_WHITE);
       mutex.unlock();
     }
@@ -3536,8 +3557,6 @@ waitForJob:
     boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
   }
 
-  std::cout << oneLsh256.div(oneLsh256, 12) << std::endl;
-
   while (true)
   {
     try
@@ -3600,18 +3619,19 @@ waitForJob:
       bool devMine = false;
       double which;
       bool submit = false;
-      uint64_t DIFF = 1;
+      double DIFF = 1;
       Num cmpDiff;
 
       while (localJobCounter == jobCounter)
       {
         which = (double)(rand() % 10000);
         devMine = (devConnected && devHeight > 0 && which < devFee * 100.0);
-        DIFF = devMine ? difficultyDev : difficulty;
+        DIFF = devMine ? doubleDiffDev : doubleDiff;
         if (DIFF == 0)
           continue;
 
-        cmpDiff = ConvertDifficultyToBig(DIFF, SPECTRE_X);
+        // cmpDiff = ConvertDifficultyToBig(DIFF, SPECTRE_X);
+        cmpDiff = SpectreX::diffToTarget(DIFF);
 
         uint64_t *nonce = devMine ? &i_dev : &i;
         (*nonce)++;
@@ -3632,12 +3652,10 @@ waitForJob:
 
         SpectreX::hash(usedWorker, WORK, SpectreX::INPUT_SIZE, powHash);
 
-        if (littleEndian())
-        {
-          std::reverse(powHash, powHash + 32);
-        }
-
-        // printf("powHash: %s\n", hexStr(powHash, 32).c_str());
+        // if (littleEndian())
+        // {
+        //   std::reverse(powHash, powHash + 32);
+        // }
 
         counter.fetch_add(1);
         submit = (devMine && devConnected) ? !submittingDev : !submitting;
@@ -3645,13 +3663,13 @@ waitForJob:
         if (localJobCounter != jobCounter || localOurHeight != ourHeight)
           break;
 
-        if (submit && CheckHash(powHash, cmpDiff, SPECTRE_X))
+        if (submit && Num(hexStr(powHash, 32).c_str(), 16) <= cmpDiff)
         {
 
-          if (littleEndian())
-          {
-            std::reverse(powHash, powHash + 32);
-          }
+          // if (littleEndian())
+          // {
+          //   std::reverse(powHash, powHash + 32);
+          // }
         //   std::string b64 = base64::to_base64(std::string((char *)&WORK[0], XELIS_TEMPLATE_SIZE));
           if (devMine)
           {
@@ -3705,12 +3723,13 @@ waitForJob:
                                     std::to_string(myJob["jobId"].get<uint64_t>()).c_str(), // JOB ID
                                     std::string(nonceStr.data()).c_str()}}}};
 
-              std::cout << "blob: " << hexStr(&WORK[0], SpectreX::INPUT_SIZE).c_str() << std::endl;
-              std::cout << "hash: " << hexStr(&powHash[0], 32) << std::endl;
-              std::vector<char> diffHex;
-              cmpDiff.print(diffHex, 16);
-              std::cout << "difficulty (LE): " << std::string(diffHex.data()).c_str() << std::endl;
-              std::cout << "difficulty (decimal): " << cmpDiff << std::endl;
+              // std::cout << "blob: " << hexStr(&WORK[0], SpectreX::INPUT_SIZE).c_str() << std::endl;
+              // std::cout << "hash: " << hexStr(&powHash[0], 32) << std::endl;
+              // std::vector<char> diffHex;
+              // cmpDiff.print(diffHex, 16);
+              // std::cout << "difficulty (LE): " << std::string(diffHex.data()).c_str() << std::endl;
+              // std::cout << "powValue: " << Num(hexStr(powHash, 32).c_str(), 16) << std::endl;
+              // std::cout << "target (decimal): " << cmpDiff << std::endl;
 
               // printf("blob: %s\n", foundBlob.c_str());
               // printf("hash (BE): %s\n", hexStr(&powHash[0], 32).c_str());

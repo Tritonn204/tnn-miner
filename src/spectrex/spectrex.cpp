@@ -12,6 +12,35 @@ namespace SpectreX
   const char *pwHashDomain = "ProofOfWorkHash";
   const char *heavyHashDomain = "HeavyHash";
 
+  const Num trueMax("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16);
+  const Num maxTarget("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16);
+  const Num minHash = (Num(1) << 256) / maxTarget;
+  const Num bigGig(1e3);
+
+  bool checkPow(Num in, Num diff) {
+    if (trueMax >> (diff.to_double()) < in) return false; 
+    return true;
+  }
+
+  Num diffToTarget(double diff) {
+    // Create a Num object representing the difficulty
+
+    // Calculate the target by dividing maxTarget by difficulty
+    Num target = Num::div(maxTarget, diff);
+
+    return target;
+  }
+
+  Num diffToHash(double diff) {
+    // Create a Num object representing the difficulty
+
+    // Calculate the target by dividing maxTarget by difficulty
+    Num hv = Num::mul(diff, minHash);
+    Num target = Num::div(hv, bigGig);
+
+    return target;
+  }
+
   void heavyHash(byte *hash, matrix &mat, byte *out)
   {
     std::array<uint16_t, 64> v{}, p{};

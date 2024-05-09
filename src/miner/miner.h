@@ -216,7 +216,7 @@ inline bool CheckHash(unsigned char *hash, int64_t diff, int algo)
 inline bool CheckHash(unsigned char *hash, Num diff, int algo)
 {
   if (littleEndian()) std::reverse(hash, hash+32);
-  bool cmp = Num(hexStr(hash, 32).c_str(), 16) < diff;
+  bool cmp = Num(hexStr(hash, 32).c_str(), 16) <= diff;
   if (littleEndian()) std::reverse(hash, hash+32);
   return (cmp);
 }

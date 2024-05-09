@@ -5,30 +5,35 @@ import (
     "math/big"
 )
 
+var (
+	maxTarget = big.NewFloat(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
+	minHash   = new(big.Float).Quo(new(big.Float).SetMantExp(big.NewFloat(1), 256), maxTarget)
+	bigGig    = big.NewFloat(1e3)
+)
+
+func DiffToTarget(diff float64) *big.Int {
+    target := new(big.Float).Quo(maxTarget, big.NewFloat(diff))
+
+    t, _ := target.Int(nil)
+    return t
+}
+
+func DiffToHash(diff float64) float64 {
+	hashVal := new(big.Float).Mul(minHash, big.NewFloat(diff))
+	hashVal.Quo(hashVal, bigGig)
+
+	h, _ := hashVal.Float64()
+	return h
+}
+
 func main() {
-    difficulty := big.NewInt(12)
+    difficulty := float64(12)
 
-    // Create a big.Int for (1<<256)-1
-    maxTarget := new(big.Int)
-    maxTarget.Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1))
+    target := DiffToTarget(difficulty)
+		hash := DiffToHash(difficulty)
 
-    // Calculate the target value using the difficulty
-    target := new(big.Int)
-    target.Div(maxTarget, difficulty)
-
-    // Calculate the mantissa and exponent
-    mantissa := new(big.Int).Set(target)
-    exponent := uint(len(target.Bytes()))
-
-    // Adjust the mantissa and exponent
-    if exponent <= 3 {
-        mantissa.Rsh(mantissa, 8*(3-exponent))
-    } else {
-        mantissa.Lsh(mantissa, 8*(exponent-3))
-    }
-
-    fmt.Printf("Difficulty: %v\n", difficulty)
+    fmt.Printf("Difficulty: %f\n", difficulty)
     fmt.Printf("Target: %v\n", target)
-    fmt.Printf("Mantissa: %v\n", mantissa)
-    fmt.Printf("Exponent: %v\n", exponent)
+		fmt.Printf("Target (HEX): %x\n", target)
+		fmt.Printf("Hash: %v\n", hash)
 }
