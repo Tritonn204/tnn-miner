@@ -1,9 +1,20 @@
+# HIP support was added in CMake 3.21
 cmake_minimum_required(VERSION 3.16.3)
+
+include(CMakePrintHelpers)
+
+#project(
+	#  Tnn-miner
+  #  VERSION 0.3.2
+  #  DESCRIPTION "Open Source Astrobwt Miner"
+  #)
+
 
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   -static -O3 -fPIE -ftree-vectorize -DNDEBUG")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -O3 -pthread -m64 -march=native -Wuninitialized -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -O3 -pthread -Wuninitialized -DNDEBUG")
 
+# We must set the CMAKE_*_COMPILER variables before 'project' is called
 if(USE_GCC)
   set(CMAKE_C_COMPILER gcc)
   set(CMAKE_CXX_COMPILER g++)
@@ -13,6 +24,7 @@ if(USE_GCC)
 else()
   set(CMAKE_C_COMPILER clang)
   set(CMAKE_CXX_COMPILER clang++)
+  #set(CMAKE_CXX_COMPILER "/usr/bin/clang++" CACHE STRING "C++ compiler" FORCE)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
   set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Wno-deprecated")
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-deprecated")
@@ -23,6 +35,15 @@ project(
   VERSION 0.3.2
   DESCRIPTION "Open Source Astrobwt Miner"
 )
+
+# This CMAKE variable isn't defined until 'project' is called.
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
+  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -flax-vector-conversions -march=armv8-a")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flax-vector-conversions -march=armv8-a")
+else()
+  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -m64 -march=native")
+endif()
 
 # if(WIN32)
 # set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
@@ -36,7 +57,7 @@ project(
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fstack-protector")
 
 set (CMAKE_STANDARD_REQUIRED TRUE)
-set (CMAKE_CXX_STANDARD 23)
+set (CMAKE_CXX_STANDARD 20)
 
 enable_language(ASM)
 
@@ -52,15 +73,6 @@ if(WIN32)
     "C:/mingw64/lib"
   )
 endif()
-
-# download CPM.cmake
-file(
-  DOWNLOAD
-  https://github.com/cpm-cmake/CPM.cmake/releases/download/v0.38.3/CPM.cmake
-  ${CMAKE_CURRENT_BINARY_DIR}/cmake/CPM.cmake
-  EXPECTED_HASH SHA256=cc155ce02e7945e7b8967ddfaff0b050e958a723ef7aad3766d368940cb15494
-)
-include(${CMAKE_CURRENT_BINARY_DIR}/cmake/CPM.cmake)
 
 # This stores downloaded dependencies so we do not need to re-download them
 set(CPM_SOURCE_CACHE "${PROJECT_SOURCE_DIR}/.cache/CPM")
@@ -78,7 +90,7 @@ endif()
 if(NOT (EXISTS ${CPM_DOWNLOAD_LOCATION}))
   message(STATUS "Downloading CPM.cmake to ${CPM_DOWNLOAD_LOCATION}")
   file(DOWNLOAD
-       https://github.com/TheLartians/CPM.cmake/releases/download/v${CPM_DOWNLOAD_VERSION}/CPM.cmake
+       https://github.com/cpm-cmake/CPM.cmake/releases/download/v${CPM_DOWNLOAD_VERSION}/CPM.cmake
        ${CPM_DOWNLOAD_LOCATION}
   )
 endif()
@@ -182,6 +194,12 @@ file(GLOB all_SRCS
   "${PROJECT_SOURCE_DIR}/src/miner/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/miner/*.c"
 )
+
+# Remove aarch files from all_SRCS
+if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
+  list(FILTER all_SRCS EXCLUDE REGEX ".*/.*/*aarch64*")
+endif()
+
 
 add_executable(${PROJECT_NAME} ${all_SRCS})
 
