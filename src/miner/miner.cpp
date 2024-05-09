@@ -2927,20 +2927,27 @@ connectionAttempt:
       std::string HOST, WORKER, PORT;
       switch (algo)
       {
-      case DERO_HASH:
-      {
-        HOST = devPool;
-        WORKER = workerName;
-        PORT = devPort[DERO_HASH];
-        break;
-      }
-      case XELIS_HASH:
-      {
-        HOST = host;
-        WORKER = devWorkerName;
-        PORT = port;
-        break;
-      }
+        case DERO_HASH:
+        {
+          HOST = devPool;
+          WORKER = workerName;
+          PORT = devPort[DERO_HASH];
+          break;
+        }
+        case XELIS_HASH:
+        {
+          HOST = host;
+          WORKER = devWorkerName;
+          PORT = port;
+          break;
+        }
+        case SPECTRE_X:
+        {
+          HOST = host;
+          WORKER = devWorkerName;
+          PORT = port;
+          break;
+        }
       }
       boost::asio::spawn(ioc, std::bind(&do_session, HOST, PORT, devSelection[algo], WORKER, algo, std::ref(ioc), std::ref(ctx), std::placeholders::_1, true),
                          // on completion, spawn will call this function
