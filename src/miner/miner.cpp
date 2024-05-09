@@ -3695,11 +3695,14 @@ waitForJob:
               devShare = {{"block_template", hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str()}};
               break;
             case SPECTRE_STRATUM:
+              std::vector<char> nonceStr;
+              Num(std::to_string(n).c_str(),10).print(nonceStr, 16);
               devShare = {{{"id", SpectreStratum::submitID},
-                           {"method", SpectreStratum::submit.method.c_str()},
-                           {"params", {devWorkerName,                                 // WORKER
-                                       devJob.at("jobId").get<std::string>().c_str(), // JOB ID
-                                       hexStr((byte *)&n, 8).c_str()}}}};
+                        {"method", SpectreStratum::submit.method.c_str()},
+                        {"params", {workerName,                                   // WORKER
+                                    std::to_string(devJob["jobId"].get<uint64_t>()).c_str(), // JOB ID
+                                    std::string(nonceStr.data()).c_str()}}}};
+
               break;
             }
             submittingDev = true;

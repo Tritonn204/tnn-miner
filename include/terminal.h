@@ -166,7 +166,7 @@ inline po::options_description get_prog_opts()
   ;
 
   po::options_description spectre("Spectre", col_width);
-  xelis.add_options()
+  spectre.add_options()
     ("spectre-test", "Run detailed diagnostics for SpectreX")
   ;
 
