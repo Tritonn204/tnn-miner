@@ -1192,7 +1192,11 @@ void xelis_stratum_session(
   packet.at("id") = XelisStratum::subscribe.id;
   packet.at("method") = XelisStratum::subscribe.method;
   std::string minerName = "tnn-miner/" + std::string(versionString);
+<<<<<<< HEAD
+  packet.at("params") = boost::json::array({minerName, boost::json::array({"xel/0"})});
+=======
   packet.at("params") = {minerName, {"xel/0"}};
+>>>>>>> main
   std::string subscription = boost::json::serialize(packet) + "\n";
 
   // std::cout << subscription << std::endl;
@@ -1222,7 +1226,11 @@ void xelis_stratum_session(
   packet = XelisStratum::stratumCall;
   packet.at("id") = XelisStratum::authorize.id;
   packet.at("method") = XelisStratum::authorize.method;
+<<<<<<< HEAD
+  packet.at("params") = boost::json::array({wallet, worker, "x"});
+=======
   packet.at("params") = {wallet, worker, "x"};
+>>>>>>> main
   std::string authorization = boost::json::serialize(packet) + "\n";
 
   // std::cout << authorization << std::endl;
@@ -1680,7 +1688,8 @@ void spectre_stratum_session(
   packet = XelisStratum::stratumCall;
   packet.at("id") = XelisStratum::authorize.id;
   packet.at("method") = XelisStratum::authorize.method;
-  packet.at("params") = {wallet + "." + worker};
+  packet.at("params") = boost::json::array({wallet + "." + worker});
+
   std::string authorization = boost::json::serialize(packet) + "\n";
 
   // // std::cout << authorization << std::endl;
@@ -1694,9 +1703,9 @@ void spectre_stratum_session(
 
   packet["id"] = SpectreStratum::subscribe.id;
   packet["method"] = SpectreStratum::subscribe.method;
-  packet["params"] = {
+  packet["params"] = boost::json::array({
     minerName
-  };
+  });
 
   boost::asio::streambuf subRes;
   beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
@@ -1908,17 +1917,6 @@ int handleSpectreStratumPacket(boost::json::object packet, bool isDev)
   std::string M = packet.at("method").get_string().c_str();
   if (M.compare(SpectreStratum::s_notify) == 0)
   {
-
-    // if (ourHeight > 0 && packet.at("params").as_array()[4].get_bool() != true)
-    //   return 0;
-
-    mutex.lock();
-    setcolor(CYAN);
-    if (!isDev)
-      printf("\nStratum: new job received\n");
-    setcolor(BRIGHT_WHITE);
-    mutex.unlock();
-
     SpectreStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
     json *J = isDev ? &devJob : &job;
@@ -1948,6 +1946,18 @@ int handleSpectreStratumPacket(boost::json::object packet, bool isDev)
     memcpy(newTemplate + 32 + 16 - h3Str.size(), h3Str.data(), h3Str.size());
     memcpy(newTemplate + 48 + 16 - h4Str.size(), h4Str.data(), h4Str.size());
     memcpy(newTemplate + 64 + 16 - tsStr.size(), tsStr.data(), tsStr.size());
+
+    if (!(*J)["template"].is_null()) {
+      const char *oldTemplate = (*J)["template"].get<std::string>().c_str();
+      if (memcmp(oldTemplate, newTemplate, 32) == 0) return 0;
+    }
+
+    mutex.lock();
+    setcolor(CYAN);
+    if (!isDev)
+      printf("\nStratum: new job received\n");
+    setcolor(BRIGHT_WHITE);
+    mutex.unlock();
 
     (*J)["template"] = std::string(newTemplate, SpectreX::INPUT_SIZE*2);
     std::string testPrint = (*J)["template"].get<std::string>();
@@ -2264,6 +2274,16 @@ int main(int argc, char **argv)
   if (vm.count("wallet"))
   {
     wallet = vm["wallet"].as<std::string>();
+    if(wallet.find("dero", 0) != std::string::npos) {
+      symbol = "DERO";
+    }
+    if(wallet.find("xel:", 0) != std::string::npos || wallet.find("xet:", 0) != std::string::npos) {
+      symbol = "XEL";
+    }
+    if(wallet.find("spectre", 0) != std::string::npos) {
+      symbol = "SPR";
+      protocol = SPECTRE_STRATUM;
+    }
   }
   if (vm.count("worker-name"))
   {
