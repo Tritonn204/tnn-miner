@@ -56,6 +56,11 @@ General:
   --help                  produce help message
   --dero                  Will mine Dero
   --xelis                 Will mine Xelis
+<<<<<<< HEAD
+=======
+  --spectre               Will mine Spectre
+  --stratum               Required for mining to Stratum pools
+>>>>>>> main
   --broadcast             Creates an http server to query miner stats
   --testnet               Adjusts in-house parameters to mine on testnets
   --daemon-address arg    Node/pool URL or IP address to mine to
@@ -88,6 +93,12 @@ Xelis:
                           code
   --worker-name arg       Sets the worker name for this instance when mining
                           Xelis
+<<<<<<< HEAD
+=======
+
+Spectre:
+  --spectre-test          Run detailed diagnostics for SpectreX
+>>>>>>> main
 ```
 ### If the miner is run without any args, a CLI wizard will simply ask you to provide the required options one at a time.
 
