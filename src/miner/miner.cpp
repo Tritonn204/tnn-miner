@@ -755,6 +755,7 @@ void xatum_session(
         ip = it.to_string();
       }
       p.set_value();
+      mutex.unlock();
   } else {
     p.set_value();
   } });
@@ -762,7 +763,6 @@ void xatum_session(
 
     std::future<void> f = p.get_future();
     f.get();
-    mutex.unlock();
 
     if (addrCount == 0)
     {
@@ -1123,6 +1123,7 @@ void xelis_stratum_session(
         ip = it.to_string();
       }
       p.set_value();
+      mutex.unlock();
   } else {
     p.set_value();
   } });
@@ -1130,7 +1131,6 @@ void xelis_stratum_session(
 
     std::future<void> f = p.get_future();
     f.get();
-    mutex.unlock();
 
     if (addrCount == 0)
     {
@@ -1607,6 +1607,7 @@ void spectre_stratum_session(
         ip = it.to_string();
       }
       p.set_value();
+      mutex.unlock();
   } else {
     p.set_value();
   } });
@@ -1614,7 +1615,6 @@ void spectre_stratum_session(
 
     std::future<void> f = p.get_future();
     f.get();
-    mutex.unlock();
 
     if (addrCount == 0)
     {
@@ -2050,23 +2050,23 @@ int handleSpectreStratumPacket(boost::json::object packet, bool isDev)
       mutex.lock();
       switch (lLevel)
       {
-      case XelisStratum::STRATUM_INFO:
+      case SpectreStratum::STRATUM_INFO:
         if (!isDev)
           setcolor(BRIGHT_WHITE);
         printf("Stratum INFO: ");
         break;
-      case XelisStratum::STRATUM_WARN:
+      case SpectreStratum::STRATUM_WARN:
         if (!isDev)
           setcolor(BRIGHT_YELLOW);
         printf("Stratum WARNING: ");
         break;
-      case XelisStratum::STRATUM_ERROR:
+      case SpectreStratum::STRATUM_ERROR:
         if (!isDev)
           setcolor(RED);
         printf("Stratum ERROR: ");
         res = -1;
         break;
-      case XelisStratum::STRATUM_DEBUG:
+      case SpectreStratum::STRATUM_DEBUG:
         break;
       }
       printf("%s\n", packet.at("params").as_array()[1].as_string().c_str());
