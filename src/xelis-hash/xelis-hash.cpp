@@ -11,6 +11,9 @@
 #include <cstring>
 #include <array>
 #include <cassert>
+#if !defined(__AVX2__)
+  #include <openssl/aes.h>
+#endif
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -73,10 +76,16 @@ uint64_t swap_bytes(uint64_t value)
 
 void aes_round(uint8_t *block, const uint8_t *key)
 {
+  #if defined(__AVX2__)
   __m128i block_m128i = _mm_load_si128((__m128i *)block);
   __m128i key_m128i = _mm_load_si128((__m128i *)key);
   __m128i result = _mm_aesenc_si128(block_m128i, key_m128i);
   _mm_store_si128((__m128i *)block, result);
+  #else
+    AES_KEY aes_key;
+    AES_set_encrypt_key(key, 128, &aes_key);
+    AES_encrypt(block, block, &aes_key);
+  #endif
 }
 
 alignas(64) static const uint64_t RC[12] = {
