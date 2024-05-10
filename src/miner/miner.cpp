@@ -1192,11 +1192,7 @@ void xelis_stratum_session(
   packet.at("id") = XelisStratum::subscribe.id;
   packet.at("method") = XelisStratum::subscribe.method;
   std::string minerName = "tnn-miner/" + std::string(versionString);
-<<<<<<< HEAD
   packet.at("params") = boost::json::array({minerName, boost::json::array({"xel/0"})});
-=======
-  packet.at("params") = {minerName, {"xel/0"}};
->>>>>>> main
   std::string subscription = boost::json::serialize(packet) + "\n";
 
   // std::cout << subscription << std::endl;
@@ -1226,11 +1222,7 @@ void xelis_stratum_session(
   packet = XelisStratum::stratumCall;
   packet.at("id") = XelisStratum::authorize.id;
   packet.at("method") = XelisStratum::authorize.method;
-<<<<<<< HEAD
   packet.at("params") = boost::json::array({wallet, worker, "x"});
-=======
-  packet.at("params") = {wallet, worker, "x"};
->>>>>>> main
   std::string authorization = boost::json::serialize(packet) + "\n";
 
   // std::cout << authorization << std::endl;
@@ -3651,7 +3643,7 @@ waitForJob:
 
         byte *WORK = (devMine && devConnected) ? &devWork[0] : &work[0];
         byte *nonceBytes = &WORK[72];
-        uint64_t n = ((tid - 1) % (256 * 256 * 256)) | ((*nonce) << 24);
+        uint64_t n = ((tid - 1) % (256 * 256)) | ((rand() % 256) << 16) | ((*nonce) << 24);
         memcpy(nonceBytes, (byte *)&n, 8);
 
         // printf("after nonce: %s\n", hexStr(WORK, SpectreX::INPUT_SIZE).c_str());
