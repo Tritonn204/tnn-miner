@@ -1293,7 +1293,7 @@ void xelis_stratum_session(
 
       if (trans > 0)
       {
-        boost::lock_guard<boost::mutex> lockGuard(wsMutex);
+        std::scoped_lock<boost::mutex> lockGuard(wsMutex);
         std::string data = beast::buffers_to_string(response.data());
         // Consume the data from the buffer after processing it
         response.consume(trans);
@@ -1805,7 +1805,7 @@ void spectre_stratum_session(
 
       if (trans > 0)
       {
-        boost::lock_guard<boost::mutex> lockGuard(wsMutex);
+        std::scoped_lock<boost::mutex> lockGuard(wsMutex);
         std::vector<std::string> packets;
         std::string data = beast::buffers_to_string(response.data());
         // Consume the data from the buffer after processing it
@@ -2743,7 +2743,7 @@ startReporting:
 
     if (milliseconds >= reportInterval * 1000)
     {
-      boost::lock_guard<boost::mutex> lockGuard(mutex);
+      std::scoped_lock<boost::mutex> lockGuard(mutex);
       start_time = now;
       int64_t currentHashes = counter.load();
       counter.store(0);
@@ -3671,7 +3671,7 @@ waitForJob:
 
         if (submit && Num(hexStr(powHash, 32).c_str(), 16) <= cmpDiff)
         {
-          boost::lock_guard<boost::mutex> lockGuard(mutex);
+          std::scoped_lock<boost::mutex> lockGuard(mutex);
           // if (littleEndian())
           // {
           //   std::reverse(powHash, powHash + 32);
