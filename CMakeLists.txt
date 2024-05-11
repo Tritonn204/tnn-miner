@@ -11,8 +11,8 @@ include(CMakePrintHelpers)
 
 
 set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   -static -ggdb -fPIE -DNDEBUG")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -ggdb -pthread -Wuninitialized -DNDEBUG")
+set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   -static -O3 -fPIE -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -O3 -pthread -Wuninitialized -DNDEBUG")
 
 # We must set the CMAKE_*_COMPILER variables before 'project' is called
 if(USE_GCC)
@@ -32,7 +32,7 @@ endif()
 
 project(
   Tnn-miner
-  VERSION 0.3.2
+  VERSION 0.3.3
   DESCRIPTION "Open Source Astrobwt Miner"
 )
 
