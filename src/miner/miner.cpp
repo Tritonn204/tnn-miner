@@ -98,6 +98,7 @@ using json = nlohmann::json;
 
 boost::mutex mutex;
 boost::mutex wsMutex;
+boost::mutex reportMutex;
 
 json job = json({});
 json devJob = json({});
@@ -1292,6 +1293,7 @@ void xelis_stratum_session(
 
       if (trans > 0)
       {
+        boost::lock_guard<boost::mutex> lockGuard(wsMutex);
         std::string data = beast::buffers_to_string(response.data());
         // Consume the data from the buffer after processing it
         response.consume(trans);
@@ -1338,11 +1340,9 @@ void xelis_stratum_session(
     {
       bool *C = isDev ? &devConnected : &isConnected;
       (*C) = false;
-      wsMutex.lock();
       setcolor(RED);
       std::cerr << e.what() << std::endl;
       setcolor(BRIGHT_WHITE);
-      wsMutex.unlock();
       return fail(ec, "Stratum session error");
     }
     boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
@@ -1361,12 +1361,10 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
     if (ourHeight > 0 && packet.at("params").as_array()[4].get_bool() != true)
       return 0;
 
-    wsMutex.lock();
     setcolor(CYAN);
     if (!isDev)
       printf("\nStratum: new job received\n");
     setcolor(BRIGHT_WHITE);
-    wsMutex.unlock();
 
     XelisStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
@@ -1393,22 +1391,18 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
     {
       if (!isDev)
       {
-        wsMutex.lock();
         setcolor(BRIGHT_YELLOW);
         printf("Mining at: %s to wallet %s\n", host.c_str(), wallet.c_str());
         setcolor(CYAN);
         printf("Dev fee: %.2f", devFee);
         std::cout << "%" << std::endl;
         setcolor(BRIGHT_WHITE);
-        wsMutex.unlock();
       }
       else
       {
-        wsMutex.lock();
         setcolor(CYAN);
         printf("Connected to dev node: %s\n", host.c_str());
         setcolor(BRIGHT_WHITE);
-        wsMutex.unlock();
       }
     }
 
@@ -1457,7 +1451,6 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
         printf("DEV | ");
       }
 
-      wsMutex.lock();
       switch (lLevel)
       {
       case XelisStratum::STRATUM_INFO:
@@ -1482,7 +1475,6 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
       printf("%s\n", packet.at("params").as_array()[1].as_string().c_str());
 
       setcolor(BRIGHT_WHITE);
-      wsMutex.unlock();
 
       return res;
     }
@@ -1525,7 +1517,6 @@ int handleXStratumResponse(boost::json::object packet, bool isDev)
   break;
   case XelisStratum::submitID:
   {
-    wsMutex.lock();
     printf("\n");
     if (isDev)
     {
@@ -1546,7 +1537,6 @@ int handleXStratumResponse(boost::json::object packet, bool isDev)
       std::cout << "Stratum: share rejected: " << packet.at("error").get_object()["message"].get_string() << std::endl;
       setcolor(BRIGHT_WHITE);
     }
-    wsMutex.unlock();
     break;
   }
   }
@@ -1755,7 +1745,15 @@ void spectre_stratum_session(
   while (true)
   {
     try
-    {
+{
+      if (
+        !isDev &&
+        SpectreStratum::lastShareSubmissionTime > 0 &&
+        std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count() - SpectreStratum::lastShareSubmissionTime > SpectreStratum::shareSubmitTimeout) {
+          rate30sec.clear();
+          rate30sec.push_back(0);
+        }
+
       if (
           SpectreStratum::lastReceivedJobTime > 0 &&
           std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count() - SpectreStratum::lastReceivedJobTime > SpectreStratum::jobTimeout)
@@ -1787,6 +1785,7 @@ void spectre_stratum_session(
           (*C) = false;
           return fail(ec, "Stratum submit");
         }
+        if (!isDev) SpectreStratum::lastShareSubmissionTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
         (*B) = false;
       }
 
@@ -2566,9 +2565,9 @@ Benchmarking:
 
     // setPriority(t.native_handle(), THREAD_PRIORITY_HIGHEST);
 
-    mutex.lock();
+   //  mutex.lock();
     std::cout << "(Benchmark) Worker " << i + 1 << " created" << std::endl;
-    mutex.unlock();
+   //  mutex.unlock();
   }
 
   while (!isConnected)
@@ -2621,9 +2620,9 @@ Benchmarking:
 
 Mining:
 {
-  mutex.lock();
+ //  mutex.lock();
   printSupported();
-  mutex.unlock();
+ //  mutex.unlock();
 
   if (miningAlgo == DERO_HASH && !(wallet.substr(0, 3) == "der" || wallet.substr(0, 3) == "det"))
   {
@@ -2651,7 +2650,7 @@ Mining:
   winMask = std::max(1, winMask);
 
   // Create worker threads and set CPU affinity
-  mutex.lock();
+ //  mutex.lock();
   if (false /*gpuMine*/)
   {
     // boost::thread t(cudaMine);
@@ -2677,7 +2676,7 @@ Mining:
 
       std::cout << "Thread " << i + 1 << " started" << std::endl;
     }
-  mutex.unlock();
+ //  mutex.unlock();
 
   auto start_time = std::chrono::steady_clock::now();
   if (broadcastStats)
@@ -2712,11 +2711,11 @@ void logSeconds(std::chrono::_V2::steady_clock::time_point start_time, int durat
     if (milliseconds >= 1000)
     {
       start_time = now;
-      mutex.lock();
+     //  mutex.lock();
       // std::cout << "\n" << std::flush;
       printf("\rBENCHMARKING: %d/%d seconds elapsed...", i, duration);
       std::cout << std::flush;
-      mutex.unlock();
+     //  mutex.unlock();
       i++;
     }
     boost::this_thread::sleep_for(boost::chrono::milliseconds(250));
@@ -2744,6 +2743,7 @@ startReporting:
 
     if (milliseconds >= reportInterval * 1000)
     {
+      boost::lock_guard<boost::mutex> lockGuard(mutex);
       start_time = now;
       int64_t currentHashes = counter.load();
       counter.store(0);
@@ -2775,7 +2775,7 @@ startReporting:
       {
         double rate = (double)(hashrate / 1000000.0);
         std::string hrate = fmt::sprintf("HASHRATE %.3f MH/s", rate);
-        mutex.lock();
+       //  mutex.lock();
         setcolor(BRIGHT_WHITE);
         std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine << versionString << " ";
         setcolor(CYAN);
@@ -2785,7 +2785,7 @@ startReporting:
       {
         double rate = (double)(hashrate / 1000.0);
         std::string hrate = fmt::sprintf("HASHRATE %.3f KH/s", rate);
-        mutex.lock();
+       //  mutex.lock();
         setcolor(BRIGHT_WHITE);
         std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine << versionString << " ";
         setcolor(CYAN);
@@ -2794,7 +2794,7 @@ startReporting:
       else
       {
         std::string hrate = fmt::sprintf("HASHRATE %.0f H/s", (double)hashrate, hrate);
-        mutex.lock();
+       //  mutex.lock();
         setcolor(BRIGHT_WHITE);
         std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine << versionString << " ";
         setcolor(CYAN);
@@ -2820,7 +2820,7 @@ startReporting:
       std::cout << std::setw(2) << "ACCEPTED " << accepted << std::setw(2) << " | REJECTED " << rejected
                 << std::setw(2) << " | DIFFICULTY " << dPrint << std::setw(2) << " | UPTIME " << uptime << std::flush;
       setcolor(BRIGHT_WHITE);
-      mutex.unlock();
+     //  mutex.unlock();
     }
     boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
   }
@@ -2910,11 +2910,11 @@ void getWork(bool isDev, int algo)
 connectionAttempt:
   bool *B = isDev ? &devConnected : &isConnected;
   *B = false;
-  mutex.lock();
+ //  mutex.lock();
   setcolor(BRIGHT_YELLOW);
   std::cout << "Connecting...\n";
   setcolor(BRIGHT_WHITE);
-  mutex.unlock();
+ //  mutex.unlock();
   try
   {
     // Launch the asynchronous operation
@@ -2973,12 +2973,12 @@ connectionAttempt:
     {
       if (!isDev)
       {
-        mutex.lock();
+       //  mutex.lock();
         setcolor(RED);
         std::cerr << "\nError establishing connections" << std::endl
                   << "Will try again in 10 seconds...\n\n";
         setcolor(BRIGHT_WHITE);
-        mutex.unlock();
+       //  mutex.unlock();
       }
       boost::this_thread::sleep_for(boost::chrono::milliseconds(10000));
       ioc.reset();
@@ -2993,20 +2993,20 @@ connectionAttempt:
   {
     if (!isDev)
     {
-      mutex.lock();
+     //  mutex.lock();
       setcolor(RED);
       std::cerr << "\nError establishing connections" << std::endl
                 << "Will try again in 10 seconds...\n\n";
       setcolor(BRIGHT_WHITE);
-      mutex.unlock();
+     //  mutex.unlock();
     }
     else
     {
-      mutex.lock();
+     //  mutex.lock();
       setcolor(RED);
       std::cerr << "Dev connection error\n";
       setcolor(BRIGHT_WHITE);
-      mutex.unlock();
+     //  mutex.unlock();
     }
     boost::this_thread::sleep_for(boost::chrono::milliseconds(10000));
     ioc.reset();
@@ -3019,7 +3019,7 @@ connectionAttempt:
   }
   if (!isDev)
   {
-    mutex.lock();
+   //  mutex.lock();
     setcolor(RED);
     if (!caughtDisconnect)
       std::cerr << "\nERROR: lost connection" << std::endl
@@ -3028,11 +3028,11 @@ connectionAttempt:
       std::cerr << "\nError establishing connection" << std::endl
                 << "Will try again in 10 seconds...\n\n";
     setcolor(BRIGHT_WHITE);
-    mutex.unlock();
+   //  mutex.unlock();
   }
   else
   {
-    mutex.lock();
+   //  mutex.lock();
     setcolor(RED);
     if (!caughtDisconnect)
       std::cerr << "\nERROR: lost connection to dev node (mining will continue)" << std::endl
@@ -3041,7 +3041,7 @@ connectionAttempt:
       std::cerr << "\nError establishing connection to dev node" << std::endl
                 << "Will try again in 10 seconds...\n\n";
     setcolor(BRIGHT_WHITE);
-    mutex.unlock();
+   //  mutex.unlock();
   }
   caughtDisconnect = true;
   boost::this_thread::sleep_for(boost::chrono::milliseconds(10000));
@@ -3169,11 +3169,11 @@ waitForJob:
   {
     try
     {
-      mutex.lock();
+     //  mutex.lock();
       json myJob = job;
       json myJobDev = devJob;
       localJobCounter = jobCounter;
-      mutex.unlock();
+     //  mutex.unlock();
 
       byte *b2 = new byte[MINIBLOCK_SIZE];
       hexstrToBytes(myJob.at("blockhashing_blob"), b2);
@@ -3196,10 +3196,10 @@ waitForJob:
 
       if ((work[0] & 0xf) != 1)
       { // check  version
-        mutex.lock();
+       //  mutex.lock();
         std::cerr << "Unknown version, please check for updates: "
                   << "version" << (work[0] & 0x1f) << std::endl;
-        mutex.unlock();
+       //  mutex.unlock();
         boost::this_thread::sleep_for(boost::chrono::milliseconds(500));
         continue;
       }
@@ -3242,7 +3242,7 @@ waitForJob:
           // printf("work: %s, hash: %s\n", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str(), hexStr(powHash, 32).c_str());
           if (devMine)
           {
-            mutex.lock();
+           //  mutex.lock();
             setcolor(CYAN);
             std::cout << "\n(DEV) Thread " << tid << " found a dev share\n";
             setcolor(BRIGHT_WHITE);
@@ -3250,11 +3250,11 @@ waitForJob:
                 {"jobid", myJobDev.at("jobid")},
                 {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
             submittingDev = true;
-            mutex.unlock();
+           //  mutex.unlock();
           }
           else
           {
-            mutex.lock();
+           //  mutex.lock();
             setcolor(BRIGHT_YELLOW);
             std::cout << "\nThread " << tid << " found a nonce!\n";
             setcolor(BRIGHT_WHITE);
@@ -3262,7 +3262,7 @@ waitForJob:
                 {"jobid", myJob.at("jobid")},
                 {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
             submitting = true;
-            mutex.unlock();
+           //  mutex.unlock();
           }
         }
 
@@ -3309,12 +3309,12 @@ waitForJob:
   {
     try
     {
-      mutex.lock();
+     //  mutex.lock();
       json myJob = job;
       json myJobDev = devJob;
       localJobCounter = jobCounter;
 
-      mutex.unlock();
+     //  mutex.unlock();
 
       if (!myJob.contains("template"))
         continue;
@@ -3439,10 +3439,10 @@ waitForJob:
           std::string foundBlob = hexStr(&WORK[0], XELIS_TEMPLATE_SIZE);
           if (devMine)
           {
-            mutex.lock();
+           //  mutex.lock();
             if (localJobCounter != jobCounter || localDevHeight != devHeight)
             {
-              mutex.unlock();
+             //  mutex.unlock();
               break;
             }
             setcolor(CYAN);
@@ -3468,14 +3468,14 @@ waitForJob:
               break;
             }
             submittingDev = true;
-            mutex.unlock();
+           //  mutex.unlock();
           }
           else
           {
-            mutex.lock();
+           //  mutex.lock();
             if (localJobCounter != jobCounter || localOurHeight != ourHeight)
             {
-              mutex.unlock();
+             //  mutex.unlock();
               break;
             }
             setcolor(BRIGHT_YELLOW);
@@ -3511,7 +3511,7 @@ waitForJob:
               break;
             }
             submitting = true;
-            mutex.unlock();
+           //  mutex.unlock();
           }
         }
 
@@ -3523,9 +3523,9 @@ waitForJob:
     }
     catch (...)
     {
-      mutex.lock();
+     //  mutex.lock();
       std::cerr << "Error in POW Function" << std::endl;
-      mutex.unlock();
+     //  mutex.unlock();
     }
     if (!isConnected)
       break;
@@ -3558,7 +3558,6 @@ waitForJob:
 
   while (!isConnected)
   {
-    printf("waiting for connection\n");
     boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
   }
 
@@ -3566,11 +3565,13 @@ waitForJob:
   {
     try
     {
-      mutex.lock();
+     //  mutex.lock();
       json myJob = job;
       json myJobDev = devJob;
       localJobCounter = jobCounter;
-      mutex.unlock();
+     //  mutex.unlock();
+
+      // printf("looping somewhere\n");
 
       if (!myJob.contains("template"))
         continue;
@@ -3695,7 +3696,7 @@ waitForJob:
               Num(std::to_string(n).c_str(),10).print(nonceStr, 16);
               devShare = {{{"id", SpectreStratum::submitID},
                         {"method", SpectreStratum::submit.method.c_str()},
-                        {"params", {workerName,                                   // WORKER
+                        {"params", {devWorkerName,                                   // WORKER
                                     std::to_string(devJob["jobId"].get<uint64_t>()).c_str(), // JOB ID
                                     std::string(nonceStr.data()).c_str()}}}};
 
@@ -3752,9 +3753,9 @@ waitForJob:
     }
     catch (...)
     {
-      mutex.lock();
+      ////  mutex.lock();
       std::cerr << "Error in POW Function" << std::endl;
-      mutex.unlock();
+      ////  mutex.unlock();
     }
     if (!isConnected)
       break;
