@@ -3646,7 +3646,15 @@ waitForJob:
 
         byte *WORK = (devMine && devConnected) ? &devWork[0] : &work[0];
         byte *nonceBytes = &WORK[72];
-        uint64_t n = ((tid - 1) % (256 * 256)) | ((rand() % 256) << 16) | ((*nonce) << 24);
+        uint64_t n;
+        
+        json &J = devMine ? myJobDev : myJob;
+        if (J["extraNonce"].is_null() || J["extraNonce"].get<std::string>().size() == 0)
+          n = ((tid - 1) % (256 * 256)) | ((rand() % 256) << 16) | ((*nonce) << 24);
+        else {
+          int eN = J["extraNonce"].get<uint32_t>();
+          n = eN | (((tid - 1) % (256 * 256)) << 24) | ((*nonce) << 40);
+        }
         memcpy(nonceBytes, (byte *)&n, 8);
 
         // printf("after nonce: %s\n", hexStr(WORK, SpectreX::INPUT_SIZE).c_str());
