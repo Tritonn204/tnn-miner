@@ -133,7 +133,7 @@ namespace SpectreX
         for (int j = 0; j < matSize; j += matSize/4)
         {
           uint64_t value = hasher.next();
-          for (int k = 0; k < 64; k++)
+          for (int k = 0; k < 16; k++)
           {
             out[i][j + k] = uint16_t((value >> (4 * k)) & 0x0f);
           }

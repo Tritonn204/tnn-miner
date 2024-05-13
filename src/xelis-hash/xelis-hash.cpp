@@ -467,115 +467,135 @@ __attribute__((target("avx512f"))) void stage_2(uint64_t *input, uint32_t *small
   // Copy slots back to the last SLOT_LENGTH elements of smallPad
   std::copy(&slots[0], &slots[XELIS_SLOT_LENGTH], &smallPad[XELIS_MEMORY_SIZE * 2 - XELIS_SLOT_LENGTH]);
 }
-// __attribute__((target("avx2"))) void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots)
-// {
-//   for (byte iter = 0; iter < XELIS_ITERS; ++iter)
-//   {
-//     for (uint16_t j = 0; j < (XELIS_MEMORY_SIZE * 2) / XELIS_SLOT_LENGTH; ++j)
-//     {
-//       __builtin_prefetch(&smallPad[(j + 1) * XELIS_SLOT_LENGTH], 0, 3);
-//       std::iota(indices, indices + XELIS_SLOT_LENGTH, 0);
-//       for (int slot_idx = XELIS_SLOT_LENGTH - 1; slot_idx >= 0; --slot_idx)
-//       {
-//         byte index_in_indices = smallPad[j * XELIS_SLOT_LENGTH + slot_idx] % (slot_idx + 1);
-//         byte index = indices[index_in_indices];
-//         indices[index_in_indices] = indices[slot_idx];
 
-//         // AVX2 implementation
-//         __m256i sum_buffer = _mm256_setzero_si256();
-//         byte sign = slots[index] >> 31;
+__attribute__((target("avx2"))) void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots)
+{
+  for (byte iter = 0; iter < XELIS_ITERS; ++iter)
+  {
+    for (uint16_t j = 0; j < (XELIS_MEMORY_SIZE * 2) / XELIS_SLOT_LENGTH; ++j)
+    {
+      __builtin_prefetch(&smallPad[j * XELIS_SLOT_LENGTH], 0, 3);
+      std::iota(indices, indices + XELIS_SLOT_LENGTH, 0);
 
-//         for (uint16_t k = 0; k < XELIS_SLOT_LENGTH; k += 8)
-//         {
-//           __m256i slot_vector = _mm256_load_si256((__m256i *)&slots[k]);
-//           __m256i values = _mm256_load_si256((__m256i *)&smallPad[j * XELIS_SLOT_LENGTH + k]);
+      __m256i sum_buffer = _mm256_setzero_si256();
 
-//           __m256i sign_mask = _mm256_cmpeq_epi32(_mm256_setzero_si256(), _mm256_srli_epi32(slot_vector, 31));
-//           sum_buffer = _mm256_blendv_epi8(_mm256_sub_epi32(sum_buffer, values), _mm256_add_epi32(sum_buffer, values), sign_mask);
-//         }
+      for (uint16_t k = 0; k < XELIS_SLOT_LENGTH; k += 8)
+      {
+        __m256i slot_vector = _mm256_load_si256((__m256i *)&slots[k]);
+        __m256i values = _mm256_load_si256((__m256i *)&smallPad[j * XELIS_SLOT_LENGTH + k]);
 
-//         __m256i adjustment = _mm256_set1_epi32(smallPad[j * XELIS_SLOT_LENGTH + index]);
-//         __m256i sign_bit = _mm256_load_si256((__m256i *)sign_bit_values_avx2[index % 8]);
+        __m256i sign_mask = _mm256_cmpeq_epi32(_mm256_setzero_si256(), _mm256_srli_epi32(slot_vector, 31));
+        sum_buffer = _mm256_blendv_epi8(_mm256_sub_epi32(sum_buffer, values), _mm256_add_epi32(sum_buffer, values), sign_mask);
+      }
 
-//         if (sign == 0)
-//         {
-//           sum_buffer = _mm256_blendv_epi8(sum_buffer, _mm256_sub_epi32(sum_buffer, adjustment), sign_bit);
-//         }
-//         else
-//         {
-//           sum_buffer = _mm256_blendv_epi8(sum_buffer, _mm256_add_epi32(sum_buffer, adjustment), sign_bit);
-//         }
+      __m128i sum_low = _mm256_extracti128_si256(sum_buffer, 0);
+      __m128i sum_high = _mm256_extracti128_si256(sum_buffer, 1);
+      __m128i sum_128 = _mm_add_epi32(sum_low, sum_high);
 
-//         __m128i sum_low = _mm256_extracti128_si256(sum_buffer, 0);
-//         __m128i sum_high = _mm256_extracti128_si256(sum_buffer, 1);
-//         __m128i sum_128 = _mm_add_epi32(sum_low, sum_high);
+      sum_128 = _mm_hadd_epi32(sum_128, sum_128);
+      sum_128 = _mm_hadd_epi32(sum_128, sum_128);
 
-//         sum_128 = _mm_hadd_epi32(sum_128, sum_128);
-//         sum_128 = _mm_hadd_epi32(sum_128, sum_128);
+      alignas(32) uint32_t sum = _mm_extract_epi32(sum_128, 0);
+      alignas(32) uint16_t offset = j * XELIS_SLOT_LENGTH;
 
-//         uint32_t reduced_sum = _mm_extract_epi32(sum_128, 0);
-//         slots[index] += reduced_sum;
-      
-//       }
-//     }
-//   }
+      for (int slot_idx = XELIS_SLOT_LENGTH - 1; slot_idx >= 0; --slot_idx)
+      {
+        alignas(32) byte index_in_indices = smallPad[j * XELIS_SLOT_LENGTH + slot_idx] % (slot_idx + 1);
+        alignas(32) byte index = indices[index_in_indices];
+        indices[index_in_indices] = indices[slot_idx];     
 
-//   // Copy slots back to the last SLOT_LENGTH elements of smallPad
-//   std::copy(&slots[0], &slots[XELIS_SLOT_LENGTH], &smallPad[XELIS_MEMORY_SIZE * 2 - XELIS_SLOT_LENGTH]);
-// }
-// __attribute__((target("sse2"))) void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots)
-// {
-//   for (byte iter = 0; iter < XELIS_ITERS; ++iter)
-//   {
-//     for (uint16_t j = 0; j < (XELIS_MEMORY_SIZE * 2) / XELIS_SLOT_LENGTH; ++j)
-//     {
-//       __builtin_prefetch(&smallPad[(j + 1) * XELIS_SLOT_LENGTH], 0, 3);
-//       std::iota(indices, indices + XELIS_SLOT_LENGTH, 0);
-//       for (int slot_idx = XELIS_SLOT_LENGTH - 1; slot_idx >= 0; --slot_idx)
-//       {
-//         byte index_in_indices = smallPad[j * XELIS_SLOT_LENGTH + slot_idx] % (slot_idx + 1);
-//         byte index = indices[index_in_indices];
-//         indices[index_in_indices] = indices[slot_idx];
+        alignas(32) byte sign = slots[index] >> 31;
+        switch(sign) {
+          case 0:
+            sum -= smallPad[offset + index];
+            break;
+          case 1:
+            sum += smallPad[offset + index];
+            break;
+        }
 
-//         // SSE implementation
-//         __m128i sum_buffer = _mm_setzero_si128();
-//         byte sign = slots[index] >> 31;
+        slots[index] += sum;
 
-//         for (size_t k = 0; k < XELIS_SLOT_LENGTH; k += 4)
-//         {
-//           __m128i slot_vector = _mm_load_si128((__m128i *)&slots[k]);
-//           __m128i values = _mm_load_si128((__m128i *)&smallPad[j * XELIS_SLOT_LENGTH + k]);
+        sign = slots[index] >> 31;
+        switch(sign) {
+          case 0:
+            sum += smallPad[offset + index];
+            break;
+          case 1:
+            sum -= smallPad[offset + index];
+            break;
+        }
+      }
+    }
+  }
 
-//           __m128i sign_mask = _mm_cmpeq_epi32(_mm_setzero_si128(), _mm_srli_epi32(slot_vector, 31));
-//           sum_buffer = _mm_blendv_epi8(_mm_sub_epi32(sum_buffer, values), _mm_add_epi32(sum_buffer, values), sign_mask);
-//         }
+  // Copy slots back to the last SLOT_LENGTH elements of smallPad
+  std::copy(&slots[0], &slots[XELIS_SLOT_LENGTH], &smallPad[XELIS_MEMORY_SIZE * 2 - XELIS_SLOT_LENGTH]);
+}
 
-//         __m128i adjustment = _mm_set1_epi32(smallPad[j * XELIS_SLOT_LENGTH + index]);
-//         __m128i sign_bit = _mm_load_si128((__m128i *)sign_bit_values_sse[index % 4]);
+__attribute__((target("sse2"))) void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots)
+{
+  for (byte iter = 0; iter < XELIS_ITERS; ++iter)
+  {
+    for (uint16_t j = 0; j < (XELIS_MEMORY_SIZE * 2) / XELIS_SLOT_LENGTH; ++j)
+    {
+      __builtin_prefetch(&smallPad[(j + 1) * XELIS_SLOT_LENGTH], 0, 3);
+      std::iota(indices, indices + XELIS_SLOT_LENGTH, 0);
 
-//         if (sign == 0)
-//         {
-//           sum_buffer = _mm_blendv_epi8(sum_buffer, _mm_sub_epi32(sum_buffer, adjustment), sign_bit);
-//         }
-//         else
-//         {
-//           sum_buffer = _mm_blendv_epi8(sum_buffer, _mm_add_epi32(sum_buffer, adjustment), sign_bit);
-//         }
+      // SSE implementation
+      __m128i sum_buffer = _mm_setzero_si128();
 
-//         // Perform horizontal addition to reduce the sum
-//         sum_buffer = _mm_hadd_epi32(sum_buffer, sum_buffer);
-//         sum_buffer = _mm_hadd_epi32(sum_buffer, sum_buffer);
+      for (size_t k = 0; k < XELIS_SLOT_LENGTH; k += 4)
+      {
+        __m128i slot_vector = _mm_load_si128((__m128i *)&slots[k]);
+        __m128i values = _mm_load_si128((__m128i *)&smallPad[j * XELIS_SLOT_LENGTH + k]);
 
-//         // Extract the reduced sum
-//         uint32_t reduced_sum = _mm_extract_epi32(sum_buffer, 0);
-//         slots[index] += reduced_sum;
-//       }
-//     }
-//   }
+        __m128i sign_mask = _mm_cmpeq_epi32(_mm_setzero_si128(), _mm_srli_epi32(slot_vector, 31));
+        sum_buffer = _mm_blendv_epi8(_mm_sub_epi32(sum_buffer, values), _mm_add_epi32(sum_buffer, values), sign_mask);
+      }
 
-//   // Copy slots back to the last SLOT_LENGTH elements of smallPad
-//   std::copy(&slots[0], &slots[XELIS_SLOT_LENGTH], &smallPad[XELIS_MEMORY_SIZE * 2 - XELIS_SLOT_LENGTH]);
-// }
+      // Perform horizontal addition to reduce the sum
+      sum_buffer = _mm_hadd_epi32(sum_buffer, sum_buffer);
+      sum_buffer = _mm_hadd_epi32(sum_buffer, sum_buffer);
+
+      // Extract the reduced sum
+      uint32_t sum = _mm_extract_epi32(sum_buffer, 0);
+      uint16_t offset = j * XELIS_SLOT_LENGTH;
+
+      for (int slot_idx = XELIS_SLOT_LENGTH - 1; slot_idx >= 0; --slot_idx)
+      {
+        byte index_in_indices = smallPad[j * XELIS_SLOT_LENGTH + slot_idx] % (slot_idx + 1);
+        byte index = indices[index_in_indices];
+        indices[index_in_indices] = indices[slot_idx];     
+
+        byte sign = slots[index] >> 31;
+        switch(sign) {
+          case 0:
+            sum -= smallPad[offset + index];
+            break;
+          case 1:
+            sum += smallPad[offset + index];
+            break;
+        }
+
+        slots[index] += sum;
+
+        sign = slots[index] >> 31;
+        switch(sign) {
+          case 0:
+            sum += smallPad[offset + index];
+            break;
+          case 1:
+            sum -= smallPad[offset + index];
+            break;
+        }
+      }
+    }
+  }
+
+  // Copy slots back to the last SLOT_LENGTH elements of smallPad
+  std::copy(&slots[0], &slots[XELIS_SLOT_LENGTH], &smallPad[XELIS_MEMORY_SIZE * 2 - XELIS_SLOT_LENGTH]);
+}
 
 __attribute__((target("default"))) void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots)
 {
