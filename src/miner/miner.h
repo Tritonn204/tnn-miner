@@ -115,7 +115,7 @@ void mine(int tid, int algo = DERO_HASH);
 void cudaMine();
 
 void benchmark(int i);
-void logSeconds(std::chrono::_V2::steady_clock::time_point start_time, int duration, bool *stop);
+void logSeconds(std::chrono::steady_clock::time_point start_time, int duration, bool *stop);
 
 Num CompactToBig(uint32_t compact) {
     // Extract the mantissa, sign bit, and exponent
@@ -227,6 +227,6 @@ void setPriority(boost::thread::native_handle_type t, int priority);
 
 void setAffinity(boost::thread::native_handle_type t, int core);
 
-void update(std::chrono::_V2::steady_clock::time_point startTime);
+void update(std::chrono::steady_clock::time_point startTime);
 
 #endif
