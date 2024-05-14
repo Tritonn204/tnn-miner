@@ -2116,13 +2116,13 @@ int handleSpectreStratumResponse(boost::json::object packet, bool isDev)
       }
       if (!packet["result"].is_null() && packet.at("result").get_bool())
       {
-        accepted++;
+        if (!isDev) accepted++;
         std::cout << "Stratum: share accepted" << std::endl;
         setcolor(BRIGHT_WHITE);
       }
       else
       {
-        rejected++;
+        if (!isDev) rejected++;
         if (!isDev)
           setcolor(RED);
         std::cout << "Stratum: share rejected: " << packet.at("error").get_array()[1].get_string() << std::endl;
@@ -3394,7 +3394,7 @@ waitForJob:
 
         byte *WORK = (devMine && devConnected) ? &devWork[0] : &work[0];
         byte *nonceBytes = &WORK[40];
-        uint64_t n = ((tid - 1) % (256 * 256 * 256)) | ((*nonce) << 24);
+        uint64_t n = ((tid - 1) % (256 * 256)) | ((rand()%256) << 16) | ((*nonce) << 24);
         memcpy(nonceBytes, (byte *)&n, 8);
 
         // if (littleEndian())
