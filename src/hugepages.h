@@ -120,8 +120,11 @@ inline void *malloc_huge_pages(size_t size)
     real_size = 0;
   }
   #else
-  ptr = (char *) mmap(0, real_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | 
-     MAP_HUGETLB, -1, 0);
+  ptr = (char *) mmap(0, real_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS
+    #if !defined(__APPLE__)
+     | MAP_HUGETLB
+    #endif
+     , -1, 0);
   if (ptr == MAP_FAILED) {
     // #ifdef __cplusplus
     // std::cerr << "failed to allocate hugepages... using regular malloc" << std::endl;
