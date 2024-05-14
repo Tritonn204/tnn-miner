@@ -140,5 +140,9 @@ namespace SpectreStratum {
   const byte submitID = 7;
 
   uint64_t lastReceivedJobTime = 0;
+  uint64_t lastShareSubmissionTime = 0;
+
+  const int shareSubmitTimeout = 70;
+
   int jobTimeout = 30;
 }
