@@ -121,13 +121,15 @@ namespace SpectreX
 
     hash(w, in, 80, out);
 
+    // std::reverse(out, out+32);
+
     printf("POW hash: %s\n", hexStr(w.sha3Hash, 32).c_str());
-    printf("WANT    : 91e7bb140b1da77f7c8f1978547f5785d26528293f34fc7fe34f3de8dafe4831\n\n");
+    printf("WANT    : ae63221b94390528bd5a092be6247f7173099978bf6b150031c034ed22b37cea\n\n");
 
     printf("BWT hash: %s\n", hexStr(w.astrobwtv3Hash, 32).c_str());
-    printf("WANT    : aee657f5887c509482a3186ca6a789f1fd545995badb5a6bc8d139e15dc177ab\n\n");
+    printf("WANT    : 271bd27bf393fc8854e4ada0f255cef19c0e86c9b7245088bdafc01318172dc5\n\n");
 
     printf("Heavy hash: %s\n", hexStr(out, 32).c_str());
-    printf("WANT      : b68c38a0d359b9ef74fecfae4b2b0a0ea026fdcee22c1d48bcc824f32050ef5\n\n");
+    printf("WANT      : 0b68c38a0d359b9ef74fecfae4b2b0a0ea026fdcee22c1d48bcc824f32050ef5\n\n");
   }
 }

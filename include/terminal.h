@@ -11,7 +11,7 @@
 
 namespace po = boost::program_options;  // from <boost/program_options.hpp>
 
-const char *versionString = "0.3.2";
+const char *versionString = "0.3.4";
 const char *consoleLine = " TNN-MINER ";
 const char *TNN = R"(
   
