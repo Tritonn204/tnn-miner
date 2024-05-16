@@ -71,7 +71,6 @@
 #if defined(_WIN32)
 #include <Windows.h>
 #else
-#include "cpp-dns.hpp"
 #include <sched.h>
 #define THREAD_PRIORITY_ABOVE_NORMAL -5
 #define THREAD_PRIORITY_HIGHEST -20
