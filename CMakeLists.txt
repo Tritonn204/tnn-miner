@@ -126,7 +126,6 @@ set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_NO_WARN_NEW_VERSIONS ON)
 find_package(Boost 1.80 COMPONENTS
-  asio
   chrono
   context
   json
@@ -145,7 +144,7 @@ else()
     VERSION 1.85.0
     URL https://github.com/boostorg/boost/releases/download/boost-1.85.0/boost-1.85.0-cmake.tar.xz
     URL_HASH SHA256=0a9cc56ceae46986f5f4d43fe0311d90cf6d2fa9028258a95cab49ffdacf92ad
-    OPTIONS "Boost_ENABLE_CMAKE ON" "BOOST_INCLUDE_LIBRARIES asio\\\;chrono\\\;context\\\;json\\\;thread\\\;atomic\\\;program_options" # Note the escapes!
+    OPTIONS "Boost_ENABLE_CMAKE ON" "BOOST_INCLUDE_LIBRARIES chrono\\\;context\\\;json\\\;thread\\\;atomic\\\;program_options" # Note the escapes!
       # Maintain build compatibility between find_package and CMakeLists.txt variants
   )
 
@@ -167,7 +166,7 @@ else()
 endif()
 
 # This is universal regardless of how wheter we compiled or found Boost
-set(TNN_BOOST_LIBS Boost::asio Boost::chrono Boost::context Boost::json Boost::thread Boost::atomic Boost::program_options)
+set(TNN_BOOST_LIBS Boost::chrono Boost::context Boost::json Boost::thread Boost::atomic Boost::program_options)
 
 #cmake_print_variables(TNN_BOOST_INCLUDES)
 #cmake_print_variables(TNN_BOOST_LIBS)

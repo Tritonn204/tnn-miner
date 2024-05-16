@@ -1455,6 +1455,8 @@ void spectre_stratum_session(
 
   SpectreStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
+  SpectreStratum::jobCache jobCache;
+
   while (true)
   {
     try
@@ -1552,7 +1554,7 @@ void spectre_stratum_session(
                   return fail(ec, "Stratum pong");
               }
               else
-                handleSpectreStratumPacket(sRPC, isDev);
+                handleSpectreStratumPacket(sRPC, &jobCache, isDev);
             }
             else
             {
@@ -1624,7 +1626,7 @@ void do_session(
   }
 }
 
-int handleSpectreStratumPacket(boost::json::object packet, bool isDev)
+int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCache *cache, bool isDev)
 {
   std::string M = packet.at("method").get_string().c_str();
   if (M.compare(SpectreStratum::s_notify) == 0)
@@ -1638,6 +1640,18 @@ int handleSpectreStratumPacket(boost::json::object packet, bool isDev)
     uint64_t h2 = packet["params"].as_array()[1].as_array()[1].get_uint64();
     uint64_t h3 = packet["params"].as_array()[1].as_array()[2].get_uint64();
     uint64_t h4 = packet["params"].as_array()[1].as_array()[3].get_uint64();
+
+    uint64_t comboHeader[4] = {h1, h2, h3, h4};
+
+    bool isEqual = true;
+    for (int i = 0; i < 4; i++) {
+      isEqual &= comboHeader[i] == cache->header[i];
+    }
+    if (isEqual) return 0;
+
+    for (int i = 0; i < 4; i++) {
+      cache->header[i] = comboHeader[i];
+    }
 
     uint64_t ts = packet["params"].as_array()[2].get_uint64();
 
@@ -1656,11 +1670,6 @@ int handleSpectreStratumPacket(boost::json::object packet, bool isDev)
     memcpy(newTemplate + 32 + 16 - h3Str.size(), h3Str.data(), h3Str.size());
     memcpy(newTemplate + 48 + 16 - h4Str.size(), h4Str.data(), h4Str.size());
     memcpy(newTemplate + 64 + 16 - tsStr.size(), tsStr.data(), tsStr.size());
-
-    if (!(*J)["template"].is_null()) {
-      const char *oldTemplate = (*J)["template"].get<std::string>().c_str();
-      if (memcmp(oldTemplate, newTemplate, 32) == 0) return 0;
-    }
 
     setcolor(CYAN);
     if (!isDev)

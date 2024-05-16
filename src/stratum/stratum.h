@@ -5,11 +5,6 @@
 
 using byte = unsigned char;
 
-int handleXStratumPacket(boost::json::object packet, bool isDev);
-int handleXStratumResponse(boost::json::object packet, bool isDev);
-
-int handleSpectreStratumPacket(boost::json::object packet, bool isDev);
-int handleSpectreStratumResponse(boost::json::object packet, bool isDev);
 
 namespace XelisStratum {
   using bJson = boost::json::object;
@@ -77,6 +72,9 @@ namespace XelisStratum {
   int jobTimeout = 90;
 }
 
+int handleXStratumPacket(boost::json::object packet, bool isDev);
+int handleXStratumResponse(boost::json::object packet, bool isDev);
+
 namespace SpectreStratum {
   using bJson = boost::json::object;
 
@@ -86,6 +84,10 @@ namespace SpectreStratum {
   const byte STRATUM_INFO = 0;
 
   int logLevel = 2;
+
+  typedef struct jobCache{
+    uint64_t header[4];
+  } jobCache;
 
   bJson stratumCall({
     {"id", 0},
@@ -146,3 +148,6 @@ namespace SpectreStratum {
 
   int jobTimeout = 30;
 }
+
+int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCache *cache, bool isDev);
+int handleSpectreStratumResponse(boost::json::object packet, bool isDev);
