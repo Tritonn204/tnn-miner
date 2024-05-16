@@ -5,8 +5,8 @@ include(CMakePrintHelpers)
 cmake_print_variables(CMAKE_HOST_SYSTEM_NAME)
 
 set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   -O3 -fPIE -DNDEBUG")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -pthread -Wuninitialized -DNDEBUG")
+set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   -static -O3 -fPIE -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -static -O3 -pthread -Wuninitialized -DNDEBUG")
 
 if(USE_GCC)
   set(CMAKE_C_COMPILER gcc)
