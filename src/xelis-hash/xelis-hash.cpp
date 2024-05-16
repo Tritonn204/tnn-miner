@@ -11,7 +11,7 @@
 #include <cstring>
 #include <array>
 #include <cassert>
-#if !defined(__AVX2__)
+#if !defined(__AES__)
   #include <openssl/aes.h>
 #endif
 
@@ -76,7 +76,7 @@ uint64_t swap_bytes(uint64_t value)
 
 void aes_round(uint8_t *block, const uint8_t *key)
 {
-  #if defined(__AVX2__)
+  #if defined(__AES__)
   __m128i block_m128i = _mm_load_si128((__m128i *)block);
   __m128i key_m128i = _mm_load_si128((__m128i *)key);
   __m128i result = _mm_aesenc_si128(block_m128i, key_m128i);
@@ -535,7 +535,7 @@ __attribute__((target("avx2"))) void stage_2(uint64_t *input, uint32_t *smallPad
 }
 */
 
-__attribute__((target("sse2"))) void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots)
+__attribute__((target("sse4.1"))) void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots)
 {
   for (byte iter = 0; iter < XELIS_ITERS; ++iter)
   {

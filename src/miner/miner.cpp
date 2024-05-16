@@ -71,7 +71,6 @@
 #if defined(_WIN32)
 #include <Windows.h>
 #else
-#include "cpp-dns.hpp"
 #include <sched.h>
 #define THREAD_PRIORITY_ABOVE_NORMAL -5
 #define THREAD_PRIORITY_HIGHEST -20
@@ -188,61 +187,6 @@ void dero_session(
 
   websocket::stream<beast::ssl_stream<beast::tcp_stream>> ws(ioc, ctx);
 
-  // If the specified host/pool is not in IP address form, resolve to acquire the IP address
-#ifndef _WIN32
-  boost::asio::ip::address::from_string(host, ec);
-  if (ec)
-  {
-    // Using cpp-dns to circumvent the issues cause by combining static linking and getaddrinfo()
-    // A second io_context is used to enable std::promise
-    net::io_context ioc2;
-    std::string ip;
-    std::promise<void> p;
-
-    YukiWorkshop::DNSResolver d(ioc2);
-    d.resolve_a4(host, [&](int err, auto &addrs, auto &qname, auto &cname, uint ttl)
-                 {
-  if (!err) {
-      wsMutex.lock();
-      for (auto &it : addrs) {
-        addrCount++;
-        ip = it.to_string();
-      }
-      p.set_value();
-      wsMutex.unlock();
-  } else {
-    p.set_value();
-  } });
-    ioc2.run();
-
-    std::future<void> f = p.get_future();
-    f.get();
-
-    if (addrCount == 0)
-    {
-      wsMutex.lock();
-      setcolor(RED);
-      std::cerr << "ERROR: Could not resolve " << host << std::endl;
-      setcolor(BRIGHT_WHITE);
-      wsMutex.unlock();
-      return;
-    }
-
-    ip_address = net::ip::address::from_string(ip.c_str(), ec);
-  }
-  else
-  {
-    ip_address = net::ip::address::from_string(host, ec);
-  }
-
-  tcp::endpoint daemon(ip_address, (uint_least16_t)std::stoi(port.c_str()));
-  // Set a timeout on the operation
-  beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(30));
-
-  // Make the connection on the IP address we get from a lookup
-  beast::get_lowest_layer(ws).connect(daemon);
-
-#else
   // Look up the domain name
   tcp::resolver resolver(ioc);
   auto const results = resolver.async_resolve(host, port, yield[ec]);
@@ -254,7 +198,6 @@ void dero_session(
 
   // Make the connection on the IP address we get from a lookup
   auto daemon = beast::get_lowest_layer(ws).connect(results);
-#endif
 
   // Set SNI Hostname (many hosts need this to handshake successfully)
   if (!SSL_set_tlsext_host_name(
@@ -452,61 +395,6 @@ void xelis_session(
 
   websocket::stream<beast::tcp_stream> ws(ioc);
 
-  // If the specified host/pool is not in IP address form, resolve to acquire the IP address
-#ifndef _WIN32
-  boost::asio::ip::address::from_string(host, ec);
-  if (ec)
-  {
-    // Using cpp-dns to circumvent the issues cause by combining static linking and getaddrinfo()
-    // A second io_context is used to enable std::promise
-    net::io_context ioc2;
-    std::string ip;
-    std::promise<void> p;
-
-    YukiWorkshop::DNSResolver d(ioc2);
-    d.resolve_a4(host, [&](int err, auto &addrs, auto &qname, auto &cname, uint ttl)
-                 {
-            if (!err) {
-                wsMutex.lock();
-                for (auto &it : addrs) {
-                    addrCount++;
-                    ip = it.to_string();
-                }
-                p.set_value();
-                wsMutex.unlock();
-            } else {
-                p.set_value();
-            } });
-    ioc2.run();
-
-    std::future<void> f = p.get_future();
-    f.get();
-
-    if (addrCount == 0)
-    {
-      wsMutex.lock();
-      setcolor(RED);
-      std::cerr << "ERROR: Could not resolve " << host << std::endl;
-      setcolor(BRIGHT_WHITE);
-      wsMutex.unlock();
-      return;
-    }
-
-    ip_address = net::ip::address::from_string(ip.c_str(), ec);
-  }
-  else
-  {
-    ip_address = net::ip::address::from_string(host, ec);
-  }
-
-  tcp::endpoint daemon(ip_address, (uint_least16_t)std::stoi(port.c_str()));
-  // Set a timeout on the operation
-  beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(30));
-
-  // Make the connection on the IP address we get from a lookup
-  beast::get_lowest_layer(ws).connect(daemon);
-
-#else
   // Look up the domain name
   tcp::resolver resolver(ioc);
   auto const results = resolver.async_resolve(host, port, yield[ec]);
@@ -518,7 +406,6 @@ void xelis_session(
 
   // Make the connection on the IP address we get from a lookup
   auto daemon = beast::get_lowest_layer(ws).connect(results);
-#endif
 
   // Update the host string. This will provide the value of the
   // Host HTTP header during the WebSocket handshake.
@@ -735,63 +622,6 @@ void xatum_session(
 
   net::ip::address ip_address;
 
-  // If the specified host/pool is not in IP address form, resolve to acquire the IP address
-#ifndef _WIN32
-  boost::asio::ip::address::from_string(host, ec);
-  if (ec)
-  {
-    // Using cpp-dns to circumvent the issues cause by combining static linking and getaddrinfo()
-    // A second io_context is used to enable std::promise
-    net::io_context ioc2;
-    std::string ip;
-    std::promise<void> p;
-
-    YukiWorkshop::DNSResolver d(ioc2);
-    d.resolve_a4(host, [&](int err, auto &addrs, auto &qname, auto &cname, uint ttl)
-                 {
-  if (!err) {
-      wsMutex.lock();
-      for (auto &it : addrs) {
-        addrCount++;
-        ip = it.to_string();
-      }
-      p.set_value();
-      wsMutex.unlock();
-  } else {
-    p.set_value();
-  } });
-    ioc2.run();
-
-    std::future<void> f = p.get_future();
-    f.get();
-
-    if (addrCount == 0)
-    {
-      wsMutex.lock();
-      setcolor(RED);
-      std::cerr << "ERROR: Could not resolve " << host << std::endl;
-      setcolor(BRIGHT_WHITE);
-      wsMutex.unlock();
-      return;
-    }
-
-    ip_address = net::ip::address::from_string(ip.c_str(), ec);
-  }
-  else
-  {
-    ip_address = net::ip::address::from_string(host, ec);
-  }
-
-  tcp::endpoint daemon(ip_address, (uint_least16_t)std::stoi(port.c_str()));
-  // Set a timeout on the operation
-  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-
-  // Make the connection on the IP address we get from a lookup
-  beast::get_lowest_layer(stream).async_connect(daemon, yield[ec]);
-  if (ec)
-    return fail(ec, "connect");
-
-#else
   // Look up the domain name
   tcp::resolver resolver(ioc);
   auto const results = resolver.async_resolve(host, port, yield[ec]);
@@ -805,7 +635,6 @@ void xatum_session(
   auto daemon = beast::get_lowest_layer(stream).async_connect(results, yield[ec]);
   if (ec)
     return fail(ec, "connect");
-#endif
 
   // Set the SNI hostname
   if (!SSL_set_tlsext_host_name(stream.native_handle(), host.c_str()))
@@ -1103,63 +932,6 @@ void xelis_stratum_session(
 
   net::ip::address ip_address;
 
-  // If the specified host/pool is not in IP address form, resolve to acquire the IP address
-#ifndef _WIN32
-  boost::asio::ip::address::from_string(host, ec);
-  if (ec)
-  {
-    // Using cpp-dns to circumvent the issues cause by combining static linking and getaddrinfo()
-    // A second io_context is used to enable std::promise
-    net::io_context ioc2;
-    std::string ip;
-    std::promise<void> p;
-
-    YukiWorkshop::DNSResolver d(ioc2);
-    d.resolve_a4(host, [&](int err, auto &addrs, auto &qname, auto &cname, uint ttl)
-                 {
-  if (!err) {
-      wsMutex.lock();
-      for (auto &it : addrs) {
-        addrCount++;
-        ip = it.to_string();
-      }
-      p.set_value();
-      wsMutex.unlock();
-  } else {
-    p.set_value();
-  } });
-    ioc2.run();
-
-    std::future<void> f = p.get_future();
-    f.get();
-
-    if (addrCount == 0)
-    {
-      wsMutex.lock();
-      setcolor(RED);
-      std::cerr << "ERROR: Could not resolve " << host << std::endl;
-      setcolor(BRIGHT_WHITE);
-      wsMutex.unlock();
-      return;
-    }
-
-    ip_address = net::ip::address::from_string(ip.c_str(), ec);
-  }
-  else
-  {
-    ip_address = net::ip::address::from_string(host, ec);
-  }
-
-  tcp::endpoint daemon(ip_address, (uint_least16_t)std::stoi(port.c_str()));
-  // Set a timeout on the operation
-  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-
-  // Make the connection on the IP address we get from a lookup
-  beast::get_lowest_layer(stream).async_connect(daemon, yield[ec]);
-  if (ec)
-    return fail(ec, "connect");
-
-#else
   // Look up the domain name
   tcp::resolver resolver(ioc);
   auto const results = resolver.async_resolve(host, port, yield[ec]);
@@ -1173,7 +945,6 @@ void xelis_stratum_session(
   auto daemon = beast::get_lowest_layer(stream).async_connect(results, yield[ec]);
   if (ec)
     return fail(ec, "connect");
-#endif
 
   // Set the SNI hostname
   if (!SSL_set_tlsext_host_name(stream.native_handle(), host.c_str()))
@@ -1576,63 +1347,6 @@ void spectre_stratum_session(
 
   net::ip::address ip_address;
 
-  // If the specified host/pool is not in IP address form, resolve to acquire the IP address
-#ifndef _WIN32
-  boost::asio::ip::address::from_string(host, ec);
-  if (ec)
-  {
-    // Using cpp-dns to circumvent the issues cause by combining static linking and getaddrinfo()
-    // A second io_context is used to enable std::promise
-    net::io_context ioc2;
-    std::string ip;
-    std::promise<void> p;
-
-    YukiWorkshop::DNSResolver d(ioc2);
-    d.resolve_a4(host, [&](int err, auto &addrs, auto &qname, auto &cname, uint ttl)
-                 {
-  if (!err) {
-      wsMutex.lock();
-      for (auto &it : addrs) {
-        addrCount++;
-        ip = it.to_string();
-      }
-      p.set_value();
-      wsMutex.unlock();
-  } else {
-    p.set_value();
-  } });
-    ioc2.run();
-
-    std::future<void> f = p.get_future();
-    f.get();
-
-    if (addrCount == 0)
-    {
-      wsMutex.lock();
-      setcolor(RED);
-      std::cerr << "ERROR: Could not resolve " << host << std::endl;
-      setcolor(BRIGHT_WHITE);
-      wsMutex.unlock();
-      return;
-    }
-
-    ip_address = net::ip::address::from_string(ip.c_str(), ec);
-  }
-  else
-  {
-    ip_address = net::ip::address::from_string(host, ec);
-  }
-
-  tcp::endpoint daemon(ip_address, (uint_least16_t)std::stoi(port.c_str()));
-  // Set a timeout on the operation
-  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-
-  // Make the connection on the IP address we get from a lookup
-  beast::get_lowest_layer(stream).async_connect(daemon, yield[ec]);
-  if (ec)
-    return fail(ec, "connect");
-
-#else
   // Look up the domain name
   tcp::resolver resolver(ioc);
   auto const results = resolver.async_resolve(host, port, yield[ec]);
@@ -1646,7 +1360,6 @@ void spectre_stratum_session(
   auto daemon = beast::get_lowest_layer(stream).async_connect(results, yield[ec]);
   if (ec)
     return fail(ec, "connect");
-#endif
 
   // // Set the SNI hostname
   // if (!SSL_set_tlsext_host_name(stream.native_handle(), host.c_str()))
@@ -1741,6 +1454,8 @@ void spectre_stratum_session(
   // std::stringstream workInfo;
 
   SpectreStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+
+  SpectreStratum::jobCache jobCache;
 
   while (true)
   {
@@ -1839,7 +1554,7 @@ void spectre_stratum_session(
                   return fail(ec, "Stratum pong");
               }
               else
-                handleSpectreStratumPacket(sRPC, isDev);
+                handleSpectreStratumPacket(sRPC, &jobCache, isDev);
             }
             else
             {
@@ -1911,7 +1626,7 @@ void do_session(
   }
 }
 
-int handleSpectreStratumPacket(boost::json::object packet, bool isDev)
+int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCache *cache, bool isDev)
 {
   std::string M = packet.at("method").get_string().c_str();
   if (M.compare(SpectreStratum::s_notify) == 0)
@@ -1925,6 +1640,18 @@ int handleSpectreStratumPacket(boost::json::object packet, bool isDev)
     uint64_t h2 = packet["params"].as_array()[1].as_array()[1].get_uint64();
     uint64_t h3 = packet["params"].as_array()[1].as_array()[2].get_uint64();
     uint64_t h4 = packet["params"].as_array()[1].as_array()[3].get_uint64();
+
+    uint64_t comboHeader[4] = {h1, h2, h3, h4};
+
+    bool isEqual = true;
+    for (int i = 0; i < 4; i++) {
+      isEqual &= comboHeader[i] == cache->header[i];
+    }
+    if (isEqual) return 0;
+
+    for (int i = 0; i < 4; i++) {
+      cache->header[i] = comboHeader[i];
+    }
 
     uint64_t ts = packet["params"].as_array()[2].get_uint64();
 
@@ -1943,11 +1670,6 @@ int handleSpectreStratumPacket(boost::json::object packet, bool isDev)
     memcpy(newTemplate + 32 + 16 - h3Str.size(), h3Str.data(), h3Str.size());
     memcpy(newTemplate + 48 + 16 - h4Str.size(), h4Str.data(), h4Str.size());
     memcpy(newTemplate + 64 + 16 - tsStr.size(), tsStr.data(), tsStr.size());
-
-    if (!(*J)["template"].is_null()) {
-      const char *oldTemplate = (*J)["template"].get<std::string>().c_str();
-      if (memcmp(oldTemplate, newTemplate, 32) == 0) return 0;
-    }
 
     setcolor(CYAN);
     if (!isDev)
@@ -2116,13 +1838,13 @@ int handleSpectreStratumResponse(boost::json::object packet, bool isDev)
       }
       if (!packet["result"].is_null() && packet.at("result").get_bool())
       {
-        accepted++;
+        if (!isDev) accepted++;
         std::cout << "Stratum: share accepted" << std::endl;
         setcolor(BRIGHT_WHITE);
       }
       else
       {
-        rejected++;
+        if (!isDev) rejected++;
         if (!isDev)
           setcolor(RED);
         std::cout << "Stratum: share rejected: " << packet.at("error").get_array()[1].get_string() << std::endl;
@@ -2701,7 +2423,7 @@ Mining:
 }
 }
 
-void logSeconds(std::chrono::_V2::steady_clock::time_point start_time, int duration, bool *stop)
+void logSeconds(std::chrono::steady_clock::time_point start_time, int duration, bool *stop)
 {
   int i = 0;
   while (!(*stop))
@@ -2722,7 +2444,7 @@ void logSeconds(std::chrono::_V2::steady_clock::time_point start_time, int durat
   }
 }
 
-void update(std::chrono::_V2::steady_clock::time_point start_time)
+void update(std::chrono::steady_clock::time_point start_time)
 {
   auto beginning = start_time;
   boost::this_thread::yield();
@@ -2855,7 +2577,7 @@ void setAffinity(boost::thread::native_handle_type t, int core)
     std::cerr << "Failed to set CPU affinity for thread. Error code: " << error << std::endl;
   }
 
-#else
+#elif !defined(__APPLE__)
   // Get the native handle of the thread
   pthread_t threadHandle = t;
 
@@ -3394,7 +3116,7 @@ waitForJob:
 
         byte *WORK = (devMine && devConnected) ? &devWork[0] : &work[0];
         byte *nonceBytes = &WORK[40];
-        uint64_t n = ((tid - 1) % (256 * 256 * 256)) | ((*nonce) << 24);
+        uint64_t n = ((tid - 1) % (256 * 256)) | ((rand()%256) << 16) | ((*nonce) << 24);
         memcpy(nonceBytes, (byte *)&n, 8);
 
         // if (littleEndian())
