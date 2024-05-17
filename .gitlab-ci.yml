@@ -11,13 +11,30 @@
 # can use versions as well, like gcc:5.2
 # see https://hub.docker.com/_/gcc/
 
+#.macos_saas_runners:
+#  tags:
+#    - saas-macos-large-m2pro
+#  image: macos-14-xcode-15
+#  before_script:
+#    - echo "started by ${GITLAB_USER_NAME} / @${GITLAB_USER_LOGIN}"
+#    - which clang
+#    #- brew install clang
+#    - brew install fmt
+#    - brew install cmake
+
 stages:
   - build
   - test
+  #- upload
   - release
 
 variables:
   AMD64_TARGET_LEVEL: x86-64-v3
+  #PACKAGE_VERSION: "0.3.4"
+  LINUX_AMD64_TGZ: "Tnn-miner-amd64.tar.gz"
+  MACOS_ARM64_TGZ: "Tnn-miner-macos-arm64.tar.gz"
+  # https://docs.gitlab.com/ee/ci/runners/hosted_runners/macos.html#optimizing-homebrew
+  HOMEBREW_NO_AUTO_UPDATE: 1
 
 image: ubuntu:noble
 
@@ -28,17 +45,44 @@ build:
   before_script:
     - apt update && apt -y install wget build-essential cmake clang libssl-dev libfmt-dev libc++-dev lld git
   script:
+    - export
     - mkdir ./build
     - cd ./build
     - cmake ..
     - make -j$(nproc)
+    - cd ../
+    - mv ./build/Tnn-miner ./Tnn-miner
+    - tar -czvf ${LINUX_AMD64_TGZ} ./Tnn-miner
+  after_script:
+    - echo "BUILD_JOB_ID=$CI_JOB_ID" >> job.env
   artifacts:
+    name: ${LINUX_AMD64_TGZ}
     paths:
-      - ./build/Tnn-miner
+      - ./${LINUX_AMD64_TGZ}
       # depending on your build setup it's most likely a good idea to cache outputs to reduce the build time
       # cache:
       #   paths:
       #     - "*.o"
+    reports:
+      dotenv: job.env
+
+#build-macos:
+#  extends:
+#    - .macos_saas_runners
+#  stage: build
+#  script:
+#    - export
+#    - mkdir ./build
+#    - cd ./build
+#    - cmake ..
+#    - make -j$(nproc)
+#    - cd ../
+#    - mv ./build/Tnn-miner ./Tnn-miner
+#    - tar -czvf ${MACOS_ARM64_TGZ} ./Tnn-miner
+#  artifacts:
+#    name: ${MACOS_ARM64_TGZ}
+#    paths:
+#      - ./${MACOS_ARM64_TGZ}
 
 # run tests using the binary built before
 test:
@@ -46,16 +90,47 @@ test:
   before_script:
     - apt update && apt -y install gdb
   script:
-    - cd ./build
     - gdb --batch -ex "run" -ex "bt" --args ./Tnn-miner --dero-test
 
+#upload:
+#  stage: upload
+#  image: curlimages/curl:latest
+#  rules:
+#    - if: $CI_COMMIT_TAG
+#  script:
+#    - ls -la
+#    #- |
+#    #  curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file bin/${DARWIN_AMD64_BINARY} "${PACKAGE_REGISTRY_URL}/${DARWIN_AMD64_BINARY}"
+#    - |
+#      curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file ${LINUX_AMD64_BINARY} "${PACKAGE_REGISTRY_URL}/${LINUX_AMD64_BINARY}"
+#  dependencies:
+#    - "build"
+
+# https://stackoverflow.com/a/67583488
 release_job:
   stage: release
   image: registry.gitlab.com/gitlab-org/release-cli:latest
+  needs:
+    - job: build
+      artifacts: true
+    - job: build-macos
+      artifacts: true
   rules:
     - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
   script:
-    - echo "running release_job"
-  release:                               # See https://docs.gitlab.com/ee/ci/yaml/#release for available properties
+    - ls -la
+    - echo $BUILD_JOB_ID
+    #- |
+    #  release-cli create --name "Release $CI_COMMIT_TAG" --tag-name $CI_COMMIT_TAG \
+    #    --assets-link "{\"name\":\"${LINUX_AMD64_BINARY}\",\"url\":\"${PACKAGE_REGISTRY_URL}/${LINUX_AMD64_BINARY}\"}"
+  release:
+    name: 'Release $CI_COMMIT_TAG'
     tag_name: '$CI_COMMIT_TAG'
-    description: '$CI_COMMIT_TAG'
+    ref: '$CI_COMMIT_TAG'
+    description: 'Release $CI_COMMIT_TAG'
+    assets:
+      links:
+        - name: "${LINUX_AMD64_TGZ}"
+          url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${BUILD_JOB_ID}/artifacts/download"
+        #- name: "${MACOS_ARM64_TGZ}"
+        #  url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${BUILD_JOB_ID}/artifacts/download"
