@@ -71,6 +71,7 @@
 #if defined(_WIN32)
 #include <Windows.h>
 #else
+#include "cpp-dns.hpp"
 #include <sched.h>
 #define THREAD_PRIORITY_ABOVE_NORMAL -5
 #define THREAD_PRIORITY_HIGHEST -20
@@ -168,6 +169,75 @@ void fail(beast::error_code ec, char const *what) noexcept
   wsMutex.unlock();
 }
 
+tcp::endpoint resolve_host(net::io_context &ioc, net::yield_context yield, std::string host, std::string port) {
+  beast::error_code ec;
+
+  int addrCount = 0;
+  net::ip::address ip_address;
+
+  // If the specified host/pool is not in IP address form, resolve to acquire the IP address
+#if !defined(_WIN32) && !defined(__APPLE__)
+  boost::asio::ip::address::from_string(host, ec);
+  if (ec)
+  {
+    // Using cpp-dns to circumvent the issues cause by combining static linking and getaddrinfo()
+    // A second io_context is used to enable std::promise
+    net::io_context ioc2;
+    std::string ip;
+    std::promise<void> p;
+
+    YukiWorkshop::DNSResolver d(ioc2);
+    d.resolve_a4(host, [&](int err, auto &addrs, auto &qname, auto &cname, uint ttl)
+    {
+      if (!err) {
+          wsMutex.lock();
+          for (auto &it : addrs) {
+            addrCount++;
+            ip = it.to_string();
+          }
+          p.set_value();
+          wsMutex.unlock();
+      } else {
+        p.set_value();
+      }
+    });
+    ioc2.run();
+
+    std::future<void> f = p.get_future();
+    f.get();
+
+    if (addrCount == 0)
+    {
+      wsMutex.lock();
+      setcolor(RED);
+      std::cerr << "ERROR: Could not resolve " << host << std::endl;
+      setcolor(BRIGHT_WHITE);
+      wsMutex.unlock();
+      //return stream;
+      // FIXME: what do?
+    }
+
+    ip_address = net::ip::address::from_string(ip.c_str(), ec);
+  }
+  else
+  {
+    ip_address = net::ip::address::from_string(host, ec);
+  }
+
+  tcp::endpoint result(ip_address, (uint_least16_t)std::stoi(port.c_str()));
+  return result;
+#else
+  // Look up the domain name
+  tcp::resolver resolver(ioc);
+  auto const results = resolver.async_resolve(host, port, yield[ec]);
+  if (ec)
+    fail(ec, "resolve");
+
+  return results.begin()->endpoint();
+#endif
+}
+
+
 void dero_session(
     std::string host,
     std::string const &port,
@@ -179,25 +249,14 @@ void dero_session(
 {
   beast::error_code ec;
 
-  // These objects perform our I/O
-  int addrCount = 0;
-  // bool resolved = false;
-
-  net::ip::address ip_address;
-
   websocket::stream<beast::ssl_stream<beast::tcp_stream>> ws(ioc, ctx);
-
-  // Look up the domain name
-  tcp::resolver resolver(ioc);
-  auto const results = resolver.async_resolve(host, port, yield[ec]);
-  if (ec)
-    return fail(ec, "resolve");
+  auto endpoint = resolve_host(ioc, yield, host, port);
 
   // Set a timeout on the operation
   beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(30));
 
   // Make the connection on the IP address we get from a lookup
-  auto daemon = beast::get_lowest_layer(ws).connect(results);
+  beast::get_lowest_layer(ws).connect(endpoint);
 
   // Set SNI Hostname (many hosts need this to handshake successfully)
   if (!SSL_set_tlsext_host_name(
@@ -212,7 +271,7 @@ void dero_session(
   // Update the host string. This will provide the value of the
   // Host HTTP header during the WebSocket handshake.
   // See https://tools.ietf.org/html/rfc7230#section-5.4
-  host += ':' + std::to_string(daemon.port());
+  host += ':' + port;
 
   // Set a timeout on the operation
   beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(30));
@@ -387,30 +446,16 @@ void xelis_session(
     bool isDev)
 {
   beast::error_code ec;
-
-  // These objects perform our I/O
-  int addrCount = 0;
-
-  net::ip::address ip_address;
-
+  auto endpoint = resolve_host(ioc, yield, host, port);
   websocket::stream<beast::tcp_stream> ws(ioc);
 
-  // Look up the domain name
-  tcp::resolver resolver(ioc);
-  auto const results = resolver.async_resolve(host, port, yield[ec]);
-  if (ec)
-    return fail(ec, "resolve");
-
-  // Set a timeout on the operation
-  beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(30));
-
   // Make the connection on the IP address we get from a lookup
-  auto daemon = beast::get_lowest_layer(ws).connect(results);
+  beast::get_lowest_layer(ws).connect(endpoint);
 
   // Update the host string. This will provide the value of the
   // Host HTTP header during the WebSocket handshake.
   // See https://tools.ietf.org/html/rfc7230#section-5.4
-  host += ':' + std::to_string(daemon.port());
+  host += ':' + port; //std::to_string(daemon.port());
 
   // Set a timeout on the operation
   beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(30));
@@ -608,31 +653,16 @@ void xatum_session(
                   boost::asio::ssl::context::no_tlsv1_1);
 
   beast::error_code ec;
-
-  // SSL_CTX_set_info_callback(ctx.native_handle(), openssl_log_callback);
-
-  // These objects perform our I/O
-  int addrCount = 0;
-  // bool resolved = false;
-  // Create a TCP socket
   ctx.set_verify_mode(ssl::verify_none); // Accept self-signed certificates
   tcp::socket socket(ioc);
   boost::beast::ssl_stream<boost::beast::tcp_stream> stream(ioc, ctx);
   boost::asio::deadline_timer deadline(ioc, boost::posix_time::seconds(1));
 
-  net::ip::address ip_address;
-
-  // Look up the domain name
-  tcp::resolver resolver(ioc);
-  auto const results = resolver.async_resolve(host, port, yield[ec]);
-  if (ec)
-    return fail(ec, "resolve");
-
+  auto endpoint = resolve_host(ioc, yield, host, port);
   // Set a timeout on the operation
   beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-
   // Make the connection on the IP address we get from a lookup
-  auto daemon = beast::get_lowest_layer(stream).async_connect(results, yield[ec]);
+  beast::get_lowest_layer(stream).async_connect(endpoint, yield[ec]);
   if (ec)
     return fail(ec, "connect");
 
@@ -920,29 +950,17 @@ void xelis_stratum_session(
   boost::system::error_code jsonEc;
   boost::asio::deadline_timer deadline(ioc, boost::posix_time::seconds(1));
 
-  // SSL_CTX_set_info_callback(ctx.native_handle(), openssl_log_callback);
+  auto endpoint = resolve_host(ioc, yield, host, port);
 
-  // These objects perform our I/O
-  int addrCount = 0;
-  // bool resolved = false;
   // Create a TCP socket
   ctx.set_verify_mode(ssl::verify_none); // Accept self-signed certificates
-  tcp::socket socket(ioc);
+  //tcp::socket socket(ioc);
   boost::beast::ssl_stream<boost::beast::tcp_stream> stream(ioc, ctx);
-
-  net::ip::address ip_address;
-
-  // Look up the domain name
-  tcp::resolver resolver(ioc);
-  auto const results = resolver.async_resolve(host, port, yield[ec]);
-  if (ec)
-    return fail(ec, "resolve");
-
   // Set a timeout on the operation
   beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
 
   // Make the connection on the IP address we get from a lookup
-  auto daemon = beast::get_lowest_layer(stream).async_connect(results, yield[ec]);
+  beast::get_lowest_layer(stream).async_connect(endpoint, yield[ec]);
   if (ec)
     return fail(ec, "connect");
 
@@ -1334,47 +1352,16 @@ void spectre_stratum_session(
   boost::system::error_code jsonEc;
   boost::asio::deadline_timer deadline(ioc, boost::posix_time::seconds(1));
 
-  // SSL_CTX_set_info_callback(ctx.native_handle(), openssl_log_callback);
-
-  // These objects perform our I/O
-  int addrCount = 0;
-  // bool resolved = false;
-  // Create a TCP socket
-  ctx.set_verify_mode(ssl::verify_none); // Accept self-signed certificates
-  tcp::socket socket(ioc);
-  // boost::beast::ssl_stream<boost::beast::tcp_stream> stream(ioc, ctx);
+  auto endpoint = resolve_host(ioc, yield, host, port);
   boost::beast::tcp_stream stream(ioc);
-
-  net::ip::address ip_address;
-
-  // Look up the domain name
-  tcp::resolver resolver(ioc);
-  auto const results = resolver.async_resolve(host, port, yield[ec]);
-  if (ec)
-    return fail(ec, "resolve");
 
   // Set a timeout on the operation
   beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
 
   // Make the connection on the IP address we get from a lookup
-  auto daemon = beast::get_lowest_layer(stream).async_connect(results, yield[ec]);
+  beast::get_lowest_layer(stream).async_connect(endpoint, yield[ec]);
   if (ec)
     return fail(ec, "connect");
-
-  // // Set the SNI hostname
-  // if (!SSL_set_tlsext_host_name(stream.native_handle(), host.c_str()))
-  // {
-  //   throw beast::system_error{
-  //       static_cast<int>(::ERR_get_error()),
-  //       boost::asio::error::get_ssl_category()};
-  // }
-
-  // // Perform the SSL handshake
-  // beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(300));
-  // stream.async_handshake(ssl::stream_base::client, yield[ec]);
-  // if (ec)
-  //   return fail(ec, "handshake");
-  
 
   std::string minerName = "tnn-miner/" + std::string(versionString);
   boost::json::object packet;
