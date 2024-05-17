@@ -36,7 +36,7 @@ inline BOOL SetPrivilege(
             &luid ) )        // receives LUID of privilege
     {
         #ifdef __cplusplus
-        printf("LookupPrivilegeValue error: %u\n", GetLastError() ); 
+        printf("LookupPrivilegeValue error: %lu\n", GetLastError() ); 
         #endif
         return FALSE; 
     }
@@ -59,7 +59,7 @@ inline BOOL SetPrivilege(
            (PDWORD) NULL) )
     { 
           #ifdef __cplusplus
-          printf("AdjustTokenPrivileges error: %u\n", GetLastError() ); 
+          printf("AdjustTokenPrivileges error: %lu\n", GetLastError() ); 
           #endif
           return FALSE; 
     } 
