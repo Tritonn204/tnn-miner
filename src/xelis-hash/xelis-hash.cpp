@@ -598,9 +598,8 @@ __attribute__((target("sse4.1"))) void stage_2(uint64_t *input, uint32_t *smallP
   // Copy slots back to the last SLOT_LENGTH elements of smallPad
   std::copy(&slots[0], &slots[XELIS_SLOT_LENGTH], &smallPad[XELIS_MEMORY_SIZE * 2 - XELIS_SLOT_LENGTH]);
 }
-*/
 
-void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots)
+__attribute__((target("default"))) void stage_2(uint64_t *input, uint32_t *smallPad, byte *indices, uint32_t *slots)
 {
   for (byte iter = 0; iter < XELIS_ITERS; ++iter)
   {
