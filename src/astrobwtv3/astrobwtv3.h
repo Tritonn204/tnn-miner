@@ -162,6 +162,7 @@ public:
 
   int lucky = 0;
 
+  byte simpleLookup[regOps_size*(256*256)];
   byte lookup3D[branchedOps_size*256*256];
   uint16_t lookup2D[regOps_size*(256*256)];
 
@@ -712,6 +713,7 @@ void branchComputeCPU(workerData &worker, bool isTest);
 
 #if defined(__AVX2__)
 void branchComputeCPU_avx2(workerData &worker, bool isTest);
+void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest);
 #endif
 
 void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &scratch, bool lookupMine);

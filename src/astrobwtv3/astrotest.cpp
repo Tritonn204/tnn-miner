@@ -1,4 +1,5 @@
 #include <astrotest.hpp>
+#include <fstream>
 
 #if defined(__AVX2__)
 void testPopcnt256_epi8() {
@@ -28,6 +29,42 @@ void testPopcnt256_epi8() {
 }
 #endif
 
+void mapZeroes() {
+  std::vector<std::tuple<int,int,int>> opMap; 
+  std::vector<std::tuple<int,int,int>> noChange; 
+
+  for (int o = 0; o < 256; o++) {
+    for (int i = 0; i < 256; i++) {
+      for (int j = 0; j < 256; j++) {
+        byte r = i;
+        branchResult(r, o, j);
+        if (std::find(branchedOps_global.begin(), branchedOps_global.end(), i) == branchedOps_global.end()) {
+          if (r == 0) opMap.push_back(std::tuple<int,int,int>(o,i,j));
+          if (r == i) noChange.push_back(std::tuple<int,int,int>(o,i,j));
+          break;
+        }
+      }
+    }
+  }
+
+  std::ofstream outputFile("unchangedOps.txt");
+  if (outputFile.is_open()) {
+    for (const auto& [op, input, salt] : noChange) {
+      outputFile << "op: " << op << ", input: " << input << ", salt: " << salt << std::endl;
+    }
+  }
+  outputFile.close();
+  std::cout << "Output written to unchangedOps.txt" << std::endl;
+
+  outputFile.open("clippedOps.txt");
+  if (outputFile.is_open()) {
+    for (const auto& [op, input, salt] : opMap) {
+      outputFile << "op: " << op << ", input: " << input << ", salt: " << salt << std::endl;
+    }
+  }
+  outputFile.close();
+  std::cout << "Output written to clippedOps.txt" << std::endl;
+}
 
 int DeroTesting(int testOp, int testLen, bool useLookup) {
   int failedTests = 0;

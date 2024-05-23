@@ -35,6 +35,7 @@
 /tests
 /boost-1.82.0/**
 /.cache
+/scripts/build
 
 # Xelis rust resources
 /src/xelis-hash/**.rs

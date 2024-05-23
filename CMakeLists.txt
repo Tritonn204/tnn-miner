@@ -6,7 +6,7 @@ cmake_print_variables(CMAKE_HOST_SYSTEM_NAME)
 
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   -O3 -fPIE -DNDEBUG")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -pthread -Wuninitialized -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fuse-ld=lld -O3 -Wuninitialized -DNDEBUG")
 
 if(USE_GCC)
   set(CMAKE_C_COMPILER gcc)
@@ -196,7 +196,6 @@ file(GLOB all_SRCS
   "${PROJECT_SOURCE_DIR}/include/*.h"
   "${PROJECT_SOURCE_DIR}/include/*.hpp"
   "${PROJECT_SOURCE_DIR}/include/libkeccak/*.c"
-  # "${PROJECT_SOURCE_DIR}/include/*.cuh"
   "${PROJECT_SOURCE_DIR}/src/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/*.c"
   "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cpp"
@@ -206,8 +205,6 @@ file(GLOB all_SRCS
   "${PROJECT_SOURCE_DIR}/src/spectrex/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/spectrex/*.c"
   "${PROJECT_SOURCE_DIR}/src/broadcast/*.cpp"
-  # "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cu"
-  # "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cuh"
   "${PROJECT_SOURCE_DIR}/src/miner/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/miner/*.c"
 )

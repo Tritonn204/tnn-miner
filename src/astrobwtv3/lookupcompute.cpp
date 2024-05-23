@@ -15,7 +15,7 @@
 // @param lookup2D: a pointer to the 2D (non-deterministic) lookup table of 2-byte chunks
 // @param lookup3D: a pointer to the 3D (deterministic) lookup table of 1-byte chunks
 
-void lookupGen(workerData &worker, uint16_t *lookup2D, byte *lookup3D) {
+void lookupGen(workerData &worker, byte *simpleLookup, uint16_t *lookup2D) {
   for (int op = 0; op < 256; op++) {
     for (int v2 = 0; v2 < 256; v2++) {
       for (int val = 0; val < 256; val++) {
@@ -27,6 +27,17 @@ void lookupGen(workerData &worker, uint16_t *lookup2D, byte *lookup3D) {
         branchResult(trueVal, op, v2);
         worker.lookup3D[pos*256*256 + v2*256 + val] = trueVal;
       }
+    }
+    for (int val = 0; val < 256; val++) {
+      auto spot = std::find(worker.regularOps, worker.regularOps + regOps_size, op);
+      if (spot == worker.regularOps + regOps_size) continue;
+      int pos = std::distance(worker.regularOps, spot);
+      byte t = worker.reg_idx[op];
+      worker.reg_idx[op] = pos;
+      byte trueVal = val;
+      branchResult(trueVal, op, 0);
+      worker.simpleLookup[pos*256 + val] = trueVal;
+      worker.reg_idx[op] = t;
     }
     int d = -1;
     for (int val = 0; val < 256*256; val++) {

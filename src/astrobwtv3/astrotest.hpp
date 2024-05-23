@@ -61,6 +61,8 @@ inline void generateRandomBytes(std::uint8_t (&iv_buff)[N])
 
 void runDivsufsortBenchmark();
 
+void mapZeroes();
+
 int DeroTesting(int testOp, int testLen, bool useLookup);
 int runDeroOpTests(int testOp, int dataLen=15);
 
