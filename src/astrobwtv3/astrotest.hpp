@@ -65,6 +65,7 @@ void mapZeroes();
 
 int DeroTesting(int testOp, int testLen, bool useLookup);
 int runDeroOpTests(int testOp, int dataLen=15);
+int rakeDeroOpTests(int testOp, int dataLen=15);
 
 int TestAstroBWTv3(bool useLookup);
 int TestAstroBWTv3repeattest(bool useLookup);

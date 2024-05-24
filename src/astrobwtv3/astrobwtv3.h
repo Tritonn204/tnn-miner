@@ -172,6 +172,8 @@ public:
 
   void *ctx;
 
+  std::vector<std::tuple<int,int,int>> repeats;
+
   byte salsaInput[256] = {0};
   byte op;
   byte pos1;

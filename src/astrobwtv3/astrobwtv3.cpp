@@ -119,6 +119,25 @@ void checkSIMDSupport() {
 }
 */
 
+void checkFalseRep(workerData &worker) {
+  byte f = worker.prev_chunk[worker.pos1];
+  bool falsePos = false;
+  for (int i = worker.pos1; i < worker.pos2; i++) {
+    if (worker.prev_chunk[i] != f) {
+      falsePos = true;
+      break;
+    }
+  }
+
+  if (falsePos) {
+    printf("false positive\n");
+    for (int i = worker.pos1; i < worker.pos2; i++) {
+      printf("%02x ", worker.prev_chunk[i]);
+    }
+    printf("\n");
+  }
+}
+
 #if defined(__AVX2__)
 // 2024-05-24: Unused in favor of optest_avx2
 void optest_simd(int op, workerData &worker, bool print=true) {
@@ -4168,7 +4187,8 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     else {
       // start = std::chrono::steady_clock::now();
       #if defined(__AVX2__)
-      branchComputeCPU_avx2(worker, false);
+      // branchComputeCPU_avx2(worker, false);
+      branchComputeCPU_avx2_zOptimized(worker, false);
       #elif defined(__aarch64__)
       branchComputeCPU_aarch64(worker, false);
       #else
@@ -11315,15 +11335,24 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
           __m256i old = data;
           int n = worker.pos2 - worker.pos1;  // Number of bytes to check
 
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
           uint32_t mask = (1 << n) - 1;
-          int result = _mm256_movemask_epi8(data);
+          int result = _mm256_movemask_epi8(cmp);
 
-          if ((result & mask) == 0 || result == mask) {
-            __m256i newVec = 
-              worker.prev_chunk[worker.pos1] == 0 ? 
-              _mm256_setzero_si256() :
-              _mm256_set1_epi8(worker.simpleLookup[worker.prev_chunk[worker.pos1]]);
-            data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          if ((result & mask) == mask) {
+            if (worker.prev_chunk[worker.pos1] == worker.simpleLookup[worker.prev_chunk[worker.pos1]]) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              if ((worker.pos2-worker.pos1)%2 == 1) {
+                worker.t1 = worker.chunk[worker.pos1];
+                worker.t2 = worker.chunk[worker.pos2];
+                worker.chunk[worker.pos1] = reverse8(worker.t2);
+                worker.chunk[worker.pos2] = reverse8(worker.t1);
+              }
+              break;
+            }
+            byte newVal = worker.simpleLookup[worker.prev_chunk[worker.pos1]];
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
                 
             if ((worker.pos2-worker.pos1)%2 == 1) {
@@ -11363,16 +11392,21 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
           __m256i old = data;
           int n = worker.pos2 - worker.pos1;  // Number of bytes to check
 
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
           uint32_t mask = (1 << n) - 1;
-          int result = _mm256_movemask_epi8(data);
+          int result = _mm256_movemask_epi8(cmp);
 
-          if ((result & mask) == 0 || result == mask) {
-            __m256i newVec = 
-              worker.prev_chunk[worker.pos1] == 0 ? 
-              _mm256_setzero_si256() :
-              _mm256_set1_epi8(worker.simpleLookup[worker.prev_chunk[worker.pos1]]);
-            data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+          if ((result & mask) == mask) {
+            byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
             _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
             break;
           }
 
@@ -11390,6 +11424,25 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           __m256i pop = popcnt256_epi8(data);
           data = _mm256_xor_si256(data,pop);
@@ -11409,6 +11462,25 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_rolv_epi8(data,_mm256_add_epi8(data,vec_3));
           data = _mm256_xor_si256(data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -11422,6 +11494,19 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+            break;
+          }
 
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
           data = _mm256_srlv_epi8(data,_mm256_and_si256(data,vec_3));
@@ -11437,6 +11522,25 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
           // Load 32 bytes of worker.prev_chunk starting from i into an AVX2 256-bit register
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           __m256i pop = popcnt256_epi8(data);
           data = _mm256_xor_si256(data,pop);
@@ -11453,6 +11557,24 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_sllv_epi8(data,_mm256_and_si256(data,vec_3));
           data = _mm256_rol_epi8(data, 3);
@@ -11469,6 +11591,24 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_add_epi8(data, data);;
           data = _mm256_rolv_epi8(data, data);
@@ -11485,6 +11625,24 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
           data = _mm256_rol_epi8(data,2);
@@ -11498,6 +11656,25 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data,4));
@@ -11512,6 +11689,24 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
           data = _mm256_mul_epi8(data, data);
@@ -11526,6 +11721,25 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_rol_epi8(data, 6);
           data = _mm256_and_si256(data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -11539,6 +11753,24 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data,2));
           data = _mm256_mul_epi8(data, data);
@@ -11553,6 +11785,25 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_rol_epi8(data, 1);
           data = _mm256_xor_si256(data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -11567,6 +11818,24 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_srlv_epi8(data,_mm256_and_si256(data,vec_3));
           data = _mm256_sllv_epi8(data,_mm256_and_si256(data,vec_3));
@@ -11581,6 +11850,25 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data,2));
           data = _mm256_sllv_epi8(data,_mm256_and_si256(data,vec_3));
@@ -11595,6 +11883,24 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data,4));
           data = _mm256_mul_epi8(data, data);
@@ -11609,6 +11915,25 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
           data = _mm256_mul_epi8(data, data);
@@ -11623,6 +11948,24 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
           data = _mm256_rol_epi8(data, 1);
@@ -11634,6 +11977,24 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_sub_epi8(data,_mm256_xor_si256(data,_mm256_set1_epi8(97)));
           data = _mm256_rol_epi8(data, 5);
@@ -11648,6 +12009,25 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
           data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -11663,6 +12043,25 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_rol_epi8(data, 1);
           data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -11677,6 +12076,24 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
           data = _mm256_reverse_epi8(data);
@@ -11691,6 +12108,25 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_rol_epi8(data, 4);
           data = _mm256_xor_si256(data,popcnt256_epi8(data));
@@ -11704,6 +12140,24 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_add_epi8(data, data);
           data = _mm256_srlv_epi8(data, _mm256_and_si256(data,vec_3));
@@ -11715,6 +12169,28 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         }
         break;
       case 25:
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
+          __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
+        }
   #pragma GCC unroll 32
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
@@ -11730,6 +12206,24 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_mul_epi8(data, data);
           data = _mm256_xor_si256(data,popcnt256_epi8(data));
@@ -11744,6 +12238,25 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_rol_epi8(data, 5);
           data = _mm256_and_si256(data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -11758,6 +12271,24 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
           data = _mm256_add_epi8(data, data);
@@ -11772,6 +12303,25 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_mul_epi8(data, data);
           data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -11786,6 +12336,25 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
@@ -11800,7 +12369,25 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
-        
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
+
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
           data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
@@ -11814,6 +12401,24 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
           data = _mm256_reverse_epi8(data);
@@ -11828,6 +12433,24 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_rolv_epi8(data, data);
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
@@ -11842,6 +12465,24 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
           data = _mm256_sllv_epi8(data, _mm256_and_si256(data,vec_3));
@@ -11856,6 +12497,25 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_add_epi8(data, data);
           data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
@@ -11870,6 +12530,24 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_xor_si256(data, popcnt256_epi8(data));
           data = _mm256_rol_epi8(data, 1);
@@ -11884,6 +12562,24 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_rolv_epi8(data, data);
           data = _mm256_srlv_epi8(data, _mm256_and_si256(data,vec_3));
@@ -11895,6 +12591,28 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         }
         break;
       case 38:
+        {
+          __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
+          __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
+        }
   #pragma GCC unroll 32
         for (int i = worker.pos1; i < worker.pos2; i++)
         {
@@ -11910,6 +12628,25 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
           data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -11924,6 +12661,25 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_rolv_epi8(data, data);
           data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -11938,6 +12694,24 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_rol_epi8(data, 5);
           data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
@@ -11952,6 +12726,24 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
         {
           __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
           __m256i old = data;
+          int n = worker.pos2 - worker.pos1;  // Number of bytes to check
+
+          __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+          uint32_t mask = (1 << n) - 1;
+          int result = _mm256_movemask_epi8(cmp);
+
+          if ((result & mask) == mask) {
+            byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+            if (worker.prev_chunk[worker.pos1] == newVal) {
+              _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+              break;
+            }
+            __m256i newVec = _mm256_set1_epi8(newVal);
+            data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+            _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+                
+            break;
+          }
 
           data = _mm256_rol_epi8(data, 4);
           data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));

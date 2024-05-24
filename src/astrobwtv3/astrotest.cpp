@@ -104,9 +104,10 @@ int runDeroOpTests(int testOp, int dataLen) {
   //byte test2[32];
   std::srand(time(NULL));
   generateInitVector<32>(test);
+  memset(test, 5, dataLen);
 
   printf("Initial Input\n");
-  for (int i = 0; i < dataLen; i++) {
+  for (int i = 0; i < 32; i++) {
     printf("%02x", test[i]);
   }
   printf("\n");
@@ -186,6 +187,116 @@ int runDeroOpTests(int testOp, int dataLen) {
   return numOpsFailed;
 }
 
+int rakeDeroOpTests(int testOp, int dataLen) {
+  bool useLookup = false;
+  int numOpsFailed = 0;
+  #if defined(__AVX2__)
+  testPopcnt256_epi8();
+  #endif
+
+  workerData *controlWorker = (workerData*)malloc_huge_pages(sizeof(workerData));
+  initWorker(*controlWorker);
+  lookupGen(*controlWorker, nullptr, nullptr);
+
+  workerData *testWorker = (workerData*)malloc_huge_pages(sizeof(workerData));
+  initWorker(*testWorker);
+  lookupGen(*testWorker, nullptr, nullptr);
+
+  controlWorker->pos1 = 0; controlWorker->pos2 = dataLen;
+  testWorker->pos1 = 0; testWorker->pos2 = dataLen;
+
+  byte test[32];
+
+  for (int o = 0; o < 256; o++) {
+    //byte test2[32];
+    std::srand(time(NULL));
+    generateInitVector<32>(test);
+    memset(test, o, dataLen);
+
+    printf("Initial Input\n");
+    for (int i = 0; i < 32; i++) {
+      printf("%02x", test[i]);
+    }
+    printf("\n");
+
+    std::string resultText = std::string("Lookup");
+    void (*testFunc)(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print);
+    // the ampersand is actually optional
+    testFunc = &optest_branchcpu;
+    if(useLookup) {
+      testFunc = &optest_lookup;
+    } else {
+      #if defined(__AVX2__)
+      resultText = "AVX2";
+      testFunc = &optest_avx2;
+      #elif defined(__x86_64__)
+      resultText = "Branch";
+      testFunc = &optest_branchcpu;
+      #endif
+      #if defined(__aarch64__)
+      resultText = "AA64";
+      testFunc = &optest_aarch64;
+      #endif
+    }
+
+    int startOp = 0;
+    int maxOp = 255;
+    if(testOp >= 0) {
+      startOp = testOp;
+      maxOp = testOp;
+    }
+
+    // printf("%-7s:   Branch vs %-7s ns         - Valid\n", resultText.c_str(), resultText.c_str());
+    for(int op = startOp; op <= maxOp; op++) {
+      // WARMUP, don't print times
+      OpTestResult *controlResult = new OpTestResult;
+      OpTestResult *testResult = new OpTestResult;
+      // WARMUP, don't print times
+
+      controlWorker->pos1 = 0; controlWorker->pos2 = dataLen;
+      //memset(&controlWorker->step_3, 0, 256);
+      //memcpy(&controlWorker->step_3, test, dataLen);
+      optest_branchcpu(0, *controlWorker, test, *controlResult, false);
+
+      controlWorker->pos1 = 0; controlWorker->pos2 = dataLen;    
+      //memset(&controlWorker->step_3, 0, 256);
+      //memcpy(&controlWorker->step_3, test, dataLen);
+      optest_branchcpu(op, *controlWorker, test, *controlResult, false);
+      //printf("  Op: %3d - %6ld ns\n", op, controlResult->duration_ns);
+
+      testWorker->pos1 = 0; testWorker->pos2 = dataLen;
+      testFunc(op, *testWorker, test, *testResult, false);
+
+      auto control_dur = controlResult->duration_ns.count();
+      auto test_dur = testResult->duration_ns.count();
+
+      auto percent_speedup = double(double(control_dur-test_dur)/double(test_dur))*100;
+      bool valid = 0 == memcmp(controlResult->result, testResult->result, dataLen);
+      char isOpt = ' ';
+      if(testWorker->opt[op]) {
+        isOpt = '*';
+      }
+      // printf("%cOp: %3d - %7ld / %7ld = %6.2f %% - %s\n", isOpt, op, controlResult->duration_ns.count(), testResult->duration_ns.count(), percent_speedup, valid ? "true" : "false");
+      if(!valid) {
+        printf("input: %d, op: %d\n", o, op);
+        numOpsFailed++;
+        printf("Vanilla: ");
+        for (int i = 0; i < dataLen; i++) {
+          printf("%02x", controlResult->result[i]);
+        }
+        printf("\n");
+        printf("%7s: ", resultText.c_str());
+        for (int i = 0; i < dataLen; i++) {
+          printf("%02x", testResult->result[i]);
+        }
+        printf("\n");
+      }
+    }
+  }
+
+  return numOpsFailed;
+}
+
 int TestAstroBWTv3(bool useLookup=false)
 {
   int failedTests = 0;
@@ -238,6 +349,12 @@ int TestAstroBWTv3(bool useLookup=false)
     {
       printf("SUCCESS! pow(%s) expected %s received %s\n", t.in.c_str(), t.out.c_str(), actualRes.c_str());
     }
+
+    // for (const auto& [a, b, c] : worker->repeats) {
+    //   printf("op: %d, input: %d, dataLen: %d\n", a, b, c);
+    // }
+
+    printf("repeated branch ops: %d, total ops: %d\n", worker->repeats.size(), worker->tries);
 
     delete[] buf;
     i++;
@@ -3557,7 +3674,7 @@ void optest_avx2(int op, workerData &worker, byte testData[32], OpTestResult &te
     //worker.pos1 = 0; worker.pos2 = 32;
     worker.chunk = worker.step_3;
     worker.prev_chunk = worker.chunk;
-    branchComputeCPU_avx2(worker, true);
+    branchComputeCPU_avx2_zOptimized(worker, true);
   }
 
   auto test_end = std::chrono::steady_clock::now();
