@@ -11243,9 +11243,10 @@ void branchComputeCPU_avx2(workerData &worker, bool isTest)
 
 void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
 {
-  #pragma unroll 276
-  for (int it = 0; it < 277; it++) 
-  {
+  #pragma unroll 277
+  // for (int it = 0; it < 277; it++) 
+  // {
+  while(true) {
     if(isTest) {
 
     } else {

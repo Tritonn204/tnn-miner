@@ -105,13 +105,10 @@ namespace astro_branched_zOp {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
 
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -133,7 +130,7 @@ namespace astro_branched_zOp {
 
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
       return;
     }
@@ -155,7 +152,7 @@ namespace astro_branched_zOp {
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -186,7 +183,7 @@ namespace astro_branched_zOp {
         return;
       }
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -219,7 +216,7 @@ namespace astro_branched_zOp {
 
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -252,7 +249,7 @@ namespace astro_branched_zOp {
 
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -283,7 +280,7 @@ namespace astro_branched_zOp {
         return;
       }
 
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -315,7 +312,7 @@ namespace astro_branched_zOp {
 
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -341,7 +338,7 @@ namespace astro_branched_zOp {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
 
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -364,13 +361,10 @@ namespace astro_branched_zOp {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -394,13 +388,10 @@ namespace astro_branched_zOp {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
 
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -424,13 +415,10 @@ namespace astro_branched_zOp {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -454,13 +442,10 @@ namespace astro_branched_zOp {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
 
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -484,13 +469,10 @@ namespace astro_branched_zOp {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -514,13 +496,10 @@ namespace astro_branched_zOp {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
 
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -544,13 +523,10 @@ namespace astro_branched_zOp {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -571,13 +547,10 @@ namespace astro_branched_zOp {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -601,13 +574,10 @@ namespace astro_branched_zOp {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
 
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -631,13 +601,10 @@ namespace astro_branched_zOp {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
 
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -661,13 +628,10 @@ namespace astro_branched_zOp {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -691,13 +655,10 @@ namespace astro_branched_zOp {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
 
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -720,13 +681,10 @@ namespace astro_branched_zOp {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -750,13 +708,10 @@ namespace astro_branched_zOp {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -787,13 +742,10 @@ namespace astro_branched_zOp {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -817,13 +769,10 @@ namespace astro_branched_zOp {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
 
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -847,13 +796,10 @@ namespace astro_branched_zOp {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -877,13 +823,10 @@ namespace astro_branched_zOp {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
 
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -907,13 +850,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
 
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -937,13 +877,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -967,13 +904,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -997,13 +931,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1027,13 +958,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1057,13 +985,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
 
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1087,13 +1012,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1117,13 +1039,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1147,13 +1066,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1184,13 +1100,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
 
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1214,13 +1127,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
 
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1244,13 +1154,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1274,13 +1181,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1303,12 +1207,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1332,13 +1233,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1369,12 +1267,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1397,13 +1292,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1427,12 +1319,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1456,13 +1345,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1484,13 +1370,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1514,13 +1397,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1544,12 +1424,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1580,13 +1457,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1610,13 +1484,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1643,12 +1514,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1670,13 +1538,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1707,13 +1572,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1737,13 +1599,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1765,12 +1624,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1794,13 +1650,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1824,12 +1677,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1857,13 +1707,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1885,12 +1732,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1914,13 +1758,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1944,12 +1785,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -1973,13 +1811,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2001,13 +1836,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2031,13 +1863,10 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
 
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2058,12 +1887,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2083,13 +1909,10 @@ inline void op30(workerData &worker) {
     __m256i old = data;
 
     if (worker.isSame) {
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2110,12 +1933,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2136,12 +1956,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2162,12 +1979,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2188,12 +2002,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2214,12 +2025,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2240,12 +2048,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2266,12 +2071,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2292,12 +2094,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2318,12 +2117,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2344,12 +2140,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2370,12 +2163,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2396,12 +2186,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2422,12 +2209,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2446,12 +2230,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2472,12 +2253,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2498,12 +2276,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2524,12 +2299,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2550,12 +2322,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2576,12 +2345,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2602,12 +2368,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2628,12 +2391,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2653,12 +2413,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2679,12 +2436,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2705,12 +2459,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2731,12 +2482,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2757,12 +2505,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2800,12 +2545,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2826,12 +2568,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2852,12 +2591,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2878,12 +2614,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2904,12 +2637,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2930,12 +2660,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2956,12 +2683,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -2982,12 +2706,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -3008,12 +2729,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -3034,12 +2752,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -3060,12 +2775,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -3085,12 +2797,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -3111,12 +2820,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -3137,12 +2843,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -3163,12 +2866,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -3189,12 +2889,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -3215,12 +2912,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -3240,12 +2934,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -3266,12 +2957,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -3292,12 +2980,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -3318,12 +3003,9 @@ inline void op30(workerData &worker) {
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-        return;
-      }
+
       __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 
       return;
@@ -3342,6 +3024,16 @@ inline void op30(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
+
     data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
     data = _mm256_add_epi8(data, data);
     data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -3354,6 +3046,16 @@ inline void op30(workerData &worker) {
   inline void op119(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_reverse_epi8(data);
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
@@ -3368,6 +3070,16 @@ inline void op30(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
+
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
     data = _mm256_mul_epi8(data, data);
     data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -3380,6 +3092,16 @@ inline void op30(workerData &worker) {
   inline void op121(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
     data = _mm256_add_epi8(data, data);
@@ -3395,6 +3117,16 @@ inline void op30(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
+
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
     data = _mm256_rolv_epi8(data, data);
     data = _mm256_rol_epi8(data, 5);
@@ -3408,6 +3140,16 @@ inline void op30(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
+
     data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
     data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
     data = _mm256_rol_epi8(data, 6);
@@ -3419,6 +3161,16 @@ inline void op30(workerData &worker) {
   inline void op124(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
@@ -3433,6 +3185,16 @@ inline void op30(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
+
     data = _mm256_reverse_epi8(data);
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
     data = _mm256_add_epi8(data, data);
@@ -3446,6 +3208,16 @@ inline void op30(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
+
     data = _mm256_rol_epi8(data, 1);
     data = _mm256_reverse_epi8(data);
 
@@ -3456,6 +3228,16 @@ inline void op30(workerData &worker) {
   inline void op127(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
     data = _mm256_mul_epi8(data, data);
@@ -3470,18 +3252,33 @@ inline void op30(workerData &worker) {
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
-      // INSERT_RANDOM_CODE_START
-      worker.chunk[i] = rl8(worker.prev_chunk[i], worker.prev_chunk[i]); // rotate  bits by random
-      worker.chunk[i] ^= rl8(worker.chunk[i], 2);               // rotate  bits by 2
-      worker.chunk[i] ^= rl8(worker.chunk[i], 2);               // rotate  bits by 2
-      worker.chunk[i] = rl8(worker.chunk[i], 5);                // rotate  bits by 5
-                                                                        // INSERT_RANDOM_CODE_END
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[i]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[i])) {
+        worker.chunk[i] = worker.prev_chunk[i];
+      } else {
+        // INSERT_RANDOM_CODE_START
+        worker.chunk[i] = rl8(worker.prev_chunk[i], worker.prev_chunk[i]); // rotate  bits by random
+        worker.chunk[i] ^= rl8(worker.chunk[i], 2);               // rotate  bits by 2
+        worker.chunk[i] ^= rl8(worker.chunk[i], 2);               // rotate  bits by 2
+        worker.chunk[i] = rl8(worker.chunk[i], 5);                // rotate  bits by 5
+                                                                          // INSERT_RANDOM_CODE_END
+      }
     }
   }
 
   inline void op129(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
     __m256i pop = popcnt256_epi8(data);
@@ -3498,6 +3295,16 @@ inline void op30(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
+
     data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
     data = _mm256_rolv_epi8(data, data);
     data = _mm256_rol_epi8(data, 1);
@@ -3510,6 +3317,16 @@ inline void op30(workerData &worker) {
   inline void op131(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
     data = _mm256_rol_epi8(data, 1);
@@ -3525,6 +3342,16 @@ inline void op30(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
+
     data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
     data = _mm256_reverse_epi8(data);
     data = _mm256_rol_epi8(data, 5);
@@ -3537,6 +3364,16 @@ inline void op30(workerData &worker) {
   inline void op133(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
     data = _mm256_rol_epi8(data, 5);
@@ -3551,6 +3388,16 @@ inline void op30(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
+
     data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
     data = _mm256_rol_epi8(data, 1);
@@ -3563,6 +3410,16 @@ inline void op30(workerData &worker) {
   inline void op135(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
@@ -5107,7 +4964,16 @@ inline void op30(workerData &worker) {
   }
 
   inline void op253(workerData &worker) {
-    std::copy(&worker.prev_chunk[worker.pos1], &worker.prev_chunk[worker.pos2], &worker.chunk[worker.pos1]);
+    __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
+    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.prev_chunk[worker.pos1] == newVal) {
+        worker.prev_lhash = (worker.lhash * (worker.pos2-worker.pos1))+ worker.prev_lhash;
+        worker.lhash = XXHash64::hash(worker.chunk, worker.pos2,0);
+        return;
+      }
+    }
   #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {

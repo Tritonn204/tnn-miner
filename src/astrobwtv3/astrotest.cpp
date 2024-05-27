@@ -82,29 +82,25 @@ int DeroTesting(int testOp, int testLen, bool useLookup) {
   return failedTests;
 }
 
-const uint64_t NUM_ITERATIONS = 99999999999999;
+const uint64_t NUM_ITERATIONS = 276;
 
+#pragma clang optimize off
 void benchmarkSIMDMath() {
     alignas(32) uint8_t prev_chunk[32] = {0};
     alignas(32) uint8_t chunk[32] = {0};
     int pos1 = 0;
     int pos2 = 16;
 
-    memset(prev_chunk, 6, 15);
-    uint8_t lookup3D[1024] = {0};
-
-    // Initialize the lookup3D array with random values
-    for (int i = 0; i < 1024; ++i) {
-        lookup3D[i] = static_cast<uint8_t>(i);
-    }
+    prev_chunk[pos2] = 29;
 
     // Fill the first 15 bytes of prev_chunk with 0x00
-    for (int i = 0; i < 15; ++i) {
-        prev_chunk[i] = 0x00;
+    for (int i = 0; i < pos2; ++i) {
+        prev_chunk[i] = 0;
     }
 
     // Fill the remaining bytes of prev_chunk with random values
-    for (int i = 15; i < 32; ++i) {
+    srand(0);
+    for (int i = pos2+1; i < 32; ++i) {
         prev_chunk[i] = static_cast<uint8_t>(rand());
     }
 
@@ -134,8 +130,8 @@ void benchmarkSIMDMath() {
 }
 
 void benchmarkLoadCompare() {
-    uint8_t prev_chunk[32] = {0};
-    uint8_t chunk[32] = {0};
+    alignas(32) uint8_t prev_chunk[32] = {0};
+    alignas(32) uint8_t chunk[32] = {0};
     int pos1 = 0;
     int pos2 = 16;
 
@@ -147,11 +143,12 @@ void benchmarkLoadCompare() {
 
     // Fill the first 15 bytes of prev_chunk with 0x00
     for (int i = 0; i < pos2; ++i) {
-        prev_chunk[i] = 6;
+        prev_chunk[i] = 0;
     }
 
     // Fill the remaining bytes of prev_chunk with random values
-    for (int i = pos2; i < 32; ++i) {
+    srand(0);
+    for (int i = pos2+1; i < 32; ++i) {
         prev_chunk[i] = static_cast<uint8_t>(rand());
     }
 
@@ -164,20 +161,17 @@ void benchmarkLoadCompare() {
         __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(prev_chunk[pos1]));
         uint32_t mask = (1 << (pos2 - pos1)) - 1;
         int result = _mm256_movemask_epi8(cmp);
-
         // __m256i data = _mm256_loadu_si256((__m256i*)&prev_chunk[pos1]);
 
-        uint8_t newVal = controlWorker->lookup3D[116*256*256 + prev_chunk[pos2] * 256 + prev_chunk[pos1]];
-        if ((result & mask) == mask) accumulator -= newVal;
-        if (prev_chunk[pos1] == newVal) {
-            _mm256_storeu_si256((__m256i*)&chunk[pos1], data);
-            accumulator += chunk[pos1];
-            continue;
-        }
+        byte newVal = controlWorker->lookup3D[controlWorker->branched_idx[116]*256*256 + prev_chunk[pos2]*256 + prev_chunk[pos1]];
+        // if (prev_chunk[pos1] == newVal) {
+        //   _mm256_storeu_si256((__m256i*)&chunk[pos1], data);
+        //   accumulator += chunk[pos1];
+        //   continue;
+        // }
 
-        __m256i old = data;
         __m256i newVec = _mm256_set1_epi8(newVal);
-        data = _mm256_blendv_epi8(old, newVec, genMask(pos2 - pos1));
+        data = _mm256_blendv_epi8(data, newVec, genMask(pos2-pos1));
         _mm256_storeu_si256((__m256i*)&chunk[pos1], data);
         accumulator += chunk[pos1];
     }
@@ -188,6 +182,7 @@ void benchmarkLoadCompare() {
     std::cout << "Load, Compare, Broadcast, Store: " << duration.count() << " nanoseconds" << std::endl;
     std::cout << "Accumulator: " << accumulator << std::endl;
 }
+#pragma clang optimize on
 
 int runDeroOpTests(int testOp, int dataLen) {
 
