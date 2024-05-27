@@ -104,7 +104,9 @@ int runDeroOpTests(int testOp, int dataLen) {
   //byte test2[32];
   std::srand(time(NULL));
   generateInitVector<32>(test);
-  memset(test, 5, dataLen);
+  memset(test, 0, dataLen);
+  
+  testWorker->isSame = true;
 
   printf("Initial Input\n");
   for (int i = 0; i < 32; i++) {
@@ -146,18 +148,18 @@ int runDeroOpTests(int testOp, int dataLen) {
     OpTestResult *testResult = new OpTestResult;
     // WARMUP, don't print times
 
-    controlWorker->pos1 = 0; controlWorker->pos2 = 16;
+    controlWorker->pos1 = 0; controlWorker->pos2 = dataLen+1;
     //memset(&controlWorker->step_3, 0, 256);
     //memcpy(&controlWorker->step_3, test, dataLen);
     optest_branchcpu(0, *controlWorker, test, *controlResult, false);
 
-    controlWorker->pos1 = 0; controlWorker->pos2 = 16;    
+    controlWorker->pos1 = 0; controlWorker->pos2 = dataLen+1;    
     //memset(&controlWorker->step_3, 0, 256);
     //memcpy(&controlWorker->step_3, test, dataLen);
     optest_branchcpu(op, *controlWorker, test, *controlResult, false);
     //printf("  Op: %3d - %6ld ns\n", op, controlResult->duration_ns);
 
-    testWorker->pos1 = 0; testWorker->pos2 = 16;
+    testWorker->pos1 = 0; testWorker->pos2 = dataLen+1;
     testFunc(op, *testWorker, test, *testResult, false);
 
     auto control_dur = controlResult->duration_ns.count();
@@ -173,12 +175,12 @@ int runDeroOpTests(int testOp, int dataLen) {
     if(!valid) {
       numOpsFailed++;
       printf("Vanilla: ");
-      for (int i = 0; i < dataLen; i++) {
+      for (int i = 0; i < dataLen+1; i++) {
         printf("%02x", controlResult->result[i]);
       }
       printf("\n");
       printf("%7s: ", resultText.c_str());
-      for (int i = 0; i < dataLen; i++) {
+      for (int i = 0; i < dataLen+1; i++) {
         printf("%02x", testResult->result[i]);
       }
       printf("\n");
@@ -202,8 +204,8 @@ int rakeDeroOpTests(int testOp, int dataLen) {
   initWorker(*testWorker);
   lookupGen(*testWorker, nullptr, nullptr);
 
-  controlWorker->pos1 = 0; controlWorker->pos2 = dataLen;
-  testWorker->pos1 = 0; testWorker->pos2 = dataLen;
+  controlWorker->pos1 = 0; controlWorker->pos2 = dataLen+1;
+  testWorker->pos1 = 0; testWorker->pos2 = dataLen+1;
 
   byte test[32];
 
@@ -281,12 +283,12 @@ int rakeDeroOpTests(int testOp, int dataLen) {
         printf("input: %d, op: %d\n", o, op);
         numOpsFailed++;
         printf("Vanilla: ");
-        for (int i = 0; i < dataLen; i++) {
+        for (int i = 0; i < dataLen+1; i++) {
           printf("%02x", controlResult->result[i]);
         }
         printf("\n");
         printf("%7s: ", resultText.c_str());
-        for (int i = 0; i < dataLen; i++) {
+        for (int i = 0; i < dataLen+1; i++) {
           printf("%02x", testResult->result[i]);
         }
         printf("\n");
@@ -354,7 +356,7 @@ int TestAstroBWTv3(bool useLookup=false)
     //   printf("op: %d, input: %d, dataLen: %d\n", a, b, c);
     // }
 
-    printf("repeated branch ops: %d, total ops: %d\n", worker->repeats.size(), worker->tries);
+    // printf("repeated branch ops: %d, total ops: %d\n", worker->repeats.size(), worker->tries);
 
     delete[] buf;
     i++;
