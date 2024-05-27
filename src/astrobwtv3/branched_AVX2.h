@@ -3,7 +3,7 @@
 namespace astro_branched_zOp {
 
 
-  void op0(workerData &worker) {
+  inline void op0(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -40,7 +40,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op1(workerData &worker) {
+  inline void op1(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -66,13 +66,14 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op2(workerData &worker) {
+  inline void op2(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
 
     if (worker.isSame) {
       byte oldVal = worker.prev_chunk[worker.pos1];
+
       if (oldVal == 0 || oldVal == 145 || oldVal == 174 || oldVal == 220) {
         _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
         return;
@@ -97,7 +98,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op3(workerData &worker) {
+  inline void op3(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -124,7 +125,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op4(workerData &worker) {
+  inline void op4(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -146,7 +147,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op5(workerData &worker) {
+  inline void op5(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -170,7 +171,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op6(workerData &worker) {
+  inline void op6(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -202,7 +203,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op7(workerData &worker) {
+  inline void op7(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -235,7 +236,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op8(workerData &worker) {
+  inline void op8(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -265,7 +266,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op9(workerData &worker) {
+  inline void op9(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -297,7 +298,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op10(workerData &worker) {
+  inline void op10(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -329,7 +330,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op11(workerData &worker) {
+  inline void op11(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -354,7 +355,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op12(workerData &worker) {
+  inline void op12(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -384,7 +385,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op13(workerData &worker) {
+  inline void op13(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -414,7 +415,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op14(workerData &worker) {
+  inline void op14(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -444,7 +445,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op15(workerData &worker) {
+  inline void op15(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -474,7 +475,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op16(workerData &worker) {
+  inline void op16(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -504,7 +505,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op17(workerData &worker) {
+  inline void op17(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -534,7 +535,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op18(workerData &worker) {
+  inline void op18(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -561,7 +562,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op19(workerData &worker) {
+  inline void op19(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -591,7 +592,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op20(workerData &worker) {
+  inline void op20(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -621,7 +622,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op21(workerData &worker) {
+  inline void op21(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -651,7 +652,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op22(workerData &worker) {
+  inline void op22(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -681,7 +682,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op23(workerData &worker) {
+  inline void op23(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -710,7 +711,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op24(workerData &worker) {
+  inline void op24(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -740,7 +741,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op25(workerData &worker) {
+  inline void op25(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -777,7 +778,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op26(workerData &worker) {
+  inline void op26(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -807,7 +808,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op27(workerData &worker) {
+  inline void op27(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -837,7 +838,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op28(workerData &worker) {
+  inline void op28(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -867,7 +868,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op29(workerData &worker) {
+  inline void op29(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -897,7 +898,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-void op30(workerData &worker) {
+inline void op30(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -927,7 +928,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op31(workerData &worker) {
+  inline void op31(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -957,7 +958,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op32(workerData &worker) {
+  inline void op32(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -987,7 +988,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op33(workerData &worker) {
+  inline void op33(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1017,7 +1018,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op34(workerData &worker) {
+  inline void op34(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1047,7 +1048,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op35(workerData &worker) {
+  inline void op35(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1077,7 +1078,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op36(workerData &worker) {
+  inline void op36(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1107,7 +1108,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op37(workerData &worker) {
+  inline void op37(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1137,7 +1138,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op38(workerData &worker) {
+  inline void op38(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1174,7 +1175,7 @@ void op30(workerData &worker) {
     }
   }
 
-  void op39(workerData &worker) {
+  inline void op39(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1204,7 +1205,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op40(workerData &worker) {
+  inline void op40(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1234,7 +1235,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op41(workerData &worker) {
+  inline void op41(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1264,7 +1265,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op42(workerData &worker) {
+  inline void op42(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1293,7 +1294,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op43(workerData &worker) {
+  inline void op43(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1322,7 +1323,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op44(workerData &worker) {
+  inline void op44(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1359,7 +1360,7 @@ void op30(workerData &worker) {
     }
   }
 
-  void op45(workerData &worker) {
+  inline void op45(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1387,7 +1388,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op46(workerData &worker) {
+  inline void op46(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1417,7 +1418,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op47(workerData &worker) {
+  inline void op47(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1446,7 +1447,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-    void op48(workerData &worker) {
+    inline void op48(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1474,7 +1475,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op49(workerData &worker) {
+  inline void op49(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1504,7 +1505,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op50(workerData &worker) {
+  inline void op50(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1534,7 +1535,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op51(workerData &worker) {
+  inline void op51(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1570,7 +1571,7 @@ void op30(workerData &worker) {
     }
   }
 
-  void op52(workerData &worker) {
+  inline void op52(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1600,7 +1601,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op53(workerData &worker) {
+  inline void op53(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1633,7 +1634,7 @@ void op30(workerData &worker) {
     }
   }
 
-  void op54(workerData &worker) {
+  inline void op54(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1660,7 +1661,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op55(workerData &worker) {
+  inline void op55(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1697,7 +1698,7 @@ void op30(workerData &worker) {
     }
   }
 
-  void op56(workerData &worker) {
+  inline void op56(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1727,7 +1728,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op57(workerData &worker) {
+  inline void op57(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1755,7 +1756,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op58(workerData &worker) {
+  inline void op58(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1784,7 +1785,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op59(workerData &worker) {
+  inline void op59(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1814,7 +1815,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op60(workerData &worker) {
+  inline void op60(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1847,7 +1848,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op61(workerData &worker) {
+  inline void op61(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1875,7 +1876,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op62(workerData &worker) {
+  inline void op62(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1904,7 +1905,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op63(workerData &worker) {
+  inline void op63(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1934,7 +1935,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op64(workerData &worker) {
+  inline void op64(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1963,7 +1964,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op65(workerData &worker) {
+  inline void op65(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1991,7 +1992,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op66(workerData &worker) {
+  inline void op66(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2021,7 +2022,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op67(workerData &worker) {
+  inline void op67(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2051,12 +2052,9 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op68(workerData &worker) {
+  inline void op68(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
-
-
-
 
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
@@ -2080,7 +2078,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op69(workerData &worker) {
+  inline void op69(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2106,9 +2104,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op70(workerData &worker) {
+    inline void op70(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.prev_chunk[worker.pos1] == newVal) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
     data = _mm256_mul_epi8(data, data);
@@ -2119,9 +2130,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op71(workerData &worker) {
+  inline void op71(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_rol_epi8(data, 5);
     data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
@@ -2132,9 +2156,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op72(workerData &worker) {
+  inline void op72(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.prev_chunk[worker.pos1] == newVal) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_reverse_epi8(data);
     data = _mm256_xor_si256(data, popcnt256_epi8(data));
@@ -2145,9 +2182,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op73(workerData &worker) {
+  inline void op73(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_xor_si256(data, popcnt256_epi8(data));
     data = _mm256_reverse_epi8(data);
@@ -2158,9 +2208,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op74(workerData &worker) {
+  inline void op74(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.prev_chunk[worker.pos1] == newVal) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_mul_epi8(data, data);
     data = _mm256_rol_epi8(data, 3);
@@ -2171,9 +2234,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op75(workerData &worker) {
+  inline void op75(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.prev_chunk[worker.pos1] == newVal) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_mul_epi8(data, data);
     data = _mm256_xor_si256(data, popcnt256_epi8(data));
@@ -2184,9 +2260,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op76(workerData &worker) {
+  inline void op76(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_rolv_epi8(data, data);
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
@@ -2197,9 +2286,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op77(workerData &worker) {
+  inline void op77(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_rol_epi8(data, 3);
     data = _mm256_add_epi8(data, data);
@@ -2210,9 +2312,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op78(workerData &worker) {
+  inline void op78(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_rolv_epi8(data, data);
     data = _mm256_reverse_epi8(data);
@@ -2223,9 +2338,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op79(workerData &worker) {
+  inline void op79(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
@@ -2236,9 +2364,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op80(workerData &worker) {
+  inline void op80(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.prev_chunk[worker.pos1] == newVal) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_rolv_epi8(data, data);
     data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -2249,9 +2390,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op81(workerData &worker) {
+    inline void op81(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
     data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -2262,9 +2416,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op82(workerData &worker) {
+  inline void op82(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.prev_chunk[worker.pos1] == newVal) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
     data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -2273,9 +2440,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op83(workerData &worker) {
+  inline void op83(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
     data = _mm256_reverse_epi8(data);
@@ -2286,9 +2466,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op84(workerData &worker) {
+  inline void op84(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
     data = _mm256_rol_epi8(data, 1);
@@ -2299,9 +2492,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op85(workerData &worker) {
+  inline void op85(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.prev_chunk[worker.pos1] == newVal) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
     data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -2312,9 +2518,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op86(workerData &worker) {
+  inline void op86(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
     data = _mm256_rolv_epi8(data, data);
@@ -2325,9 +2544,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op87(workerData &worker) {
+  inline void op87(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_add_epi8(data, data);
     data = _mm256_rol_epi8(data, 3);
@@ -2338,9 +2570,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op88(workerData &worker) {
+  inline void op88(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
     data = _mm256_rol_epi8(data, 1);
@@ -2351,9 +2596,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op89(workerData &worker) {
+  inline void op89(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_add_epi8(data, data);
     data = _mm256_mul_epi8(data, data);
@@ -2364,9 +2622,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op90(workerData &worker) {
+  inline void op90(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_reverse_epi8(data);
     data = _mm256_rol_epi8(data, 6);
@@ -2376,9 +2647,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op91(workerData &worker) {
+  inline void op91(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.prev_chunk[worker.pos1] == newVal) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_xor_si256(data, popcnt256_epi8(data));
     data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -2389,9 +2673,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op92(workerData &worker) {
+  inline void op92(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.prev_chunk[worker.pos1] == newVal) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_xor_si256(data, popcnt256_epi8(data));
     data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
@@ -2402,9 +2699,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op93(workerData &worker) {
+  inline void op93(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.prev_chunk[worker.pos1] == newVal) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
     data = _mm256_mul_epi8(data, data);
@@ -2415,9 +2725,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op94(workerData &worker) {
+  inline void op94(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.prev_chunk[worker.pos1] == newVal) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_rol_epi8(data, 1);
     data = _mm256_rolv_epi8(data, data);
@@ -2428,9 +2751,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op95(workerData &worker) {
+  inline void op95(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_rol_epi8(data, 1);
     data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
@@ -2440,22 +2776,40 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op96(workerData &worker) {
+  inline void op96(workerData &worker) {
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
-      // INSERT_RANDOM_CODE_START
-      worker.chunk[i] = worker.prev_chunk[i] ^ rl8(worker.prev_chunk[i], 2);   // rotate  bits by 2
-      worker.chunk[i] ^= rl8(worker.chunk[i], 2);   // rotate  bits by 2
-      worker.chunk[i] ^= (byte)bitTable[worker.chunk[i]]; // ones count bits
-      worker.chunk[i] = rl8(worker.chunk[i], 1);    // rotate  bits by 1
-                                                            // INSERT_RANDOM_CODE_END
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[i]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[i])) {
+        worker.chunk[i] = worker.prev_chunk[i];
+      } else {
+        // INSERT_RANDOM_CODE_START
+        worker.chunk[i] = worker.prev_chunk[i] ^ rl8(worker.prev_chunk[i], 2);   // rotate  bits by 2
+        worker.chunk[i] ^= rl8(worker.chunk[i], 2);   // rotate  bits by 2
+        worker.chunk[i] ^= (byte)bitTable[worker.chunk[i]]; // ones count bits
+        worker.chunk[i] = rl8(worker.chunk[i], 1);    // rotate  bits by 1
+                                                              // INSERT_RANDOM_CODE_END
+      }
     }
   }
 
-  void op97(workerData &worker) {
+  inline void op97(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_rol_epi8(data, 1);
     data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -2466,9 +2820,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op98(workerData &worker) {
+  inline void op98(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
     data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -2479,9 +2846,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op99(workerData &worker) {
+  inline void op99(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
     data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
@@ -2492,9 +2872,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op100(workerData &worker) {
+  inline void op100(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_rolv_epi8(data, data);
     data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
@@ -2505,9 +2898,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op101(workerData &worker) {
+  inline void op101(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
     data = _mm256_xor_si256(data, popcnt256_epi8(data));
@@ -2518,9 +2924,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op102(workerData &worker) {
+  inline void op102(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_rol_epi8(data, 3);
     data = _mm256_sub_epi8(data, _mm256_xor_si256(data, _mm256_set1_epi8(97)));
@@ -2531,9 +2950,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op103(workerData &worker) {
+  inline void op103(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.prev_chunk[worker.pos1] == newVal) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_rol_epi8(data, 1);
     data = _mm256_reverse_epi8(data);
@@ -2544,9 +2976,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op104(workerData &worker) {
+  inline void op104(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_reverse_epi8(data);
     data = _mm256_xor_si256(data, popcnt256_epi8(data));
@@ -2557,9 +3002,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op105(workerData &worker) {
+  inline void op105(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
     data = _mm256_rol_epi8(data, 3);
@@ -2570,9 +3028,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op106(workerData &worker) {
+  inline void op106(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_reverse_epi8(data);
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 4));
@@ -2583,9 +3054,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op107(workerData &worker) {
+  inline void op107(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_srlv_epi8(data, _mm256_and_si256(data, vec_3));
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
@@ -2595,9 +3079,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op108(workerData &worker) {
+  inline void op108(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.prev_chunk[worker.pos1] == newVal) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
     data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
@@ -2608,9 +3105,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op109(workerData &worker) {
+  inline void op109(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.prev_chunk[worker.pos1] == newVal) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_mul_epi8(data, data);
     data = _mm256_rolv_epi8(data, data);
@@ -2621,9 +3131,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op110(workerData &worker) {
+  inline void op110(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_add_epi8(data, data);
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
@@ -2634,9 +3157,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op111(workerData &worker) {
+  inline void op111(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_mul_epi8(data, data);
     data = _mm256_reverse_epi8(data);
@@ -2647,9 +3183,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op112(workerData &worker) {
+  inline void op112(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_rol_epi8(data, 3);
     data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
@@ -2660,9 +3209,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op113(workerData &worker) {
+  inline void op113(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_rol_epi8(data, 6);
     data = _mm256_xor_si256(data, popcnt256_epi8(data));
@@ -2672,9 +3234,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op114(workerData &worker) {
+  inline void op114(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.unchangedBytes[worker.reg_idx[worker.op]].test(worker.prev_chunk[worker.pos1])) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_rol_epi8(data, 1);
     data = _mm256_reverse_epi8(data);
@@ -2685,9 +3260,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op115(workerData &worker) {
+  inline void op115(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.prev_chunk[worker.pos1] == newVal) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_rolv_epi8(data, data);
     data = _mm256_rol_epi8(data, 5);
@@ -2698,9 +3286,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op116(workerData &worker) {
+  inline void op116(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.prev_chunk[worker.pos1] == newVal) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
     data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
@@ -2711,9 +3312,22 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op117(workerData &worker) {
+  inline void op117(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
+
+    if (worker.isSame) {
+      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+      if (worker.prev_chunk[worker.pos1] == newVal) {
+        _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+        return;
+      }
+      __m256i newVec = _mm256_set1_epi8(newVal);
+      data = _mm256_blendv_epi8(old, newVec, genMask(worker.pos2-worker.pos1));
+      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
+
+      return;
+    }
 
     data = _mm256_sllv_epi8(data, _mm256_and_si256(data, vec_3));
     data = _mm256_rol_epi8(data, 3);
@@ -2724,7 +3338,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op118(workerData &worker) {
+  inline void op118(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2737,7 +3351,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op119(workerData &worker) {
+  inline void op119(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2750,7 +3364,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op120(workerData &worker) {
+  inline void op120(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2763,7 +3377,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op121(workerData &worker) {
+  inline void op121(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2777,7 +3391,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op122(workerData &worker) {
+  inline void op122(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2790,7 +3404,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op123(workerData &worker) {
+  inline void op123(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2802,7 +3416,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op124(workerData &worker) {
+  inline void op124(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2815,7 +3429,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op125(workerData &worker) {
+  inline void op125(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2828,7 +3442,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op126(workerData &worker) {
+  inline void op126(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2839,7 +3453,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op127(workerData &worker) {
+  inline void op127(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2852,7 +3466,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op128(workerData &worker) {
+  inline void op128(workerData &worker) {
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -2865,7 +3479,7 @@ void op30(workerData &worker) {
     }
   }
 
-  void op129(workerData &worker) {
+  inline void op129(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2880,7 +3494,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op130(workerData &worker) {
+  inline void op130(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2893,7 +3507,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op131(workerData &worker) {
+  inline void op131(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2907,7 +3521,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op132(workerData &worker) {
+  inline void op132(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2920,7 +3534,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op133(workerData &worker) {
+  inline void op133(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2933,7 +3547,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op134(workerData &worker) {
+  inline void op134(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2946,7 +3560,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op135(workerData &worker) {
+  inline void op135(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2959,7 +3573,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op136(workerData &worker) {
+  inline void op136(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2972,7 +3586,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op137(workerData &worker) {
+  inline void op137(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2985,7 +3599,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op138(workerData &worker) {
+  inline void op138(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2998,7 +3612,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op139(workerData &worker) {
+  inline void op139(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3009,7 +3623,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op140(workerData &worker) {
+  inline void op140(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3022,7 +3636,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op141(workerData &worker) {
+  inline void op141(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3036,7 +3650,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op142(workerData &worker) {
+  inline void op142(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3049,7 +3663,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op143(workerData &worker) {
+  inline void op143(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3062,7 +3676,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op144(workerData &worker) {
+  inline void op144(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3075,7 +3689,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op145(workerData &worker) {
+  inline void op145(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3088,7 +3702,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op146(workerData &worker) {
+  inline void op146(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3102,7 +3716,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op147(workerData &worker) {
+  inline void op147(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3115,7 +3729,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op148(workerData &worker) {
+  inline void op148(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3128,7 +3742,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op149(workerData &worker) {
+  inline void op149(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3141,7 +3755,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op150(workerData &worker) {
+  inline void op150(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3154,7 +3768,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op151(workerData &worker) {
+  inline void op151(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3167,7 +3781,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op152(workerData &worker) {
+  inline void op152(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3180,7 +3794,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op153(workerData &worker) {
+  inline void op153(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3190,7 +3804,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op154(workerData &worker) {
+  inline void op154(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3204,7 +3818,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op155(workerData &worker) {
+  inline void op155(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3218,7 +3832,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op156(workerData &worker) {
+  inline void op156(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3230,7 +3844,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op157(workerData &worker) {
+  inline void op157(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3243,7 +3857,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op158(workerData &worker) {
+  inline void op158(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3257,7 +3871,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op159(workerData &worker) {
+  inline void op159(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3270,7 +3884,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op160(workerData &worker) {
+  inline void op160(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3282,7 +3896,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op161(workerData &worker) {
+  inline void op161(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3295,7 +3909,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op162(workerData &worker) {
+  inline void op162(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3308,7 +3922,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op163(workerData &worker) {
+  inline void op163(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3321,7 +3935,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op164(workerData &worker) {
+  inline void op164(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3335,7 +3949,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op165(workerData &worker) {
+  inline void op165(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3348,7 +3962,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op166(workerData &worker) {
+  inline void op166(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3361,7 +3975,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op167(workerData &worker) {
+  inline void op167(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3372,7 +3986,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op168(workerData &worker) {
+  inline void op168(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3385,7 +3999,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op169(workerData &worker) {
+  inline void op169(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3398,7 +4012,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op170(workerData &worker) {
+  inline void op170(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3411,7 +4025,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op171(workerData &worker) {
+  inline void op171(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3425,7 +4039,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op172(workerData &worker) {
+  inline void op172(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3438,7 +4052,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op173(workerData &worker) {
+  inline void op173(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3451,7 +4065,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op174(workerData &worker) {
+  inline void op174(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3466,7 +4080,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op175(workerData &worker) {
+  inline void op175(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3479,7 +4093,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op176(workerData &worker) {
+  inline void op176(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3492,7 +4106,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op177(workerData &worker) {
+  inline void op177(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3506,7 +4120,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op178(workerData &worker) {
+  inline void op178(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3519,7 +4133,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op179(workerData &worker) {
+  inline void op179(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3532,7 +4146,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op180(workerData &worker) {
+  inline void op180(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3545,7 +4159,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op181(workerData &worker) {
+  inline void op181(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3558,7 +4172,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op182(workerData &worker) {
+  inline void op182(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3570,7 +4184,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op183(workerData &worker) {
+  inline void op183(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3583,7 +4197,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op184(workerData &worker) {
+  inline void op184(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3596,7 +4210,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op185(workerData &worker) {
+  inline void op185(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3609,7 +4223,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op186(workerData &worker) {
+  inline void op186(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3622,7 +4236,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op187(workerData &worker) {
+  inline void op187(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3635,7 +4249,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op188(workerData &worker) {
+  inline void op188(workerData &worker) {
   #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -3648,7 +4262,7 @@ void op30(workerData &worker) {
     }
   }
 
-  void op189(workerData &worker) {
+  inline void op189(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3661,7 +4275,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op190(workerData &worker) {
+  inline void op190(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3674,7 +4288,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op191(workerData &worker) {
+  inline void op191(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3687,7 +4301,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op192(workerData &worker) {
+  inline void op192(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3700,7 +4314,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op193(workerData &worker) {
+  inline void op193(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3713,7 +4327,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op194(workerData &worker) {
+  inline void op194(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3726,7 +4340,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op195(workerData &worker) {
+  inline void op195(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3740,7 +4354,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op196(workerData &worker) {
+  inline void op196(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3753,7 +4367,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op197(workerData &worker) {
+  inline void op197(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3766,7 +4380,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op198(workerData &worker) {
+  inline void op198(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3779,7 +4393,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op199(workerData &worker) {
+  inline void op199(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3792,7 +4406,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op200(workerData &worker) {
+  inline void op200(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3806,7 +4420,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op201(workerData &worker) {
+  inline void op201(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3819,7 +4433,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op202(workerData &worker) {
+  inline void op202(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3832,7 +4446,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op203(workerData &worker) {
+  inline void op203(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3845,7 +4459,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op204(workerData &worker) {
+  inline void op204(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3858,7 +4472,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op205(workerData &worker) {
+  inline void op205(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3872,7 +4486,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op206(workerData &worker) {
+  inline void op206(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3886,7 +4500,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op207(workerData &worker) {
+  inline void op207(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3899,7 +4513,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op208(workerData &worker) {
+  inline void op208(workerData &worker) {
   #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -3912,7 +4526,7 @@ void op30(workerData &worker) {
     }
   }
 
-  void op209(workerData &worker) {
+  inline void op209(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3926,7 +4540,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op210(workerData &worker) {
+  inline void op210(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3939,7 +4553,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op211(workerData &worker) {
+  inline void op211(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3952,7 +4566,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op212(workerData &worker) {
+  inline void op212(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3965,7 +4579,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op213(workerData &worker) {
+  inline void op213(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3978,7 +4592,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op214(workerData &worker) {
+  inline void op214(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3991,7 +4605,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op215(workerData &worker) {
+  inline void op215(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4004,7 +4618,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op216(workerData &worker) {
+  inline void op216(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4017,7 +4631,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op217(workerData &worker) {
+  inline void op217(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4030,7 +4644,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op218(workerData &worker) {
+  inline void op218(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4043,7 +4657,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op219(workerData &worker) {
+  inline void op219(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4056,7 +4670,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op220(workerData &worker) {
+  inline void op220(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4069,7 +4683,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op221(workerData &worker) {
+  inline void op221(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4082,7 +4696,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op222(workerData &worker) {
+  inline void op222(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4095,7 +4709,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op223(workerData &worker) {
+  inline void op223(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4108,7 +4722,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op224(workerData &worker) {
+  inline void op224(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4120,7 +4734,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op225(workerData &worker) {
+  inline void op225(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4133,7 +4747,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op226(workerData &worker) {
+  inline void op226(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4146,7 +4760,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op227(workerData &worker) {
+  inline void op227(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4159,7 +4773,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op228(workerData &worker) {
+  inline void op228(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4173,7 +4787,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op229(workerData &worker) {
+  inline void op229(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4187,7 +4801,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op230(workerData &worker) {
+  inline void op230(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4200,7 +4814,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op231(workerData &worker) {
+  inline void op231(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4213,7 +4827,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op232(workerData &worker) {
+  inline void op232(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4226,7 +4840,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op233(workerData &worker) {
+  inline void op233(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4241,7 +4855,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op234(workerData &worker) {
+  inline void op234(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4254,7 +4868,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op235(workerData &worker) {
+  inline void op235(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4267,7 +4881,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op236(workerData &worker) {
+  inline void op236(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4280,7 +4894,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op237(workerData &worker) {
+  inline void op237(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4293,7 +4907,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op238(workerData &worker) {
+  inline void op238(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4306,7 +4920,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op239(workerData &worker) {
+  inline void op239(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4318,7 +4932,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op240(workerData &worker) {
+  inline void op240(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4331,7 +4945,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op241(workerData &worker) {
+  inline void op241(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4345,7 +4959,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op242(workerData &worker) {
+  inline void op242(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4358,7 +4972,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op243(workerData &worker) {
+  inline void op243(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4372,7 +4986,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op244(workerData &worker) {
+  inline void op244(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4385,7 +4999,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op245(workerData &worker) {
+  inline void op245(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4398,7 +5012,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op246(workerData &worker) {
+  inline void op246(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4411,7 +5025,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op247(workerData &worker) {
+  inline void op247(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4424,7 +5038,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op248(workerData &worker) {
+  inline void op248(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4438,7 +5052,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op249(workerData &worker) {
+  inline void op249(workerData &worker) {
   #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -4451,7 +5065,7 @@ void op30(workerData &worker) {
     }
   }
 
-  void op250(workerData &worker) {
+  inline void op250(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4465,7 +5079,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op251(workerData &worker) {
+  inline void op251(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4479,7 +5093,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op252(workerData &worker) {
+  inline void op252(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4492,7 +5106,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op253(workerData &worker) {
+  inline void op253(workerData &worker) {
     std::copy(&worker.prev_chunk[worker.pos1], &worker.prev_chunk[worker.pos2], &worker.chunk[worker.pos1]);
   #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
@@ -4509,7 +5123,7 @@ void op30(workerData &worker) {
     }
   }
 
-  void op254(workerData &worker) {
+  inline void op254(workerData &worker) {
     RC4_set_key(&worker.key, 256, worker.prev_chunk);
 
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
@@ -4525,7 +5139,7 @@ void op30(workerData &worker) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  void op255(workerData &worker) {
+  inline void op255(workerData &worker) {
     RC4_set_key(&worker.key, 256, worker.prev_chunk);
 
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);

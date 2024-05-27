@@ -82,7 +82,118 @@ int DeroTesting(int testOp, int testLen, bool useLookup) {
   return failedTests;
 }
 
+const uint64_t NUM_ITERATIONS = 99999999999999;
+
+void benchmarkSIMDMath() {
+    alignas(32) uint8_t prev_chunk[32] = {0};
+    alignas(32) uint8_t chunk[32] = {0};
+    int pos1 = 0;
+    int pos2 = 16;
+
+    memset(prev_chunk, 6, 15);
+    uint8_t lookup3D[1024] = {0};
+
+    // Initialize the lookup3D array with random values
+    for (int i = 0; i < 1024; ++i) {
+        lookup3D[i] = static_cast<uint8_t>(i);
+    }
+
+    // Fill the first 15 bytes of prev_chunk with 0x00
+    for (int i = 0; i < 15; ++i) {
+        prev_chunk[i] = 0x00;
+    }
+
+    // Fill the remaining bytes of prev_chunk with random values
+    for (int i = 15; i < 32; ++i) {
+        prev_chunk[i] = static_cast<uint8_t>(rand());
+    }
+
+    uint64_t accumulator = 0;
+    auto start = std::chrono::steady_clock::now();
+
+    for (uint64_t i = 0; i < NUM_ITERATIONS; ++i) {
+        __m256i data = _mm256_loadu_si256((__m256i*)&prev_chunk[pos1]);
+        __m256i old = data;
+
+        data = _mm256_and_si256(data, _mm256_set1_epi8(prev_chunk[pos2]));
+        data = _mm256_xor_si256(data, _mm256_set1_epi8(prev_chunk[pos2]));
+        data = _mm256_xor_si256(data, popcnt256_epi8(data));
+        data = _mm256_sllv_epi8(data, _mm256_and_si256(data, _mm256_set1_epi8(3)));
+
+        data = _mm256_blendv_epi8(old, data, genMask(pos2 - pos1));
+        _mm256_storeu_si256((__m256i*)&chunk[pos1], data);
+
+        accumulator += chunk[pos1];
+    }
+
+    auto end = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+
+    std::cout << "SIMD Math Operations: " << duration.count() << " nanoseconds" << std::endl;
+    std::cout << "Accumulator: " << accumulator << std::endl;
+}
+
+void benchmarkLoadCompare() {
+    uint8_t prev_chunk[32] = {0};
+    uint8_t chunk[32] = {0};
+    int pos1 = 0;
+    int pos2 = 16;
+
+    workerData *controlWorker = (workerData*)malloc_huge_pages(sizeof(workerData));
+    initWorker(*controlWorker);
+    lookupGen(*controlWorker, nullptr, nullptr);
+
+    prev_chunk[pos2] = 29;
+
+    // Fill the first 15 bytes of prev_chunk with 0x00
+    for (int i = 0; i < pos2; ++i) {
+        prev_chunk[i] = 6;
+    }
+
+    // Fill the remaining bytes of prev_chunk with random values
+    for (int i = pos2; i < 32; ++i) {
+        prev_chunk[i] = static_cast<uint8_t>(rand());
+    }
+
+    uint64_t accumulator = 0;
+    auto start = std::chrono::steady_clock::now();
+
+    for (uint64_t i = 0; i < NUM_ITERATIONS; ++i) {
+
+        __m256i data = _mm256_loadu_si256((__m256i*)&prev_chunk[pos1]);
+        __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(prev_chunk[pos1]));
+        uint32_t mask = (1 << (pos2 - pos1)) - 1;
+        int result = _mm256_movemask_epi8(cmp);
+
+        // __m256i data = _mm256_loadu_si256((__m256i*)&prev_chunk[pos1]);
+
+        uint8_t newVal = controlWorker->lookup3D[116*256*256 + prev_chunk[pos2] * 256 + prev_chunk[pos1]];
+        if ((result & mask) == mask) accumulator -= newVal;
+        if (prev_chunk[pos1] == newVal) {
+            _mm256_storeu_si256((__m256i*)&chunk[pos1], data);
+            accumulator += chunk[pos1];
+            continue;
+        }
+
+        __m256i old = data;
+        __m256i newVec = _mm256_set1_epi8(newVal);
+        data = _mm256_blendv_epi8(old, newVec, genMask(pos2 - pos1));
+        _mm256_storeu_si256((__m256i*)&chunk[pos1], data);
+        accumulator += chunk[pos1];
+    }
+
+    auto end = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+
+    std::cout << "Load, Compare, Broadcast, Store: " << duration.count() << " nanoseconds" << std::endl;
+    std::cout << "Accumulator: " << accumulator << std::endl;
+}
+
 int runDeroOpTests(int testOp, int dataLen) {
+
+  benchmarkSIMDMath();
+  benchmarkLoadCompare();
+
   bool useLookup = false;
   int numOpsFailed = 0;
   #if defined(__AVX2__)
