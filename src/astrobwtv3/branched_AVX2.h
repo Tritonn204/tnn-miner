@@ -1,7 +1,7 @@
 #include "astrobwtv3.h"
 
 namespace astro_branched_zOp {
-  inline void op0(workerData &worker) {
+  void op0(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -21,7 +21,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void op1(workerData &worker) {
+  void op1(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -34,7 +34,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op2(workerData &worker) {
+  void op2(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -49,7 +49,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op3(workerData &worker) {
+  void op3(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -61,7 +61,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op4(workerData &worker) {
+  void op4(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -74,7 +74,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op5(workerData &worker) {
+  void op5(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -88,7 +88,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op6(workerData &worker) {
+  void op6(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -103,7 +103,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op7(workerData &worker) {
+  void op7(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -118,7 +118,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op8(workerData &worker) {
+  void op8(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -130,7 +130,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op9(workerData &worker) {
+  void op9(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -143,7 +143,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op10(workerData &worker) {
+  void op10(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -161,7 +161,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op11(workerData &worker) {
+  void op11(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -177,7 +177,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op12(workerData &worker) {
+  void op12(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -195,7 +195,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op13(workerData &worker) {
+  void op13(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -213,7 +213,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op14(workerData &worker) {
+  void op14(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -231,7 +231,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op15(workerData &worker) {
+  void op15(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -249,7 +249,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op16(workerData &worker) {
+  void op16(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -267,7 +267,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op17(workerData &worker) {
+  void op17(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -285,7 +285,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op18(workerData &worker) {
+  void op18(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -300,7 +300,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op19(workerData &worker) {
+  void op19(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -318,7 +318,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op20(workerData &worker) {
+  void op20(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -336,7 +336,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op21(workerData &worker) {
+  void op21(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -354,7 +354,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op22(workerData &worker) {
+  void op22(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -372,7 +372,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op23(workerData &worker) {
+  void op23(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -389,7 +389,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op24(workerData &worker) {
+  void op24(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -407,7 +407,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op25(workerData &worker) {
+  void op25(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -432,7 +432,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void op26(workerData &worker) {
+  void op26(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -450,7 +450,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op27(workerData &worker) {
+  void op27(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -468,7 +468,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op28(workerData &worker) {
+  void op28(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -486,7 +486,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op29(workerData &worker) {
+  void op29(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -504,7 +504,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op30(workerData &worker) {
+  void op30(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -522,7 +522,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op31(workerData &worker) {
+  void op31(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -540,7 +540,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op32(workerData &worker) {
+  void op32(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -558,7 +558,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op33(workerData &worker) {
+  void op33(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -576,7 +576,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op34(workerData &worker) {
+  void op34(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -594,7 +594,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op35(workerData &worker) {
+  void op35(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -612,7 +612,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op36(workerData &worker) {
+  void op36(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -630,7 +630,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op37(workerData &worker) {
+  void op37(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -648,7 +648,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op38(workerData &worker) {
+  void op38(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -673,7 +673,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void op39(workerData &worker) {
+  void op39(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -691,7 +691,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op40(workerData &worker) {
+  void op40(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -709,7 +709,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op41(workerData &worker) {
+  void op41(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -727,7 +727,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op42(workerData &worker) {
+  void op42(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -744,7 +744,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op43(workerData &worker) {
+  void op43(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -761,7 +761,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op44(workerData &worker) {
+  void op44(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -786,7 +786,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void op45(workerData &worker) {
+  void op45(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -802,7 +802,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op46(workerData &worker) {
+  void op46(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -820,7 +820,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op47(workerData &worker) {
+  void op47(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -837,7 +837,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op48(workerData &worker) {
+  void op48(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -853,7 +853,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op49(workerData &worker) {
+  void op49(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -871,7 +871,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op50(workerData &worker) {
+  void op50(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -889,7 +889,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op51(workerData &worker) {
+  void op51(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -913,7 +913,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void op52(workerData &worker) {
+  void op52(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -931,7 +931,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op53(workerData &worker) {
+  void op53(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -952,7 +952,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void op54(workerData &worker) {
+  void op54(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -967,7 +967,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op55(workerData &worker) {
+  void op55(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -992,7 +992,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void op56(workerData &worker) {
+  void op56(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1010,7 +1010,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op57(workerData &worker) {
+  void op57(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1026,7 +1026,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op58(workerData &worker) {
+  void op58(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1043,7 +1043,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op59(workerData &worker) {
+  void op59(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1061,7 +1061,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op60(workerData &worker) {
+  void op60(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1082,7 +1082,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op61(workerData &worker) {
+  void op61(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1098,7 +1098,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op62(workerData &worker) {
+  void op62(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1115,7 +1115,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op63(workerData &worker) {
+  void op63(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1133,7 +1133,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op64(workerData &worker) {
+  void op64(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1150,7 +1150,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op65(workerData &worker) {
+  void op65(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1166,7 +1166,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op66(workerData &worker) {
+  void op66(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1184,7 +1184,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op67(workerData &worker) {
+  void op67(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1202,7 +1202,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op68(workerData &worker) {
+  void op68(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1216,7 +1216,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op69(workerData &worker) {
+  void op69(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1229,7 +1229,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op70(workerData &worker) {
+  void op70(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1243,7 +1243,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op71(workerData &worker) {
+  void op71(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1258,7 +1258,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op72(workerData &worker) {
+  void op72(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1272,7 +1272,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op73(workerData &worker) {
+  void op73(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1287,7 +1287,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op74(workerData &worker) {
+  void op74(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1301,7 +1301,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op75(workerData &worker) {
+  void op75(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1315,7 +1315,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op76(workerData &worker) {
+  void op76(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1330,7 +1330,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op77(workerData &worker) {
+  void op77(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1345,7 +1345,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op78(workerData &worker) {
+  void op78(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1360,7 +1360,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op79(workerData &worker) {
+  void op79(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1375,7 +1375,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op80(workerData &worker) {
+  void op80(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1389,7 +1389,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op81(workerData &worker) {
+  void op81(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1404,7 +1404,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op82(workerData &worker) {
+  void op82(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1416,7 +1416,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op83(workerData &worker) {
+  void op83(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1431,7 +1431,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op84(workerData &worker) {
+  void op84(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1446,7 +1446,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op85(workerData &worker) {
+  void op85(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1460,7 +1460,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op86(workerData &worker) {
+  void op86(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1475,7 +1475,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op87(workerData &worker) {
+  void op87(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1490,7 +1490,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op88(workerData &worker) {
+  void op88(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1505,7 +1505,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op89(workerData &worker) {
+  void op89(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1520,7 +1520,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op90(workerData &worker) {
+  void op90(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1534,7 +1534,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op91(workerData &worker) {
+  void op91(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1548,7 +1548,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op92(workerData &worker) {
+  void op92(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1562,7 +1562,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op93(workerData &worker) {
+  void op93(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1576,7 +1576,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op94(workerData &worker) {
+  void op94(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1590,7 +1590,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op95(workerData &worker) {
+  void op95(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1604,7 +1604,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op96(workerData &worker) {
+  void op96(workerData &worker) {
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -1622,7 +1622,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void op97(workerData &worker) {
+  void op97(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1637,7 +1637,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op98(workerData &worker) {
+  void op98(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1652,7 +1652,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op99(workerData &worker) {
+  void op99(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1667,7 +1667,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op100(workerData &worker) {
+  void op100(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1682,7 +1682,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op101(workerData &worker) {
+  void op101(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1697,7 +1697,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op102(workerData &worker) {
+  void op102(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1712,7 +1712,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op103(workerData &worker) {
+  void op103(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1726,7 +1726,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op104(workerData &worker) {
+  void op104(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1741,7 +1741,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op105(workerData &worker) {
+  void op105(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1756,7 +1756,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op106(workerData &worker) {
+  void op106(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1771,7 +1771,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op107(workerData &worker) {
+  void op107(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1785,7 +1785,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op108(workerData &worker) {
+  void op108(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1799,7 +1799,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op109(workerData &worker) {
+  void op109(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1813,7 +1813,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op110(workerData &worker) {
+  void op110(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1828,7 +1828,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op111(workerData &worker) {
+  void op111(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1843,7 +1843,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op112(workerData &worker) {
+  void op112(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1858,7 +1858,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op113(workerData &worker) {
+  void op113(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1872,7 +1872,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op114(workerData &worker) {
+  void op114(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1887,7 +1887,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op115(workerData &worker) {
+  void op115(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1901,7 +1901,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op116(workerData &worker) {
+  void op116(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1915,7 +1915,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op117(workerData &worker) {
+  void op117(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1929,7 +1929,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op118(workerData &worker) {
+  void op118(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1944,7 +1944,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op119(workerData &worker) {
+  void op119(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1958,7 +1958,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op120(workerData &worker) {
+  void op120(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1972,7 +1972,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op121(workerData &worker) {
+  void op121(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -1988,7 +1988,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op122(workerData &worker) {
+  void op122(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2003,7 +2003,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op123(workerData &worker) {
+  void op123(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2016,7 +2016,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op124(workerData &worker) {
+  void op124(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2030,7 +2030,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op125(workerData &worker) {
+  void op125(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2045,7 +2045,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op126(workerData &worker) {
+  void op126(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2058,7 +2058,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op127(workerData &worker) {
+  void op127(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2072,7 +2072,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op128(workerData &worker) {
+  void op128(workerData &worker) {
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -2090,7 +2090,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void op129(workerData &worker) {
+  void op129(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2107,7 +2107,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op130(workerData &worker) {
+  void op130(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2122,7 +2122,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op131(workerData &worker) {
+  void op131(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2138,7 +2138,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op132(workerData &worker) {
+  void op132(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2152,7 +2152,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op133(workerData &worker) {
+  void op133(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2166,7 +2166,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op134(workerData &worker) {
+  void op134(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2180,7 +2180,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op135(workerData &worker) {
+  void op135(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2195,7 +2195,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op136(workerData &worker) {
+  void op136(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2208,7 +2208,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op137(workerData &worker) {
+  void op137(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2221,7 +2221,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op138(workerData &worker) {
+  void op138(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2234,7 +2234,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op139(workerData &worker) {
+  void op139(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2245,7 +2245,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op140(workerData &worker) {
+  void op140(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2258,7 +2258,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op141(workerData &worker) {
+  void op141(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2272,7 +2272,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op142(workerData &worker) {
+  void op142(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2285,7 +2285,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op143(workerData &worker) {
+  void op143(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2298,7 +2298,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op144(workerData &worker) {
+  void op144(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2311,7 +2311,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op145(workerData &worker) {
+  void op145(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2324,7 +2324,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op146(workerData &worker) {
+  void op146(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2338,7 +2338,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op147(workerData &worker) {
+  void op147(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2351,7 +2351,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op148(workerData &worker) {
+  void op148(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2364,7 +2364,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op149(workerData &worker) {
+  void op149(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2377,7 +2377,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op150(workerData &worker) {
+  void op150(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2390,7 +2390,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op151(workerData &worker) {
+  void op151(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2403,7 +2403,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op152(workerData &worker) {
+  void op152(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2416,7 +2416,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op153(workerData &worker) {
+  void op153(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2426,7 +2426,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op154(workerData &worker) {
+  void op154(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2440,7 +2440,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op155(workerData &worker) {
+  void op155(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2454,7 +2454,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op156(workerData &worker) {
+  void op156(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2466,7 +2466,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op157(workerData &worker) {
+  void op157(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2479,7 +2479,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op158(workerData &worker) {
+  void op158(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2493,7 +2493,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op159(workerData &worker) {
+  void op159(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2506,7 +2506,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op160(workerData &worker) {
+  void op160(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2518,7 +2518,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op161(workerData &worker) {
+  void op161(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2531,7 +2531,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op162(workerData &worker) {
+  void op162(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2544,7 +2544,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op163(workerData &worker) {
+  void op163(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2557,7 +2557,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op164(workerData &worker) {
+  void op164(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2571,7 +2571,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op165(workerData &worker) {
+  void op165(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2584,7 +2584,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op166(workerData &worker) {
+  void op166(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2597,7 +2597,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op167(workerData &worker) {
+  void op167(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2608,7 +2608,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op168(workerData &worker) {
+  void op168(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2621,7 +2621,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op169(workerData &worker) {
+  void op169(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2634,7 +2634,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op170(workerData &worker) {
+  void op170(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2647,7 +2647,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op171(workerData &worker) {
+  void op171(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2661,7 +2661,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op172(workerData &worker) {
+  void op172(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2674,7 +2674,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op173(workerData &worker) {
+  void op173(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2687,7 +2687,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op174(workerData &worker) {
+  void op174(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2702,7 +2702,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op175(workerData &worker) {
+  void op175(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2715,7 +2715,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op176(workerData &worker) {
+  void op176(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2728,7 +2728,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op177(workerData &worker) {
+  void op177(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2742,7 +2742,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op178(workerData &worker) {
+  void op178(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2755,7 +2755,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op179(workerData &worker) {
+  void op179(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2768,7 +2768,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op180(workerData &worker) {
+  void op180(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2781,7 +2781,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op181(workerData &worker) {
+  void op181(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2794,7 +2794,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op182(workerData &worker) {
+  void op182(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2806,7 +2806,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op183(workerData &worker) {
+  void op183(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2819,7 +2819,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op184(workerData &worker) {
+  void op184(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2832,7 +2832,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op185(workerData &worker) {
+  void op185(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2845,7 +2845,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op186(workerData &worker) {
+  void op186(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2858,7 +2858,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op187(workerData &worker) {
+  void op187(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2871,7 +2871,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op188(workerData &worker) {
+  void op188(workerData &worker) {
   #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -2884,7 +2884,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void op189(workerData &worker) {
+  void op189(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2897,7 +2897,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op190(workerData &worker) {
+  void op190(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2910,7 +2910,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op191(workerData &worker) {
+  void op191(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2923,7 +2923,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op192(workerData &worker) {
+  void op192(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2936,7 +2936,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op193(workerData &worker) {
+  void op193(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2949,7 +2949,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op194(workerData &worker) {
+  void op194(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2962,7 +2962,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op195(workerData &worker) {
+  void op195(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2976,7 +2976,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op196(workerData &worker) {
+  void op196(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -2989,7 +2989,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op197(workerData &worker) {
+  void op197(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3002,7 +3002,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op198(workerData &worker) {
+  void op198(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3015,7 +3015,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op199(workerData &worker) {
+  void op199(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3028,7 +3028,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op200(workerData &worker) {
+  void op200(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3042,7 +3042,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op201(workerData &worker) {
+  void op201(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3055,7 +3055,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op202(workerData &worker) {
+  void op202(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3068,7 +3068,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op203(workerData &worker) {
+  void op203(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3081,7 +3081,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op204(workerData &worker) {
+  void op204(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3094,7 +3094,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op205(workerData &worker) {
+  void op205(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3108,7 +3108,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op206(workerData &worker) {
+  void op206(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3122,7 +3122,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op207(workerData &worker) {
+  void op207(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3135,7 +3135,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op208(workerData &worker) {
+  void op208(workerData &worker) {
   #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -3148,7 +3148,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void op209(workerData &worker) {
+  void op209(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3162,7 +3162,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op210(workerData &worker) {
+  void op210(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3175,7 +3175,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op211(workerData &worker) {
+  void op211(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3188,7 +3188,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op212(workerData &worker) {
+  void op212(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3201,7 +3201,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op213(workerData &worker) {
+  void op213(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3214,7 +3214,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op214(workerData &worker) {
+  void op214(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3227,7 +3227,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op215(workerData &worker) {
+  void op215(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3240,7 +3240,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op216(workerData &worker) {
+  void op216(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3253,7 +3253,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op217(workerData &worker) {
+  void op217(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3266,7 +3266,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op218(workerData &worker) {
+  void op218(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3279,7 +3279,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op219(workerData &worker) {
+  void op219(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3292,7 +3292,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op220(workerData &worker) {
+  void op220(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3305,7 +3305,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op221(workerData &worker) {
+  void op221(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3318,7 +3318,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op222(workerData &worker) {
+  void op222(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3331,7 +3331,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op223(workerData &worker) {
+  void op223(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3344,7 +3344,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op224(workerData &worker) {
+  void op224(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3356,7 +3356,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op225(workerData &worker) {
+  void op225(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3369,7 +3369,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op226(workerData &worker) {
+  void op226(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3382,7 +3382,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op227(workerData &worker) {
+  void op227(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3395,7 +3395,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op228(workerData &worker) {
+  void op228(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3409,7 +3409,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op229(workerData &worker) {
+  void op229(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3423,7 +3423,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op230(workerData &worker) {
+  void op230(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3436,7 +3436,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op231(workerData &worker) {
+  void op231(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3449,7 +3449,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op232(workerData &worker) {
+  void op232(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3462,7 +3462,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op233(workerData &worker) {
+  void op233(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3477,7 +3477,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op234(workerData &worker) {
+  void op234(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3490,7 +3490,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op235(workerData &worker) {
+  void op235(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3503,7 +3503,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op236(workerData &worker) {
+  void op236(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3516,7 +3516,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op237(workerData &worker) {
+  void op237(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3529,7 +3529,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op238(workerData &worker) {
+  void op238(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3542,7 +3542,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op239(workerData &worker) {
+  void op239(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3554,7 +3554,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op240(workerData &worker) {
+  void op240(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3567,7 +3567,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op241(workerData &worker) {
+  void op241(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3581,7 +3581,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op242(workerData &worker) {
+  void op242(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3594,7 +3594,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op243(workerData &worker) {
+  void op243(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3608,7 +3608,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op244(workerData &worker) {
+  void op244(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3621,7 +3621,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op245(workerData &worker) {
+  void op245(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3634,7 +3634,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op246(workerData &worker) {
+  void op246(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3647,7 +3647,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op247(workerData &worker) {
+  void op247(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3660,7 +3660,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op248(workerData &worker) {
+  void op248(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3674,7 +3674,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op249(workerData &worker) {
+  void op249(workerData &worker) {
   #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -3687,7 +3687,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void op250(workerData &worker) {
+  void op250(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3701,7 +3701,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op251(workerData &worker) {
+  void op251(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3715,7 +3715,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op252(workerData &worker) {
+  void op252(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -3728,7 +3728,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op253(workerData &worker) {
+  void op253(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
     if (worker.isSame) {
@@ -3754,7 +3754,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void op254(workerData &worker) {
+  void op254(workerData &worker) {
     RC4_set_key(&worker.key, 256, worker.prev_chunk);
 
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
@@ -3770,7 +3770,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void op255(workerData &worker) {
+  void op255(workerData &worker) {
     RC4_set_key(&worker.key, 256, worker.prev_chunk);
 
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
@@ -3786,7 +3786,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op0(workerData &worker) {
+  void r_op0(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
 
     byte newVal = worker.simpleLookup[worker.prev_chunk[worker.pos1]];
@@ -3803,7 +3803,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void r_op1(workerData &worker) {
+  void r_op1(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
 
     byte newVal = worker.lookup3D[worker.branched_idx[worker.op] * 256 * 256 +
@@ -3817,7 +3817,7 @@ namespace astro_branched_zOp {
     return;
   }
 
-  inline void r_op2(workerData &worker) {
+  void r_op2(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
 
     byte newVal = worker.simpleLookup[worker.reg_idx[worker.op] * 256 + worker.prev_chunk[worker.pos1]];
@@ -3826,7 +3826,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op3(workerData &worker) {
+  void r_op3(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
 
     byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
@@ -3836,7 +3836,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op4(workerData &worker) {
+  void r_op4(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
 
     byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
@@ -3845,7 +3845,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op5(workerData &worker) {
+  void r_op5(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
 
     byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
@@ -3854,7 +3854,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op6(workerData &worker) {
+  void r_op6(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
 
     byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
@@ -3863,7 +3863,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op7(workerData &worker) {
+  void r_op7(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
 
     byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
@@ -3872,7 +3872,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op8(workerData &worker) {
+  void r_op8(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
 
     byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
@@ -3881,7 +3881,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op9(workerData &worker) {
+  void r_op9(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
 
     byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
@@ -3890,7 +3890,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op10(workerData &worker) {
+  void r_op10(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
 
     byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
@@ -3899,7 +3899,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op11(workerData &worker) {
+  void r_op11(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
 
     byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
@@ -3908,7 +3908,7 @@ namespace astro_branched_zOp {
       _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op12(workerData &worker) {
+  void r_op12(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
 
     byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
@@ -3917,115 +3917,46 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
 }
 
-  inline void r_op13(workerData &worker) {
+  void r_op13(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
-    __m256i old = data;
 
-
-
-
-    if (worker.isSame) {
-      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-
-
-      __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
-      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-
-      return;
-    }
-
-    data = _mm256_rol_epi8(data, 1);
-    data = _mm256_xor_si256(data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
-    data = _mm256_srlv_epi8(data,_mm256_and_si256(data,vec_3));
-    data = _mm256_rol_epi8(data, 5);
-
-    data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+    byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
+    __m256i newVec = _mm256_set1_epi8(newVal);
+    data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op14(workerData &worker) {
+  void r_op14(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
-
-
-
-    if (worker.isSame) {
-
-
-      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
-      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-
-      return;
-    }
-
-    data = _mm256_srlv_epi8(data,_mm256_and_si256(data,vec_3));
-    data = _mm256_sllv_epi8(data,_mm256_and_si256(data,vec_3));
-    data = _mm256_mul_epi8(data, data);
-    data = _mm256_sllv_epi8(data,_mm256_and_si256(data,vec_3));
-
-    data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+    byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+    __m256i newVec = _mm256_set1_epi8(newVal);
+    data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op15(workerData &worker) {
+  void r_op15(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
-    __m256i old = data;
+
+    byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
 
 
-
-
-    if (worker.isSame) {
-      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-
-
-      __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
-      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-
-      return;
-    }
-
-    data = _mm256_xor_si256(data, _mm256_rol_epi8(data,2));
-    data = _mm256_sllv_epi8(data,_mm256_and_si256(data,vec_3));
-    data = _mm256_and_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
-    data = _mm256_sub_epi8(data,_mm256_xor_si256(data,_mm256_set1_epi8(97)));
-
-    data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+    __m256i newVec = _mm256_set1_epi8(newVal);
+    data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op16(workerData &worker) {
+  void r_op16(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
-    __m256i old = data;
 
-
-
-
-    if (worker.isSame) {
-
-
-      byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
-      __m256i newVec = _mm256_set1_epi8(newVal);
-      data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
-      _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
-
-      return;
-    }
-
-    data = _mm256_xor_si256(data, _mm256_rol_epi8(data,4));
-    data = _mm256_mul_epi8(data, data);
-    data = _mm256_rol_epi8(data,1);
-    data = _mm256_xor_si256(data, _mm256_set1_epi64x(-1LL));
-
-    data = _mm256_blendv_epi8(old, data, genMask(worker.pos2-worker.pos1));
+    byte newVal = worker.simpleLookup[worker.reg_idx[worker.op]*256 + worker.prev_chunk[worker.pos1]];
+    __m256i newVec = _mm256_set1_epi8(newVal);
+    data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2-worker.pos1));
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op17(workerData &worker) {
+  void r_op17(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4052,7 +3983,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op18(workerData &worker) {
+  void r_op18(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4076,7 +4007,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op19(workerData &worker) {
+  void r_op19(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4103,7 +4034,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op20(workerData &worker) {
+  void r_op20(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4130,7 +4061,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op21(workerData &worker) {
+  void r_op21(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4157,7 +4088,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op22(workerData &worker) {
+  void r_op22(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4184,7 +4115,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op23(workerData &worker) {
+  void r_op23(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4210,7 +4141,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op24(workerData &worker) {
+  void r_op24(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4237,7 +4168,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op25(workerData &worker) {
+  void r_op25(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4271,7 +4202,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void r_op26(workerData &worker) {
+  void r_op26(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4298,7 +4229,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op27(workerData &worker) {
+  void r_op27(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4325,7 +4256,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op28(workerData &worker) {
+  void r_op28(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4352,7 +4283,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op29(workerData &worker) {
+  void r_op29(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4379,7 +4310,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op30(workerData &worker) {
+  void r_op30(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4406,7 +4337,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op31(workerData &worker) {
+  void r_op31(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4433,7 +4364,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op32(workerData &worker) {
+  void r_op32(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4460,7 +4391,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op33(workerData &worker) {
+  void r_op33(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4487,7 +4418,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op34(workerData &worker) {
+  void r_op34(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4514,7 +4445,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op35(workerData &worker) {
+  void r_op35(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4541,7 +4472,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op36(workerData &worker) {
+  void r_op36(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4568,7 +4499,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op37(workerData &worker) {
+  void r_op37(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4595,7 +4526,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op38(workerData &worker) {
+  void r_op38(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4629,7 +4560,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void r_op39(workerData &worker) {
+  void r_op39(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4656,7 +4587,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op40(workerData &worker) {
+  void r_op40(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4683,7 +4614,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op41(workerData &worker) {
+  void r_op41(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4710,7 +4641,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op42(workerData &worker) {
+  void r_op42(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4736,7 +4667,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op43(workerData &worker) {
+  void r_op43(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4762,7 +4693,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op44(workerData &worker) {
+  void r_op44(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4796,7 +4727,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void r_op45(workerData &worker) {
+  void r_op45(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4821,7 +4752,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op46(workerData &worker) {
+  void r_op46(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4848,7 +4779,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op47(workerData &worker) {
+  void r_op47(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4874,7 +4805,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op48(workerData &worker) {
+  void r_op48(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4899,7 +4830,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op49(workerData &worker) {
+  void r_op49(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4926,7 +4857,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op50(workerData &worker) {
+  void r_op50(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4953,7 +4884,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op51(workerData &worker) {
+  void r_op51(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -4986,7 +4917,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void r_op52(workerData &worker) {
+  void r_op52(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5013,7 +4944,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op53(workerData &worker) {
+  void r_op53(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5043,7 +4974,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void r_op54(workerData &worker) {
+  void r_op54(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5067,7 +4998,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op55(workerData &worker) {
+  void r_op55(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5101,7 +5032,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void r_op56(workerData &worker) {
+  void r_op56(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5128,7 +5059,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op57(workerData &worker) {
+  void r_op57(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5153,7 +5084,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op58(workerData &worker) {
+  void r_op58(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5179,7 +5110,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op59(workerData &worker) {
+  void r_op59(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5206,7 +5137,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op60(workerData &worker) {
+  void r_op60(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5236,7 +5167,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op61(workerData &worker) {
+  void r_op61(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5261,7 +5192,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op62(workerData &worker) {
+  void r_op62(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5287,7 +5218,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op63(workerData &worker) {
+  void r_op63(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5314,7 +5245,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op64(workerData &worker) {
+  void r_op64(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5340,7 +5271,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op65(workerData &worker) {
+  void r_op65(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5365,7 +5296,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op66(workerData &worker) {
+  void r_op66(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5392,7 +5323,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op67(workerData &worker) {
+  void r_op67(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5419,7 +5350,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op68(workerData &worker) {
+  void r_op68(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5442,7 +5373,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op69(workerData &worker) {
+  void r_op69(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5465,7 +5396,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op70(workerData &worker) {
+  void r_op70(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5488,7 +5419,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op71(workerData &worker) {
+  void r_op71(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5511,7 +5442,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op72(workerData &worker) {
+  void r_op72(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5534,7 +5465,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op73(workerData &worker) {
+  void r_op73(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5557,7 +5488,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op74(workerData &worker) {
+  void r_op74(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5580,7 +5511,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op75(workerData &worker) {
+  void r_op75(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5603,7 +5534,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op76(workerData &worker) {
+  void r_op76(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5626,7 +5557,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op77(workerData &worker) {
+  void r_op77(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5649,7 +5580,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op78(workerData &worker) {
+  void r_op78(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5672,7 +5603,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op79(workerData &worker) {
+  void r_op79(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5695,7 +5626,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op80(workerData &worker) {
+  void r_op80(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5718,7 +5649,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op81(workerData &worker) {
+  void r_op81(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5741,7 +5672,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op82(workerData &worker) {
+  void r_op82(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5762,7 +5693,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op83(workerData &worker) {
+  void r_op83(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5785,7 +5716,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op84(workerData &worker) {
+  void r_op84(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5808,7 +5739,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op85(workerData &worker) {
+  void r_op85(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5831,7 +5762,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op86(workerData &worker) {
+  void r_op86(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5854,7 +5785,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op87(workerData &worker) {
+  void r_op87(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5877,7 +5808,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op88(workerData &worker) {
+  void r_op88(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5900,7 +5831,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op89(workerData &worker) {
+  void r_op89(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5923,7 +5854,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op90(workerData &worker) {
+  void r_op90(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5945,7 +5876,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op91(workerData &worker) {
+  void r_op91(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5968,7 +5899,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op92(workerData &worker) {
+  void r_op92(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -5991,7 +5922,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op93(workerData &worker) {
+  void r_op93(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6014,7 +5945,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op94(workerData &worker) {
+  void r_op94(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6037,7 +5968,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op95(workerData &worker) {
+  void r_op95(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6059,7 +5990,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op96(workerData &worker) {
+  void r_op96(workerData &worker) {
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -6077,7 +6008,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void r_op97(workerData &worker) {
+  void r_op97(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6100,7 +6031,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op98(workerData &worker) {
+  void r_op98(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6123,7 +6054,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op99(workerData &worker) {
+  void r_op99(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6146,7 +6077,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op100(workerData &worker) {
+  void r_op100(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6169,7 +6100,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op101(workerData &worker) {
+  void r_op101(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6192,7 +6123,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op102(workerData &worker) {
+  void r_op102(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6215,7 +6146,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op103(workerData &worker) {
+  void r_op103(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6238,7 +6169,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op104(workerData &worker) {
+  void r_op104(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6261,7 +6192,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op105(workerData &worker) {
+  void r_op105(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6284,7 +6215,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op106(workerData &worker) {
+  void r_op106(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6307,7 +6238,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op107(workerData &worker) {
+  void r_op107(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6329,7 +6260,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op108(workerData &worker) {
+  void r_op108(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6352,7 +6283,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op109(workerData &worker) {
+  void r_op109(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6375,7 +6306,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op110(workerData &worker) {
+  void r_op110(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6398,7 +6329,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op111(workerData &worker) {
+  void r_op111(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6421,7 +6352,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op112(workerData &worker) {
+  void r_op112(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6444,7 +6375,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op113(workerData &worker) {
+  void r_op113(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6466,7 +6397,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op114(workerData &worker) {
+  void r_op114(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6489,7 +6420,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op115(workerData &worker) {
+  void r_op115(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6512,7 +6443,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op116(workerData &worker) {
+  void r_op116(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6535,7 +6466,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op117(workerData &worker) {
+  void r_op117(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6558,7 +6489,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op118(workerData &worker) {
+  void r_op118(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6581,7 +6512,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op119(workerData &worker) {
+  void r_op119(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6604,7 +6535,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op120(workerData &worker) {
+  void r_op120(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6627,7 +6558,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op121(workerData &worker) {
+  void r_op121(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6651,7 +6582,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op122(workerData &worker) {
+  void r_op122(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6674,7 +6605,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op123(workerData &worker) {
+  void r_op123(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6696,7 +6627,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op124(workerData &worker) {
+  void r_op124(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6719,7 +6650,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op125(workerData &worker) {
+  void r_op125(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6742,7 +6673,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op126(workerData &worker) {
+  void r_op126(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6763,7 +6694,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op127(workerData &worker) {
+  void r_op127(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6786,7 +6717,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op128(workerData &worker) {
+  void r_op128(workerData &worker) {
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -6804,7 +6735,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void r_op129(workerData &worker) {
+  void r_op129(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6829,7 +6760,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op130(workerData &worker) {
+  void r_op130(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6852,7 +6783,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op131(workerData &worker) {
+  void r_op131(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6876,7 +6807,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op132(workerData &worker) {
+  void r_op132(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6899,7 +6830,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op133(workerData &worker) {
+  void r_op133(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6922,7 +6853,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op134(workerData &worker) {
+  void r_op134(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6945,7 +6876,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op135(workerData &worker) {
+  void r_op135(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6968,7 +6899,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op136(workerData &worker) {
+  void r_op136(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6981,7 +6912,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op137(workerData &worker) {
+  void r_op137(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -6994,7 +6925,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op138(workerData &worker) {
+  void r_op138(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7007,7 +6938,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op139(workerData &worker) {
+  void r_op139(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7018,7 +6949,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op140(workerData &worker) {
+  void r_op140(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7031,7 +6962,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op141(workerData &worker) {
+  void r_op141(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7045,7 +6976,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op142(workerData &worker) {
+  void r_op142(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7058,7 +6989,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op143(workerData &worker) {
+  void r_op143(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7071,7 +7002,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op144(workerData &worker) {
+  void r_op144(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7084,7 +7015,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op145(workerData &worker) {
+  void r_op145(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7097,7 +7028,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op146(workerData &worker) {
+  void r_op146(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7111,7 +7042,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op147(workerData &worker) {
+  void r_op147(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7124,7 +7055,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op148(workerData &worker) {
+  void r_op148(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7137,7 +7068,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op149(workerData &worker) {
+  void r_op149(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7150,7 +7081,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op150(workerData &worker) {
+  void r_op150(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7163,7 +7094,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op151(workerData &worker) {
+  void r_op151(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7176,7 +7107,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op152(workerData &worker) {
+  void r_op152(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7189,7 +7120,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op153(workerData &worker) {
+  void r_op153(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7199,7 +7130,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op154(workerData &worker) {
+  void r_op154(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7213,7 +7144,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op155(workerData &worker) {
+  void r_op155(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7227,7 +7158,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op156(workerData &worker) {
+  void r_op156(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7239,7 +7170,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op157(workerData &worker) {
+  void r_op157(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7252,7 +7183,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op158(workerData &worker) {
+  void r_op158(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7266,7 +7197,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op159(workerData &worker) {
+  void r_op159(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7279,7 +7210,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op160(workerData &worker) {
+  void r_op160(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7291,7 +7222,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op161(workerData &worker) {
+  void r_op161(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7304,7 +7235,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op162(workerData &worker) {
+  void r_op162(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7317,7 +7248,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op163(workerData &worker) {
+  void r_op163(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7330,7 +7261,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op164(workerData &worker) {
+  void r_op164(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7344,7 +7275,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op165(workerData &worker) {
+  void r_op165(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7357,7 +7288,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op166(workerData &worker) {
+  void r_op166(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7370,7 +7301,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op167(workerData &worker) {
+  void r_op167(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7381,7 +7312,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op168(workerData &worker) {
+  void r_op168(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7394,7 +7325,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op169(workerData &worker) {
+  void r_op169(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7407,7 +7338,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op170(workerData &worker) {
+  void r_op170(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7420,7 +7351,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op171(workerData &worker) {
+  void r_op171(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7434,7 +7365,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op172(workerData &worker) {
+  void r_op172(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7447,7 +7378,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op173(workerData &worker) {
+  void r_op173(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7460,7 +7391,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op174(workerData &worker) {
+  void r_op174(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7475,7 +7406,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op175(workerData &worker) {
+  void r_op175(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7488,7 +7419,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op176(workerData &worker) {
+  void r_op176(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7501,7 +7432,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op177(workerData &worker) {
+  void r_op177(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7515,7 +7446,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op178(workerData &worker) {
+  void r_op178(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7528,7 +7459,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op179(workerData &worker) {
+  void r_op179(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7541,7 +7472,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op180(workerData &worker) {
+  void r_op180(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7554,7 +7485,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op181(workerData &worker) {
+  void r_op181(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7567,7 +7498,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op182(workerData &worker) {
+  void r_op182(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7579,7 +7510,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op183(workerData &worker) {
+  void r_op183(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7592,7 +7523,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op184(workerData &worker) {
+  void r_op184(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7605,7 +7536,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op185(workerData &worker) {
+  void r_op185(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7618,7 +7549,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op186(workerData &worker) {
+  void r_op186(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7631,7 +7562,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op187(workerData &worker) {
+  void r_op187(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7644,7 +7575,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op188(workerData &worker) {
+  void r_op188(workerData &worker) {
   #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -7657,7 +7588,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void r_op189(workerData &worker) {
+  void r_op189(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7670,7 +7601,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op190(workerData &worker) {
+  void r_op190(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7683,7 +7614,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op191(workerData &worker) {
+  void r_op191(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7696,7 +7627,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op192(workerData &worker) {
+  void r_op192(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7709,7 +7640,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op193(workerData &worker) {
+  void r_op193(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7722,7 +7653,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op194(workerData &worker) {
+  void r_op194(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7735,7 +7666,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op195(workerData &worker) {
+  void r_op195(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7749,7 +7680,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op196(workerData &worker) {
+  void r_op196(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7762,7 +7693,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op197(workerData &worker) {
+  void r_op197(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7775,7 +7706,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op198(workerData &worker) {
+  void r_op198(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7788,7 +7719,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op199(workerData &worker) {
+  void r_op199(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7801,7 +7732,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op200(workerData &worker) {
+  void r_op200(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7815,7 +7746,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op201(workerData &worker) {
+  void r_op201(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7828,7 +7759,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op202(workerData &worker) {
+  void r_op202(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7841,7 +7772,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op203(workerData &worker) {
+  void r_op203(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7854,7 +7785,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op204(workerData &worker) {
+  void r_op204(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7867,7 +7798,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op205(workerData &worker) {
+  void r_op205(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7881,7 +7812,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op206(workerData &worker) {
+  void r_op206(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7895,7 +7826,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op207(workerData &worker) {
+  void r_op207(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7908,7 +7839,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op208(workerData &worker) {
+  void r_op208(workerData &worker) {
   #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -7921,7 +7852,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void r_op209(workerData &worker) {
+  void r_op209(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7935,7 +7866,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op210(workerData &worker) {
+  void r_op210(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7948,7 +7879,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op211(workerData &worker) {
+  void r_op211(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7961,7 +7892,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op212(workerData &worker) {
+  void r_op212(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7974,7 +7905,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op213(workerData &worker) {
+  void r_op213(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -7987,7 +7918,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op214(workerData &worker) {
+  void r_op214(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8000,7 +7931,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op215(workerData &worker) {
+  void r_op215(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8013,7 +7944,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op216(workerData &worker) {
+  void r_op216(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8026,7 +7957,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op217(workerData &worker) {
+  void r_op217(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8039,7 +7970,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op218(workerData &worker) {
+  void r_op218(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8052,7 +7983,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op219(workerData &worker) {
+  void r_op219(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8065,7 +7996,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op220(workerData &worker) {
+  void r_op220(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8078,7 +8009,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op221(workerData &worker) {
+  void r_op221(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8091,7 +8022,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op222(workerData &worker) {
+  void r_op222(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8104,7 +8035,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op223(workerData &worker) {
+  void r_op223(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8117,7 +8048,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op224(workerData &worker) {
+  void r_op224(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8129,7 +8060,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op225(workerData &worker) {
+  void r_op225(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8142,7 +8073,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op226(workerData &worker) {
+  void r_op226(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8155,7 +8086,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op227(workerData &worker) {
+  void r_op227(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8168,7 +8099,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op228(workerData &worker) {
+  void r_op228(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8182,7 +8113,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op229(workerData &worker) {
+  void r_op229(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8196,7 +8127,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op230(workerData &worker) {
+  void r_op230(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8209,7 +8140,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op231(workerData &worker) {
+  void r_op231(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8222,7 +8153,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op232(workerData &worker) {
+  void r_op232(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8235,7 +8166,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op233(workerData &worker) {
+  void r_op233(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8250,7 +8181,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op234(workerData &worker) {
+  void r_op234(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8263,7 +8194,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op235(workerData &worker) {
+  void r_op235(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8276,7 +8207,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op236(workerData &worker) {
+  void r_op236(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8289,7 +8220,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op237(workerData &worker) {
+  void r_op237(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8302,7 +8233,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op238(workerData &worker) {
+  void r_op238(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8315,7 +8246,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op239(workerData &worker) {
+  void r_op239(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8327,7 +8258,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op240(workerData &worker) {
+  void r_op240(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8340,7 +8271,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op241(workerData &worker) {
+  void r_op241(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8354,7 +8285,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op242(workerData &worker) {
+  void r_op242(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8367,7 +8298,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op243(workerData &worker) {
+  void r_op243(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8381,7 +8312,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op244(workerData &worker) {
+  void r_op244(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8394,7 +8325,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op245(workerData &worker) {
+  void r_op245(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8407,7 +8338,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op246(workerData &worker) {
+  void r_op246(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8420,7 +8351,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op247(workerData &worker) {
+  void r_op247(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8433,7 +8364,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op248(workerData &worker) {
+  void r_op248(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8447,7 +8378,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op249(workerData &worker) {
+  void r_op249(workerData &worker) {
   #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -8460,7 +8391,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void r_op250(workerData &worker) {
+  void r_op250(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8474,7 +8405,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op251(workerData &worker) {
+  void r_op251(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8488,7 +8419,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op252(workerData &worker) {
+  void r_op252(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     __m256i old = data;
 
@@ -8501,7 +8432,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op253(workerData &worker) {
+  void r_op253(workerData &worker) {
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
     if (worker.isSame) {
@@ -8527,7 +8458,7 @@ namespace astro_branched_zOp {
     }
   }
 
-  inline void r_op254(workerData &worker) {
+  void r_op254(workerData &worker) {
     RC4_set_key(&worker.key, 256, worker.prev_chunk);
 
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
@@ -8543,7 +8474,7 @@ namespace astro_branched_zOp {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
-  inline void r_op255(workerData &worker) {
+  void r_op255(workerData &worker) {
     RC4_set_key(&worker.key, 256, worker.prev_chunk);
 
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);

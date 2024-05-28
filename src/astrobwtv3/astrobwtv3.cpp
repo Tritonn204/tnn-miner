@@ -11451,7 +11451,7 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
       break;
     }
   }
-  if (!isTest) printf("%d out of %d ops had repeating char inputs\n", sameCount, worker.tries);
+  // if (!isTest) printf("%d out of %d ops had repeating char inputs\n", sameCount, worker.tries);
   worker.data_len = static_cast<uint32_t>((worker.tries - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
 }
 
