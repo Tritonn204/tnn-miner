@@ -662,40 +662,6 @@ inline void prefetch(T *data, int size, int hint) {
   }
 }
 
-inline void hashSHA256(SHA256_CTX &sha256, const byte *input, byte *digest, unsigned long inputSize)
-{
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, input, inputSize);
-  SHA256_Final(digest, &sha256);
-}
-
-inline std::vector<uint8_t> padSHA256Input(const uint8_t* input, size_t length) {
-    // Calculate the length of the padded message
-    size_t paddedLength = length + 1; // Original length plus the 0x80 byte
-    size_t mod = paddedLength % 64;
-    if (mod > 56) {
-        paddedLength += 64 + 56 - mod; // Pad so there's room for the length
-    } else {
-        paddedLength += 56 - mod; // Pad so there's room for the length
-    }
-    paddedLength += 8; // Add 8 bytes for the original length
-
-    // Create the padded message
-    std::vector<uint8_t> padded(paddedLength, 0);
-    memcpy(padded.data(), input, length);
-
-    // Append the '1' bit
-    padded[length] = 0x80;
-
-    // Append the original length in bits as a 64-bit big-endian integer
-    uint64_t bitLength = static_cast<uint64_t>(length) * 8; // Convert length to bits
-    for (size_t i = 0; i < 8; ++i) {
-        padded[paddedLength - 1 - i] = static_cast<uint8_t>((bitLength >> (8 * i)) & 0xff);
-    }
-
-    return padded;
-}
-
 template <typename T>
 inline void insertElement(T* arr, int& size, int capacity, int index, const T& element) {
     if (size < capacity) {

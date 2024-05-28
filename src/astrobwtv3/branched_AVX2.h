@@ -19,6 +19,10 @@ namespace astro_branched_zOp {
     in = _mm256_rol_epi8(in, 1);
   }
 
+  void __attribute__((noinline)) r2(__m256i &in) {
+    in = _mm256_rol_epi8(in, 2);
+  }
+
   void __attribute__((noinline)) r3(__m256i &in) {
     in = _mm256_rol_epi8(in, 3);
   }
@@ -43,9 +47,23 @@ namespace astro_branched_zOp {
     in = _mm256_xor_si256(in, _mm256_set1_epi8(p2));
   }
 
-  void __attribute__((noinline)) ap2(__m256i &in, byte p2) {
+  void __attribute__((noinline)) addp2(__m256i &in, byte p2) {
     in = _mm256_and_si256(in, _mm256_set1_epi8(p2));
   }
+
+  void __attribute__((noinline)) x0_r2(__m256i &in) {
+    in = _mm256_xor_si256(in, _mm256_rol_epi8(in, 2));
+  }
+
+  void __attribute__((noinline)) x0_r4(__m256i &in) {
+    in = _mm256_xor_si256(in, _mm256_rol_epi8(in, 4));
+  }
+
+  void __attribute__((noinline)) subx97(__m256i &in) {
+    in = _mm256_sub_epi8(in, _mm256_xor_si256(in, _mm256_set1_epi8(97)));
+  }
+
+  // Data manipulation
 
   void __attribute__((noinline)) notData(__m256i &in) {
     in = _mm256_xor_si256(in, _mm256_set1_epi64x(-1LL));
@@ -54,11 +72,16 @@ namespace astro_branched_zOp {
   void __attribute__((noinline)) revData(__m256i &in) {
     in = _mm256_reverse_epi8(in);
   }
+  
 
   // utility
 
   void __attribute__((noinline)) blendStep(workerData &worker) {
     worker.data = _mm256_blendv_epi8(worker.old, worker.data, genMask(worker.pos2 - worker.pos1));
+  }
+
+  void __attribute__((noinline)) storeStep(workerData &worker) {
+    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
   }
 
   // op codes
@@ -69,7 +92,7 @@ namespace astro_branched_zOp {
     m0(worker.data);
     r0(worker.data);
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
 
     if ((worker.pos2 - worker.pos1) % 2 == 1) {
       worker.t1 = worker.chunk[worker.pos1];
@@ -86,7 +109,7 @@ namespace astro_branched_zOp {
     worker.data = _mm256_and_si256(worker.data, _mm256_set1_epi8(worker.prev_chunk[worker.pos2]));
     a0(worker.data);
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op2(workerData &worker) {
@@ -96,26 +119,26 @@ namespace astro_branched_zOp {
     worker.data = _mm256_sllv_epi8(worker.data, shift);
     p0(worker.data);
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op3(workerData &worker) {
-    worker.data = _mm256_rolv_epi8(worker.data,_mm256_add_epi8(worker.data,vec_3));
-    worker.data = _mm256_xor_si256(worker.data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
+    worker.data = _mm256_rolv_epi8(worker.data, _mm256_add_epi8(worker.data, vec_3));
+    worker.data = _mm256_xor_si256(worker.data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
     r1(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op4(workerData &worker) {
     notData(worker.data);
     sr03(worker.data);
     r0(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data,_mm256_xor_si256(worker.data,_mm256_set1_epi8(97)));
+    subx97(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op5(workerData &worker) {
@@ -125,7 +148,7 @@ namespace astro_branched_zOp {
     sr03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op6(workerData &worker) {
@@ -134,10 +157,10 @@ namespace astro_branched_zOp {
     notData(worker.data);
 
     __m256i x = _mm256_xor_si256(worker.data,_mm256_set1_epi8(97));
-    worker.data = _mm256_sub_epi8(worker.data,x);
+    worker.data = _mm256_sub_epi8(worker.data, x);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op7(workerData &worker) {
@@ -148,26 +171,26 @@ namespace astro_branched_zOp {
     notData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op8(workerData &worker) {
     notData(worker.data);
-    worker.data = _mm256_rol_epi8(worker.data,2);
+    r2(worker.data);
     sl03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op9(workerData &worker) {
     xp2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data,4));
+    x0_r4(worker.data);
     sr03(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data,2));
+    x0_r2(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op10(workerData &worker) {
@@ -177,26 +200,27 @@ namespace astro_branched_zOp {
     m0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op11(workerData &worker) {
-    worker.data = _mm256_rol_epi8(worker.data, 6);
+    r3(worker.data);
+    r3(worker.data);
     worker.data = _mm256_and_si256(worker.data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
     r0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op12(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data,2));
+    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
     m0(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data,2));
+    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
     notData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op13(workerData &worker) {
@@ -206,7 +230,7 @@ namespace astro_branched_zOp {
     r5(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op14(workerData &worker) {
@@ -216,17 +240,17 @@ namespace astro_branched_zOp {
     sl03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op15(workerData &worker) {
     worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data,2));
     sl03(worker.data);
-    ap2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_sub_epi8(worker.data,_mm256_xor_si256(worker.data,_mm256_set1_epi8(97)));
+    addp2(worker.data, worker.chunk[worker.pos2]);
+    subx97(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op16(workerData &worker) {
@@ -236,80 +260,87 @@ namespace astro_branched_zOp {
     notData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op17(workerData &worker) {
     xp2(worker.data, worker.chunk[worker.pos2]);
     m0(worker.data);
-    worker.data = _mm256_rol_epi8(worker.data,5);
+    r5(worker.data);
     notData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op18(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
     r1(worker.data);
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op19(workerData &worker) {    worker.data = _mm256_sub_epi8(worker.data,_mm256_xor_si256(worker.data,_mm256_set1_epi8(97)));
+  void op19(workerData &worker) {
+    subx97(worker.data);
     r5(worker.data);
     sl03(worker.data);
     a0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op20(workerData &worker) {    ap2(worker.data, worker.chunk[worker.pos2]);
+  void op20(workerData &worker) {
+    addp2(worker.data, worker.chunk[worker.pos2]);
     xp2(worker.data, worker.chunk[worker.pos2]);
     revData(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op21(workerData &worker) {    r1(worker.data);
+  void op21(workerData &worker) {
+    r1(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
     a0(worker.data);
     worker.data = _mm256_and_si256(worker.data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op22(workerData &worker) {    sl03(worker.data);
+  void op22(workerData &worker) {
+    sl03(worker.data);
     revData(worker.data);
-    worker.data = _mm256_mul_epi8(worker.data,worker.data);
+    m0(worker.data);
     r1(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op23(workerData &worker) {    worker.data = _mm256_rol_epi8(worker.data, 4);
+  void op23(workerData &worker) {
+    worker.data = _mm256_rol_epi8(worker.data, 4);
     worker.data = _mm256_xor_si256(worker.data,popcnt256_epi8(worker.data));
     worker.data = _mm256_and_si256(worker.data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op24(workerData &worker) {    a0(worker.data);
+  void op24(workerData &worker) {
+    a0(worker.data);
     sr03(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
     r5(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op25(workerData &worker) {    
+  void op25(workerData &worker) {
+    
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -326,115 +357,128 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op26(workerData &worker) {    m0(worker.data);
+  void op26(workerData &worker) {
+    m0(worker.data);
     worker.data = _mm256_xor_si256(worker.data,popcnt256_epi8(worker.data));
     a0(worker.data);
     revData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op27(workerData &worker) {    r5(worker.data);
+  void op27(workerData &worker) {
+    r5(worker.data);
     worker.data = _mm256_and_si256(worker.data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
     r5(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op28(workerData &worker) {    sl03(worker.data);
+  void op28(workerData &worker) {
+    sl03(worker.data);
     a0(worker.data);
     a0(worker.data);
     r5(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op29(workerData &worker) {    m0(worker.data);
+  void op29(workerData &worker) {
+    m0(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
     sr03(worker.data);
     a0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op30(workerData &worker) {    ap2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+  void op30(workerData &worker) {
+    addp2(worker.data, worker.chunk[worker.pos2]);
+    x0_r4(worker.data);
     r5(worker.data);
     sl03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op31(workerData &worker) {    notData(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+  void op31(workerData &worker) {
+    notData(worker.data);
+    x0_r2(worker.data);
     sl03(worker.data);
     m0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op32(workerData &worker) {    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+  void op32(workerData &worker) {
+    x0_r2(worker.data);
     revData(worker.data);
     r3(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op33(workerData &worker) {    r0(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+  void op33(workerData &worker) {
+    r0(worker.data);
+    x0_r4(worker.data);
     revData(worker.data);
     m0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op34(workerData &worker) {    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+  void op34(workerData &worker) {
+    subx97(worker.data);
     sl03(worker.data);
     sl03(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op35(workerData &worker) {    a0(worker.data);
+  void op35(workerData &worker) {
+    a0(worker.data);
     notData(worker.data);
     r1(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op36(workerData &worker) {    p0(worker.data);
+  void op36(workerData &worker) {
+    p0(worker.data);
     r1(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     r1(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op37(workerData &worker) {    r0(worker.data);
+  void op37(workerData &worker) {
+    r0(worker.data);
     sr03(worker.data);
     sr03(worker.data);
     m0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op38(workerData &worker) {    
+  void op38(workerData &worker) {
+    
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -451,52 +495,57 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op39(workerData &worker) {    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+  void op39(workerData &worker) {
+    x0_r2(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
     sr03(worker.data);
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op40(workerData &worker) {    r0(worker.data);
+  void op40(workerData &worker) {
+    r0(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
     p0(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op41(workerData &worker) {    r5(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+  void op41(workerData &worker) {
+    r5(worker.data);
+    subx97(worker.data);
     r3(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op42(workerData &worker) {    worker.data = _mm256_rol_epi8(worker.data, 4);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+  void op42(workerData &worker) {
+    worker.data = _mm256_rol_epi8(worker.data, 4);
+    x0_r2(worker.data);
     r0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op43(workerData &worker) {
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
     a0(worker.data);
-    ap2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    addp2(worker.data, worker.chunk[worker.pos2]);
+    subx97(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op44(workerData &worker) {    
+  void op44(workerData &worker) {
+    
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -514,56 +563,60 @@ namespace astro_branched_zOp {
   }
 
   void op45(workerData &worker) {
-    worker.data = _mm256_rol_epi8(worker.data, 2);
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    r2(worker.data);
+    addp2(worker.data, worker.chunk[worker.pos2]);
     p0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op46(workerData &worker) {    p0(worker.data);
+  void op46(workerData &worker) {
+    p0(worker.data);
     a0(worker.data);
     r5(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op47(workerData &worker) {
     r5(worker.data);
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
     r5(worker.data);
     sl03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op48(workerData &worker) {    r0(worker.data);
+  void op48(workerData &worker) {
+    r0(worker.data);
     r5(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op49(workerData &worker) {    p0(worker.data);
+  void op49(workerData &worker) {
+    p0(worker.data);
     a0(worker.data);
     revData(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op50(workerData &worker) {    revData(worker.data);
+  void op50(workerData &worker) {
+    revData(worker.data);
     r3(worker.data);
     a0(worker.data);
     r1(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op51(workerData &worker) {
@@ -583,16 +636,18 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op52(workerData &worker) {    r0(worker.data);
+  void op52(workerData &worker) {
+    r0(worker.data);
     sr03(worker.data);
     notData(worker.data);
     p0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op53(workerData &worker) {    
+  void op53(workerData &worker) {
+    
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -610,10 +665,11 @@ namespace astro_branched_zOp {
     xp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op55(workerData &worker) {    
+  void op55(workerData &worker) {
+    
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -630,39 +686,42 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op56(workerData &worker) {    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+  void op56(workerData &worker) {
+    x0_r2(worker.data);
     m0(worker.data);
     notData(worker.data);
     r1(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op57(workerData &worker) {    r0(worker.data);
+  void op57(workerData &worker) {
+    r0(worker.data);
     revData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op58(workerData &worker) {
     revData(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    x0_r2(worker.data);
+    addp2(worker.data, worker.chunk[worker.pos2]);
     a0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op59(workerData &worker) {    r1(worker.data);
+  void op59(workerData &worker) {
+    r1(worker.data);
     m0(worker.data);
     r0(worker.data);
     notData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op60(workerData &worker) {
@@ -671,337 +730,351 @@ namespace astro_branched_zOp {
     m0(worker.data);
     r3(worker.data);
 
-    #ifdef _WIN32
-      blendStep(worker);
-    #else
-      blendStep(worker);
-    #endif
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    blendStep(worker);
+    storeStep(worker);
   }
 
-  void op61(workerData &worker) {    r5(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+  void op61(workerData &worker) {
+    r5(worker.data);
+    sl03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op62(workerData &worker) {
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
     notData(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     a0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op63(workerData &worker) {    r5(worker.data);
+  void op63(workerData &worker) {
+    r5(worker.data);
     p0(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
     a0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op64(workerData &worker) {
     xp2(worker.data, worker.chunk[worker.pos2]);
     revData(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
     m0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op65(workerData &worker) {    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+  void op65(workerData &worker) {
+    x0_r2(worker.data);
     m0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op66(workerData &worker) {    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+  void op66(workerData &worker) {
+    x0_r2(worker.data);
     revData(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
     r1(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op67(workerData &worker) {    r1(worker.data);
+  void op67(workerData &worker) {
+    r1(worker.data);
     p0(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     r5(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op68(workerData &worker) {    ap2(worker.data, worker.chunk[worker.pos2]);
+  void op68(workerData &worker) {
+    addp2(worker.data, worker.chunk[worker.pos2]);
     notData(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op69(workerData &worker) {
     a0(worker.data);
     m0(worker.data);
     revData(worker.data);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op70(workerData &worker) {    xp2(worker.data, worker.chunk[worker.pos2]);
+  void op70(workerData &worker) {
+    xp2(worker.data, worker.chunk[worker.pos2]);
     m0(worker.data);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    sr03(worker.data);
+    x0_r4(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op71(workerData &worker) {
     r5(worker.data);
     notData(worker.data);
     m0(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op72(workerData &worker) {    revData(worker.data);
+  void op72(workerData &worker) {
+    revData(worker.data);
     p0(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op73(workerData &worker) {
     p0(worker.data);
     revData(worker.data);
     r5(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op74(workerData &worker) {    m0(worker.data);
+  void op74(workerData &worker) {
+    m0(worker.data);
     r3(worker.data);
     revData(worker.data);
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op75(workerData &worker) {    m0(worker.data);
+  void op75(workerData &worker) {
+    m0(worker.data);
     p0(worker.data);
-    ap2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    addp2(worker.data, worker.chunk[worker.pos2]);
+    x0_r4(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op76(workerData &worker) {
     r0(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     r5(worker.data);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op77(workerData &worker) {
     r3(worker.data);
     a0(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
     p0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op78(workerData &worker) {
     r0(worker.data);
     revData(worker.data);
     m0(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op79(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r4(worker.data);
+    x0_r2(worker.data);
     a0(worker.data);
     m0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op80(workerData &worker) {    r0(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+  void op80(workerData &worker) {
+    r0(worker.data);
+    sl03(worker.data);
     a0(worker.data);
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op81(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    x0_r4(worker.data);
+    sl03(worker.data);
     r0(worker.data);
     p0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op82(workerData &worker) {    xp2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+  void op82(workerData &worker) {
+    xp2(worker.data, worker.chunk[worker.pos2]);
+    sr03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op83(workerData &worker) {
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
     revData(worker.data);
     r3(worker.data);
     revData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op84(workerData &worker) {
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
     r1(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
     a0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op85(workerData &worker) {    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+  void op85(workerData &worker) {
+    sr03(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
     r0(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op86(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
     r0(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
     notData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op87(workerData &worker) {
     a0(worker.data);
     r3(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
     a0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op88(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     r1(worker.data);
     m0(worker.data);
     notData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op89(workerData &worker) {
     a0(worker.data);
     m0(worker.data);
     notData(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op90(workerData &worker) {
     revData(worker.data);
-    worker.data = _mm256_rol_epi8(worker.data, 6);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    r3(worker.data);
+    r3(worker.data);
+    sr03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op91(workerData &worker) {    p0(worker.data);
-    ap2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+  void op91(workerData &worker) {
+    p0(worker.data);
+    addp2(worker.data, worker.chunk[worker.pos2]);
+    x0_r4(worker.data);
     revData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op92(workerData &worker) {    p0(worker.data);
+  void op92(workerData &worker) {
+    p0(worker.data);
     notData(worker.data);
     p0(worker.data);
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op93(workerData &worker) {    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+  void op93(workerData &worker) {
+    x0_r2(worker.data);
     m0(worker.data);
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
     a0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op94(workerData &worker) {    r1(worker.data);
+  void op94(workerData &worker) {
+    r1(worker.data);
     r0(worker.data);
-    ap2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    addp2(worker.data, worker.chunk[worker.pos2]);
+    sl03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op95(workerData &worker) {
     r1(worker.data);
     notData(worker.data);
-    worker.data = _mm256_rol_epi8(worker.data, 2);
+    r2(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op96(workerData &worker) {
@@ -1024,71 +1097,72 @@ namespace astro_branched_zOp {
 
   void op97(workerData &worker) {
     r1(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
     p0(worker.data);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op98(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
+    sl03(worker.data);
+    sr03(worker.data);
+    x0_r4(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op99(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    x0_r4(worker.data);
+    subx97(worker.data);
     revData(worker.data);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op100(workerData &worker) {
     r0(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
     revData(worker.data);
     p0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op101(workerData &worker) {
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
     p0(worker.data);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
     notData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op102(workerData &worker) {
     r3(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
     a0(worker.data);
     r3(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op103(workerData &worker) {    r1(worker.data);
+  void op103(workerData &worker) {
+    r1(worker.data);
     revData(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
     r0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op104(workerData &worker) {
@@ -1098,93 +1172,97 @@ namespace astro_branched_zOp {
     a0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op105(workerData &worker) {
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
     r3(worker.data);
     r0(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op106(workerData &worker) {
     revData(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
     r1(worker.data);
     m0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op107(workerData &worker) {
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
-    worker.data = _mm256_rol_epi8(worker.data, 6);
+    sr03(worker.data);
+    x0_r2(worker.data);
+    r3(worker.data);
+    r3(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op108(workerData &worker) {    xp2(worker.data, worker.chunk[worker.pos2]);
+  void op108(workerData &worker) {
+    xp2(worker.data, worker.chunk[worker.pos2]);
     notData(worker.data);
-    ap2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    addp2(worker.data, worker.chunk[worker.pos2]);
+    x0_r2(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op109(workerData &worker) {    m0(worker.data);
+  void op109(workerData &worker) {
+    m0(worker.data);
     r0(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op110(workerData &worker) {
     a0(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    x0_r2(worker.data);
+    x0_r2(worker.data);
+    sr03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op111(workerData &worker) {
     m0(worker.data);
     revData(worker.data);
     m0(worker.data);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op112(workerData &worker) {
     r3(worker.data);
     notData(worker.data);
     r5(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op113(workerData &worker) {
-    worker.data = _mm256_rol_epi8(worker.data, 6);
+    r3(worker.data);
+    r3(worker.data);
     p0(worker.data);
     notData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op114(workerData &worker) {
@@ -1194,109 +1272,117 @@ namespace astro_branched_zOp {
     notData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op115(workerData &worker) {    r0(worker.data);
+  void op115(workerData &worker) {
+    r0(worker.data);
     r5(worker.data);
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
     r3(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op116(workerData &worker) {    ap2(worker.data, worker.chunk[worker.pos2]);
+  void op116(workerData &worker) {
+    addp2(worker.data, worker.chunk[worker.pos2]);
     xp2(worker.data, worker.chunk[worker.pos2]);
     p0(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op117(workerData &worker) {    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+  void op117(workerData &worker) {
+    sl03(worker.data);
     r3(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    sl03(worker.data);
+    addp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op118(workerData &worker) {
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
     a0(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
     r5(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op119(workerData &worker) {    revData(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+  void op119(workerData &worker) {
+    revData(worker.data);
+    x0_r2(worker.data);
     notData(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op120(workerData &worker) {    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+  void op120(workerData &worker) {
+    x0_r2(worker.data);
     m0(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
     revData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op121(workerData &worker) {
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
     a0(worker.data);
     p0(worker.data);
     m0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op122(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
     r0(worker.data);
     r5(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op123(workerData &worker) {    ap2(worker.data, worker.chunk[worker.pos2]);
+  void op123(workerData &worker) {
+    addp2(worker.data, worker.chunk[worker.pos2]);
     notData(worker.data);
-    worker.data = _mm256_rol_epi8(worker.data, 6);
+    r3(worker.data);
+    r3(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op124(workerData &worker) {    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+  void op124(workerData &worker) {
+    x0_r2(worker.data);
+    x0_r2(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
     notData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op125(workerData &worker) {
     revData(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     a0(worker.data);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op126(workerData &worker) {
@@ -1304,16 +1390,17 @@ namespace astro_branched_zOp {
     revData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op127(workerData &worker) {    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+  void op127(workerData &worker) {
+    sl03(worker.data);
     m0(worker.data);
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
     xp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op128(workerData &worker) {
@@ -1338,242 +1425,245 @@ namespace astro_branched_zOp {
     notData(worker.data);
     p0(worker.data);
     p0(worker.data);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op130(workerData &worker) {
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
     r0(worker.data);
     r1(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op131(workerData &worker) {
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
     r1(worker.data);
     p0(worker.data);
     m0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op132(workerData &worker) {    ap2(worker.data, worker.chunk[worker.pos2]);
+  void op132(workerData &worker) {
+    addp2(worker.data, worker.chunk[worker.pos2]);
     revData(worker.data);
     r5(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op133(workerData &worker) {    xp2(worker.data, worker.chunk[worker.pos2]);
+  void op133(workerData &worker) {
+    xp2(worker.data, worker.chunk[worker.pos2]);
     r5(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    x0_r2(worker.data);
+    sl03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op134(workerData &worker) {    notData(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+  void op134(workerData &worker) {
+    notData(worker.data);
+    x0_r4(worker.data);
     r1(worker.data);
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op135(workerData &worker) {
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    sr03(worker.data);
+    x0_r2(worker.data);
     a0(worker.data);
     revData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op136(workerData &worker) {
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    sr03(worker.data);
+    subx97(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
     r5(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op137(workerData &worker) {
     r5(worker.data);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
     revData(worker.data);
     r0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op138(workerData &worker) {
     xp2(worker.data, worker.chunk[worker.pos2]);
     xp2(worker.data, worker.chunk[worker.pos2]);
     a0(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op139(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     r3(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op140(workerData &worker) {
     r1(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
     r5(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op141(workerData &worker) {
     r1(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
     p0(worker.data);
     a0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op142(workerData &worker) {
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
     r5(worker.data);
     revData(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op143(workerData &worker) {
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
     r3(worker.data);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
+    sl03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op144(workerData &worker) {
     r0(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
     notData(worker.data);
     r0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op145(workerData &worker) {
     revData(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
+    x0_r2(worker.data);
+    x0_r4(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op146(workerData &worker) {
-    ap2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
+    sl03(worker.data);
+    addp2(worker.data, worker.chunk[worker.pos2]);
     p0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op147(workerData &worker) {
     notData(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    sl03(worker.data);
+    x0_r4(worker.data);
     m0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op148(workerData &worker) {
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
     r5(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    sl03(worker.data);
+    subx97(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op149(workerData &worker) {
     xp2(worker.data, worker.chunk[worker.pos2]);
     revData(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
     a0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op150(workerData &worker) {
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    sl03(worker.data);
+    sl03(worker.data);
+    sl03(worker.data);
+    addp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op151(workerData &worker) {
     a0(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
     m0(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op152(workerData &worker) {
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
     notData(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    sl03(worker.data);
+    x0_r2(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op153(workerData &worker) {
     worker.data = _mm256_rol_epi8(worker.data, 4);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op154(workerData &worker) {
@@ -1583,36 +1673,36 @@ namespace astro_branched_zOp {
     p0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op155(workerData &worker) {
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
     p0(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op156(workerData &worker) {
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
+    sr03(worker.data);
     worker.data = _mm256_rol_epi8(worker.data, 4);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op157(workerData &worker) {
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
+    sl03(worker.data);
     r0(worker.data);
     r1(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op158(workerData &worker) {
@@ -1622,26 +1712,26 @@ namespace astro_branched_zOp {
     r1(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op159(workerData &worker) {
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
     r0(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op160(workerData &worker) {
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
     revData(worker.data);
     worker.data = _mm256_rol_epi8(worker.data, 4);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op161(workerData &worker) {
@@ -1651,125 +1741,125 @@ namespace astro_branched_zOp {
     r0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op162(workerData &worker) {
     m0(worker.data);
     revData(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    x0_r2(worker.data);
+    subx97(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op163(workerData &worker) {
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    sl03(worker.data);
+    subx97(worker.data);
+    x0_r4(worker.data);
     r1(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op164(workerData &worker) {
     m0(worker.data);
     p0(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
     notData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op165(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
     a0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op166(workerData &worker) {
     r3(worker.data);
     a0(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     notData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op167(workerData &worker) {
     m0(worker.data);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op168(workerData &worker) {
     r0(worker.data);
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
     r0(worker.data);
     r1(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op169(workerData &worker) {
     r1(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    sl03(worker.data);
+    x0_r4(worker.data);
+    addp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op170(workerData &worker) {
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
     revData(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
     m0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op171(workerData &worker) {
     r3(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
     p0(worker.data);
     revData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op172(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    x0_r4(worker.data);
+    subx97(worker.data);
+    sl03(worker.data);
     r1(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op173(workerData &worker) {
     notData(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
     m0(worker.data);
     a0(worker.data);
 
   blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op174(workerData &worker) {
@@ -1779,17 +1869,17 @@ namespace astro_branched_zOp {
     p0(worker.data);
 
   blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op175(workerData &worker) {
     r3(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
     m0(worker.data);
     r5(worker.data);
 
   blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op176(workerData &worker) {
@@ -1799,106 +1889,107 @@ namespace astro_branched_zOp {
     r5(worker.data);
 
   blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op177(workerData &worker) {
     p0(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    x0_r2(worker.data);
+    x0_r2(worker.data);
+    addp2(worker.data, worker.chunk[worker.pos2]);
 
   blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op178(workerData &worker) {
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
     a0(worker.data);
     notData(worker.data);
     r1(worker.data);
 
   blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op179(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     a0(worker.data);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
     revData(worker.data);
 
   blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op180(workerData &worker) {
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    sr03(worker.data);
+    x0_r4(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
 
   blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op181(workerData &worker) {
     notData(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    sl03(worker.data);
+    x0_r2(worker.data);
     r5(worker.data);
 
   blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op182(workerData &worker) {
     xp2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_rol_epi8(worker.data, 6);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    r3(worker.data);
+    r3(worker.data);
+    x0_r4(worker.data);
 
   blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op183(workerData &worker) {
     a0(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
+    subx97(worker.data);
     m0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op184(workerData &worker) {
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
     m0(worker.data);
     r5(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op185(workerData &worker) {
     notData(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
     r5(worker.data);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op186(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    x0_r2(worker.data);
+    x0_r4(worker.data);
+    subx97(worker.data);
+    sr03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op187(workerData &worker) {
@@ -1908,7 +1999,7 @@ namespace astro_branched_zOp {
     r3(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op188(workerData &worker) {
@@ -1926,102 +2017,102 @@ namespace astro_branched_zOp {
 
   void op189(workerData &worker) {
     r5(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op190(workerData &worker) {
     r5(worker.data);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    ap2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    sr03(worker.data);
+    addp2(worker.data, worker.chunk[worker.pos2]);
+    x0_r2(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op191(workerData &worker) {
     a0(worker.data);
     r3(worker.data);
     r0(worker.data);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op192(workerData &worker) {
     a0(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
     a0(worker.data);
     m0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op193(workerData &worker) {
-    ap2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    addp2(worker.data, worker.chunk[worker.pos2]);
+    sl03(worker.data);
     r0(worker.data);
     r1(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op194(workerData &worker) {
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
     r0(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    sl03(worker.data);
+    addp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op195(workerData &worker) {
     p0(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op196(workerData &worker) {
     r3(worker.data);
     revData(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
     r1(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op197(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
     r0(worker.data);
     m0(worker.data);
     m0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op198(workerData &worker) {
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
+    sr03(worker.data);
     revData(worker.data);
     r1(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op199(workerData &worker) {
@@ -2031,27 +2122,27 @@ namespace astro_branched_zOp {
     xp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op200(workerData &worker) {
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
     p0(worker.data);
     revData(worker.data);
     revData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op201(workerData &worker) {
     r3(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r2(worker.data);
+    x0_r4(worker.data);
     notData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op202(workerData &worker) {
@@ -2061,47 +2152,47 @@ namespace astro_branched_zOp {
     r5(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op203(workerData &worker) {
     xp2(worker.data, worker.chunk[worker.pos2]);
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
     r1(worker.data);
     r0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op204(workerData &worker) {
     r5(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     r0(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op205(workerData &worker) {
     p0(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    x0_r4(worker.data);
+    sl03(worker.data);
     a0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op206(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
     revData(worker.data);
     revData(worker.data);
     p0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op207(workerData &worker) {
@@ -2109,7 +2200,7 @@ namespace astro_branched_zOp {
     p0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op208(workerData &worker) {
@@ -2129,120 +2220,120 @@ namespace astro_branched_zOp {
     r5(worker.data);
     revData(worker.data);
     p0(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op210(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     r0(worker.data);
     r5(worker.data);
     notData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op211(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
     a0(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
     r0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op212(workerData &worker) {
     r0(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     // xp2(worker.data, worker.chunk[worker.pos2]);
     // xp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op213(workerData &worker) {
     a0(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
     r3(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op214(workerData &worker) {
     xp2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    subx97(worker.data);
+    sr03(worker.data);
     notData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op215(workerData &worker) {
     xp2(worker.data, worker.chunk[worker.pos2]);
-    ap2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    addp2(worker.data, worker.chunk[worker.pos2]);
+    sl03(worker.data);
     m0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op216(workerData &worker) {
     r0(worker.data);
     notData(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    subx97(worker.data);
+    addp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op217(workerData &worker) {
     r5(worker.data);
     a0(worker.data);
     r1(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op218(workerData &worker) {
     revData(worker.data);
     notData(worker.data);
     m0(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op219(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
     r3(worker.data);
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
     revData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op220(workerData &worker) {
     r1(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
     revData(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op221(workerData &worker) {
@@ -2252,116 +2343,116 @@ namespace astro_branched_zOp {
     revData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op222(workerData &worker) {
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
+    sl03(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
     m0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op223(workerData &worker) {
     r3(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
     r0(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op224(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     worker.data = _mm256_rol_epi8(worker.data, 4);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sl03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op225(workerData &worker) {
     notData(worker.data);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
     revData(worker.data);
     r3(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op226(workerData &worker) {
     revData(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
     m0(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op227(workerData &worker) {
     notData(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    sl03(worker.data);
+    subx97(worker.data);
+    addp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op228(workerData &worker) {
     a0(worker.data);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
     a0(worker.data);
     p0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op229(workerData &worker) {
     r3(worker.data);
     r0(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     p0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op230(workerData &worker) {
     m0(worker.data);
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
     r0(worker.data);
     r0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op231(workerData &worker) {
     r3(worker.data);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
     revData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op232(workerData &worker) {
     m0(worker.data);
     m0(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
     r5(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op233(workerData &worker) {
@@ -2371,156 +2462,157 @@ namespace astro_branched_zOp {
     p0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op234(workerData &worker) {
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
     m0(worker.data);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op235(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     m0(worker.data);
     r3(worker.data);
     notData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op236(workerData &worker) {
     xp2(worker.data, worker.chunk[worker.pos2]);
     a0(worker.data);
-    ap2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    addp2(worker.data, worker.chunk[worker.pos2]);
+    subx97(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op237(workerData &worker) {
     r5(worker.data);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    sl03(worker.data);
+    x0_r2(worker.data);
     r3(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op238(workerData &worker) {
     a0(worker.data);
     a0(worker.data);
     r3(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op239(workerData &worker) {
-    worker.data = _mm256_rol_epi8(worker.data, 6);
+    r3(worker.data);
+    r3(worker.data);
     m0(worker.data);
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op240(workerData &worker) {
     notData(worker.data);
     a0(worker.data);
-    ap2(worker.data, worker.chunk[worker.pos2]);
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    addp2(worker.data, worker.chunk[worker.pos2]);
+    sl03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op241(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
     p0(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
     r1(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op242(workerData &worker) {
     a0(worker.data);
     a0(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
     xp2(worker.data, worker.chunk[worker.pos2]);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op243(workerData &worker) {
     r5(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     p0(worker.data);
     r1(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op244(workerData &worker) {
     notData(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     revData(worker.data);
     r5(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op245(workerData &worker) {
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
     r5(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    x0_r2(worker.data);
+    sr03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op246(workerData &worker) {
     a0(worker.data);
     r1(worker.data);
-    worker.data = _mm256_srlv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    sr03(worker.data);
     a0(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op247(workerData &worker) {
     r5(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     r5(worker.data);
     notData(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op248(workerData &worker) {
     notData(worker.data);
-    worker.data = _mm256_sub_epi8(worker.data, _mm256_xor_si256(worker.data, _mm256_set1_epi8(97)));
+    subx97(worker.data);
     p0(worker.data);
     r5(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op249(workerData &worker) {
@@ -2537,44 +2629,37 @@ namespace astro_branched_zOp {
   }
 
   void op250(workerData &worker) {
-    ap2(worker.data, worker.chunk[worker.pos2]);
+    addp2(worker.data, worker.chunk[worker.pos2]);
     r0(worker.data);
     p0(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
+    x0_r4(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op251(workerData &worker) {
     a0(worker.data);
     p0(worker.data);
     revData(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op252(workerData &worker) {
     revData(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 4));
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
-    worker.data = _mm256_sllv_epi8(worker.data, _mm256_and_si256(worker.data, vec_3));
+    x0_r4(worker.data);
+    x0_r2(worker.data);
+    sl03(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void op253(workerData &worker) {    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
-    if (worker.isSame) {
-      byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
-      if (worker.prev_chunk[worker.pos1] == newVal) {
-        worker.prev_lhash = (worker.lhash * (worker.pos2-worker.pos1))+ worker.prev_lhash;
-        worker.lhash = XXHash64::hash(worker.chunk, worker.pos2,0);
-        return;
-      }
-    }
+  void op253(workerData &worker) {
+    storeStep(worker);
   #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -2593,37 +2678,32 @@ namespace astro_branched_zOp {
   void op254(workerData &worker) {
     RC4_set_key(&worker.key, 256, worker.prev_chunk);
 
-
-
-
     p0(worker.data);
     r3(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     r3(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void op255(workerData &worker) {
     RC4_set_key(&worker.key, 256, worker.prev_chunk);
 
-
-
-
     p0(worker.data);
     r3(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     r3(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void r_op0(workerData &worker) {    byte newVal = worker.simpleLookup[worker.prev_chunk[worker.pos1]];
+  void r_op0(workerData &worker) {
+    byte newVal = worker.simpleLookup[worker.prev_chunk[worker.pos1]];
     __m256i newVec = _mm256_set1_epi8(newVal);
     worker.data = _mm256_blendv_epi8(worker.data, newVec, genMask(worker.pos2 - worker.pos1));
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
 
     if ((worker.pos2 - worker.pos1) % 2 == 1) {
       worker.t1 = worker.chunk[worker.pos1];
@@ -2634,24 +2714,27 @@ namespace astro_branched_zOp {
     }
   }
 
-  void r_op1(workerData &worker) {    byte newVal = worker.lookup3D[worker.branched_idx[worker.op] * 256 * 256 +
+  void r_op1(workerData &worker) {
+    byte newVal = worker.lookup3D[worker.branched_idx[worker.op] * 256 * 256 +
                                   worker.prev_chunk[worker.pos2] * 256 +
                                   worker.prev_chunk[worker.pos1]];
 
     __m256i newVec = _mm256_set1_epi8(newVal);
     worker.data = _mm256_blendv_epi8(worker.data, newVec, genMask(worker.pos2 - worker.pos1));
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
 
     return;
   }
 
-  void r_op2(workerData &worker) {    byte newVal = worker.simpleLookup[worker.reg_idx[worker.op] * 256 + worker.prev_chunk[worker.pos1]];
+  void r_op2(workerData &worker) {
+    byte newVal = worker.simpleLookup[worker.reg_idx[worker.op] * 256 + worker.prev_chunk[worker.pos1]];
     __m256i newVec = _mm256_set1_epi8(newVal);
     worker.data = _mm256_blendv_epi8(worker.data, newVec, genMask(worker.pos2 - worker.pos1));
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
-  void r_op253(workerData &worker) {    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+  void r_op253(workerData &worker) {
+    storeStep(worker);
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
       if (worker.prev_chunk[worker.pos1] == newVal) {
@@ -2680,11 +2763,11 @@ namespace astro_branched_zOp {
 
     p0(worker.data);
     r3(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     r3(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   void r_op255(workerData &worker) {
@@ -2692,11 +2775,11 @@ namespace astro_branched_zOp {
 
     p0(worker.data);
     r3(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
+    x0_r2(worker.data);
     r3(worker.data);
 
     blendStep(worker);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+    storeStep(worker);
   }
 
   typedef void (*OpFunc)(workerData &);
@@ -2758,10 +2841,5 @@ namespace astro_branched_zOp {
     r_op2, r_op2, r_op253, r_op254, r_op255,
   };
 
-  const std::vector<unsigned char> branchedOps_global = {
-1,3,5,9,11,13,15,17,20,21,23,27,29,30,35,39,40,43,45,47,51,54,58,60,62,64,68,70,72,74,75,80,82,85,91,92,93,94,103,108,109,115,116,117,
-119,120,123,124,127,132,133,134,136,138,140,142,143,146,148,149,150,154,155,159,161,165,168,169,176,177,178,180,182,184,187,189,190,193,
-194,195,199,202,203,204,212,214,215,216,219,221,222,223,226,227,230,231,234,236,239,240,241,242,250,253
-};
   int branchComputeSize = 14;
 }
