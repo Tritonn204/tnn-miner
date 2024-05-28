@@ -203,6 +203,8 @@ int runDeroOpTests(int testOp, int dataLen) {
   testWorker->pos1 = 0; testWorker->pos2 = dataLen+1;
   z_testWorker->pos1 = 0; z_testWorker->pos2 = dataLen+1;
 
+  z_testWorker->isSame = true;
+
   byte test[32];
   //byte test2[32];
   std::srand(time(NULL));
@@ -261,11 +263,17 @@ int runDeroOpTests(int testOp, int dataLen) {
     optest_branchcpu(op, *controlWorker, test, *controlResult, false);
     //printf("  Op: %3d - %6ld ns\n", op, controlResult->duration_ns);
 
-    testWorker->pos1 = 0; testWorker->pos2 = dataLen+1;
-    testFunc(op, *testWorker, test, *testResult, false);
+    z_testWorker->pos1 = 0; z_testWorker->pos2 = dataLen+1;
+    testFunc(op, *z_testWorker, test, *z_testResult, false);
 
     z_testWorker->pos1 = 0; z_testWorker->pos2 = dataLen+1;
     testFunc(op, *z_testWorker, test, *z_testResult, false);
+
+    testWorker->pos1 = 0; testWorker->pos2 = dataLen+1;
+    testFunc(op, *testWorker, test, *testResult, false);
+
+    testWorker->pos1 = 0; testWorker->pos2 = dataLen+1;
+    testFunc(op, *testWorker, test, *testResult, false);
 
     auto control_dur = controlResult->duration_ns.count();
     auto test_dur = testResult->duration_ns.count();

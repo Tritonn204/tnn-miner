@@ -176,6 +176,10 @@ public:
 
   alignas(32) byte salsaInput[256] = {0};
   alignas(32) byte op;
+  #if defined(__AVX2__)
+  __m256i data;
+  __m256i old;
+  #endif
   byte pos1;
   byte pos2;
   byte t1;
@@ -201,12 +205,6 @@ public:
 
   alignas(32) std::bitset<256> clippedBytes[regOps_size];
   alignas(32) std::bitset<256> unchangedBytes[regOps_size];
-
-  #if defined(__AVX2__)
-  alignas(32) __m256i maskTable[32];
-  __m256i simd_data;
-  __m256i simd_old;
-  #endif
 
   byte branchedOps[branchedOps_size*2];
   byte regularOps[regOps_size*2];
