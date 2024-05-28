@@ -4189,7 +4189,6 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
       #if defined(__AVX2__)
       // branchComputeCPU_avx2(worker, false);
       branchComputeCPU_avx2_zOptimized(worker, false);
-      worker.data_len = static_cast<uint32_t>((worker.tries - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
       #elif defined(__aarch64__)
       branchComputeCPU_aarch64(worker, false);
       #else
@@ -11243,18 +11242,28 @@ void branchComputeCPU_avx2(workerData &worker, bool isTest)
 
 void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
 {
+  byte prevOp;
+  int sameCount = 0;
   #pragma unroll 277
-  // for (int it = 0; it < 277; it++) 
-  // {
-  while(true) {
+  for (int it = 0; it < 277; it++) 
+  {
+  // while(true) {
     if(isTest) {
+      __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
+      __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+      uint32_t mask = (1 << (worker.pos2 - worker.pos1)) - 1;
+      int result = _mm256_movemask_epi8(cmp);
 
+      if ((result & mask) == mask) {
+        worker.isSame = true;
+      }
     } else {
       worker.tries++;
       worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries;
       // __builtin_prefetch(&worker.random_switcher,0,3);
       // printf("%d worker.random_switcher %d %08jx\n", worker.tries, worker.random_switcher, worker.random_switcher);
 
+      prevOp = worker.op;
       worker.op = static_cast<byte>(worker.random_switcher);
       // if (debugOpOrder) worker.opsA.push_back(worker.op);
 
@@ -11322,18 +11331,6 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
       }
     }
 
-    if (!worker.isSame) {
-      __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
-      __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
-      uint32_t mask = (1 << (worker.pos2 - worker.pos1)) - 1;
-      int result = _mm256_movemask_epi8(cmp);
-
-      if ((result & mask) == mask) worker.isSame = true;
-    }
-
-
-    __builtin_prefetch(&astro_branched_zOp::branchCompute[(worker.op+2)%256],0,2);
-    __builtin_prefetch(&astro_branched_zOp::branchCompute[(worker.op+1)%256],0,3);
     __builtin_prefetch(&worker.chunk[worker.pos1],1,3);
 
     // if (debugOpOrder && worker.op == sus_op) {
@@ -11356,10 +11353,24 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
     //   printf("\n");
     // }
 
-    astro_branched_zOp::branchCompute[worker.op](worker);
+    if (!worker.isSame) {
+      __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
+      __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+      uint32_t mask = (1 << (worker.pos2 - worker.pos1)) - 1;
+      int result = _mm256_movemask_epi8(cmp);
+
+      if ((result & mask) == mask) {
+        worker.isSame = true;
+        // if (worker.pos2 - worker.pos1 > 0) printf("same after op: %d, for op: %d\n", prevOp, worker.op);
+      }
+    } else {
+      sameCount++;
+    }
+
+    astro_branched_zOp::branchCompute[worker.op + (256*worker.isSame)](worker);
 
     if(isTest) {
-      return;
+      break;
     }
   
     // if (op == 53) {
@@ -11437,9 +11448,11 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
 
     if (worker.tries > 260 + 16 || (worker.sData[(worker.tries-1)*256+255] >= 0xf0 && worker.tries > 260))
     {
-      return;
+      break;
     }
   }
+  if (!isTest) printf("%d out of %d ops had repeating char inputs\n", sameCount, worker.tries);
+  worker.data_len = static_cast<uint32_t>((worker.tries - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
 }
 
 #endif

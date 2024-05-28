@@ -82,7 +82,7 @@ int DeroTesting(int testOp, int testLen, bool useLookup) {
   return failedTests;
 }
 
-const uint64_t NUM_ITERATIONS = 276;
+const uint64_t NUM_ITERATIONS = 1000;
 
 #pragma clang optimize off
 void benchmarkSIMDMath() {
@@ -100,7 +100,7 @@ void benchmarkSIMDMath() {
 
     // Fill the remaining bytes of prev_chunk with random values
     srand(0);
-    for (int i = pos2+1; i < 32; ++i) {
+    for (int i = pos2 + 1; i < 32; ++i) {
         prev_chunk[i] = static_cast<uint8_t>(rand());
     }
 
@@ -148,7 +148,7 @@ void benchmarkLoadCompare() {
 
     // Fill the remaining bytes of prev_chunk with random values
     srand(0);
-    for (int i = pos2+1; i < 32; ++i) {
+    for (int i = pos2 + 1; i < 32; ++i) {
         prev_chunk[i] = static_cast<uint8_t>(rand());
     }
 
@@ -158,22 +158,14 @@ void benchmarkLoadCompare() {
     for (uint64_t i = 0; i < NUM_ITERATIONS; ++i) {
 
         __m256i data = _mm256_loadu_si256((__m256i*)&prev_chunk[pos1]);
-        __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(prev_chunk[pos1]));
-        uint32_t mask = (1 << (pos2 - pos1)) - 1;
-        int result = _mm256_movemask_epi8(cmp);
-        // __m256i data = _mm256_loadu_si256((__m256i*)&prev_chunk[pos1]);
+        // if ((result & mask) == mask) {
+          byte newVal = controlWorker->lookup3D[controlWorker->branched_idx[116]*256*256 + prev_chunk[pos2]*256 + prev_chunk[pos1]];
 
-        byte newVal = controlWorker->lookup3D[controlWorker->branched_idx[116]*256*256 + prev_chunk[pos2]*256 + prev_chunk[pos1]];
-        // if (prev_chunk[pos1] == newVal) {
-        //   _mm256_storeu_si256((__m256i*)&chunk[pos1], data);
-        //   accumulator += chunk[pos1];
-        //   continue;
-        // }
-
-        __m256i newVec = _mm256_set1_epi8(newVal);
-        data = _mm256_blendv_epi8(data, newVec, genMask(pos2-pos1));
-        _mm256_storeu_si256((__m256i*)&chunk[pos1], data);
-        accumulator += chunk[pos1];
+          __m256i newVec = _mm256_set1_epi8(newVal);
+          data = _mm256_blendv_epi8(data, newVec, genMask(pos2-pos1));
+          _mm256_storeu_si256((__m256i*)&chunk[pos1], data);
+          accumulator += chunk[pos1];
+        // } 
     }
 
     auto end = std::chrono::steady_clock::now();
@@ -203,8 +195,13 @@ int runDeroOpTests(int testOp, int dataLen) {
   initWorker(*testWorker);
   lookupGen(*testWorker, nullptr, nullptr);
 
-  controlWorker->pos1 = 0; controlWorker->pos2 = dataLen;
-  testWorker->pos1 = 0; testWorker->pos2 = dataLen;
+  workerData *z_testWorker = (workerData*)malloc_huge_pages(sizeof(workerData));
+  initWorker(*z_testWorker);
+  lookupGen(*z_testWorker, nullptr, nullptr);
+
+  controlWorker->pos1 = 0; controlWorker->pos2 = dataLen+1;
+  testWorker->pos1 = 0; testWorker->pos2 = dataLen+1;
+  z_testWorker->pos1 = 0; z_testWorker->pos2 = dataLen+1;
 
   byte test[32];
   //byte test2[32];
@@ -212,8 +209,6 @@ int runDeroOpTests(int testOp, int dataLen) {
   generateInitVector<32>(test);
   memset(test, 0, dataLen);
   
-  testWorker->isSame = true;
-
   printf("Initial Input\n");
   for (int i = 0; i < 32; i++) {
     printf("%02x", test[i]);
@@ -246,12 +241,13 @@ int runDeroOpTests(int testOp, int dataLen) {
     startOp = testOp;
     maxOp = testOp;
   }
-
-  printf("%-7s:   Branch vs %-7s ns         - Valid\n", resultText.c_str(), resultText.c_str());
+                                            //
+  printf("%-7s:   Branch vs %-7s ns         - Valid| Branch vs %-7s ns        - Valid\n", resultText.c_str(), resultText.c_str(), "AVX2_zOp");
   for(int op = startOp; op <= maxOp; op++) {
     // WARMUP, don't print times
     OpTestResult *controlResult = new OpTestResult;
     OpTestResult *testResult = new OpTestResult;
+    OpTestResult *z_testResult = new OpTestResult;
     // WARMUP, don't print times
 
     controlWorker->pos1 = 0; controlWorker->pos2 = dataLen+1;
@@ -268,16 +264,23 @@ int runDeroOpTests(int testOp, int dataLen) {
     testWorker->pos1 = 0; testWorker->pos2 = dataLen+1;
     testFunc(op, *testWorker, test, *testResult, false);
 
+    z_testWorker->pos1 = 0; z_testWorker->pos2 = dataLen+1;
+    testFunc(op, *z_testWorker, test, *z_testResult, false);
+
     auto control_dur = controlResult->duration_ns.count();
     auto test_dur = testResult->duration_ns.count();
+    auto z_test_dur = z_testResult->duration_ns.count();
 
     auto percent_speedup = double(double(control_dur-test_dur)/double(test_dur))*100;
+    auto z_percent_speedup = double(double(control_dur-z_test_dur)/double(z_test_dur))*100;
     bool valid = 0 == memcmp(controlResult->result, testResult->result, dataLen);
+    bool z_valid = 0 == memcmp(controlResult->result, z_testResult->result, dataLen);
     char isOpt = ' ';
     if(testWorker->opt[op]) {
       isOpt = '*';
     }
-    printf("%cOp: %3d - %7ld / %7ld = %6.2f %% - %s\n", isOpt, op, controlResult->duration_ns.count(), testResult->duration_ns.count(), percent_speedup, valid ? "true" : "false");
+    printf("%cOp: %3d - %7ld / %7ld = %6.2f %% - %s | %7ld / %7ld = %6.2f %% - %s\n", isOpt, op, controlResult->duration_ns.count(), testResult->duration_ns.count(), 
+      percent_speedup, valid ? "true" : "false", controlResult->duration_ns.count(), z_testResult->duration_ns.count(), z_percent_speedup, z_valid ? "true" : "false");
     if(!valid) {
       numOpsFailed++;
       printf("Vanilla: ");
@@ -288,6 +291,20 @@ int runDeroOpTests(int testOp, int dataLen) {
       printf("%7s: ", resultText.c_str());
       for (int i = 0; i < dataLen+1; i++) {
         printf("%02x", testResult->result[i]);
+      }
+      printf("\n");
+    }
+
+    if(!z_valid) {
+      numOpsFailed++;
+      printf("Vanilla: ");
+      for (int i = 0; i < dataLen+1; i++) {
+        printf("%02x", controlResult->result[i]);
+      }
+      printf("\nZ optimized: ");
+      printf("%7s: ", resultText.c_str());
+      for (int i = 0; i < dataLen+1; i++) {
+        printf("%02x", z_testResult->result[i]);
       }
       printf("\n");
     }
