@@ -7595,7 +7595,7 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
 {
   byte prevOp;
   int sameCount = 0;
-  // #pragma unroll 277
+  #pragma unroll 64
   for (int it = 0; it < 277; it++) 
   {
   // while(true) {
