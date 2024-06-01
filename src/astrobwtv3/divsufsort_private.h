@@ -31,7 +31,7 @@
 extern "C" {
 #endif /* __cplusplus */
 
-#define INLINE inline
+#define INLINE  // inline
 
 #if HAVE_CONFIG_H
 # include "config.h"
