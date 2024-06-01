@@ -3261,11 +3261,15 @@ void mineSpectre(int tid)
 
   alignas(64) workerData *astroWorker = (workerData *)malloc_huge_pages(sizeof(workerData));
   alignas(64) SpectreX::worker *worker = (SpectreX::worker *)malloc_huge_pages(sizeof(SpectreX::worker));
+  initWorker(*astroWorker);
+  lookupGen(*astroWorker, nullptr, nullptr);
   worker->astroWorker = astroWorker;
 
   alignas(64) workerData *devAstroWorker = (workerData *)malloc_huge_pages(sizeof(workerData));
   alignas(64) SpectreX::worker *devWorker = (SpectreX::worker *)malloc_huge_pages(sizeof(SpectreX::worker));
   devWorker->astroWorker = devAstroWorker;
+  initWorker(*devAstroWorker);
+  lookupGen(*devAstroWorker, nullptr, nullptr);
 
 waitForJob:
 

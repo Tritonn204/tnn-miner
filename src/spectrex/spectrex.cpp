@@ -1,4 +1,5 @@
 #include "spectrex.h"
+#include <lookupcompute.h>
 #include <openssl/evp.h>
 #include <openssl/sha.h>
 #include <hex.h>
@@ -116,6 +117,9 @@ namespace SpectreX
 
     worker w;
     workerData *aw = (workerData*)malloc(sizeof(workerData));
+    initWorker(*aw);
+    lookupGen(*aw, nullptr, nullptr);
+
     w.astroWorker = aw;
     newMatrix(in, w.mat);
 
