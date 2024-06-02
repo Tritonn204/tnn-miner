@@ -34,11 +34,6 @@
 #include <filesystem>
 #include <functional>
 #include "lookupcompute.h"
-#include "archon3r3.h"
-// #include "archon4r0.h"
-#include "archon.h"
-#include "sais_lcp.hpp"
-#include "dc3.hpp"
 
 extern "C"
 {
@@ -50,7 +45,6 @@ extern "C"
 
 #include <hex.h>
 #include <openssl/rc4.h>
-// #include "sais2.h"
 
 #include <fstream>
 
@@ -62,8 +56,6 @@ extern "C"
 #if defined(__x86_64__)
   #include "immintrin.h"
 #endif
-#include "dc3.hpp"
-// #include "fgsaca.hpp"
 #include <hugepages.h>
 
 using byte = unsigned char;
@@ -249,191 +241,7 @@ void buildSuffixArray(const uint8_t* data, int n, int* suffixArray, int* buckets
     delete[] temp;
 }
 
-void runDivsufsortBenchmark() {
-  std::vector<std::string> snapshotFiles;
-  for (const auto& entry : std::filesystem::directory_iterator("tests")) {
-    snapshotFiles.push_back(entry.path().string());
-  }
-  
-  std::vector<std::chrono::duration<double>> times;
-  std::vector<std::chrono::duration<double>> times2;
-  std::vector<std::chrono::duration<double>> times3;
-  std::vector<std::chrono::duration<double>> times4;
-  std::vector<std::chrono::duration<double>> times5;
 
-  int buckets[256];
-  int sorted[MAX_LENGTH];
-
-  
-  int32_t *sa = reinterpret_cast<int32_t *>(malloc_huge_pages(MAX_LENGTH*sizeof(int32_t)));
-  uint32_t *sa2 = reinterpret_cast<uint32_t *>(malloc_huge_pages(MAX_LENGTH*sizeof(uint32_t)));
-  byte *buffer = reinterpret_cast<byte *>(malloc_huge_pages(MAX_LENGTH));
-  int32_t *bA = reinterpret_cast<int32_t *>(malloc_huge_pages((256)*sizeof(int32_t)));;
-  int32_t *bB = reinterpret_cast<int32_t *>(malloc_huge_pages((256*256)*sizeof(int32_t)));
-
-  void * ctx = libsais_create_ctx();
-  workerData *worker = new workerData;
-
-  std::cout << "Testing divsufsort" << std::endl;
-  for (const auto& file : snapshotFiles) {
-    // printf("enter\n");
-    // Load snapshot data from file
-    std::ifstream ifs(file, std::ios::binary);
-    ifs.seekg(0, ifs.end);
-    size_t size = ifs.tellg(); 
-    ifs.seekg(0, ifs.beg);
-    ifs.read(reinterpret_cast<char*>(buffer), size);
-    ifs.close();
-    
-    // Run divsufsort
-    auto start = std::chrono::steady_clock::now();
-    divsufsort(buffer, sa, size, bA, bB); 
-    auto end = std::chrono::steady_clock::now();
-    
-    std::chrono::duration<double> time = end - start;
-    times.push_back(time);
-  }
-
-  memset(sa, 0, MAX_LENGTH);
-
-  std::cout << "Testing sais" << std::endl;
-  for (const auto& file : snapshotFiles) {
-    // printf("enter\n");
-    // Load snapshot data from file
-    std::ifstream ifs(file, std::ios::binary);
-    ifs.seekg(0, ifs.end);
-    size_t size = ifs.tellg(); 
-    ifs.seekg(0, ifs.beg);
-    byte* buffer = new byte[size];
-    ifs.read(reinterpret_cast<char*>(buffer), size);
-    ifs.close();
-    
-    // Run libcubwt
-    prefetch(buffer, size, 3);
-    auto start = std::chrono::steady_clock::now(); 
-    libsais_ctx(ctx, buffer, sa, size, 0, NULL); 
-    auto end = std::chrono::steady_clock::now();
-    
-    auto time = end - start;
-    times2.push_back(time);
-  }
-
-  memset(sa, 0, MAX_LENGTH);
-
-  std::cout << "Testing Archon3r3" << std::endl;
-  for (const auto& file : snapshotFiles) {
-    // Load snapshot data from file
-    std::ifstream ifs(file, std::ios::binary);
-    ifs.seekg(0, ifs.end);
-    size_t size = ifs.tellg();
-    ifs.seekg(0, ifs.beg);
-    ifs.read(reinterpret_cast<char*>(worker->sData), size);
-    ifs.close();
-
-    worker->data_len = size;
-
-    // Run Archon3r3
-    auto start = std::chrono::steady_clock::now();
-    encode(*worker);
-    auto end = std::chrono::steady_clock::now();
-
-    std::chrono::duration<double> time = end - start;
-    times3.push_back(time);
-  }
-
-  memset(sa, 0, MAX_LENGTH);
-
-  std::cout << "Testing Archon" << std::endl;
-  for (const auto& file : snapshotFiles) {
-      // Load snapshot data from file
-      FILE* fp = fopen(file.c_str(), "rb");
-      if (!fp) {
-          std::cout << "Failed to open file: " << file << std::endl;
-          continue;
-      }
-
-      fseek(fp, 0, SEEK_END);
-      size_t size = ftell(fp);
-      fseek(fp, 0, SEEK_SET);
-
-      Archon ar(size);
-      ar.enRead(fp, size);
-      fclose(fp);
-
-      // Run Archon
-      auto start = std::chrono::steady_clock::now();
-      ar.enCompute();
-      auto end = std::chrono::steady_clock::now();
-
-      std::chrono::duration<double> time = end - start;
-      times4.push_back(time);
-  }
-
-  memset(sa, 0, MAX_LENGTH);
-
-  std::cout << "Testing DC3" << std::endl;
-  for (const auto& file : snapshotFiles) {
-    // printf("enter\n");
-    // Load snapshot data from file
-    std::ifstream ifs(file, std::ios::binary);
-    ifs.seekg(0, ifs.end);
-    size_t size = ifs.tellg(); 
-    ifs.seekg(0, ifs.beg);
-    byte* buffer = new byte[size+3];
-    for (int i = size-3; i < size; i++) buffer[i] = 0;
-    ifs.read(reinterpret_cast<char*>(buffer), size);
-    ifs.close();
-    
-    // Run libcubwt
-    std::string str(reinterpret_cast<char const*>(buffer), size);
-    auto start = std::chrono::steady_clock::now(); 
-    std::vector<std::string::size_type> suffArr = dc3::suffixArray(str.cbegin(), str.cend());
-    auto end = std::chrono::steady_clock::now();
-    
-    auto time = end - start;
-    times5.push_back(time);
-  }
-
-  double divsufsortAverage = 0.0;
-  double libsaisAverage = 0.0;
-  double archon3r3Average = 0.0;
-  double archon4r0Average = 0.0;
-  double saislcpAverage = 0.0;
-
-  for (const auto& time : times) {
-    divsufsortAverage += time.count();
-  }
-  for (const auto& time : times2) {
-    libsaisAverage += time.count(); 
-  }
-  for (const auto& time : times3) {
-    archon3r3Average += time.count();
-  }
-  for (const auto& time : times4) {
-    archon4r0Average += time.count();
-  }
-  for (const auto& time : times5) {
-    saislcpAverage += time.count();
-  }
-
-  std::cout << "Total divsufsort time: " << std::setprecision (5) << divsufsortAverage << " seconds" << std::endl;
-  std::cout << "Total sais time:       " << std::setprecision (5) << libsaisAverage << " seconds" << std::endl;
-  std::cout << "Total Archon3r3 time:  " << std::setprecision(5) << archon3r3Average << " seconds" << std::endl;
-  std::cout << "Total Archon4r0 time:  " << std::setprecision(5) << archon4r0Average << " seconds" << std::endl;
-  std::cout << "Total DC3 time:  " << std::setprecision(5) << saislcpAverage << " seconds" << std::endl;
-
-  divsufsortAverage /= times.size();
-  libsaisAverage /= times2.size();
-  archon3r3Average /= times3.size();
-  archon4r0Average /= times4.size();
-  saislcpAverage /= times5.size();
-
-  std::cout << "Average divsufsort time: " << divsufsortAverage << " seconds" << std::endl;
-  std::cout << "Average sais time:       " << libsaisAverage << " seconds" << std::endl;
-  std::cout << "Average Archon3r3 time:       " << archon3r3Average << " seconds" << std::endl;
-  std::cout << "Average Archon4r0 time:       " << archon4r0Average << " seconds" << std::endl;
-  std::cout << "Average DC3 time:       " << saislcpAverage << " seconds" << std::endl;
-}
 
 #if defined(__AVX2__)
 

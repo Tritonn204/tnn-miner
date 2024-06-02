@@ -19,6 +19,12 @@
   #include "astro_aarch64.hpp"
 #endif
 
+extern "C"
+{
+  #include "divsufsort_private.h"
+  #include "divsufsort.h"
+}
+
 struct OpTestResult {
   unsigned char input[256];
   unsigned char result[256];

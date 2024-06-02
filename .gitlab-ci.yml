@@ -43,7 +43,7 @@ build:
   # instead of calling g++ directly you can also use some build toolkit like make
   # install the necessary build tools when needed
   before_script:
-    - apt update && apt -y install wget build-essential cmake clang libssl-dev libfmt-dev libc++-dev lld git
+    - apt update && apt -y install wget build-essential cmake clang libssl-dev libfmt-dev libudns-dev libc++-dev lld git
   script:
     - export
     - mkdir ./build
@@ -90,6 +90,7 @@ test:
   before_script:
     - apt update && apt -y install gdb
   script:
+    - tar -xvf ./${LINUX_AMD64_TGZ}
     - gdb --batch -ex "run" -ex "bt" --args ./Tnn-miner --dero-test
 
 #upload:

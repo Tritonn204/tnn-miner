@@ -16,7 +16,7 @@
 #define FMT_HEADER_ONLY
 
 #include "rootcert.h"
-#include "cpp-dns.hpp"
+#include "DNSResolver.hpp"
 
 #include <boost/program_options.hpp>
 #include <boost/beast/core.hpp>
