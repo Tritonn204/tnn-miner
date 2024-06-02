@@ -1944,12 +1944,13 @@ int main(int argc, char **argv)
   if (vm.count("xelis-test"))
   {
     xelis_runTests();
+    xelis_runTests_v2();
     return 0;
   }
 
   if (vm.count("xelis-bench"))
   {
-    boost::thread t(xelis_benchmark_cpu_hash);
+    boost::thread t(xelis_benchmark_cpu_hash_v2);
     setPriority(t.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
     t.join();
     return 0;
