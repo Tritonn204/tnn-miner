@@ -1,4 +1,6 @@
 
+#if defined(__aarch64__)
+
 #include "astro_aarch64.hpp"
 
 using byte = unsigned char;
@@ -4038,3 +4040,5 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest)
   }
   worker.data_len = static_cast<uint32_t>((worker.tries - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
 }
+
+#endif

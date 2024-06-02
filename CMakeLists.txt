@@ -115,6 +115,7 @@ endif()
 include(${CPM_DOWNLOAD_LOCATION})
 
 CPMAddPackage("gh:nlohmann/json@3.10.5")
+CPMAddPackage("gh:fmtlib/fmt#10.2.1")
 
 set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL REQUIRED)
@@ -210,9 +211,9 @@ file(GLOB all_SRCS
 )
 
 # Remove aarch files from all_SRCS
-if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" AND NOT CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
-  list(FILTER all_SRCS EXCLUDE REGEX ".*/.*/*aarch64*")
-endif()
+#if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" AND NOT CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
+#  list(FILTER all_SRCS EXCLUDE REGEX ".*/.*/*aarch64*")
+#endif()
 
 
 add_executable(${PROJECT_NAME} ${all_SRCS})
@@ -226,4 +227,4 @@ endif()
 if(NOT APPLE AND NOT WIN32)
   target_link_libraries(${PROJECT_NAME} udns)
 endif()
-target_link_libraries(${PROJECT_NAME} Threads::Threads nlohmann_json::nlohmann_json ${TNN_BOOST_LIBS} OpenSSL::SSL OpenSSL::Crypto chacha)
+target_link_libraries(${PROJECT_NAME} fmt Threads::Threads nlohmann_json::nlohmann_json ${TNN_BOOST_LIBS} OpenSSL::SSL OpenSSL::Crypto)

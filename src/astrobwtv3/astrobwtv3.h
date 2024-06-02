@@ -37,7 +37,6 @@
 #if defined(__aarch64__)
   #include <arm_neon.h>
 #endif
-#include "libsais.h"
 
 #ifndef POW_CONST
 #define POW_CONST
@@ -169,8 +168,6 @@ public:
   SHA256_CTX sha256;
   ucstk::Salsa20 salsa20;
   RC4_KEY key;
-
-  void *ctx;
 
   // std::vector<std::tuple<int,int,int>> repeats;
 
@@ -524,7 +521,6 @@ inline void initWorker(workerData &worker) {
   std::set_difference(full.begin(), full.end(), branchedOps_global.begin(), branchedOps_global.end(), std::inserter(diff, diff.begin()));
   std::copy(diff.begin(), diff.end(), worker.regularOps);
 
-  worker.ctx = libsais_create_ctx();
   // printf("Branched Ops:\n");
   // for (int i = 0; i < branchedOps_size; i++) {
   //   std::printf("%02X, ", worker.branchedOps[i]);

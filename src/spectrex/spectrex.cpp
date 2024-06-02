@@ -115,22 +115,22 @@ namespace SpectreX
 
     hexstrToBytes(std::string(input), in);
 
-    worker w;
-    workerData *aw = (workerData*)malloc(sizeof(workerData));
+    alignas(64) SpectreX::worker *w = (SpectreX::worker *)malloc_huge_pages(sizeof(SpectreX::worker));
+    alignas(64) workerData *aw = (workerData *)malloc_huge_pages(sizeof(workerData));
     initWorker(*aw);
     lookupGen(*aw, nullptr, nullptr);
+    w->astroWorker = aw;
 
-    w.astroWorker = aw;
-    newMatrix(in, w.mat);
+    newMatrix(in, w->mat);
 
-    hash(w, in, 80, out);
+    hash(*w, in, 80, out);
 
     // std::reverse(out, out+32);
 
-    printf("POW hash: %s\n", hexStr(w.sha3Hash, 32).c_str());
+    printf("POW hash: %s\n", hexStr(w->sha3Hash, 32).c_str());
     printf("WANT    : ae63221b94390528bd5a092be6247f7173099978bf6b150031c034ed22b37cea\n\n");
 
-    printf("BWT hash: %s\n", hexStr(w.astrobwtv3Hash, 32).c_str());
+    printf("BWT hash: %s\n", hexStr(w->astrobwtv3Hash, 32).c_str());
     printf("WANT    : 271bd27bf393fc8854e4ada0f255cef19c0e86c9b7245088bdafc01318172dc5\n\n");
 
     printf("Heavy hash: %s\n", hexStr(out, 32).c_str());

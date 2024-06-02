@@ -1,5 +1,7 @@
 #include "astrobwtv3.h"
 
+#if defined(__AVX2__)
+
 namespace astro_branched_zOp {
   // arithmetic operations
 
@@ -3619,3 +3621,6 @@ namespace astro_branched_zOp {
 
   int branchComputeSize = 14;
 }
+
+#endif
+
