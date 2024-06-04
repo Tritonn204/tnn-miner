@@ -43,6 +43,8 @@
 /src/xelis-hash/**.lock
 /src/xelis-hash/target
 
+/src/xelis-hash/xelis-hash-v2.cpp
+
 # Misc
 **.txt
 

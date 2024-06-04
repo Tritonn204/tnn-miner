@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include "cpuid.h"
+#include <cpuid_chacha.h>
 #include "chacha.h"
 
 enum chacha_constants {
@@ -36,37 +36,29 @@ typedef struct chacha_impl_t {
 #define CHACHA_IMPL(cpuflags, desc, ext) \
 	{(cpuflags), desc, chacha_##ext, xchacha_##ext, chacha_blocks_##ext, hchacha_##ext}
 
-#if defined(ARCH_X86)
-	/* 32 bit only implementations */
-	#if defined(CPU_32BITS)
-	#endif
-
-	/* 64 bit only implementations */
-	#if defined(CPU_64BITS)
-	#endif
-
+#if defined(__x86_64__)
 	/* both 32 & 64 bit implementations */
-	#if defined(HAVE_AVX2)
+	#if defined(__AVX2__)
 		CHACHA_DECLARE(avx2)
 		#define CHACHA_AVX2 CHACHA_IMPL(CPUID_AVX2, "avx2", avx2)
 	#endif
 
-	#if defined(HAVE_XOP)
+	#if defined(__XOP__)
 		CHACHA_DECLARE(xop)
 		#define CHACHA_XOP CHACHA_IMPL(CPUID_XOP, "xop", xop)
 	#endif
 
-	#if defined(HAVE_AVX)
+	#if defined(__AVX__)
 		CHACHA_DECLARE(avx)
 		#define CHACHA_AVX CHACHA_IMPL(CPUID_AVX, "avx", avx)
 	#endif
 
-	#if defined(HAVE_SSSE3)
+	#if defined(__SSE3__)
 		CHACHA_DECLARE(ssse3)
 		#define CHACHA_SSSE3 CHACHA_IMPL(CPUID_SSSE3, "ssse3", ssse3)
 	#endif
 
-	#if defined(HAVE_SSE2)
+	#if defined(__SSE2__)
 		CHACHA_DECLARE(sse2)
 		#define CHACHA_SSE2 CHACHA_IMPL(CPUID_SSE2, "sse2", sse2)
 	#endif
@@ -75,13 +67,13 @@ typedef struct chacha_impl_t {
 	#define CHACHA_X86 CHACHA_IMPL(CPUID_X86, "x86", x86)
 #endif
 
-#if defined(ARCH_ARM)
-	#if defined(HAVE_ARMv6)
+#if defined(__ARM__)
+	#if defined(__ARM_ARCH_6__)
 		CHACHA_DECLARE(armv6)
 		#define CHACHA_ARMv6 CHACHA_IMPL(CPUID_ARMv6, "armv6", armv6)
 	#endif
 
-	#if defined(HAVE_NEON)
+	#if defined(__ARM_NEON__)
 		CHACHA_DECLARE(neon)
 		#define CHACHA_NEON CHACHA_IMPL(CPUID_NEON, "neon", neon)
 	#endif
@@ -89,7 +81,7 @@ typedef struct chacha_impl_t {
 
 /* the "always runs" version */
 #define CHACHA_GENERIC CHACHA_IMPL(CPUID_GENERIC, "generic", ref)
-#include "chacha/chacha_ref.inc"
+#include <chacha/chacha_ref.inc>
 
 /* list implemenations from most optimized to least, with generic as the last entry */
 static const chacha_impl_t chacha_list[] = {
@@ -150,6 +142,16 @@ chacha_init(chacha_state *S, const chacha_key *key, const chacha_iv *iv, size_t 
 	memcpy(state->s + 0, key, 32);
 	memset(state->s + 32, 0, 8);
 	memcpy(state->s + 40, iv, 8);
+	state->rounds = rounds;
+	state->leftover = 0;
+}
+
+LIB_PUBLIC void
+chacha_init12(chacha_state *S, const chacha_key *key, const chacha_iv12 *iv, size_t rounds) {
+	chacha_state_internal *state = (chacha_state_internal *)S;
+	memcpy(state->s + 0, key, 32);
+	memset(state->s + 32, 0, 4);
+	memcpy(state->s + 36, iv, 12);
 	state->rounds = rounds;
 	state->leftover = 0;
 }
@@ -274,9 +276,8 @@ chacha_final(chacha_state *S, unsigned char *out) {
 /* one-shot, input/output assumed to be word aligned */
 LIB_PUBLIC void
 chacha(const chacha_key *key, const chacha_iv *iv, const unsigned char *in, unsigned char *out, size_t inlen, size_t rounds) {
-	chacha_opt->chacha(key, iv, in, out, inlen, rounds);
+    chacha_opt->chacha(key, iv, in, out, inlen, rounds);
 }
-
 /*
 	xchacha, chacha with a 192 bit nonce
 */
