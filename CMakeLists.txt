@@ -215,7 +215,6 @@ file(GLOB all_SRCS
 #  list(FILTER all_SRCS EXCLUDE REGEX ".*/.*/*aarch64*")
 #endif()
 
-
 add_executable(${PROJECT_NAME} ${all_SRCS})
 
 if(WIN32)

@@ -1,7 +1,7 @@
 #include "xelis-hash.hpp"
 #include <stdlib.h>
 #include <iostream>
-#include <chacha20.hpp>
+#include "chacha20.hpp"
 #include <crc32.h>
 
 #if defined(__x86_64__)
@@ -18,9 +18,6 @@
 #endif
 
 #include <openssl/evp.h>
-
-
-#include "chacha.h"
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -154,7 +151,7 @@ void stage_1(uint8_t *input, uint64_t *scratch_pad, size_t input_len)
   const size_t output_size = XELIS_MEMORY_SIZE_V2 * 8; // MEMORY_SIZE is in u64, so multiply by 8 for bytes
 
   alignas(32) uint8_t nonce[nonce_size] = {0};
-  uint8_t *output = reinterpret_cast<uint8_t *>(scratch_pad);
+  alignas(32) uint8_t *output = reinterpret_cast<uint8_t *>(scratch_pad);
   size_t output_offset = 0;
   size_t num_chunks = (input_len + chunk_size - 1) / chunk_size;
 
@@ -169,9 +166,9 @@ void stage_1(uint8_t *input, uint64_t *scratch_pad, size_t input_len)
     memcpy(key, &input[chunk_start], chunk_end - chunk_start);
 
     // Create a new ChaCha20 instance with the current chunk as the key
-    // Chacha20 chacha(key, nonce);
+    chacha20::ChaCha20 chacha(key, nonce);
 
-        // Create and initialize the ChaCha20 cipher context
+    // Create and initialize the ChaCha20 cipher context
     // EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
     // EVP_EncryptInit_ex(ctx, EVP_chacha20(), NULL, NULL, NULL);
 
@@ -185,24 +182,23 @@ void stage_1(uint8_t *input, uint64_t *scratch_pad, size_t input_len)
     size_t chunk_output_size = remaining_output_size / chunks_left;
     int current_output_size = std::min(remaining_output_size, chunk_output_size);
 
-    chacha_key k = {0};
-    chacha_iv iv = {0};
+    chacha.apply_keystream(output + output_offset, current_output_size);
 
-    memcpy(iv.b, nonce, 8);
+    __builtin_prefetch(output + current_output_size + output_offset, 0, 3);
 
     // Generate the output using the keystream
     // EVP_EncryptUpdate(ctx, output + output_offset, &current_output_size, output + output_offset, current_output_size);
     // EVP_EncryptFinal_ex(ctx, output + output_offset + current_output_size, &current_output_size);
     // chacha.crypt(output + output_offset, current_output_size);
-    chacha(&k, &iv, output + output_offset, output + output_offset, chunk_output_size, 10);
+    // chacha(&k, &iv, output + output_offset, output + output_offset, chunk_output_size, 20);
     output_offset += current_output_size;
 
     // EVP_CIPHER_CTX_free(ctx);
 
     // Update the nonce with the last NONCE_SIZE bytes of the output
     size_t nonce_start = current_output_size - nonce_size;
-    std::copy(output + output_offset - nonce_size, output + output_offset, nonce);
-    // memcpy(nonce, output + output_offset - nonce_size, nonce_size);
+    // std::copy(output + output_offset - nonce_size, output + output_offset, nonce);
+    memcpy(nonce, output + output_offset - nonce_size, nonce_size);
 
     // printf("nonce: ");
     // for (int i = 0; i < 12; i++)
@@ -581,7 +577,7 @@ namespace xelis_tests_v2
 
   bool test_zero_input()
   {
-    alignas(64) byte input[112] = {0};
+    alignas(32) byte input[112] = {0};
     Hash expected_hash = {
         21, 151, 162, 132, 117, 237, 123, 209, 162, 83, 125, 103,
         120, 231, 142, 171, 252, 240, 191, 215, 40, 185,
