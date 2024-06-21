@@ -1,3 +1,5 @@
+#if defined(__x86_64__)
+
 #include "chacha20.hpp"
 #include <inttypes.h>
 #include <immintrin.h>
@@ -177,3 +179,5 @@ inline void gen_par_ks_blocks(Backend_AVX2 &self, byte *blocks)
     block_ptr += 8;
   }
 }
+
+#endif
