@@ -624,11 +624,11 @@ void xelis_hash_v2(byte *input, workerData_xelis_v2 &worker, byte *hashResult)
 {
 }
 
-void xelis_benchmark_cpu_hash()
+void xelis_benchmark_cpu_hash_v2()
 {
 }
 
-void xelis_runTests()
+void xelis_runTests_v2()
 {
 }
 

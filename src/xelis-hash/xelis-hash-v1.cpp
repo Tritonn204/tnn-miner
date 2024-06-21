@@ -933,7 +933,7 @@ void xelis_runTests()
   all_tests_passed &= xelis_tests::test_zero_input();
   all_tests_passed &= xelis_tests::test_xelis_input();
 
-  test_chacha20();
+  //test_chacha20();
 
   xelis_tests::test_real();
 

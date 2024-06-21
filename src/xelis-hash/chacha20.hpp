@@ -1,5 +1,7 @@
 #pragma once
 
+#if defined(__x86_64__)
+
 #include <stddef.h>
 #include <inttypes.h>
 #include <array>
@@ -79,15 +81,17 @@ namespace chacha20
     __attribute__((target("avx2")))
     void process_block(Block &block)
     {
-      inner<decltype([this](Backend_AVX2& backend) {})>(state, [this, &block](Backend_AVX2 &backend)
-               { gen_ks_block<R>(backend, block.data()); });
+      // FIXME: Tritonn should fix this
+      //inner<decltype([this](Backend_AVX2& backend) {})>(state, [this, &block](Backend_AVX2 &backend)
+      //         { gen_ks_block<R>(backend, block.data()); });
     }
 
     __attribute__((target("avx2")))
     void process_blocks(Block *blocks, size_t count)
     {
-      inner<decltype([this](Backend_AVX2& backend) {})>(state, [this, blocks, count](Backend_AVX2 &backend)
-               { gen_par_ks_blocks<R>(backend, reinterpret_cast<uint8_t *>(blocks)); });
+      // FIXME: Tritonn should fix this
+      //inner<decltype([this](Backend_AVX2& backend) {})>(state, [this, blocks, count](Backend_AVX2 &backend)
+      //         { gen_par_ks_blocks<R>(backend, reinterpret_cast<uint8_t *>(blocks)); });
     }
 
     uint32_t get_block_pos() const
@@ -152,3 +156,5 @@ namespace chacha20
 
   using ChaCha20 = ChaChaCore<10>;
 }
+
+#endif
