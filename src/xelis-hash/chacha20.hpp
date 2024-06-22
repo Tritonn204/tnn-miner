@@ -40,16 +40,10 @@ namespace chacha20
     unsigned int R;
   } Backend_AVX2;
 
+  using InnerCallback_AVX2 = void(*)(Backend_AVX2&);
+
   template <unsigned int R_>
   void rounds();
-
-  template <typename F>
-  void inner(uint32_t *state, F &&f);
-
-  template <unsigned int R>
-  void gen_ks_block(Backend_AVX2 &self, byte *block);
-  template <unsigned int R>
-  void gen_par_ks_blocks(Backend_AVX2 &self, byte *blocks);
 
   template <unsigned int R>
   class ChaChaCore
@@ -78,21 +72,8 @@ namespace chacha20
       state[15] = pack4(iv + 2 * 4);
     }
 
-    __attribute__((target("avx2")))
-    void process_block(Block &block)
-    {
-      // FIXME: Tritonn should fix this
-      //inner<decltype([this](Backend_AVX2& backend) {})>(state, [this, &block](Backend_AVX2 &backend)
-      //         { gen_ks_block<R>(backend, block.data()); });
-    }
-
-    __attribute__((target("avx2")))
-    void process_blocks(Block *blocks, size_t count)
-    {
-      // FIXME: Tritonn should fix this
-      //inner<decltype([this](Backend_AVX2& backend) {})>(state, [this, blocks, count](Backend_AVX2 &backend)
-      //         { gen_par_ks_blocks<R>(backend, reinterpret_cast<uint8_t *>(blocks)); });
-    }
+    void process_block(Block &block);
+    void process_blocks(Block *blocks);
 
     uint32_t get_block_pos() const
     {
@@ -110,7 +91,7 @@ namespace chacha20
       while (i + PAR_BLOCKS * 64 <= len)
       {
         std::array<Block, PAR_BLOCKS> blocks;
-        process_blocks(blocks.data(), PAR_BLOCKS);
+        process_blocks(blocks.data());
 
         for (size_t j = 0; j < PAR_BLOCKS; ++j)
         {

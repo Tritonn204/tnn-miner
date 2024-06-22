@@ -3,6 +3,7 @@
 #include <iostream>
 #include "chacha20.hpp"
 #include <crc32.h>
+#include <BLAKE3/c/blake3.h>
 
 #if defined(__x86_64__)
 #include <emmintrin.h>
@@ -17,6 +18,7 @@
 #include <openssl/aes.h>
 #endif
 
+#include <sodium.h>
 #include <openssl/evp.h>
 
 #ifdef _WIN32
@@ -69,7 +71,7 @@ alignas(16) const int sign_bit_values_sse[4][4] = {
     {0, -1, 0, 0},
     {-1, 0, 0, 0}};
 
-static uint64_t swap_bytes(uint64_t value)
+static inline uint64_t swap_bytes(uint64_t value)
 {
   return ((value & 0xFF00000000000000ULL) >> 56) |
          ((value & 0x00FF000000000000ULL) >> 40) |
@@ -81,7 +83,14 @@ static uint64_t swap_bytes(uint64_t value)
          ((value & 0x00000000000000FFULL) << 56);
 }
 
-static void aes_round(uint8_t *block, const uint8_t *key)
+static inline void blake3(const uint8_t *input, int len, uint8_t *output) {
+        blake3_hasher hasher;
+	blake3_hasher_init(&hasher);
+	blake3_hasher_update(&hasher, input, len);
+	blake3_hasher_finalize(&hasher, output, BLAKE3_OUT_LEN);
+}
+
+static inline void aes_round(uint8_t *block, const uint8_t *key)
 {
 #if defined(__AES__)
   __m128i block_m128i = _mm_load_si128((__m128i *)block);
@@ -144,75 +153,151 @@ static void aes_round(uint8_t *block, const uint8_t *key)
 //   }
 // }
 
-void stage_1(uint8_t *input, uint64_t *scratch_pad, size_t input_len)
+
+
+
+// void stage_1(uint8_t *input, uint64_t *scratch_pad, size_t input_len)
+// {
+//   const size_t chunk_size = 32;
+//   const size_t nonce_size = 12;
+//   const size_t output_size = XELIS_MEMORY_SIZE_V2 * 8; // MEMORY_SIZE is in u64, so multiply by 8 for bytes
+
+//   alignas(32) uint8_t nonce[nonce_size] = {0};
+//   alignas(32) uint8_t *output = reinterpret_cast<uint8_t *>(scratch_pad);
+//   size_t output_offset = 0;
+//   size_t num_chunks = (input_len + chunk_size - 1) / chunk_size;
+
+//   for (size_t chunk_index = 0; chunk_index < num_chunks; ++chunk_index)
+//   {
+//     // Calculate the start and end of the current chunk
+//     size_t chunk_start = chunk_index * chunk_size;
+//     size_t chunk_end = std::min(chunk_start + chunk_size, input_len);
+
+//     // Pad the chunk to 32 bytes if it is shorter
+//     alignas(32) uint8_t key[chunk_size] = {0};
+//     memcpy(key, &input[chunk_start], chunk_end - chunk_start);
+
+//     // Create a new ChaCha20 instance with the current chunk as the key
+//     chacha20::ChaCha20 chacha(key, nonce);
+
+//     // Create and initialize the ChaCha20 cipher context
+//     EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+//     EVP_EncryptInit_ex(ctx, EVP_chacha20(), NULL, NULL, NULL);
+
+//     // // Set the key and nonce
+//     EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN, 12, NULL);
+//     EVP_EncryptInit_ex(ctx, NULL, NULL, key, nonce);
+
+//     // Calculate the remaining size and how much to generate this iteration
+//     size_t remaining_output_size = output_size - output_offset;
+//     size_t chunks_left = num_chunks - chunk_index;
+//     size_t chunk_output_size = remaining_output_size / chunks_left;
+//     int current_output_size = std::min(remaining_output_size, chunk_output_size);
+
+//     // printf("pre chacha\n");
+//     // chacha.apply_keystream(output + output_offset, current_output_size);
+
+//     __builtin_prefetch(output + current_output_size + output_offset, 0, 3);
+
+//     // Generate the output using the keystream
+//     EVP_EncryptUpdate(ctx, output + output_offset, &current_output_size, output + output_offset, current_output_size);
+//     EVP_EncryptFinal_ex(ctx, output + output_offset + current_output_size, &current_output_size);
+//     // chacha.crypt(output + output_offset, current_output_size);
+//     // chacha(&k, &iv, output + output_offset, output + output_offset, chunk_output_size, 20);
+//     output_offset += current_output_size;
+
+//     // EVP_CIPHER_CTX_free(ctx);
+
+//     // Update the nonce with the last NONCE_SIZE bytes of the output
+//     size_t nonce_start = current_output_size - nonce_size;
+//     // std::copy(output + output_offset - nonce_size, output + output_offset, nonce);
+//     memcpy(nonce, output + output_offset - nonce_size, nonce_size);
+
+//     // printf("nonce: ");
+//     // for (int i = 0; i < 12; i++)
+//     // {
+//     //   printf("%02X ", nonce[i]);
+//     // }
+//     // printf("\n");
+//   }
+
+//   // Crc32 crc32;
+//   // crc32.input(scratch_pad, XELIS_MEMORY_SIZE_V2 * 8);
+//   // std::cout << "Stage 1 scratch pad CRC32: 0x" << std::hex << std::setw(8) << std::setfill('0') << crc32.result() << std::endl;
+// }
+
+void stage_1_sodium(const uint8_t *input, uint64_t *scratch_pad, size_t INPUT_LEN) {
+  const size_t CHUNK_SIZE = 32;
+  const size_t NONCE_SIZE = 12;
+  const size_t OUTPUT_SIZE = XELIS_MEMORY_SIZE_V2 * 8;
+  const size_t CHUNKS = 4;
+
+	uint8_t key[CHUNK_SIZE*CHUNKS] = {0};
+	uint8_t nonce[32] = {1};
+	memcpy(key, input, INPUT_LEN);
+	// blake3(input, INPUT_LEN, nonce);
+
+	uint8_t *t = reinterpret_cast<uint8_t *>(scratch_pad);
+	crypto_stream_chacha20_ietf(t, OUTPUT_SIZE/CHUNKS, nonce, key+0*CHUNK_SIZE);
+
+	t += OUTPUT_SIZE/CHUNKS;
+	// crypto_stream_chacha20_ietf(t, OUTPUT_SIZE/CHUNKS, t-NONCE_SIZE, key+1*CHUNK_SIZE);
+
+	// t += OUTPUT_SIZE/CHUNKS;
+	// crypto_stream_chacha20_ietf(t, OUTPUT_SIZE/CHUNKS, t-NONCE_SIZE, key+2*CHUNK_SIZE);
+
+	// t += OUTPUT_SIZE/CHUNKS;
+	// crypto_stream_chacha20_ietf(t, OUTPUT_SIZE/CHUNKS, t-NONCE_SIZE, key+3*CHUNK_SIZE);
+
+  // Crc32 crc32;
+  // crc32.input(scratch_pad, 10);
+  // std::cout << "Stage 1 SODIUM scratch pad CRC32: 0x" << std::hex << std::setw(8) << std::setfill('0') << crc32.result() << std::endl;
+}
+
+void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
 {
   const size_t chunk_size = 32;
   const size_t nonce_size = 12;
-  const size_t output_size = XELIS_MEMORY_SIZE_V2 * 8; // MEMORY_SIZE is in u64, so multiply by 8 for bytes
+  const size_t output_size = XELIS_MEMORY_SIZE_V2 * 8;
+  const size_t chunks = 4;
 
-  alignas(32) uint8_t nonce[nonce_size] = {0};
-  alignas(32) uint8_t *output = reinterpret_cast<uint8_t *>(scratch_pad);
-  size_t output_offset = 0;
-  size_t num_chunks = (input_len + chunk_size - 1) / chunk_size;
+  uint8_t *t = reinterpret_cast<uint8_t *>(sp);
+  uint8_t key[chunk_size * chunks] = {0};
+  uint8_t nonce[32] = {1};
+  memcpy(key, input, input_len);
+  // blake3(input, input_len, nonce);
 
-  for (size_t chunk_index = 0; chunk_index < num_chunks; ++chunk_index)
-  {
-    // Calculate the start and end of the current chunk
-    size_t chunk_start = chunk_index * chunk_size;
-    size_t chunk_end = std::min(chunk_start + chunk_size, input_len);
+  int outlen;
+  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
 
-    // Pad the chunk to 32 bytes if it is shorter
-    alignas(32) uint8_t key[chunk_size] = {0};
-    memcpy(key, &input[chunk_start], chunk_end - chunk_start);
+  EVP_EncryptInit_ex(ctx, EVP_chacha20(), NULL, key + 0 * chunk_size, nonce);
+  EVP_EncryptUpdate(ctx, t, &outlen, t, output_size / chunks);
+  EVP_EncryptFinal_ex(ctx, t + outlen, &outlen);
 
-    // Create a new ChaCha20 instance with the current chunk as the key
-    chacha20::ChaCha20 chacha(key, nonce);
+  t += output_size / chunks;
 
-    // Create and initialize the ChaCha20 cipher context
-    // EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-    // EVP_EncryptInit_ex(ctx, EVP_chacha20(), NULL, NULL, NULL);
+  // EVP_EncryptInit_ex(ctx, EVP_chacha20(), NULL, key + 1 * chunk_size, t - 12);
+  // EVP_EncryptUpdate(ctx, t, &outlen, t, output_size / chunks);
+  // EVP_EncryptFinal_ex(ctx, t + outlen, &outlen);
 
-    // // Set the key and nonce
-    // EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN, 12, NULL);
-    // EVP_EncryptInit_ex(ctx, NULL, NULL, key, nonce);
+  // t += output_size / chunks;
 
-    // Calculate the remaining size and how much to generate this iteration
-    size_t remaining_output_size = output_size - output_offset;
-    size_t chunks_left = num_chunks - chunk_index;
-    size_t chunk_output_size = remaining_output_size / chunks_left;
-    int current_output_size = std::min(remaining_output_size, chunk_output_size);
+  // EVP_EncryptInit_ex(ctx, EVP_chacha20(), NULL, key + 2 * chunk_size, t - 12);
+  // EVP_EncryptUpdate(ctx, t, &outlen, t, output_size / chunks);
+  // EVP_EncryptFinal_ex(ctx, t + outlen, &outlen);
 
-    chacha.apply_keystream(output + output_offset, current_output_size);
+  // t += output_size / chunks;
 
-    __builtin_prefetch(output + current_output_size + output_offset, 0, 3);
+  // EVP_EncryptInit_ex(ctx, EVP_chacha20(), NULL, key + 3 * chunk_size, t - 12);
+  // EVP_EncryptUpdate(ctx, t, &outlen, t, output_size / chunks);
+  // EVP_EncryptFinal_ex(ctx, t + outlen, &outlen);
 
-    // Generate the output using the keystream
-    // EVP_EncryptUpdate(ctx, output + output_offset, &current_output_size, output + output_offset, current_output_size);
-    // EVP_EncryptFinal_ex(ctx, output + output_offset + current_output_size, &current_output_size);
-    // chacha.crypt(output + output_offset, current_output_size);
-    // chacha(&k, &iv, output + output_offset, output + output_offset, chunk_output_size, 20);
-    output_offset += current_output_size;
-
-    // EVP_CIPHER_CTX_free(ctx);
-
-    // Update the nonce with the last NONCE_SIZE bytes of the output
-    size_t nonce_start = current_output_size - nonce_size;
-    // std::copy(output + output_offset - nonce_size, output + output_offset, nonce);
-    memcpy(nonce, output + output_offset - nonce_size, nonce_size);
-
-    // printf("nonce: ");
-    // for (int i = 0; i < 12; i++)
-    // {
-    //   printf("%02X ", nonce[i]);
-    // }
-    // printf("\n");
-  }
+  EVP_CIPHER_CTX_free(ctx);
 
   // Crc32 crc32;
-  // crc32.input(scratch_pad, XELIS_MEMORY_SIZE_V2 * 8);
+  // crc32.input(scratch_pad, 10);
   // std::cout << "Stage 1 scratch pad CRC32: 0x" << std::hex << std::setw(8) << std::setfill('0') << crc32.result() << std::endl;
 }
-
 // void stage_3(uint64_t *scratchPad, byte *hashResult)
 // {
 //   const byte key[16] = {0};
@@ -476,21 +561,50 @@ void xelis_benchmark_cpu_hash_v2()
   const uint32_t ITERATIONS = 1000;
   byte input[112] = {0};
   alignas(64) workerData_xelis_v2 worker;
+  alignas(64) workerData_xelis_v2 worker2;
   alignas(64) byte hash_result[XELIS_HASH_SIZE] = {0};
+
+  printf("v2 bench\n");
 
   auto start = std::chrono::high_resolution_clock::now();
   for (uint32_t i = 0; i < ITERATIONS; ++i)
   {
-    input[0] = i & 0xFF;
-    input[1] = (i >> 8) & 0xFF;
-    xelis_hash_v2(input, worker, hash_result);
+    // input[0] = i & 0xFF;
+    // input[1] = (i >> 8) & 0xFF;
+    memset(worker.scratchPad, 0, XELIS_MEMORY_SIZE_V2*8);
+    stage_1(input, worker.scratchPad, 112);
   }
   auto end = std::chrono::high_resolution_clock::now();
 
   std::chrono::duration<double, std::milli> elapsed = end - start;
   std::cout << "Time took: " << elapsed.count() << " ms" << std::endl;
-  std::cout << "H/s: " << (ITERATIONS * 1000.0 / elapsed.count()) << std::endl;
+  std::cout << "H/s: " << ((ITERATIONS * 1000.0) / elapsed.count()) << std::endl;
   std::cout << "ms per hash: " << (elapsed.count() / ITERATIONS) << std::endl;
+
+  Crc32 crc32;
+  crc32.input(reinterpret_cast<uint8_t*>(worker.scratchPad), XELIS_MEMORY_SIZE_V2*8);
+  std::cout << "Stage 1 scratch pad CRC32: 0x" << std::hex << std::setw(8) << std::setfill('0') << crc32.result() << std::endl;
+
+  sodium_init();
+
+  start = std::chrono::high_resolution_clock::now();
+  for (uint32_t i = 0; i < ITERATIONS; ++i)
+  {
+    // input[0] = i & 0xFF;
+    // input[1] = (i >> 8) & 0xFF;
+    stage_1_sodium(input, worker2.scratchPad, 112);
+  }
+  end = std::chrono::high_resolution_clock::now();
+
+  elapsed = end - start;
+  std::cout << "\nSODIUM Time took: " << elapsed.count() << " ms" << std::endl;
+  std::cout << "SODIUM H/s: " << ((ITERATIONS * 1000.0) / elapsed.count()) << std::endl;
+  std::cout << "SODIUM ms per hash: " << (elapsed.count() / ITERATIONS) << std::endl;
+
+  Crc32 crc32_2;
+  crc32_2.input(reinterpret_cast<uint8_t*>(worker2.scratchPad), XELIS_MEMORY_SIZE_V2*8);
+  std::cout << "Stage 1 SODIUM scratch pad CRC32: 0x" << std::hex << std::setw(8) << std::setfill('0') << crc32_2.result() << std::endl;
+
 }
 
 static int char2int(char input)

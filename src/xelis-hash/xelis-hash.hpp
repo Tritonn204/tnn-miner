@@ -12,10 +12,10 @@ typedef unsigned char byte;
 #define XELIS_USE_SCALAR 1
 
 const uint16_t XELIS_MEMORY_SIZE = 32768;
-const size_t XELIS_MEMORY_SIZE_V2 = 429*256;
+const size_t XELIS_MEMORY_SIZE_V2 = 429*128;
 
 const uint16_t XELIS_SCRATCHPAD_ITERS = 5000;
-const uint16_t XELIS_SCRATCHPAD_ITERS_V2 = 5;
+const uint16_t XELIS_SCRATCHPAD_ITERS_V2 = 3;
 
 const byte XELIS_ITERS = 1;
 const uint16_t XELIS_BUFFER_SIZE = 42;

@@ -33,8 +33,6 @@
 
 const int workerThreads = 2;
 
-const int reportInterval = 1;
-
 const char *nullArg = "NULL";
 
 std::string symbol = nullArg;
@@ -48,6 +46,7 @@ bool useStratum = false;
 int miningAlgo = DERO_HASH;
 int protocol = XELIS_SOLO;
 
+int reportInterval = 3;
 int threads = 0;
 int testOp = -1;
 int testLen = -1;

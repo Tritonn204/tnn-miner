@@ -1,5 +1,3 @@
-#if defined(__x86_64__)
-
 #include "chacha20.hpp"
 #include <inttypes.h>
 #include <immintrin.h>
@@ -7,9 +5,8 @@
 
 using namespace chacha20;
 
-template <typename F>
 __attribute__((target("avx2")))
-inline void inner(uint32_t *state, F &&f)
+inline Backend_AVX2 prepare_backend(uint32_t *state)
 {
   const __m128i *state_ptr = reinterpret_cast<const __m128i *>(state);
   __m256i v[3] = {
@@ -29,9 +26,7 @@ inline void inner(uint32_t *state, F &&f)
       {ctr[0], ctr[1]},
       0};
 
-  f(backend);
-
-  state[12] = static_cast<uint32_t>(_mm256_extract_epi32(backend.ctr[0], 0));
+  return backend;
 }
 
 // Helper function: add-xor-rotate
@@ -168,7 +163,7 @@ inline void gen_par_ks_blocks(Backend_AVX2 &self, byte *blocks)
   }
 
   __m128i *block_ptr = reinterpret_cast<__m128i *>(blocks);
-  for (const auto &v : vs)
+  for (auto &v : vs)
   {
     __m128i *t = reinterpret_cast<__m128i *>(&v);
     for (int i = 0; i < 4; ++i)
@@ -180,4 +175,23 @@ inline void gen_par_ks_blocks(Backend_AVX2 &self, byte *blocks)
   }
 }
 
-#endif
+template <unsigned int R>
+__attribute__((target("avx2")))
+void ChaChaCore<R>::process_block(Block& block)
+{
+    auto backend = prepare_backend(state);
+    gen_ks_block<R>(backend, block.data());
+    state[12] = static_cast<uint32_t>(_mm256_extract_epi32(backend.ctr[0], 0));
+}
+
+template <unsigned int R>
+__attribute__((target("avx2")))
+void ChaChaCore<R>::process_blocks(Block* blocks)
+{
+    auto backend = prepare_backend(state);
+    gen_par_ks_blocks<R>(backend, reinterpret_cast<uint8_t*>(blocks));
+    state[12] = static_cast<uint32_t>(_mm256_extract_epi32(backend.ctr[0], 0));
+}
+
+template void ChaChaCore<10>::process_block(Block&);
+template void ChaChaCore<10>::process_blocks(Block*);

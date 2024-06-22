@@ -21,5 +21,5 @@ namespace BroadcastServer {
   extern int *rejected_ptr;
   extern const char* version_b;
 
-  void serverThread(std::vector<int64_t> *HR30, int *accepted, int *rejected, const char *version);
+  void serverThread(std::vector<int64_t> *HR30, int *accepted, int *rejected, const char *version, int rinterval);
 };

@@ -8,6 +8,7 @@ namespace BroadcastServer
   uint64_t startTime = 0;
   int *accepted_ptr;
   int *rejected_ptr;
+  int interval;
   const char *version_b;
 
   void handleRequest(http::request<http::string_body> &req, http::response<http::string_body> &res)
@@ -18,7 +19,7 @@ namespace BroadcastServer
       // Create a JSON object with some sample data
       json_b::object jsonData;
 
-      jsonData["hashrate"] = std::accumulate((*rate30sec_ptr).begin(), (*rate30sec_ptr).end(), 0LL) / (*rate30sec_ptr).size();
+      jsonData["hashrate"] = std::accumulate((*rate30sec_ptr).begin(), (*rate30sec_ptr).end(), 0LL) / (*rate30sec_ptr).size() / interval;
       jsonData["accepted"] = *accepted_ptr;
       jsonData["rejected"] = *rejected_ptr;
 
@@ -82,8 +83,9 @@ namespace BroadcastServer
     }
   }
 
-  void serverThread(std::vector<int64_t> *HR30, int *accepted, int *rejected, const char *version)
+  void serverThread(std::vector<int64_t> *HR30, int *accepted, int *rejected, const char *version, int rinterval)
   {
+    interval = rinterval;
     startTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
     boost::asio::io_context ioContext;
