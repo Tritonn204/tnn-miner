@@ -89,7 +89,7 @@ namespace SpectreX
     hexstrToBytes(std::string(input), in);
 
     worker w;
-    workerData *aw = (workerData*)malloc(sizeof(workerData));
+    alignas(32) workerData *aw = (workerData*)malloc_huge_pages(sizeof(workerData));
     w.astroWorker = aw;
     newMatrix(in, w.mat);
 
@@ -100,7 +100,7 @@ namespace SpectreX
 
   void testWithInput(byte* in, byte *out) {
     worker w;
-    workerData *aw = (workerData*)malloc(sizeof(workerData));
+    alignas(32) workerData *aw = (workerData*)malloc_huge_pages(sizeof(workerData));
     w.astroWorker = aw;
     newMatrix(in, w.mat);
 

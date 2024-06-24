@@ -78,23 +78,23 @@ namespace astro_branched_zOp {
 
   // utility
 
-  void __attribute__((noinline)) blendStep(workerData &worker) {
-    worker.data = _mm256_blendv_epi8(worker.old, worker.data, genMask(worker.pos2 - worker.pos1));
+  void __attribute__((noinline)) blendStep(workerData &worker, __m256i &data, __m256i &old) {
+    data = _mm256_blendv_epi8(old, data, genMask(worker.pos2 - worker.pos1));
   }
 
-  void __attribute__((noinline)) storeStep(workerData &worker) {
-    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], worker.data);
+  void __attribute__((noinline)) storeStep(workerData &worker, __m256i &data, __m256i &old) {
+    _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
   // op codes
 
-  void op0(workerData &worker) {
-    p0(worker.data);
-    r5(worker.data);
-    m0(worker.data);
-    r0(worker.data);
-    blendStep(worker);
-    storeStep(worker);
+  void op0(workerData &worker, __m256i &data, __m256i &old) {
+    p0(data);
+    r5(data);
+    m0(data);
+    r0(data);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
 
     if ((worker.pos2 - worker.pos1) % 2 == 1) {
       worker.t1 = worker.chunk[worker.pos1];
@@ -104,244 +104,244 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op1(workerData &worker) {
-    __m256i shift = _mm256_and_si256(worker.data, vec_3);
-    worker.data = _mm256_sllv_epi8(worker.data, shift);
-    r1(worker.data);
-    worker.data = _mm256_and_si256(worker.data, _mm256_set1_epi8(worker.prev_chunk[worker.pos2]));
-    a0(worker.data);
-    blendStep(worker);
-    storeStep(worker);
+  void op1(workerData &worker, __m256i &data, __m256i &old) {
+    __m256i shift = _mm256_and_si256(data, vec_3);
+    data = _mm256_sllv_epi8(data, shift);
+    r1(data);
+    data = _mm256_and_si256(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos2]));
+    a0(data);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op2(workerData &worker) {
-    p0(worker.data);
-    revData(worker.data);
-    __m256i shift = _mm256_and_si256(worker.data, vec_3);
-    worker.data = _mm256_sllv_epi8(worker.data, shift);
-    p0(worker.data);
-    blendStep(worker);
-    storeStep(worker);
+  void op2(workerData &worker, __m256i &data, __m256i &old) {
+    p0(data);
+    revData(data);
+    __m256i shift = _mm256_and_si256(data, vec_3);
+    data = _mm256_sllv_epi8(data, shift);
+    p0(data);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op3(workerData &worker) {
-    worker.data = _mm256_rolv_epi8(worker.data, _mm256_add_epi8(worker.data, vec_3));
-    worker.data = _mm256_xor_si256(worker.data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
-    r1(worker.data);
+  void op3(workerData &worker, __m256i &data, __m256i &old) {
+    data = _mm256_rolv_epi8(data, _mm256_add_epi8(data, vec_3));
+    data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
+    r1(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op4(workerData &worker) {
-    notData(worker.data);
-    sr03(worker.data);
-    r0(worker.data);
-    subx97(worker.data);
+  void op4(workerData &worker, __m256i &data, __m256i &old) {
+    notData(data);
+    sr03(data);
+    r0(data);
+    subx97(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op5(workerData &worker) {
-    p0(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    sl03(worker.data);
-    sr03(worker.data);
+  void op5(workerData &worker, __m256i &data, __m256i &old) {
+    p0(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    sl03(data);
+    sr03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op6(workerData &worker) {
-    sl03(worker.data);
-    r3(worker.data);
-    notData(worker.data);
+  void op6(workerData &worker, __m256i &data, __m256i &old) {
+    sl03(data);
+    r3(data);
+    notData(data);
 
-    __m256i x = _mm256_xor_si256(worker.data,_mm256_set1_epi8(97));
-    worker.data = _mm256_sub_epi8(worker.data, x);
+    __m256i x = _mm256_xor_si256(data,_mm256_set1_epi8(97));
+    data = _mm256_sub_epi8(data, x);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op7(workerData &worker) {
-    a0(worker.data);
-    r0(worker.data);
+  void op7(workerData &worker, __m256i &data, __m256i &old) {
+    a0(data);
+    r0(data);
 
-    p0(worker.data);
-    notData(worker.data);
+    p0(data);
+    notData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op8(workerData &worker) {
-    notData(worker.data);
-    r2(worker.data);
-    sl03(worker.data);
+  void op8(workerData &worker, __m256i &data, __m256i &old) {
+    notData(data);
+    r2(data);
+    sl03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op9(workerData &worker) {
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    x0_r4(worker.data);
-    sr03(worker.data);
-    x0_r2(worker.data);
+  void op9(workerData &worker, __m256i &data, __m256i &old) {
+    xp2(data, worker.chunk[worker.pos2]);
+    x0_r4(data);
+    sr03(data);
+    x0_r2(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op10(workerData &worker) {
-    notData(worker.data);
-    m0(worker.data);
-    r3(worker.data);
-    m0(worker.data);
+  void op10(workerData &worker, __m256i &data, __m256i &old) {
+    notData(data);
+    m0(data);
+    r3(data);
+    m0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op11(workerData &worker) {
-    r3(worker.data);
-    r3(worker.data);
-    worker.data = _mm256_and_si256(worker.data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
-    r0(worker.data);
+  void op11(workerData &worker, __m256i &data, __m256i &old) {
+    r3(data);
+    r3(data);
+    data = _mm256_and_si256(data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
+    r0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op12(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
-    m0(worker.data);
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data, 2));
-    notData(worker.data);
+  void op12(workerData &worker, __m256i &data, __m256i &old) {
+    data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
+    m0(data);
+    data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
+    notData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op13(workerData &worker) {
-    r1(worker.data);
-    worker.data = _mm256_xor_si256(worker.data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
-    sr03(worker.data);
-    r5(worker.data);
+  void op13(workerData &worker, __m256i &data, __m256i &old) {
+    r1(data);
+    data = _mm256_xor_si256(data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
+    sr03(data);
+    r5(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op14(workerData &worker) {
-    sr03(worker.data);
-    sl03(worker.data);
-    m0(worker.data);
-    sl03(worker.data);
+  void op14(workerData &worker, __m256i &data, __m256i &old) {
+    sr03(data);
+    sl03(data);
+    m0(data);
+    sl03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op15(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data,2));
-    sl03(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    subx97(worker.data);
+  void op15(workerData &worker, __m256i &data, __m256i &old) {
+    data = _mm256_xor_si256(data, _mm256_rol_epi8(data,2));
+    sl03(data);
+    addp2(data, worker.chunk[worker.pos2]);
+    subx97(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op16(workerData &worker) {
-    worker.data = _mm256_xor_si256(worker.data, _mm256_rol_epi8(worker.data,4));
-    m0(worker.data);
-    r1(worker.data);
-    notData(worker.data);
+  void op16(workerData &worker, __m256i &data, __m256i &old) {
+    data = _mm256_xor_si256(data, _mm256_rol_epi8(data,4));
+    m0(data);
+    r1(data);
+    notData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op17(workerData &worker) {
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    m0(worker.data);
-    r5(worker.data);
-    notData(worker.data);
+  void op17(workerData &worker, __m256i &data, __m256i &old) {
+    xp2(data, worker.chunk[worker.pos2]);
+    m0(data);
+    r5(data);
+    notData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op18(workerData &worker) {
-    x0_r4(worker.data);
-    r1(worker.data);
-    blendStep(worker);
-    storeStep(worker);
+  void op18(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r4(data);
+    r1(data);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op19(workerData &worker) {
-    subx97(worker.data);
-    r5(worker.data);
-    sl03(worker.data);
-    a0(worker.data);
+  void op19(workerData &worker, __m256i &data, __m256i &old) {
+    subx97(data);
+    r5(data);
+    sl03(data);
+    a0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op20(workerData &worker) {
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    revData(worker.data);
-    x0_r2(worker.data);
+  void op20(workerData &worker, __m256i &data, __m256i &old) {
+    addp2(data, worker.chunk[worker.pos2]);
+    xp2(data, worker.chunk[worker.pos2]);
+    revData(data);
+    x0_r2(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op21(workerData &worker) {
-    r1(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    a0(worker.data);
-    worker.data = _mm256_and_si256(worker.data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
+  void op21(workerData &worker, __m256i &data, __m256i &old) {
+    r1(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    a0(data);
+    data = _mm256_and_si256(data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op22(workerData &worker) {
-    sl03(worker.data);
-    revData(worker.data);
-    m0(worker.data);
-    r1(worker.data);
+  void op22(workerData &worker, __m256i &data, __m256i &old) {
+    sl03(data);
+    revData(data);
+    m0(data);
+    r1(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op23(workerData &worker) {
-    worker.data = _mm256_rol_epi8(worker.data, 4);
-    worker.data = _mm256_xor_si256(worker.data,popcnt256_epi8(worker.data));
-    worker.data = _mm256_and_si256(worker.data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
+  void op23(workerData &worker, __m256i &data, __m256i &old) {
+    data = _mm256_rol_epi8(data, 4);
+    data = _mm256_xor_si256(data,popcnt256_epi8(data));
+    data = _mm256_and_si256(data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op24(workerData &worker) {
-    a0(worker.data);
-    sr03(worker.data);
-    x0_r4(worker.data);
-    r5(worker.data);
+  void op24(workerData &worker, __m256i &data, __m256i &old) {
+    a0(data);
+    sr03(data);
+    x0_r4(data);
+    r5(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op25(workerData &worker) {
+  void op25(workerData &worker, __m256i &data, __m256i &old) {
     
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
@@ -359,127 +359,127 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op26(workerData &worker) {
-    m0(worker.data);
-    worker.data = _mm256_xor_si256(worker.data,popcnt256_epi8(worker.data));
-    a0(worker.data);
-    revData(worker.data);
+  void op26(workerData &worker, __m256i &data, __m256i &old) {
+    m0(data);
+    data = _mm256_xor_si256(data,popcnt256_epi8(data));
+    a0(data);
+    revData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op27(workerData &worker) {
-    r5(worker.data);
-    worker.data = _mm256_and_si256(worker.data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
-    x0_r4(worker.data);
-    r5(worker.data);
+  void op27(workerData &worker, __m256i &data, __m256i &old) {
+    r5(data);
+    data = _mm256_and_si256(data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
+    x0_r4(data);
+    r5(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op28(workerData &worker) {
-    sl03(worker.data);
-    a0(worker.data);
-    a0(worker.data);
-    r5(worker.data);
+  void op28(workerData &worker, __m256i &data, __m256i &old) {
+    sl03(data);
+    a0(data);
+    a0(data);
+    r5(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op29(workerData &worker) {
-    m0(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    sr03(worker.data);
-    a0(worker.data);
+  void op29(workerData &worker, __m256i &data, __m256i &old) {
+    m0(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    sr03(data);
+    a0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op30(workerData &worker) {
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    x0_r4(worker.data);
-    r5(worker.data);
-    sl03(worker.data);
+  void op30(workerData &worker, __m256i &data, __m256i &old) {
+    addp2(data, worker.chunk[worker.pos2]);
+    x0_r4(data);
+    r5(data);
+    sl03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op31(workerData &worker) {
-    notData(worker.data);
-    x0_r2(worker.data);
-    sl03(worker.data);
-    m0(worker.data);
+  void op31(workerData &worker, __m256i &data, __m256i &old) {
+    notData(data);
+    x0_r2(data);
+    sl03(data);
+    m0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op32(workerData &worker) {
-    x0_r2(worker.data);
-    revData(worker.data);
-    r3(worker.data);
-    x0_r2(worker.data);
+  void op32(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r2(data);
+    revData(data);
+    r3(data);
+    x0_r2(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op33(workerData &worker) {
-    r0(worker.data);
-    x0_r4(worker.data);
-    revData(worker.data);
-    m0(worker.data);
+  void op33(workerData &worker, __m256i &data, __m256i &old) {
+    r0(data);
+    x0_r4(data);
+    revData(data);
+    m0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op34(workerData &worker) {
-    subx97(worker.data);
-    sl03(worker.data);
-    sl03(worker.data);
-    subx97(worker.data);
+  void op34(workerData &worker, __m256i &data, __m256i &old) {
+    subx97(data);
+    sl03(data);
+    sl03(data);
+    subx97(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op35(workerData &worker) {
-    a0(worker.data);
-    notData(worker.data);
-    r1(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
+  void op35(workerData &worker, __m256i &data, __m256i &old) {
+    a0(data);
+    notData(data);
+    r1(data);
+    xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op36(workerData &worker) {
-    p0(worker.data);
-    r1(worker.data);
-    x0_r2(worker.data);
-    r1(worker.data);
+  void op36(workerData &worker, __m256i &data, __m256i &old) {
+    p0(data);
+    r1(data);
+    x0_r2(data);
+    r1(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op37(workerData &worker) {
-    r0(worker.data);
-    sr03(worker.data);
-    sr03(worker.data);
-    m0(worker.data);
+  void op37(workerData &worker, __m256i &data, __m256i &old) {
+    r0(data);
+    sr03(data);
+    sr03(data);
+    m0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op38(workerData &worker) {
+  void op38(workerData &worker, __m256i &data, __m256i &old) {
     
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
@@ -497,56 +497,56 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op39(workerData &worker) {
-    x0_r2(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    sr03(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
+  void op39(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r2(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    sr03(data);
+    addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op40(workerData &worker) {
-    r0(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    p0(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
+  void op40(workerData &worker, __m256i &data, __m256i &old) {
+    r0(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    p0(data);
+    xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op41(workerData &worker) {
-    r5(worker.data);
-    subx97(worker.data);
-    r3(worker.data);
-    x0_r4(worker.data);
+  void op41(workerData &worker, __m256i &data, __m256i &old) {
+    r5(data);
+    subx97(data);
+    r3(data);
+    x0_r4(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op42(workerData &worker) {
-    worker.data = _mm256_rol_epi8(worker.data, 4);
-    x0_r2(worker.data);
-    r0(worker.data);
+  void op42(workerData &worker, __m256i &data, __m256i &old) {
+    data = _mm256_rol_epi8(data, 4);
+    x0_r2(data);
+    r0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op43(workerData &worker) {
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    a0(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    subx97(worker.data);
+  void op43(workerData &worker, __m256i &data, __m256i &old) {
+    addp2(data, worker.chunk[worker.pos2]);
+    a0(data);
+    addp2(data, worker.chunk[worker.pos2]);
+    subx97(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op44(workerData &worker) {
+  void op44(workerData &worker, __m256i &data, __m256i &old) {
     
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
@@ -564,64 +564,64 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op45(workerData &worker) {
-    r2(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    p0(worker.data);
+  void op45(workerData &worker, __m256i &data, __m256i &old) {
+    r2(data);
+    addp2(data, worker.chunk[worker.pos2]);
+    p0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op46(workerData &worker) {
-    p0(worker.data);
-    a0(worker.data);
-    r5(worker.data);
-    x0_r4(worker.data);
+  void op46(workerData &worker, __m256i &data, __m256i &old) {
+    p0(data);
+    a0(data);
+    r5(data);
+    x0_r4(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op47(workerData &worker) {
-    r5(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    r5(worker.data);
-    sl03(worker.data);
+  void op47(workerData &worker, __m256i &data, __m256i &old) {
+    r5(data);
+    addp2(data, worker.chunk[worker.pos2]);
+    r5(data);
+    sl03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op48(workerData &worker) {
-    r0(worker.data);
-    r5(worker.data);
+  void op48(workerData &worker, __m256i &data, __m256i &old) {
+    r0(data);
+    r5(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op49(workerData &worker) {
-    p0(worker.data);
-    a0(worker.data);
-    revData(worker.data);
-    x0_r4(worker.data);
+  void op49(workerData &worker, __m256i &data, __m256i &old) {
+    p0(data);
+    a0(data);
+    revData(data);
+    x0_r4(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op50(workerData &worker) {
-    revData(worker.data);
-    r3(worker.data);
-    a0(worker.data);
-    r1(worker.data);
+  void op50(workerData &worker, __m256i &data, __m256i &old) {
+    revData(data);
+    r3(data);
+    a0(data);
+    r1(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op51(workerData &worker) {
+  void op51(workerData &worker, __m256i &data, __m256i &old) {
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -638,17 +638,17 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op52(workerData &worker) {
-    r0(worker.data);
-    sr03(worker.data);
-    notData(worker.data);
-    p0(worker.data);
+  void op52(workerData &worker, __m256i &data, __m256i &old) {
+    r0(data);
+    sr03(data);
+    notData(data);
+    p0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op53(workerData &worker) {
+  void op53(workerData &worker, __m256i &data, __m256i &old) {
     
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
@@ -662,15 +662,15 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op54(workerData &worker) {
-    revData(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
+  void op54(workerData &worker, __m256i &data, __m256i &old) {
+    revData(data);
+    xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op55(workerData &worker) {
+  void op55(workerData &worker, __m256i &data, __m256i &old) {
     
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
@@ -688,398 +688,398 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op56(workerData &worker) {
-    x0_r2(worker.data);
-    m0(worker.data);
-    notData(worker.data);
-    r1(worker.data);
+  void op56(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r2(data);
+    m0(data);
+    notData(data);
+    r1(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op57(workerData &worker) {
-    r0(worker.data);
-    revData(worker.data);
+  void op57(workerData &worker, __m256i &data, __m256i &old) {
+    r0(data);
+    revData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op58(workerData &worker) {
-    revData(worker.data);
-    x0_r2(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    a0(worker.data);
+  void op58(workerData &worker, __m256i &data, __m256i &old) {
+    revData(data);
+    x0_r2(data);
+    addp2(data, worker.chunk[worker.pos2]);
+    a0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op59(workerData &worker) {
-    r1(worker.data);
-    m0(worker.data);
-    r0(worker.data);
-    notData(worker.data);
+  void op59(workerData &worker, __m256i &data, __m256i &old) {
+    r1(data);
+    m0(data);
+    r0(data);
+    notData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op60(workerData &worker) {
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    notData(worker.data);
-    m0(worker.data);
-    r3(worker.data);
+  void op60(workerData &worker, __m256i &data, __m256i &old) {
+    xp2(data, worker.chunk[worker.pos2]);
+    notData(data);
+    m0(data);
+    r3(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op61(workerData &worker) {
-    r5(worker.data);
-    sl03(worker.data);
+  void op61(workerData &worker, __m256i &data, __m256i &old) {
+    r5(data);
+    sl03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op62(workerData &worker) {
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    notData(worker.data);
-    x0_r2(worker.data);
-    a0(worker.data);
+  void op62(workerData &worker, __m256i &data, __m256i &old) {
+    addp2(data, worker.chunk[worker.pos2]);
+    notData(data);
+    x0_r2(data);
+    a0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op63(workerData &worker) {
-    r5(worker.data);
-    p0(worker.data);
-    subx97(worker.data);
-    a0(worker.data);
+  void op63(workerData &worker, __m256i &data, __m256i &old) {
+    r5(data);
+    p0(data);
+    subx97(data);
+    a0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op64(workerData &worker) {
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    revData(worker.data);
-    x0_r4(worker.data);
-    m0(worker.data);
+  void op64(workerData &worker, __m256i &data, __m256i &old) {
+    xp2(data, worker.chunk[worker.pos2]);
+    revData(data);
+    x0_r4(data);
+    m0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op65(workerData &worker) {
-    x0_r2(worker.data);
-    m0(worker.data);
+  void op65(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r2(data);
+    m0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op66(workerData &worker) {
-    x0_r2(worker.data);
-    revData(worker.data);
-    x0_r4(worker.data);
-    r1(worker.data);
+  void op66(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r2(data);
+    revData(data);
+    x0_r4(data);
+    r1(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op67(workerData &worker) {
-    r1(worker.data);
-    p0(worker.data);
-    x0_r2(worker.data);
-    r5(worker.data);
+  void op67(workerData &worker, __m256i &data, __m256i &old) {
+    r1(data);
+    p0(data);
+    x0_r2(data);
+    r5(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op68(workerData &worker) {
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    notData(worker.data);
-    x0_r4(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
+  void op68(workerData &worker, __m256i &data, __m256i &old) {
+    addp2(data, worker.chunk[worker.pos2]);
+    notData(data);
+    x0_r4(data);
+    xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op69(workerData &worker) {
-    a0(worker.data);
-    m0(worker.data);
-    revData(worker.data);
-    sr03(worker.data);
+  void op69(workerData &worker, __m256i &data, __m256i &old) {
+    a0(data);
+    m0(data);
+    revData(data);
+    sr03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op70(workerData &worker) {
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    m0(worker.data);
-    sr03(worker.data);
-    x0_r4(worker.data);
+  void op70(workerData &worker, __m256i &data, __m256i &old) {
+    xp2(data, worker.chunk[worker.pos2]);
+    m0(data);
+    sr03(data);
+    x0_r4(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op71(workerData &worker) {
-    r5(worker.data);
-    notData(worker.data);
-    m0(worker.data);
-    sl03(worker.data);
+  void op71(workerData &worker, __m256i &data, __m256i &old) {
+    r5(data);
+    notData(data);
+    m0(data);
+    sl03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op72(workerData &worker) {
-    revData(worker.data);
-    p0(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    sl03(worker.data);
+  void op72(workerData &worker, __m256i &data, __m256i &old) {
+    revData(data);
+    p0(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    sl03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op73(workerData &worker) {
-    p0(worker.data);
-    revData(worker.data);
-    r5(worker.data);
-    subx97(worker.data);
+  void op73(workerData &worker, __m256i &data, __m256i &old) {
+    p0(data);
+    revData(data);
+    r5(data);
+    subx97(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op74(workerData &worker) {
-    m0(worker.data);
-    r3(worker.data);
-    revData(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
+  void op74(workerData &worker, __m256i &data, __m256i &old) {
+    m0(data);
+    r3(data);
+    revData(data);
+    addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op75(workerData &worker) {
-    m0(worker.data);
-    p0(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    x0_r4(worker.data);
+  void op75(workerData &worker, __m256i &data, __m256i &old) {
+    m0(data);
+    p0(data);
+    addp2(data, worker.chunk[worker.pos2]);
+    x0_r4(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op76(workerData &worker) {
-    r0(worker.data);
-    x0_r2(worker.data);
-    r5(worker.data);
-    sr03(worker.data);
+  void op76(workerData &worker, __m256i &data, __m256i &old) {
+    r0(data);
+    x0_r2(data);
+    r5(data);
+    sr03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op77(workerData &worker) {
-    r3(worker.data);
-    a0(worker.data);
-    sl03(worker.data);
-    p0(worker.data);
+  void op77(workerData &worker, __m256i &data, __m256i &old) {
+    r3(data);
+    a0(data);
+    sl03(data);
+    p0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op78(workerData &worker) {
-    r0(worker.data);
-    revData(worker.data);
-    m0(worker.data);
-    subx97(worker.data);
+  void op78(workerData &worker, __m256i &data, __m256i &old) {
+    r0(data);
+    revData(data);
+    m0(data);
+    subx97(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op79(workerData &worker) {
-    x0_r4(worker.data);
-    x0_r2(worker.data);
-    a0(worker.data);
-    m0(worker.data);
+  void op79(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r4(data);
+    x0_r2(data);
+    a0(data);
+    m0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op80(workerData &worker) {
-    r0(worker.data);
-    sl03(worker.data);
-    a0(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
+  void op80(workerData &worker, __m256i &data, __m256i &old) {
+    r0(data);
+    sl03(data);
+    a0(data);
+    addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op81(workerData &worker) {
-    x0_r4(worker.data);
-    sl03(worker.data);
-    r0(worker.data);
-    p0(worker.data);
+  void op81(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r4(data);
+    sl03(data);
+    r0(data);
+    p0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op82(workerData &worker) {
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    sr03(worker.data);
+  void op82(workerData &worker, __m256i &data, __m256i &old) {
+    xp2(data, worker.chunk[worker.pos2]);
+    sr03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op83(workerData &worker) {
-    sl03(worker.data);
-    revData(worker.data);
-    r3(worker.data);
-    revData(worker.data);
+  void op83(workerData &worker, __m256i &data, __m256i &old) {
+    sl03(data);
+    revData(data);
+    r3(data);
+    revData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op84(workerData &worker) {
-    subx97(worker.data);
-    r1(worker.data);
-    sl03(worker.data);
-    a0(worker.data);
+  void op84(workerData &worker, __m256i &data, __m256i &old) {
+    subx97(data);
+    r1(data);
+    sl03(data);
+    a0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op85(workerData &worker) {
-    sr03(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    r0(worker.data);
-    sl03(worker.data);
+  void op85(workerData &worker, __m256i &data, __m256i &old) {
+    sr03(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    r0(data);
+    sl03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op86(workerData &worker) {
-    x0_r4(worker.data);
-    r0(worker.data);
-    x0_r4(worker.data);
-    notData(worker.data);
+  void op86(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r4(data);
+    r0(data);
+    x0_r4(data);
+    notData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op87(workerData &worker) {
-    a0(worker.data);
-    r3(worker.data);
-    x0_r4(worker.data);
-    a0(worker.data);
+  void op87(workerData &worker, __m256i &data, __m256i &old) {
+    a0(data);
+    r3(data);
+    x0_r4(data);
+    a0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op88(workerData &worker) {
-    x0_r2(worker.data);
-    r1(worker.data);
-    m0(worker.data);
-    notData(worker.data);
+  void op88(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r2(data);
+    r1(data);
+    m0(data);
+    notData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op89(workerData &worker) {
-    a0(worker.data);
-    m0(worker.data);
-    notData(worker.data);
-    x0_r2(worker.data);
+  void op89(workerData &worker, __m256i &data, __m256i &old) {
+    a0(data);
+    m0(data);
+    notData(data);
+    x0_r2(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op90(workerData &worker) {
-    revData(worker.data);
-    r3(worker.data);
-    r3(worker.data);
-    sr03(worker.data);
+  void op90(workerData &worker, __m256i &data, __m256i &old) {
+    revData(data);
+    r3(data);
+    r3(data);
+    sr03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op91(workerData &worker) {
-    p0(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    x0_r4(worker.data);
-    revData(worker.data);
+  void op91(workerData &worker, __m256i &data, __m256i &old) {
+    p0(data);
+    addp2(data, worker.chunk[worker.pos2]);
+    x0_r4(data);
+    revData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op92(workerData &worker) {
-    p0(worker.data);
-    notData(worker.data);
-    p0(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
+  void op92(workerData &worker, __m256i &data, __m256i &old) {
+    p0(data);
+    notData(data);
+    p0(data);
+    addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op93(workerData &worker) {
-    x0_r2(worker.data);
-    m0(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    a0(worker.data);
+  void op93(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r2(data);
+    m0(data);
+    addp2(data, worker.chunk[worker.pos2]);
+    a0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op94(workerData &worker) {
-    r1(worker.data);
-    r0(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    sl03(worker.data);
+  void op94(workerData &worker, __m256i &data, __m256i &old) {
+    r1(data);
+    r0(data);
+    addp2(data, worker.chunk[worker.pos2]);
+    sl03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op95(workerData &worker) {
-    r1(worker.data);
-    notData(worker.data);
-    r2(worker.data);
+  void op95(workerData &worker, __m256i &data, __m256i &old) {
+    r1(data);
+    notData(data);
+    r2(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op96(workerData &worker) {
+  void op96(workerData &worker, __m256i &data, __m256i &old) {
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -1097,315 +1097,315 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op97(workerData &worker) {
-    r1(worker.data);
-    sl03(worker.data);
-    p0(worker.data);
-    sr03(worker.data);
+  void op97(workerData &worker, __m256i &data, __m256i &old) {
+    r1(data);
+    sl03(data);
+    p0(data);
+    sr03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op98(workerData &worker) {
-    x0_r4(worker.data);
-    sl03(worker.data);
-    sr03(worker.data);
-    x0_r4(worker.data);
+  void op98(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r4(data);
+    sl03(data);
+    sr03(data);
+    x0_r4(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op99(workerData &worker) {
-    x0_r4(worker.data);
-    subx97(worker.data);
-    revData(worker.data);
-    sr03(worker.data);
+  void op99(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r4(data);
+    subx97(data);
+    revData(data);
+    sr03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op100(workerData &worker) {
-    r0(worker.data);
-    sl03(worker.data);
-    revData(worker.data);
-    p0(worker.data);
+  void op100(workerData &worker, __m256i &data, __m256i &old) {
+    r0(data);
+    sl03(data);
+    revData(data);
+    p0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op101(workerData &worker) {
-    sr03(worker.data);
-    p0(worker.data);
-    sr03(worker.data);
-    notData(worker.data);
+  void op101(workerData &worker, __m256i &data, __m256i &old) {
+    sr03(data);
+    p0(data);
+    sr03(data);
+    notData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op102(workerData &worker) {
-    r3(worker.data);
-    subx97(worker.data);
-    a0(worker.data);
-    r3(worker.data);
+  void op102(workerData &worker, __m256i &data, __m256i &old) {
+    r3(data);
+    subx97(data);
+    a0(data);
+    r3(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op103(workerData &worker) {
-    r1(worker.data);
-    revData(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    r0(worker.data);
+  void op103(workerData &worker, __m256i &data, __m256i &old) {
+    r1(data);
+    revData(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    r0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op104(workerData &worker) {
-    revData(worker.data);
-    p0(worker.data);
-    r5(worker.data);
-    a0(worker.data);
+  void op104(workerData &worker, __m256i &data, __m256i &old) {
+    revData(data);
+    p0(data);
+    r5(data);
+    a0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op105(workerData &worker) {
-    sl03(worker.data);
-    r3(worker.data);
-    r0(worker.data);
-    x0_r2(worker.data);
+  void op105(workerData &worker, __m256i &data, __m256i &old) {
+    sl03(data);
+    r3(data);
+    r0(data);
+    x0_r2(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op106(workerData &worker) {
-    revData(worker.data);
-    x0_r4(worker.data);
-    r1(worker.data);
-    m0(worker.data);
+  void op106(workerData &worker, __m256i &data, __m256i &old) {
+    revData(data);
+    x0_r4(data);
+    r1(data);
+    m0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op107(workerData &worker) {
-    sr03(worker.data);
-    x0_r2(worker.data);
-    r3(worker.data);
-    r3(worker.data);
+  void op107(workerData &worker, __m256i &data, __m256i &old) {
+    sr03(data);
+    x0_r2(data);
+    r3(data);
+    r3(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op108(workerData &worker) {
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    notData(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    x0_r2(worker.data);
+  void op108(workerData &worker, __m256i &data, __m256i &old) {
+    xp2(data, worker.chunk[worker.pos2]);
+    notData(data);
+    addp2(data, worker.chunk[worker.pos2]);
+    x0_r2(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op109(workerData &worker) {
-    m0(worker.data);
-    r0(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    x0_r2(worker.data);
+  void op109(workerData &worker, __m256i &data, __m256i &old) {
+    m0(data);
+    r0(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    x0_r2(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op110(workerData &worker) {
-    a0(worker.data);
-    x0_r2(worker.data);
-    x0_r2(worker.data);
-    sr03(worker.data);
+  void op110(workerData &worker, __m256i &data, __m256i &old) {
+    a0(data);
+    x0_r2(data);
+    x0_r2(data);
+    sr03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op111(workerData &worker) {
-    m0(worker.data);
-    revData(worker.data);
-    m0(worker.data);
-    sr03(worker.data);
+  void op111(workerData &worker, __m256i &data, __m256i &old) {
+    m0(data);
+    revData(data);
+    m0(data);
+    sr03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op112(workerData &worker) {
-    r3(worker.data);
-    notData(worker.data);
-    r5(worker.data);
-    subx97(worker.data);
+  void op112(workerData &worker, __m256i &data, __m256i &old) {
+    r3(data);
+    notData(data);
+    r5(data);
+    subx97(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op113(workerData &worker) {
-    r3(worker.data);
-    r3(worker.data);
-    p0(worker.data);
-    notData(worker.data);
+  void op113(workerData &worker, __m256i &data, __m256i &old) {
+    r3(data);
+    r3(data);
+    p0(data);
+    notData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op114(workerData &worker) {
-    r1(worker.data);
-    revData(worker.data);
-    r0(worker.data);
-    notData(worker.data);
+  void op114(workerData &worker, __m256i &data, __m256i &old) {
+    r1(data);
+    revData(data);
+    r0(data);
+    notData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op115(workerData &worker) {
-    r0(worker.data);
-    r5(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    r3(worker.data);
+  void op115(workerData &worker, __m256i &data, __m256i &old) {
+    r0(data);
+    r5(data);
+    addp2(data, worker.chunk[worker.pos2]);
+    r3(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op116(workerData &worker) {
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    p0(worker.data);
-    sl03(worker.data);
+  void op116(workerData &worker, __m256i &data, __m256i &old) {
+    addp2(data, worker.chunk[worker.pos2]);
+    xp2(data, worker.chunk[worker.pos2]);
+    p0(data);
+    sl03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op117(workerData &worker) {
-    sl03(worker.data);
-    r3(worker.data);
-    sl03(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
+  void op117(workerData &worker, __m256i &data, __m256i &old) {
+    sl03(data);
+    r3(data);
+    sl03(data);
+    addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op118(workerData &worker) {
-    sr03(worker.data);
-    a0(worker.data);
-    sl03(worker.data);
-    r5(worker.data);
+  void op118(workerData &worker, __m256i &data, __m256i &old) {
+    sr03(data);
+    a0(data);
+    sl03(data);
+    r5(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op119(workerData &worker) {
-    revData(worker.data);
-    x0_r2(worker.data);
-    notData(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
+  void op119(workerData &worker, __m256i &data, __m256i &old) {
+    revData(data);
+    x0_r2(data);
+    notData(data);
+    xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op120(workerData &worker) {
-    x0_r2(worker.data);
-    m0(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    revData(worker.data);
+  void op120(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r2(data);
+    m0(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    revData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op121(workerData &worker) {
-    sr03(worker.data);
-    a0(worker.data);
-    p0(worker.data);
-    m0(worker.data);
+  void op121(workerData &worker, __m256i &data, __m256i &old) {
+    sr03(data);
+    a0(data);
+    p0(data);
+    m0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op122(workerData &worker) {
-    x0_r4(worker.data);
-    r0(worker.data);
-    r5(worker.data);
-    x0_r2(worker.data);
+  void op122(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r4(data);
+    r0(data);
+    r5(data);
+    x0_r2(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op123(workerData &worker) {
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    notData(worker.data);
-    r3(worker.data);
-    r3(worker.data);
+  void op123(workerData &worker, __m256i &data, __m256i &old) {
+    addp2(data, worker.chunk[worker.pos2]);
+    notData(data);
+    r3(data);
+    r3(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op124(workerData &worker) {
-    x0_r2(worker.data);
-    x0_r2(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    notData(worker.data);
+  void op124(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r2(data);
+    x0_r2(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    notData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op125(workerData &worker) {
-    revData(worker.data);
-    x0_r2(worker.data);
-    a0(worker.data);
-    sr03(worker.data);
+  void op125(workerData &worker, __m256i &data, __m256i &old) {
+    revData(data);
+    x0_r2(data);
+    a0(data);
+    sr03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op126(workerData &worker) {
-    r1(worker.data);
-    revData(worker.data);
+  void op126(workerData &worker, __m256i &data, __m256i &old) {
+    r1(data);
+    revData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op127(workerData &worker) {
-    sl03(worker.data);
-    m0(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    xp2(worker.data, worker.chunk[worker.pos2]);
+  void op127(workerData &worker, __m256i &data, __m256i &old) {
+    sl03(data);
+    m0(data);
+    addp2(data, worker.chunk[worker.pos2]);
+    xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op128(workerData &worker) {
+  void op128(workerData &worker, __m256i &data, __m256i &old) {
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -1423,588 +1423,588 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op129(workerData &worker) {
-    notData(worker.data);
-    p0(worker.data);
-    p0(worker.data);
-    sr03(worker.data);
+  void op129(workerData &worker, __m256i &data, __m256i &old) {
+    notData(data);
+    p0(data);
+    p0(data);
+    sr03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op130(workerData &worker) {
-    sr03(worker.data);
-    r0(worker.data);
-    r1(worker.data);
-    x0_r4(worker.data);
+  void op130(workerData &worker, __m256i &data, __m256i &old) {
+    sr03(data);
+    r0(data);
+    r1(data);
+    x0_r4(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op131(workerData &worker) {
-    subx97(worker.data);
-    r1(worker.data);
-    p0(worker.data);
-    m0(worker.data);
+  void op131(workerData &worker, __m256i &data, __m256i &old) {
+    subx97(data);
+    r1(data);
+    p0(data);
+    m0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op132(workerData &worker) {
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    revData(worker.data);
-    r5(worker.data);
-    x0_r2(worker.data);
+  void op132(workerData &worker, __m256i &data, __m256i &old) {
+    addp2(data, worker.chunk[worker.pos2]);
+    revData(data);
+    r5(data);
+    x0_r2(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op133(workerData &worker) {
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    r5(worker.data);
-    x0_r2(worker.data);
-    sl03(worker.data);
+  void op133(workerData &worker, __m256i &data, __m256i &old) {
+    xp2(data, worker.chunk[worker.pos2]);
+    r5(data);
+    x0_r2(data);
+    sl03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op134(workerData &worker) {
-    notData(worker.data);
-    x0_r4(worker.data);
-    r1(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
+  void op134(workerData &worker, __m256i &data, __m256i &old) {
+    notData(data);
+    x0_r4(data);
+    r1(data);
+    addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op135(workerData &worker) {
-    sr03(worker.data);
-    x0_r2(worker.data);
-    a0(worker.data);
-    revData(worker.data);
+  void op135(workerData &worker, __m256i &data, __m256i &old) {
+    sr03(data);
+    x0_r2(data);
+    a0(data);
+    revData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op136(workerData &worker) {
-    sr03(worker.data);
-    subx97(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    r5(worker.data);
+  void op136(workerData &worker, __m256i &data, __m256i &old) {
+    sr03(data);
+    subx97(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    r5(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op137(workerData &worker) {
-    r5(worker.data);
-    sr03(worker.data);
-    revData(worker.data);
-    r0(worker.data);
+  void op137(workerData &worker, __m256i &data, __m256i &old) {
+    r5(data);
+    sr03(data);
+    revData(data);
+    r0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op138(workerData &worker) {
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    a0(worker.data);
-    subx97(worker.data);
+  void op138(workerData &worker, __m256i &data, __m256i &old) {
+    xp2(data, worker.chunk[worker.pos2]);
+    xp2(data, worker.chunk[worker.pos2]);
+    a0(data);
+    subx97(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op139(workerData &worker) {
-    x0_r2(worker.data);
-    r3(worker.data);
+  void op139(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r2(data);
+    r3(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op140(workerData &worker) {
-    r1(worker.data);
-    x0_r2(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    r5(worker.data);
+  void op140(workerData &worker, __m256i &data, __m256i &old) {
+    r1(data);
+    x0_r2(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    r5(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op141(workerData &worker) {
-    r1(worker.data);
-    subx97(worker.data);
-    p0(worker.data);
-    a0(worker.data);
+  void op141(workerData &worker, __m256i &data, __m256i &old) {
+    r1(data);
+    subx97(data);
+    p0(data);
+    a0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op142(workerData &worker) {
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    r5(worker.data);
-    revData(worker.data);
-    x0_r2(worker.data);
+  void op142(workerData &worker, __m256i &data, __m256i &old) {
+    addp2(data, worker.chunk[worker.pos2]);
+    r5(data);
+    revData(data);
+    x0_r2(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op143(workerData &worker) {
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    r3(worker.data);
-    sr03(worker.data);
-    sl03(worker.data);
+  void op143(workerData &worker, __m256i &data, __m256i &old) {
+    addp2(data, worker.chunk[worker.pos2]);
+    r3(data);
+    sr03(data);
+    sl03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op144(workerData &worker) {
-    r0(worker.data);
-    sl03(worker.data);
-    notData(worker.data);
-    r0(worker.data);
+  void op144(workerData &worker, __m256i &data, __m256i &old) {
+    r0(data);
+    sl03(data);
+    notData(data);
+    r0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op145(workerData &worker) {
-    revData(worker.data);
-    x0_r4(worker.data);
-    x0_r2(worker.data);
-    x0_r4(worker.data);
+  void op145(workerData &worker, __m256i &data, __m256i &old) {
+    revData(data);
+    x0_r4(data);
+    x0_r2(data);
+    x0_r4(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op146(workerData &worker) {
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    sl03(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    p0(worker.data);
+  void op146(workerData &worker, __m256i &data, __m256i &old) {
+    addp2(data, worker.chunk[worker.pos2]);
+    sl03(data);
+    addp2(data, worker.chunk[worker.pos2]);
+    p0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op147(workerData &worker) {
-    notData(worker.data);
-    sl03(worker.data);
-    x0_r4(worker.data);
-    m0(worker.data);
+  void op147(workerData &worker, __m256i &data, __m256i &old) {
+    notData(data);
+    sl03(data);
+    x0_r4(data);
+    m0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op148(workerData &worker) {
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    r5(worker.data);
-    sl03(worker.data);
-    subx97(worker.data);
+  void op148(workerData &worker, __m256i &data, __m256i &old) {
+    addp2(data, worker.chunk[worker.pos2]);
+    r5(data);
+    sl03(data);
+    subx97(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op149(workerData &worker) {
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    revData(worker.data);
-    subx97(worker.data);
-    a0(worker.data);
+  void op149(workerData &worker, __m256i &data, __m256i &old) {
+    xp2(data, worker.chunk[worker.pos2]);
+    revData(data);
+    subx97(data);
+    a0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op150(workerData &worker) {
-    sl03(worker.data);
-    sl03(worker.data);
-    sl03(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
+  void op150(workerData &worker, __m256i &data, __m256i &old) {
+    sl03(data);
+    sl03(data);
+    sl03(data);
+    addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op151(workerData &worker) {
-    a0(worker.data);
-    sl03(worker.data);
-    m0(worker.data);
-    sl03(worker.data);
+  void op151(workerData &worker, __m256i &data, __m256i &old) {
+    a0(data);
+    sl03(data);
+    m0(data);
+    sl03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op152(workerData &worker) {
-    sr03(worker.data);
-    notData(worker.data);
-    sl03(worker.data);
-    x0_r2(worker.data);
+  void op152(workerData &worker, __m256i &data, __m256i &old) {
+    sr03(data);
+    notData(data);
+    sl03(data);
+    x0_r2(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op153(workerData &worker) {
-    worker.data = _mm256_rol_epi8(worker.data, 4);
+  void op153(workerData &worker, __m256i &data, __m256i &old) {
+    data = _mm256_rol_epi8(data, 4);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op154(workerData &worker) {
-    r5(worker.data);
-    notData(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    p0(worker.data);
+  void op154(workerData &worker, __m256i &data, __m256i &old) {
+    r5(data);
+    notData(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    p0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op155(workerData &worker) {
-    subx97(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    p0(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
+  void op155(workerData &worker, __m256i &data, __m256i &old) {
+    subx97(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    p0(data);
+    xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op156(workerData &worker) {
-    sr03(worker.data);
-    sr03(worker.data);
-    worker.data = _mm256_rol_epi8(worker.data, 4);
+  void op156(workerData &worker, __m256i &data, __m256i &old) {
+    sr03(data);
+    sr03(data);
+    data = _mm256_rol_epi8(data, 4);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op157(workerData &worker) {
-    sr03(worker.data);
-    sl03(worker.data);
-    r0(worker.data);
-    r1(worker.data);
+  void op157(workerData &worker, __m256i &data, __m256i &old) {
+    sr03(data);
+    sl03(data);
+    r0(data);
+    r1(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op158(workerData &worker) {
-    p0(worker.data);
-    r3(worker.data);
-    a0(worker.data);
-    r1(worker.data);
+  void op158(workerData &worker, __m256i &data, __m256i &old) {
+    p0(data);
+    r3(data);
+    a0(data);
+    r1(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op159(workerData &worker) {
-    subx97(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    r0(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
+  void op159(workerData &worker, __m256i &data, __m256i &old) {
+    subx97(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    r0(data);
+    xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op160(workerData &worker) {
-    sr03(worker.data);
-    revData(worker.data);
-    worker.data = _mm256_rol_epi8(worker.data, 4);
+  void op160(workerData &worker, __m256i &data, __m256i &old) {
+    sr03(data);
+    revData(data);
+    data = _mm256_rol_epi8(data, 4);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op161(workerData &worker) {
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    r5(worker.data);
-    r0(worker.data);
+  void op161(workerData &worker, __m256i &data, __m256i &old) {
+    xp2(data, worker.chunk[worker.pos2]);
+    xp2(data, worker.chunk[worker.pos2]);
+    r5(data);
+    r0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op162(workerData &worker) {
-    m0(worker.data);
-    revData(worker.data);
-    x0_r2(worker.data);
-    subx97(worker.data);
+  void op162(workerData &worker, __m256i &data, __m256i &old) {
+    m0(data);
+    revData(data);
+    x0_r2(data);
+    subx97(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op163(workerData &worker) {
-    sl03(worker.data);
-    subx97(worker.data);
-    x0_r4(worker.data);
-    r1(worker.data);
+  void op163(workerData &worker, __m256i &data, __m256i &old) {
+    sl03(data);
+    subx97(data);
+    x0_r4(data);
+    r1(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op164(workerData &worker) {
-    m0(worker.data);
-    p0(worker.data);
-    subx97(worker.data);
-    notData(worker.data);
+  void op164(workerData &worker, __m256i &data, __m256i &old) {
+    m0(data);
+    p0(data);
+    subx97(data);
+    notData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op165(workerData &worker) {
-    x0_r4(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    sl03(worker.data);
-    a0(worker.data);
+  void op165(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r4(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    sl03(data);
+    a0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op166(workerData &worker) {
-    r3(worker.data);
-    a0(worker.data);
-    x0_r2(worker.data);
-    notData(worker.data);
+  void op166(workerData &worker, __m256i &data, __m256i &old) {
+    r3(data);
+    a0(data);
+    x0_r2(data);
+    notData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op167(workerData &worker) {
-    m0(worker.data);
-    sr03(worker.data);
+  void op167(workerData &worker, __m256i &data, __m256i &old) {
+    m0(data);
+    sr03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op168(workerData &worker) {
-    r0(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    r0(worker.data);
-    r1(worker.data);
+  void op168(workerData &worker, __m256i &data, __m256i &old) {
+    r0(data);
+    addp2(data, worker.chunk[worker.pos2]);
+    r0(data);
+    r1(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op169(workerData &worker) {
-    r1(worker.data);
-    sl03(worker.data);
-    x0_r4(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
+  void op169(workerData &worker, __m256i &data, __m256i &old) {
+    r1(data);
+    sl03(data);
+    x0_r4(data);
+    addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op170(workerData &worker) {
-    subx97(worker.data);
-    revData(worker.data);
-    subx97(worker.data);
-    m0(worker.data);
+  void op170(workerData &worker, __m256i &data, __m256i &old) {
+    subx97(data);
+    revData(data);
+    subx97(data);
+    m0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op171(workerData &worker) {
-    r3(worker.data);
-    subx97(worker.data);
-    p0(worker.data);
-    revData(worker.data);
+  void op171(workerData &worker, __m256i &data, __m256i &old) {
+    r3(data);
+    subx97(data);
+    p0(data);
+    revData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op172(workerData &worker) {
-    x0_r4(worker.data);
-    subx97(worker.data);
-    sl03(worker.data);
-    r1(worker.data);
+  void op172(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r4(data);
+    subx97(data);
+    sl03(data);
+    r1(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op173(workerData &worker) {
-    notData(worker.data);
-    sl03(worker.data);
-    m0(worker.data);
-    a0(worker.data);
+  void op173(workerData &worker, __m256i &data, __m256i &old) {
+    notData(data);
+    sl03(data);
+    m0(data);
+    a0(data);
 
-  blendStep(worker);
-    storeStep(worker);
+  blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op174(workerData &worker) {
-    notData(worker.data);
-    r0(worker.data);
-    p0(worker.data);
-    p0(worker.data);
+  void op174(workerData &worker, __m256i &data, __m256i &old) {
+    notData(data);
+    r0(data);
+    p0(data);
+    p0(data);
 
-  blendStep(worker);
-    storeStep(worker);
+  blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op175(workerData &worker) {
-    r3(worker.data);
-    subx97(worker.data);
-    m0(worker.data);
-    r5(worker.data);
+  void op175(workerData &worker, __m256i &data, __m256i &old) {
+    r3(data);
+    subx97(data);
+    m0(data);
+    r5(data);
 
-  blendStep(worker);
-    storeStep(worker);
+  blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op176(workerData &worker) {
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    m0(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    r5(worker.data);
+  void op176(workerData &worker, __m256i &data, __m256i &old) {
+    xp2(data, worker.chunk[worker.pos2]);
+    m0(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    r5(data);
 
-  blendStep(worker);
-    storeStep(worker);
+  blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op177(workerData &worker) {
-    p0(worker.data);
-    x0_r2(worker.data);
-    x0_r2(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
+  void op177(workerData &worker, __m256i &data, __m256i &old) {
+    p0(data);
+    x0_r2(data);
+    x0_r2(data);
+    addp2(data, worker.chunk[worker.pos2]);
 
-  blendStep(worker);
-    storeStep(worker);
+  blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op178(workerData &worker) {
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    a0(worker.data);
-    notData(worker.data);
-    r1(worker.data);
+  void op178(workerData &worker, __m256i &data, __m256i &old) {
+    addp2(data, worker.chunk[worker.pos2]);
+    a0(data);
+    notData(data);
+    r1(data);
 
-  blendStep(worker);
-    storeStep(worker);
+  blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op179(workerData &worker) {
-    x0_r2(worker.data);
-    a0(worker.data);
-    sr03(worker.data);
-    revData(worker.data);
+  void op179(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r2(data);
+    a0(data);
+    sr03(data);
+    revData(data);
 
-  blendStep(worker);
-    storeStep(worker);
+  blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op180(workerData &worker) {
-    sr03(worker.data);
-    x0_r4(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    subx97(worker.data);
+  void op180(workerData &worker, __m256i &data, __m256i &old) {
+    sr03(data);
+    x0_r4(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    subx97(data);
 
-  blendStep(worker);
-    storeStep(worker);
+  blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op181(workerData &worker) {
-    notData(worker.data);
-    sl03(worker.data);
-    x0_r2(worker.data);
-    r5(worker.data);
+  void op181(workerData &worker, __m256i &data, __m256i &old) {
+    notData(data);
+    sl03(data);
+    x0_r2(data);
+    r5(data);
 
-  blendStep(worker);
-    storeStep(worker);
+  blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op182(workerData &worker) {
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    r3(worker.data);
-    r3(worker.data);
-    x0_r4(worker.data);
+  void op182(workerData &worker, __m256i &data, __m256i &old) {
+    xp2(data, worker.chunk[worker.pos2]);
+    r3(data);
+    r3(data);
+    x0_r4(data);
 
-  blendStep(worker);
-    storeStep(worker);
+  blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op183(workerData &worker) {
-    a0(worker.data);
-    subx97(worker.data);
-    subx97(worker.data);
-    m0(worker.data);
+  void op183(workerData &worker, __m256i &data, __m256i &old) {
+    a0(data);
+    subx97(data);
+    subx97(data);
+    m0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op184(workerData &worker) {
-    sl03(worker.data);
-    m0(worker.data);
-    r5(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
+  void op184(workerData &worker, __m256i &data, __m256i &old) {
+    sl03(data);
+    m0(data);
+    r5(data);
+    xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op185(workerData &worker) {
-    notData(worker.data);
-    x0_r4(worker.data);
-    r5(worker.data);
-    sr03(worker.data);
+  void op185(workerData &worker, __m256i &data, __m256i &old) {
+    notData(data);
+    x0_r4(data);
+    r5(data);
+    sr03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op186(workerData &worker) {
-    x0_r2(worker.data);
-    x0_r4(worker.data);
-    subx97(worker.data);
-    sr03(worker.data);
+  void op186(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r2(data);
+    x0_r4(data);
+    subx97(data);
+    sr03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op187(workerData &worker) {
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    notData(worker.data);
-    a0(worker.data);
-    r3(worker.data);
+  void op187(workerData &worker, __m256i &data, __m256i &old) {
+    xp2(data, worker.chunk[worker.pos2]);
+    notData(data);
+    a0(data);
+    r3(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op188(workerData &worker) {
+  void op188(workerData &worker, __m256i &data, __m256i &old) {
   #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -2017,195 +2017,195 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op189(workerData &worker) {
-    r5(worker.data);
-    x0_r4(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    subx97(worker.data);
+  void op189(workerData &worker, __m256i &data, __m256i &old) {
+    r5(data);
+    x0_r4(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    subx97(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op190(workerData &worker) {
-    r5(worker.data);
-    sr03(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    x0_r2(worker.data);
+  void op190(workerData &worker, __m256i &data, __m256i &old) {
+    r5(data);
+    sr03(data);
+    addp2(data, worker.chunk[worker.pos2]);
+    x0_r2(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op191(workerData &worker) {
-    a0(worker.data);
-    r3(worker.data);
-    r0(worker.data);
-    sr03(worker.data);
+  void op191(workerData &worker, __m256i &data, __m256i &old) {
+    a0(data);
+    r3(data);
+    r0(data);
+    sr03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op192(workerData &worker) {
-    a0(worker.data);
-    sl03(worker.data);
-    a0(worker.data);
-    m0(worker.data);
+  void op192(workerData &worker, __m256i &data, __m256i &old) {
+    a0(data);
+    sl03(data);
+    a0(data);
+    m0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op193(workerData &worker) {
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    sl03(worker.data);
-    r0(worker.data);
-    r1(worker.data);
+  void op193(workerData &worker, __m256i &data, __m256i &old) {
+    addp2(data, worker.chunk[worker.pos2]);
+    sl03(data);
+    r0(data);
+    r1(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op194(workerData &worker) {
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    r0(worker.data);
-    sl03(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
+  void op194(workerData &worker, __m256i &data, __m256i &old) {
+    addp2(data, worker.chunk[worker.pos2]);
+    r0(data);
+    sl03(data);
+    addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op195(workerData &worker) {
-    p0(worker.data);
-    x0_r2(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    x0_r4(worker.data);
+  void op195(workerData &worker, __m256i &data, __m256i &old) {
+    p0(data);
+    x0_r2(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    x0_r4(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op196(workerData &worker) {
-    r3(worker.data);
-    revData(worker.data);
-    sl03(worker.data);
-    r1(worker.data);
+  void op196(workerData &worker, __m256i &data, __m256i &old) {
+    r3(data);
+    revData(data);
+    sl03(data);
+    r1(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op197(workerData &worker) {
-    x0_r4(worker.data);
-    r0(worker.data);
-    m0(worker.data);
-    m0(worker.data);
+  void op197(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r4(data);
+    r0(data);
+    m0(data);
+    m0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op198(workerData &worker) {
-    sr03(worker.data);
-    sr03(worker.data);
-    revData(worker.data);
-    r1(worker.data);
+  void op198(workerData &worker, __m256i &data, __m256i &old) {
+    sr03(data);
+    sr03(data);
+    revData(data);
+    r1(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op199(workerData &worker) {
-    notData(worker.data);
-    a0(worker.data);
-    m0(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
+  void op199(workerData &worker, __m256i &data, __m256i &old) {
+    notData(data);
+    a0(data);
+    m0(data);
+    xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op200(workerData &worker) {
-    sr03(worker.data);
-    p0(worker.data);
-    revData(worker.data);
-    revData(worker.data);
+  void op200(workerData &worker, __m256i &data, __m256i &old) {
+    sr03(data);
+    p0(data);
+    revData(data);
+    revData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op201(workerData &worker) {
-    r3(worker.data);
-    x0_r2(worker.data);
-    x0_r4(worker.data);
-    notData(worker.data);
+  void op201(workerData &worker, __m256i &data, __m256i &old) {
+    r3(data);
+    x0_r2(data);
+    x0_r4(data);
+    notData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op202(workerData &worker) {
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    notData(worker.data);
-    r0(worker.data);
-    r5(worker.data);
+  void op202(workerData &worker, __m256i &data, __m256i &old) {
+    xp2(data, worker.chunk[worker.pos2]);
+    notData(data);
+    r0(data);
+    r5(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op203(workerData &worker) {
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    r1(worker.data);
-    r0(worker.data);
+  void op203(workerData &worker, __m256i &data, __m256i &old) {
+    xp2(data, worker.chunk[worker.pos2]);
+    addp2(data, worker.chunk[worker.pos2]);
+    r1(data);
+    r0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op204(workerData &worker) {
-    r5(worker.data);
-    x0_r2(worker.data);
-    r0(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
+  void op204(workerData &worker, __m256i &data, __m256i &old) {
+    r5(data);
+    x0_r2(data);
+    r0(data);
+    xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op205(workerData &worker) {
-    p0(worker.data);
-    x0_r4(worker.data);
-    sl03(worker.data);
-    a0(worker.data);
+  void op205(workerData &worker, __m256i &data, __m256i &old) {
+    p0(data);
+    x0_r4(data);
+    sl03(data);
+    a0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op206(workerData &worker) {
-    x0_r4(worker.data);
-    revData(worker.data);
-    revData(worker.data);
-    p0(worker.data);
+  void op206(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r4(data);
+    revData(data);
+    revData(data);
+    p0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op207(workerData &worker) {
-    p0(worker.data);
-    p0(worker.data);
+  void op207(workerData &worker, __m256i &data, __m256i &old) {
+    p0(data);
+    p0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op208(workerData &worker) {
+  void op208(workerData &worker, __m256i &data, __m256i &old) {
   #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -2218,406 +2218,406 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op209(workerData &worker) {
-    r5(worker.data);
-    revData(worker.data);
-    p0(worker.data);
-    subx97(worker.data);
+  void op209(workerData &worker, __m256i &data, __m256i &old) {
+    r5(data);
+    revData(data);
+    p0(data);
+    subx97(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op210(workerData &worker) {
-    x0_r2(worker.data);
-    r0(worker.data);
-    r5(worker.data);
-    notData(worker.data);
+  void op210(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r2(data);
+    r0(data);
+    r5(data);
+    notData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op211(workerData &worker) {
-    x0_r4(worker.data);
-    a0(worker.data);
-    subx97(worker.data);
-    r0(worker.data);
+  void op211(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r4(data);
+    a0(data);
+    subx97(data);
+    r0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op212(workerData &worker) {
-    r0(worker.data);
-    x0_r2(worker.data);
-    // xp2(worker.data, worker.chunk[worker.pos2]);
-    // xp2(worker.data, worker.chunk[worker.pos2]);
+  void op212(workerData &worker, __m256i &data, __m256i &old) {
+    r0(data);
+    x0_r2(data);
+    // xp2(data, worker.chunk[worker.pos2]);
+    // xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op213(workerData &worker) {
-    a0(worker.data);
-    sl03(worker.data);
-    r3(worker.data);
-    subx97(worker.data);
+  void op213(workerData &worker, __m256i &data, __m256i &old) {
+    a0(data);
+    sl03(data);
+    r3(data);
+    subx97(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op214(workerData &worker) {
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    subx97(worker.data);
-    sr03(worker.data);
-    notData(worker.data);
+  void op214(workerData &worker, __m256i &data, __m256i &old) {
+    xp2(data, worker.chunk[worker.pos2]);
+    subx97(data);
+    sr03(data);
+    notData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op215(workerData &worker) {
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    sl03(worker.data);
-    m0(worker.data);
+  void op215(workerData &worker, __m256i &data, __m256i &old) {
+    xp2(data, worker.chunk[worker.pos2]);
+    addp2(data, worker.chunk[worker.pos2]);
+    sl03(data);
+    m0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op216(workerData &worker) {
-    r0(worker.data);
-    notData(worker.data);
-    subx97(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
+  void op216(workerData &worker, __m256i &data, __m256i &old) {
+    r0(data);
+    notData(data);
+    subx97(data);
+    addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op217(workerData &worker) {
-    r5(worker.data);
-    a0(worker.data);
-    r1(worker.data);
-    x0_r4(worker.data);
+  void op217(workerData &worker, __m256i &data, __m256i &old) {
+    r5(data);
+    a0(data);
+    r1(data);
+    x0_r4(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op218(workerData &worker) {
-    revData(worker.data);
-    notData(worker.data);
-    m0(worker.data);
-    subx97(worker.data);
+  void op218(workerData &worker, __m256i &data, __m256i &old) {
+    revData(data);
+    notData(data);
+    m0(data);
+    subx97(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op219(workerData &worker) {
-    x0_r4(worker.data);
-    r3(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    revData(worker.data);
+  void op219(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r4(data);
+    r3(data);
+    addp2(data, worker.chunk[worker.pos2]);
+    revData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op220(workerData &worker) {
-    r1(worker.data);
-    sl03(worker.data);
-    revData(worker.data);
-    sl03(worker.data);
+  void op220(workerData &worker, __m256i &data, __m256i &old) {
+    r1(data);
+    sl03(data);
+    revData(data);
+    sl03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op221(workerData &worker) {
-    r5(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    notData(worker.data);
-    revData(worker.data);
+  void op221(workerData &worker, __m256i &data, __m256i &old) {
+    r5(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    notData(data);
+    revData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op222(workerData &worker) {
-    sr03(worker.data);
-    sl03(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    m0(worker.data);
+  void op222(workerData &worker, __m256i &data, __m256i &old) {
+    sr03(data);
+    sl03(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    m0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op223(workerData &worker) {
-    r3(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    r0(worker.data);
-    subx97(worker.data);
+  void op223(workerData &worker, __m256i &data, __m256i &old) {
+    r3(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    r0(data);
+    subx97(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op224(workerData &worker) {
-    x0_r2(worker.data);
-    worker.data = _mm256_rol_epi8(worker.data, 4);
-    sl03(worker.data);
+  void op224(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r2(data);
+    data = _mm256_rol_epi8(data, 4);
+    sl03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op225(workerData &worker) {
-    notData(worker.data);
-    sr03(worker.data);
-    revData(worker.data);
-    r3(worker.data);
+  void op225(workerData &worker, __m256i &data, __m256i &old) {
+    notData(data);
+    sr03(data);
+    revData(data);
+    r3(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op226(workerData &worker) {
-    revData(worker.data);
-    subx97(worker.data);
-    m0(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
+  void op226(workerData &worker, __m256i &data, __m256i &old) {
+    revData(data);
+    subx97(data);
+    m0(data);
+    xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op227(workerData &worker) {
-    notData(worker.data);
-    sl03(worker.data);
-    subx97(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
+  void op227(workerData &worker, __m256i &data, __m256i &old) {
+    notData(data);
+    sl03(data);
+    subx97(data);
+    addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op228(workerData &worker) {
-    a0(worker.data);
-    sr03(worker.data);
-    a0(worker.data);
-    p0(worker.data);
+  void op228(workerData &worker, __m256i &data, __m256i &old) {
+    a0(data);
+    sr03(data);
+    a0(data);
+    p0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op229(workerData &worker) {
-    r3(worker.data);
-    r0(worker.data);
-    x0_r2(worker.data);
-    p0(worker.data);
+  void op229(workerData &worker, __m256i &data, __m256i &old) {
+    r3(data);
+    r0(data);
+    x0_r2(data);
+    p0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op230(workerData &worker) {
-    m0(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    r0(worker.data);
-    r0(worker.data);
+  void op230(workerData &worker, __m256i &data, __m256i &old) {
+    m0(data);
+    addp2(data, worker.chunk[worker.pos2]);
+    r0(data);
+    r0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op231(workerData &worker) {
-    r3(worker.data);
-    sr03(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    revData(worker.data);
+  void op231(workerData &worker, __m256i &data, __m256i &old) {
+    r3(data);
+    sr03(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    revData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op232(workerData &worker) {
-    m0(worker.data);
-    m0(worker.data);
-    x0_r4(worker.data);
-    r5(worker.data);
+  void op232(workerData &worker, __m256i &data, __m256i &old) {
+    m0(data);
+    m0(data);
+    x0_r4(data);
+    r5(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op233(workerData &worker) {
-    r1(worker.data);
-    p0(worker.data);
-    r3(worker.data);
-    p0(worker.data);
+  void op233(workerData &worker, __m256i &data, __m256i &old) {
+    r1(data);
+    p0(data);
+    r3(data);
+    p0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op234(workerData &worker) {
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    m0(worker.data);
-    sr03(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
+  void op234(workerData &worker, __m256i &data, __m256i &old) {
+    addp2(data, worker.chunk[worker.pos2]);
+    m0(data);
+    sr03(data);
+    xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op235(workerData &worker) {
-    x0_r2(worker.data);
-    m0(worker.data);
-    r3(worker.data);
-    notData(worker.data);
+  void op235(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r2(data);
+    m0(data);
+    r3(data);
+    notData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op236(workerData &worker) {
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    a0(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    subx97(worker.data);
+  void op236(workerData &worker, __m256i &data, __m256i &old) {
+    xp2(data, worker.chunk[worker.pos2]);
+    a0(data);
+    addp2(data, worker.chunk[worker.pos2]);
+    subx97(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op237(workerData &worker) {
-    r5(worker.data);
-    sl03(worker.data);
-    x0_r2(worker.data);
-    r3(worker.data);
+  void op237(workerData &worker, __m256i &data, __m256i &old) {
+    r5(data);
+    sl03(data);
+    x0_r2(data);
+    r3(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op238(workerData &worker) {
-    a0(worker.data);
-    a0(worker.data);
-    r3(worker.data);
-    subx97(worker.data);
+  void op238(workerData &worker, __m256i &data, __m256i &old) {
+    a0(data);
+    a0(data);
+    r3(data);
+    subx97(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op239(workerData &worker) {
-    r3(worker.data);
-    r3(worker.data);
-    m0(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
+  void op239(workerData &worker, __m256i &data, __m256i &old) {
+    r3(data);
+    r3(data);
+    m0(data);
+    addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op240(workerData &worker) {
-    notData(worker.data);
-    a0(worker.data);
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    sl03(worker.data);
+  void op240(workerData &worker, __m256i &data, __m256i &old) {
+    notData(data);
+    a0(data);
+    addp2(data, worker.chunk[worker.pos2]);
+    sl03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op241(workerData &worker) {
-    x0_r4(worker.data);
-    p0(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
-    r1(worker.data);
+  void op241(workerData &worker, __m256i &data, __m256i &old) {
+    x0_r4(data);
+    p0(data);
+    xp2(data, worker.chunk[worker.pos2]);
+    r1(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op242(workerData &worker) {
-    a0(worker.data);
-    a0(worker.data);
-    subx97(worker.data);
-    xp2(worker.data, worker.chunk[worker.pos2]);
+  void op242(workerData &worker, __m256i &data, __m256i &old) {
+    a0(data);
+    a0(data);
+    subx97(data);
+    xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op243(workerData &worker) {
-    r5(worker.data);
-    x0_r2(worker.data);
-    p0(worker.data);
-    r1(worker.data);
+  void op243(workerData &worker, __m256i &data, __m256i &old) {
+    r5(data);
+    x0_r2(data);
+    p0(data);
+    r1(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op244(workerData &worker) {
-    notData(worker.data);
-    x0_r2(worker.data);
-    revData(worker.data);
-    r5(worker.data);
+  void op244(workerData &worker, __m256i &data, __m256i &old) {
+    notData(data);
+    x0_r2(data);
+    revData(data);
+    r5(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op245(workerData &worker) {
-    subx97(worker.data);
-    r5(worker.data);
-    x0_r2(worker.data);
-    sr03(worker.data);
+  void op245(workerData &worker, __m256i &data, __m256i &old) {
+    subx97(data);
+    r5(data);
+    x0_r2(data);
+    sr03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op246(workerData &worker) {
-    a0(worker.data);
-    r1(worker.data);
-    sr03(worker.data);
-    a0(worker.data);
+  void op246(workerData &worker, __m256i &data, __m256i &old) {
+    a0(data);
+    r1(data);
+    sr03(data);
+    a0(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op247(workerData &worker) {
-    r5(worker.data);
-    x0_r2(worker.data);
-    r5(worker.data);
-    notData(worker.data);
+  void op247(workerData &worker, __m256i &data, __m256i &old) {
+    r5(data);
+    x0_r2(data);
+    r5(data);
+    notData(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op248(workerData &worker) {
-    notData(worker.data);
-    subx97(worker.data);
-    p0(worker.data);
-    r5(worker.data);
+  void op248(workerData &worker, __m256i &data, __m256i &old) {
+    notData(data);
+    subx97(data);
+    p0(data);
+    r5(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op249(workerData &worker) {
+  void op249(workerData &worker, __m256i &data, __m256i &old) {
   #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -2630,38 +2630,38 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op250(workerData &worker) {
-    addp2(worker.data, worker.chunk[worker.pos2]);
-    r0(worker.data);
-    p0(worker.data);
-    x0_r4(worker.data);
+  void op250(workerData &worker, __m256i &data, __m256i &old) {
+    addp2(data, worker.chunk[worker.pos2]);
+    r0(data);
+    p0(data);
+    x0_r4(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op251(workerData &worker) {
-    a0(worker.data);
-    p0(worker.data);
-    revData(worker.data);
-    x0_r2(worker.data);
+  void op251(workerData &worker, __m256i &data, __m256i &old) {
+    a0(data);
+    p0(data);
+    revData(data);
+    x0_r2(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op252(workerData &worker) {
-    revData(worker.data);
-    x0_r4(worker.data);
-    x0_r2(worker.data);
-    sl03(worker.data);
+  void op252(workerData &worker, __m256i &data, __m256i &old) {
+    revData(data);
+    x0_r4(data);
+    x0_r2(data);
+    sl03(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op253(workerData &worker) {
-    storeStep(worker);
+  void op253(workerData &worker, __m256i &data, __m256i &old) {
+    storeStep(worker, data, old);
   #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -2677,35 +2677,35 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op254(workerData &worker) {
+  void op254(workerData &worker, __m256i &data, __m256i &old) {
     RC4_set_key(&worker.key, 256, worker.prev_chunk);
 
-    p0(worker.data);
-    r3(worker.data);
-    x0_r2(worker.data);
-    r3(worker.data);
+    p0(data);
+    r3(data);
+    x0_r2(data);
+    r3(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void op255(workerData &worker) {
+  void op255(workerData &worker, __m256i &data, __m256i &old) {
     RC4_set_key(&worker.key, 256, worker.prev_chunk);
 
-    p0(worker.data);
-    r3(worker.data);
-    x0_r2(worker.data);
-    r3(worker.data);
+    p0(data);
+    r3(data);
+    x0_r2(data);
+    r3(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void r_op0(workerData &worker) {
+  void r_op0(workerData &worker, __m256i &data, __m256i &old) {
     byte newVal = worker.simpleLookup[worker.prev_chunk[worker.pos1]];
     __m256i newVec = _mm256_set1_epi8(newVal);
-    worker.data = _mm256_blendv_epi8(worker.data, newVec, genMask(worker.pos2 - worker.pos1));
-    storeStep(worker);
+    data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2 - worker.pos1));
+    storeStep(worker, data, old);
 
     if ((worker.pos2 - worker.pos1) % 2 == 1) {
       worker.t1 = worker.chunk[worker.pos1];
@@ -2716,27 +2716,27 @@ namespace astro_branched_zOp {
     }
   }
 
-  void r_op1(workerData &worker) {
+  void r_op1(workerData &worker, __m256i &data, __m256i &old) {
     byte newVal = worker.lookup3D[worker.branched_idx[worker.op] * 256 * 256 +
                                   worker.prev_chunk[worker.pos2] * 256 +
                                   worker.prev_chunk[worker.pos1]];
 
     __m256i newVec = _mm256_set1_epi8(newVal);
-    worker.data = _mm256_blendv_epi8(worker.data, newVec, genMask(worker.pos2 - worker.pos1));
-    storeStep(worker);
+    data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2 - worker.pos1));
+    storeStep(worker, data, old);
 
     return;
   }
 
-  void r_op2(workerData &worker) {
+  void r_op2(workerData &worker, __m256i &data, __m256i &old) {
     byte newVal = worker.simpleLookup[worker.reg_idx[worker.op] * 256 + worker.prev_chunk[worker.pos1]];
     __m256i newVec = _mm256_set1_epi8(newVal);
-    worker.data = _mm256_blendv_epi8(worker.data, newVec, genMask(worker.pos2 - worker.pos1));
-    storeStep(worker);
+    data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2 - worker.pos1));
+    storeStep(worker, data, old);
   }
 
-  void r_op253(workerData &worker) {
-    storeStep(worker);
+  void r_op253(workerData &worker, __m256i &data, __m256i &old) {
+    storeStep(worker, data, old);
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
       if (worker.prev_chunk[worker.pos1] == newVal) {
@@ -2760,31 +2760,31 @@ namespace astro_branched_zOp {
     }
   }
 
-  void r_op254(workerData &worker) {
+  void r_op254(workerData &worker, __m256i &data, __m256i &old) {
     RC4_set_key(&worker.key, 256, worker.prev_chunk);
 
-    p0(worker.data);
-    r3(worker.data);
-    x0_r2(worker.data);
-    r3(worker.data);
+    p0(data);
+    r3(data);
+    x0_r2(data);
+    r3(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  void r_op255(workerData &worker) {
+  void r_op255(workerData &worker, __m256i &data, __m256i &old) {
     RC4_set_key(&worker.key, 256, worker.prev_chunk);
 
-    p0(worker.data);
-    r3(worker.data);
-    x0_r2(worker.data);
-    r3(worker.data);
+    p0(data);
+    r3(data);
+    x0_r2(data);
+    r3(data);
 
-    blendStep(worker);
-    storeStep(worker);
+    blendStep(worker, data, old);
+    storeStep(worker, data, old);
   }
 
-  typedef void (*OpFunc)(workerData &);
+  typedef void (*OpFunc)(workerData &, __m256i &, __m256i &);
 
   alignas(32) OpFunc branchCompute[512] = {
     // standard versions

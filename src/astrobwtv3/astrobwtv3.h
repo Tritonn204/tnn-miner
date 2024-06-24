@@ -171,12 +171,9 @@ public:
 
   // std::vector<std::tuple<int,int,int>> repeats;
 
-  alignas(32) byte salsaInput[256] = {0};
-  alignas(32) byte op;
-  #if defined(__AVX2__)
-  __m256i data;
-  __m256i old;
-  #endif
+  byte salsaInput[256] = {0};
+  byte op;
+
   byte pos1;
   byte pos2;
   byte t1;
@@ -188,38 +185,38 @@ public:
   byte *chunk;
   byte *prev_chunk;
 
-  alignas(32) byte simpleLookup[regOps_size*(256*256)];
-  alignas(32) byte lookup3D[branchedOps_size*256*256];
-  alignas(32) uint16_t lookup2D[regOps_size*(256*256)];
+  byte simpleLookup[regOps_size*(256*256)];
+  byte lookup3D[branchedOps_size*256*256];
+  uint16_t lookup2D[regOps_size*(256*256)];
 
   bool isSame = false;
 
-  alignas(32) byte sHash[32];
-  alignas(32) byte sha_key[32];
-  alignas(32) byte sha_key2[32];
-  alignas(32) byte sData[MAX_LENGTH+64];
-  alignas(32) byte chunkCache[256];
+  byte sHash[32];
+  byte sha_key[32];
+  byte sha_key2[32];
+  byte sData[MAX_LENGTH+64];
+  byte chunkCache[256];
 
-  alignas(32) std::bitset<256> clippedBytes[regOps_size];
-  alignas(32) std::bitset<256> unchangedBytes[regOps_size];
+  std::bitset<256> clippedBytes[regOps_size];
+  std::bitset<256> unchangedBytes[regOps_size];
 
   byte branchedOps[branchedOps_size*2];
   byte regularOps[regOps_size*2];
 
-  alignas(32) byte branched_idx[256];
-  alignas(32) byte reg_idx[256];
+  byte branched_idx[256];
+  byte reg_idx[256];
 
-  alignas(32) uint64_t random_switcher;
+  uint64_t random_switcher;
 
-  alignas(32) uint64_t lhash;
-  alignas(32) uint64_t prev_lhash;
-  alignas(32) uint64_t tries;
+  uint64_t lhash;
+  uint64_t prev_lhash;
+  uint64_t tries;
 
-  alignas(32) byte counter[64];
+  byte counter[64];
 
-  alignas(32) int bA[256];
-  alignas(32) int bB[256*256];
-  alignas(32) int32_t sa[MAX_LENGTH];
+  int bA[256];
+  int bB[256*256];
+  int32_t sa[MAX_LENGTH];
   
   std::vector<byte> opsA;
   std::vector<byte> opsB;

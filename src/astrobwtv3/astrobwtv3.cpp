@@ -300,6 +300,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
   try
   {
     std::fill_n(worker.sData + 256, 64, 0);
+    memset(worker.sData + 256, 0, 64);
 
     __builtin_prefetch(&worker.sData[256], 1, 3);
     __builtin_prefetch(&worker.sData[256+64], 1, 3);
@@ -7519,10 +7520,10 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
     //   printf("\n");
     // }
 
-    worker.data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
-    worker.old = worker.data;
+    __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
+    __m256i old = data;
     if (!isTest && !worker.isSame) {
-      __m256i cmp = _mm256_cmpeq_epi8(worker.data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+      __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
       uint32_t mask = (1 << (worker.pos2 - worker.pos1)) - 1;
       int result = _mm256_movemask_epi8(cmp);
 
@@ -7534,7 +7535,7 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
       // sameCount++;
     }
 
-    astro_branched_zOp::branchCompute[worker.op + (256*worker.isSame)](worker);
+    astro_branched_zOp::branchCompute[worker.op + (256*worker.isSame)](worker, data, old);
 
     if(isTest) {
       break;
