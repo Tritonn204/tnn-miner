@@ -46,4 +46,5 @@
 
 # Misc
 **.txt
-
+# Blake3
+!/lib/BLAKE3/c/CMakeLists.txt

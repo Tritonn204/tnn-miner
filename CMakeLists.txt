@@ -211,7 +211,7 @@ file(GLOB all_SRCS
   "${PROJECT_SOURCE_DIR}/src/miner/*.c"
 )
 
-#add_subdirectory(${PROJECT_SOURCE_DIR}/lib/BLAKE3/c)
+add_subdirectory(${PROJECT_SOURCE_DIR}/lib/BLAKE3/c)
 
 # Remove aarch files from all_SRCS
 #if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" AND NOT CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
