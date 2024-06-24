@@ -616,7 +616,7 @@ inline void generateInitVector(std::uint8_t (&iv_buff)[N])
 {
   using random_bytes_engine = std::independent_bits_engine<std::default_random_engine,
                                                            CHAR_BIT, unsigned short>;
-  random_bytes_engine rbe;
+  random_bytes_engine rbe(rand());
 
   std::generate(std::begin(iv_buff), std::end(iv_buff), rbe);
 }
@@ -678,6 +678,10 @@ void mineDero(int tid);
 void processAfterMarker(workerData& worker);
 void lookupCompute(workerData &worker, bool isTest);
 void branchComputeCPU(workerData &worker, bool isTest);
+
+uint8_t wolfBranch(uint8_t val, uint8_t pos2val, uint32_t opcode);
+void wolfPermute(uint8_t *in, uint8_t *out, uint8_t op, uint8_t pos1, uint8_t pos2);
+void wolfCompute(workerData &worker, bool isTest);
 
 #if defined(__AVX2__)
 void branchComputeCPU_avx2(workerData &worker, bool isTest);

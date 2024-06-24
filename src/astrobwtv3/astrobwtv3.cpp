@@ -345,16 +345,17 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
       // end = std::chrono::steady_clock::now();
     }
     else {
-      // start = std::chrono::steady_clock::now();
-      #if defined(__AVX2__)
-      // branchComputeCPU_avx2(worker, false);
-      branchComputeCPU_avx2_zOptimized(worker, false);
-      #elif defined(__aarch64__)
-      branchComputeCPU_aarch64(worker, false);
-      #else
-      branchComputeCPU(worker, false);
-      #endif
-      // end = std::chrono::steady_clock::now();
+      // // start = std::chrono::steady_clock::now();
+      // #if defined(__AVX2__)
+      // // branchComputeCPU_avx2(worker, false);
+      // branchComputeCPU_avx2_zOptimized(worker, false);
+      // #elif defined(__aarch64__)
+      // branchComputeCPU_aarch64(worker, false);
+      // #else
+      // branchComputeCPU(worker, false);
+      // #endif
+      // // end = std::chrono::steady_clock::now();
+      wolfCompute(worker, false);
     }
     
 
@@ -7639,6 +7640,220 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
 }
 
 #endif
+
+// WOLF CODE
+
+void wolfCompute(workerData &worker, bool isTest)
+{
+  while (true)
+  {
+    if(isTest) {
+
+    } else {
+      worker.tries++;
+      worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries;
+      // printf("%d worker.random_switcher %d %08jx\n", worker.tries, worker.random_switcher, worker.random_switcher);
+
+      worker.op = static_cast<byte>(worker.random_switcher);
+      if (debugOpOrder) worker.opsB.push_back(worker.op);
+
+      // printf("op: %d\n", worker.op);
+
+      worker.pos1 = static_cast<byte>(worker.random_switcher >> 8);
+      worker.pos2 = static_cast<byte>(worker.random_switcher >> 16);
+
+      // __builtin_prefetch(worker.chunk + worker.pos1, 0, 1);
+      // __builtin_prefetch(worker.maskTable, 0, 0);
+
+      if (worker.pos1 > worker.pos2)
+      {
+        std::swap(worker.pos1, worker.pos2);
+      }
+
+      if (worker.pos2 - worker.pos1 > 32)
+      {
+        worker.pos2 = worker.pos1 + ((worker.pos2 - worker.pos1) & 0x1f);
+      }
+
+      // int otherpos = std::find(branchedOps.begin(), branchedOps.end(), worker.op) == branchedOps.end() ? 0 : worker.chunk[worker.pos2];
+      // __builtin_prefetch(&worker.chunk[worker.pos1], 0, 0);
+      // __builtin_prefetch(&worker.lookup[lookupIndex(worker.op,0,otherpos)]);
+      worker.chunk = &worker.sData[(worker.tries - 1) * 256];
+      if (worker.tries == 1) {
+        worker.prev_chunk = worker.chunk;
+      } else {
+        worker.prev_chunk = &worker.sData[(worker.tries - 2) * 256];
+
+        #if defined(__AVX2__)
+          // Calculate the start and end blocks
+          int start_block = 0;
+          int end_block = worker.pos1 / 16;
+
+          // Copy the blocks before worker.pos1
+          for (int i = start_block; i < end_block; i++) {
+              __m128i prev_data = _mm_loadu_si128((__m128i*)&worker.prev_chunk[i * 16]);
+              _mm_storeu_si128((__m128i*)&worker.chunk[i * 16], prev_data);
+          }
+
+          // Copy the remaining bytes before worker.pos1
+          for (int i = end_block * 16; i < worker.pos1; i++) {
+              worker.chunk[i] = worker.prev_chunk[i];
+          }
+
+          // Calculate the start and end blocks
+          start_block = (worker.pos2 + 15) / 16;
+          end_block = 16;
+
+          // Copy the blocks after worker.pos2
+          for (int i = start_block; i < end_block; i++) {
+              __m128i prev_data = _mm_loadu_si128((__m128i*)&worker.prev_chunk[i * 16]);
+              _mm_storeu_si128((__m128i*)&worker.chunk[i * 16], prev_data);
+          }
+
+          // Copy the remaining bytes after worker.pos2
+          for (int i = worker.pos2; i < start_block * 16; i++) {
+            worker.chunk[i] = worker.prev_chunk[i];
+          }
+        #else
+          memcpy(worker.chunk, worker.prev_chunk, 256);
+        #endif
+      }
+
+      if (debugOpOrder && worker.op == sus_op) {
+        printf("Lookup pre op %d, pos1: %d, pos2: %d::\n", worker.op, worker.pos1, worker.pos2);
+        for (int i = 0; i < 256; i++) {
+            printf("%02X ", worker.prev_chunk[i]);
+        } 
+        printf("\n");
+      }
+    }
+    // fmt::printf("op: %d, ", worker.op);
+    // fmt::printf("worker.pos1: %d, worker.pos2: %d\n", worker.pos1, worker.pos2);
+
+    // printf("index: %d\n", lookupIndex(op, worker.chunk[worker.pos1], worker.chunk[worker.pos2]));
+
+    if (worker.op == 253) {
+#pragma GCC unroll 32
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+        worker.chunk[i] = worker.prev_chunk[i];
+      }
+      for (int i = worker.pos1; i < worker.pos2; i++)
+      {
+
+        // INSERT_RANDOM_CODE_START
+        worker.chunk[i] = rl8(worker.chunk[i], 3);  // rotate  bits by 3
+        worker.chunk[i] ^= rl8(worker.chunk[i], 2); // rotate  bits by 2
+        worker.chunk[i] ^= worker.chunk[worker.pos2];     // XOR
+        worker.chunk[i] = rl8(worker.chunk[i], 3);  // rotate  bits by 3
+        // INSERT_RANDOM_CODE_END
+
+        worker.prev_lhash = worker.lhash + worker.prev_lhash;
+        worker.lhash = XXHash64::hash(worker.chunk, worker.pos2,0);
+      }
+      goto after;
+    }
+    if (worker.op >= 254) {
+      RC4_set_key(&worker.key, 256,  worker.prev_chunk);
+    }
+    {
+      wolfPermute(worker.prev_chunk, worker.chunk, worker.op, worker.pos1, worker.pos2);
+    }
+
+    if (!worker.op) {
+      if ((worker.pos2-worker.pos1)%2 == 1) {
+        worker.t1 = worker.chunk[worker.pos1];
+        worker.t2 = worker.chunk[worker.pos2];
+        worker.chunk[worker.pos1] = reverse8(worker.t2);
+        worker.chunk[worker.pos2] = reverse8(worker.t1);
+      }
+    }
+
+after:
+
+    if(isTest) {
+      break;
+    }
+    // if (op == 53) {
+    //   std::cout << hexStr(worker.chunk, 256) << std::endl << std::endl;
+    //   std::cout << hexStr(&worker.chunk[worker.pos1], 1) << std::endl;
+    //   std::cout << hexStr(&worker.chunk[worker.pos2], 1) << std::endl;
+    // }
+
+    worker.A = (worker.chunk[worker.pos1] - worker.chunk[worker.pos2]);
+    worker.A = (256 + (worker.A % 256)) % 256;
+
+    if (worker.A < 0x10)
+    { // 6.25 % probability
+      // __builtin_prefetch(worker.chunk);
+      worker.prev_lhash = worker.lhash + worker.prev_lhash;
+      worker.lhash = XXHash64::hash(worker.chunk, worker.pos2, 0);
+
+      // uint64_t test = XXHash64::hash(worker.chunk, worker.pos2, 0);
+      if (worker.op == sus_op && debugOpOrder)  printf("Wolf: A: new worker.lhash: %08jx\n", worker.lhash);
+    }
+
+    if (worker.A < 0x20)
+    { // 12.5 % probability
+      // __builtin_prefetch(worker.chunk);
+      worker.prev_lhash = worker.lhash + worker.prev_lhash;
+      worker.lhash = hash_64_fnv1a(worker.chunk, worker.pos2);
+
+      // uint64_t test = hash_64_fnv1a(worker.chunk, worker.pos2);
+      if (worker.op == sus_op && debugOpOrder)  printf("Wolf: B: new worker.lhash: %08jx\n", worker.lhash);
+    }
+
+    if (worker.A < 0x30)
+    { // 18.75 % probability
+      // std::copy(worker.chunk, worker.chunk + worker.pos2, s3);
+      // __builtin_prefetch(worker.chunk);
+      worker.prev_lhash = worker.lhash + worker.prev_lhash;
+      HH_ALIGNAS(16)
+      const highwayhash::HH_U64 key2[2] = {worker.tries, worker.prev_lhash};
+      worker.lhash = highwayhash::SipHash(key2, (char*)worker.chunk, worker.pos2); // more deviations
+
+      // uint64_t test = highwayhash::SipHash(key2, (char*)worker.chunk, worker.pos2); // more deviations
+      if (worker.op == sus_op && debugOpOrder)  printf("Wolf: C: new worker.lhash: %08jx\n", worker.lhash);
+    }
+
+    if (worker.A <= 0x40)
+    { // 25% probablility
+      // if (worker.op == sus_op && debugOpOrder) {
+      //   printf("Lookup: D: RC4 key:\n");
+      //   for (int i = 0; i < 256; i++) {
+      //     printf("%d, ", worker.key.data[i]);
+      //   }
+      // }
+      // prefetch(worker.chunk, 0, 1);
+      RC4(&worker.key, 256, worker.chunk,  worker.chunk);
+    }
+
+    worker.chunk[255] = worker.chunk[255] ^ worker.chunk[worker.pos1] ^ worker.chunk[worker.pos2];
+
+    if (debugOpOrder && worker.op == sus_op) {
+      printf("Wolf op %d result:\n", worker.op);
+      for (int i = 0; i < 256; i++) {
+          printf("%02X ", worker.chunk[i]);
+      } 
+      printf("\n");
+    }
+
+    // memcpy(&worker.sData[(worker.tries - 1) * 256], worker.chunk, 256);
+    
+    // std::copy(worker.chunk, worker.chunk + 256, &worker.sData[(worker.tries - 1) * 256]);
+
+    // memcpy(&worker->data.data()[(worker.tries - 1) * 256], worker.chunk, 256);
+
+    // std::cout << hexStr(worker.chunk, 256) << std::endl;
+
+    if (worker.tries > 260 + 16 || (worker.sData[(worker.tries-1)*256+255] >= 0xf0 && worker.tries > 260))
+    {
+      break;
+    }
+  }
+  worker.data_len = static_cast<uint32_t>((worker.tries - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
+}
+
 
 // Compute the new values for worker.chunk using layered lookup tables instead of
 // branched computational operations

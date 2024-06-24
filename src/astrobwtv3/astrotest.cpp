@@ -263,7 +263,7 @@ int runDeroOpTests(int testOp, int dataLen) {
   benchmarkLoadCompare();
 #endif
 
-  bool useLookup = false;
+  bool useLookup = true;
   int numOpsFailed = 0;
   #if defined(__AVX2__)
   testPopcnt256_epi8();
@@ -291,7 +291,7 @@ int runDeroOpTests(int testOp, int dataLen) {
   //byte test2[32];
   std::srand(time(NULL));
   generateInitVector<32>(test);
-  memset(test, 0, dataLen);
+  // memset(test, 0, dataLen);
   
   printf("Initial Input\n");
   for (int i = 0; i < 32; i++) {
@@ -299,12 +299,12 @@ int runDeroOpTests(int testOp, int dataLen) {
   }
   printf("\n");
 
-  std::string resultText = std::string("Lookup");
+  std::string resultText = std::string("Wolf");
   void (*testFunc)(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print);
   // the ampersand is actually optional
   testFunc = &optest_branchcpu;
   if(useLookup) {
-    testFunc = &optest_lookup;
+    testFunc = &optest_wolf;
   } else {
     #if defined(__AVX2__)
     resultText = "AVX2";
@@ -346,10 +346,10 @@ int runDeroOpTests(int testOp, int dataLen) {
     //printf("  Op: %3d - %6ld ns\n", op, controlResult->duration_ns);
 
     z_testWorker->pos1 = 0; z_testWorker->pos2 = dataLen+1;
-    testFunc(op, *z_testWorker, test, *z_testResult, false);
+    optest_branchcpu(op, *z_testWorker, test, *z_testResult, false);
 
     z_testWorker->pos1 = 0; z_testWorker->pos2 = dataLen+1;
-    testFunc(op, *z_testWorker, test, *z_testResult, false);
+    optest_branchcpu(op, *z_testWorker, test, *z_testResult, false);
 
     testWorker->pos1 = 0; testWorker->pos2 = dataLen+1;
     testFunc(op, *testWorker, test, *testResult, false);
@@ -3857,6 +3857,47 @@ void optest_lookup(int op, workerData &worker, byte testData[32], OpTestResult &
   //memcpy(testRes.result, worker.salsaInput, 256);
   if (print){
     printf("LT result     : ");
+    for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
+      printf("%02x ", worker.chunk[i]);
+    }
+    printf("\n took %ld ns\n---------------\n", test_time.count());
+  }
+  return; 
+}
+
+void optest_wolf(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print) {
+  // Set us up the bomb
+  memset(worker.step_3, 0, 256);
+  memcpy(worker.step_3, testData, 32);
+
+  // Because lookupCompute references .chunk (which is a pointer)
+  worker.chunk = &worker.step_3[0];
+  worker.prev_chunk = worker.chunk;
+  if (print){
+    printf("Wolf\n");
+    printf("LT Input %3d  : ", op);
+    for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
+      printf("%02X ", worker.chunk[i]);
+    }
+    printf("\n");
+  }
+
+  auto start = std::chrono::steady_clock::now();
+  for(int x = 0; x < 256; x++) {
+    worker.op = op;
+    //worker.pos1 = 0; worker.pos2 = 32;
+    worker.chunk = worker.step_3;
+    worker.prev_chunk = worker.chunk;
+    wolfCompute(worker, true);
+  }
+
+  auto test_end = std::chrono::steady_clock::now();
+  auto test_time = std::chrono::duration_cast<std::chrono::nanoseconds>(test_end-start);
+  testRes.duration_ns = test_time;
+  memcpy(testRes.result, worker.chunk, 256);
+  //memcpy(testRes.result, worker.salsaInput, 256);
+  if (print){
+    printf("Wolf result     : ");
     for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
       printf("%02x ", worker.chunk[i]);
     }
