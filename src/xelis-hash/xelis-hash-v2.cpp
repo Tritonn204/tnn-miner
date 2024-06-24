@@ -585,7 +585,10 @@ void xelis_benchmark_cpu_hash_v2()
   crc32.input(reinterpret_cast<uint8_t*>(worker.scratchPad), 10);
   std::cout << "Stage 1 scratch pad CRC32: 0x" << std::hex << std::setw(8) << std::setfill('0') << crc32.result() << std::endl;
 
-  sodium_init();
+  if(sodium_init() != 0) {
+    std::cout << "Unable to initialize Sodium" << std::endl;
+    exit(1);
+  }
 
   start = std::chrono::high_resolution_clock::now();
   for (uint32_t i = 0; i < ITERATIONS; ++i)
