@@ -2,6 +2,8 @@
 #include <inttypes.h>
 #include <stdio.h>
 
+// The base for the following code was contributed by @Wolf9466 on Discord
+
 // Last instruction is a special case, and duplicated.
 alignas(32) uint32_t CodeLUT[256] =
 {
