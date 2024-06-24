@@ -211,7 +211,7 @@ file(GLOB all_SRCS
   "${PROJECT_SOURCE_DIR}/src/miner/*.c"
 )
 
-add_subdirectory(${PROJECT_SOURCE_DIR}/lib/BLAKE3/c)
+#add_subdirectory(${PROJECT_SOURCE_DIR}/lib/BLAKE3/c)
 
 # Remove aarch files from all_SRCS
 #if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" AND NOT CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
@@ -229,4 +229,4 @@ endif()
 if(NOT APPLE AND NOT WIN32)
   target_link_libraries(${PROJECT_NAME} udns)
 endif()
-target_link_libraries(${PROJECT_NAME} fmt Threads::Threads nlohmann_json::nlohmann_json ${TNN_BOOST_LIBS} OpenSSL::SSL OpenSSL::Crypto sodium blake3)
+target_link_libraries(${PROJECT_NAME} fmt Threads::Threads nlohmann_json::nlohmann_json ${TNN_BOOST_LIBS} OpenSSL::SSL OpenSSL::Crypto sodium) # blake3)

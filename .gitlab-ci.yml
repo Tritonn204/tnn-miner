@@ -11,17 +11,6 @@
 # can use versions as well, like gcc:5.2
 # see https://hub.docker.com/_/gcc/
 
-#.macos_saas_runners:
-#  tags:
-#    - saas-macos-large-m2pro
-#  image: macos-14-xcode-15
-#  before_script:
-#    - echo "started by ${GITLAB_USER_NAME} / @${GITLAB_USER_LOGIN}"
-#    - which clang
-#    #- brew install clang
-#    - brew install fmt
-#    - brew install cmake
-
 stages:
   - build
   - test
@@ -33,18 +22,42 @@ variables:
   #PACKAGE_VERSION: "0.3.4"
   LINUX_AMD64_TGZ: "Tnn-miner-amd64.tar.gz"
   MACOS_ARM64_TGZ: "Tnn-miner-macos-arm64.tar.gz"
+  WIN_AMD64_ZIP: "Tnn-miner-win64.zip"
   # https://docs.gitlab.com/ee/ci/runners/hosted_runners/macos.html#optimizing-homebrew
   HOMEBREW_NO_AUTO_UPDATE: 1
 
+.macos_saas_runners:
+  tags:
+    - saas-macos-large-m2pro
+  image: macos-14-xcode-15
+  before_script:
+    - echo "started by ${GITLAB_USER_NAME} / @${GITLAB_USER_LOGIN}"
+    - which clang
+    #- brew install clang
+    #- brew install fmt
+    - brew install cmake
+
+.windows_job:
+  tags:
+    - saas-windows-medium-amd64
+  before_script:
+    - Set-Variable -Name "time" -Value (date -Format "%H:%m")
+    - echo ${time}
+    - echo "started by ${GITLAB_USER_NAME} / @${GITLAB_USER_LOGIN}"
+
 image: ubuntu:noble
 
-build:
+build-linux:
   stage: build
   # instead of calling g++ directly you can also use some build toolkit like make
   # install the necessary build tools when needed
-  before_script:
-    - apt update && apt -y install wget build-essential cmake clang libssl-dev libfmt-dev libudns-dev libc++-dev lld git
+  #before_script:
+  #  - ./scripts/prereqs.sh
+  #  #- apt update && apt -y install wget build-essential cmake clang libssl-dev libfmt-dev libudns-dev libc++-dev lld git
   script:
+    - apt update && apt install -y dos2unix
+    - dos2unix ./scripts/*.sh
+    - ./scripts/prereqs.sh
     - export
     - mkdir ./build
     - cd ./build
@@ -54,41 +67,82 @@ build:
     - mv ./build/Tnn-miner ./Tnn-miner
     - tar -czvf ${LINUX_AMD64_TGZ} ./Tnn-miner
   after_script:
-    - echo "BUILD_JOB_ID=$CI_JOB_ID" >> job.env
+    - echo "LINUX_BUILD_JOB_ID=$CI_JOB_ID" >> linux-job.env
   artifacts:
     name: ${LINUX_AMD64_TGZ}
     paths:
-      - ./${LINUX_AMD64_TGZ}
+      - ${LINUX_AMD64_TGZ}
       # depending on your build setup it's most likely a good idea to cache outputs to reduce the build time
       # cache:
       #   paths:
       #     - "*.o"
     reports:
-      dotenv: job.env
+      dotenv: linux-job.env
 
-#build-macos:
-#  extends:
-#    - .macos_saas_runners
-#  stage: build
-#  script:
-#    - export
-#    - mkdir ./build
-#    - cd ./build
-#    - cmake ..
-#    - make -j$(nproc)
-#    - cd ../
-#    - mv ./build/Tnn-miner ./Tnn-miner
-#    - tar -czvf ${MACOS_ARM64_TGZ} ./Tnn-miner
-#  artifacts:
-#    name: ${MACOS_ARM64_TGZ}
-#    paths:
-#      - ./${MACOS_ARM64_TGZ}
+build-macos:
+  rules:
+    - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
+  extends:
+    - .macos_saas_runners
+  stage: build
+  script:
+    - export
+    - mkdir ./build
+    - cd ./build
+    - cmake ..
+    - make -j$(nproc)
+    - cd ../
+    - mv ./build/Tnn-miner ./Tnn-miner
+    - ls -la ./
+    - ls -la ./build/
+    - tar -czvf Tnn-miner-macos-arm64.tar.gz ./Tnn-miner
+  after_script:
+    - pwd
+    - ls -la ./
+    - echo "MACOS_BUILD_JOB_ID=$CI_JOB_ID" >> macos-job.env
+  artifacts:
+    name: Tnn-miner-macos-arm64.tar.gz
+    paths:
+      - Tnn-miner-macos-arm64.tar.gz
+    reports:
+      dotenv: macos-job.env
+
+build-windows:
+  rules:
+    - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
+  extends:
+    - .windows_job
+  stage: build
+  script:
+    - echo "running scripts in the build job"
+    - .\scripts\prereqs.bat ci
+    - .\scripts\build.bat ci
+    - dir .\build\
+    - move build\Tnn-miner.exe .\
+    - 7z.exe a ${WIN_AMD64_ZIP} Tnn-miner.exe
+  after_script:
+    - echo "WIN_BUILD_JOB_ID=$CI_JOB_ID" >> win-job.env
+  artifacts:
+    name: ${WIN_AMD64_ZIP}
+    paths:
+      - ${WIN_AMD64_ZIP}
+    reports:
+      dotenv: win-job.env
+
 
 # run tests using the binary built before
 test:
+  rules:
+    - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
   stage: test
+  needs:
+    - job: build-linux
+      artifacts: true
   before_script:
-    - apt update && apt -y install gdb
+    - apt update && apt -y install gdb unzip
+    - ls -la ./
+    - tar -xvf ${LINUX_AMD64_TGZ}
+    - ls -la ./
   script:
     - tar -xvf ./${LINUX_AMD64_TGZ}
     - gdb --batch -ex "run" -ex "bt" --args ./Tnn-miner --dero-test
@@ -112,15 +166,17 @@ release_job:
   stage: release
   image: registry.gitlab.com/gitlab-org/release-cli:latest
   needs:
-    - job: build
+    - job: build-linux
       artifacts: true
-    #- job: build-macos
-    #  artifacts: true
+    - job: build-macos
+      artifacts: true
   rules:
     - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
   script:
     - ls -la
-    - echo $BUILD_JOB_ID
+    - echo $LINUX_BUILD_JOB_ID
+    - echo $MACOS_BUILD_JOB_ID
+    - echo $WIN_BUILD_JOB_ID
     #- |
     #  release-cli create --name "Release $CI_COMMIT_TAG" --tag-name $CI_COMMIT_TAG \
     #    --assets-link "{\"name\":\"${LINUX_AMD64_BINARY}\",\"url\":\"${PACKAGE_REGISTRY_URL}/${LINUX_AMD64_BINARY}\"}"
@@ -132,6 +188,11 @@ release_job:
     assets:
       links:
         - name: "${LINUX_AMD64_TGZ}"
-          url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${BUILD_JOB_ID}/artifacts/download"
-        #- name: "${MACOS_ARM64_TGZ}"
-        #  url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${BUILD_JOB_ID}/artifacts/download"
+          url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${LINUX_BUILD_JOB_ID}/artifacts/download"
+          filepath: "/${LINUX_AMD64_TGZ}"
+        - name: "${MACOS_ARM64_TGZ}"
+          url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${MACOS_BUILD_JOB_ID}/artifacts/download"
+          filepath: "/${MACOS_ARM64_TGZ}"
+        - name: "${WIN_AMD64_ZIP}"
+          url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${WIN_BUILD_JOB_ID}/artifacts/download"
+          filepath: "/${WIN_AMD64_ZIP}"
