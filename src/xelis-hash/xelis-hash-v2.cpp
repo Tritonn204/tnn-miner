@@ -238,16 +238,16 @@ void stage_1_sodium(const uint8_t *input, uint64_t *scratch_pad, size_t INPUT_LE
 	// blake3(input, INPUT_LEN, nonce);
 
 	uint8_t *t = reinterpret_cast<uint8_t *>(scratch_pad);
-	crypto_stream_chacha20_ietf(t, OUTPUT_SIZE/CHUNKS, nonce, key+0*CHUNK_SIZE);
+	crypto_stream_chacha20(t, OUTPUT_SIZE/CHUNKS, nonce, key+0*CHUNK_SIZE);
 
 	t += OUTPUT_SIZE/CHUNKS;
-	// crypto_stream_chacha20_ietf(t, OUTPUT_SIZE/CHUNKS, t-NONCE_SIZE, key+1*CHUNK_SIZE);
+	crypto_stream_chacha20_ietf(t, OUTPUT_SIZE/CHUNKS, t-NONCE_SIZE, key+1*CHUNK_SIZE);
 
-	// t += OUTPUT_SIZE/CHUNKS;
-	// crypto_stream_chacha20_ietf(t, OUTPUT_SIZE/CHUNKS, t-NONCE_SIZE, key+2*CHUNK_SIZE);
+	t += OUTPUT_SIZE/CHUNKS;
+	crypto_stream_chacha20_ietf(t, OUTPUT_SIZE/CHUNKS, t-NONCE_SIZE, key+2*CHUNK_SIZE);
 
-	// t += OUTPUT_SIZE/CHUNKS;
-	// crypto_stream_chacha20_ietf(t, OUTPUT_SIZE/CHUNKS, t-NONCE_SIZE, key+3*CHUNK_SIZE);
+	t += OUTPUT_SIZE/CHUNKS;
+	crypto_stream_chacha20_ietf(t, OUTPUT_SIZE/CHUNKS, t-NONCE_SIZE, key+3*CHUNK_SIZE);
 
   // Crc32 crc32;
   // crc32.input(scratch_pad, 10);
@@ -276,21 +276,21 @@ void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
 
   t += output_size / chunks;
 
-  // EVP_EncryptInit_ex(ctx, EVP_chacha20(), NULL, key + 1 * chunk_size, t - 12);
-  // EVP_EncryptUpdate(ctx, t, &outlen, t, output_size / chunks);
-  // EVP_EncryptFinal_ex(ctx, t + outlen, &outlen);
+  EVP_EncryptInit_ex(ctx, EVP_chacha20(), NULL, key + 1 * chunk_size, t - 12);
+  EVP_EncryptUpdate(ctx, t, &outlen, t, output_size / chunks);
+  EVP_EncryptFinal_ex(ctx, t + outlen, &outlen);
 
-  // t += output_size / chunks;
+  t += output_size / chunks;
 
-  // EVP_EncryptInit_ex(ctx, EVP_chacha20(), NULL, key + 2 * chunk_size, t - 12);
-  // EVP_EncryptUpdate(ctx, t, &outlen, t, output_size / chunks);
-  // EVP_EncryptFinal_ex(ctx, t + outlen, &outlen);
+  EVP_EncryptInit_ex(ctx, EVP_chacha20(), NULL, key + 2 * chunk_size, t - 12);
+  EVP_EncryptUpdate(ctx, t, &outlen, t, output_size / chunks);
+  EVP_EncryptFinal_ex(ctx, t + outlen, &outlen);
 
-  // t += output_size / chunks;
+  t += output_size / chunks;
 
-  // EVP_EncryptInit_ex(ctx, EVP_chacha20(), NULL, key + 3 * chunk_size, t - 12);
-  // EVP_EncryptUpdate(ctx, t, &outlen, t, output_size / chunks);
-  // EVP_EncryptFinal_ex(ctx, t + outlen, &outlen);
+  EVP_EncryptInit_ex(ctx, EVP_chacha20(), NULL, key + 3 * chunk_size, t - 12);
+  EVP_EncryptUpdate(ctx, t, &outlen, t, output_size / chunks);
+  EVP_EncryptFinal_ex(ctx, t + outlen, &outlen);
 
   EVP_CIPHER_CTX_free(ctx);
 
@@ -582,7 +582,7 @@ void xelis_benchmark_cpu_hash_v2()
   std::cout << "ms per hash: " << (elapsed.count() / ITERATIONS) << std::endl;
 
   Crc32 crc32;
-  crc32.input(reinterpret_cast<uint8_t*>(worker.scratchPad), XELIS_MEMORY_SIZE_V2*8);
+  crc32.input(reinterpret_cast<uint8_t*>(worker.scratchPad), 10);
   std::cout << "Stage 1 scratch pad CRC32: 0x" << std::hex << std::setw(8) << std::setfill('0') << crc32.result() << std::endl;
 
   sodium_init();
@@ -602,7 +602,7 @@ void xelis_benchmark_cpu_hash_v2()
   std::cout << "SODIUM ms per hash: " << (elapsed.count() / ITERATIONS) << std::endl;
 
   Crc32 crc32_2;
-  crc32_2.input(reinterpret_cast<uint8_t*>(worker2.scratchPad), XELIS_MEMORY_SIZE_V2*8);
+  crc32_2.input(reinterpret_cast<uint8_t*>(worker2.scratchPad), 10);
   std::cout << "Stage 1 SODIUM scratch pad CRC32: 0x" << std::hex << std::setw(8) << std::setfill('0') << crc32_2.result() << std::endl;
 
 }
