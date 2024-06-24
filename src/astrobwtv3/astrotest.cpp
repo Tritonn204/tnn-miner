@@ -285,13 +285,14 @@ int runDeroOpTests(int testOp, int dataLen) {
   testWorker->pos1 = 0; testWorker->pos2 = dataLen+1;
   z_testWorker->pos1 = 0; z_testWorker->pos2 = dataLen+1;
 
+  testWorker->isSame = true;
   z_testWorker->isSame = true;
 
   byte test[32];
   //byte test2[32];
   std::srand(time(NULL));
   generateInitVector<32>(test);
-  // memset(test, 0, dataLen);
+  memset(test, rand()%256, dataLen);
   
   printf("Initial Input\n");
   for (int i = 0; i < 32; i++) {
@@ -346,10 +347,10 @@ int runDeroOpTests(int testOp, int dataLen) {
     //printf("  Op: %3d - %6ld ns\n", op, controlResult->duration_ns);
 
     z_testWorker->pos1 = 0; z_testWorker->pos2 = dataLen+1;
-    optest_branchcpu(op, *z_testWorker, test, *z_testResult, false);
+    optest_avx2(op, *z_testWorker, test, *z_testResult, false);
 
     z_testWorker->pos1 = 0; z_testWorker->pos2 = dataLen+1;
-    optest_branchcpu(op, *z_testWorker, test, *z_testResult, false);
+    optest_avx2(op, *z_testWorker, test, *z_testResult, false);
 
     testWorker->pos1 = 0; testWorker->pos2 = dataLen+1;
     testFunc(op, *testWorker, test, *testResult, false);

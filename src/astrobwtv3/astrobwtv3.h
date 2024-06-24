@@ -199,6 +199,7 @@ public:
 
   std::bitset<256> clippedBytes[regOps_size];
   std::bitset<256> unchangedBytes[regOps_size];
+  std::bitset<256> isBranched;
 
   byte branchedOps[branchedOps_size*2];
   byte regularOps[regOps_size*2];
@@ -518,6 +519,11 @@ inline void initWorker(workerData &worker) {
   std::set_difference(full.begin(), full.end(), branchedOps_global.begin(), branchedOps_global.end(), std::inserter(diff, diff.begin()));
   std::copy(diff.begin(), diff.end(), worker.regularOps);
 
+  for (int i = 0; i < 256; i++) {
+    if (std::find(branchedOps_global.begin(), branchedOps_global.end(), i) != branchedOps_global.end())
+      worker.isBranched.set(i, 1);
+  }
+
   // printf("Branched Ops:\n");
   // for (int i = 0; i < branchedOps_size; i++) {
   //   std::printf("%02X, ", worker.branchedOps[i]);
@@ -680,7 +686,7 @@ void lookupCompute(workerData &worker, bool isTest);
 void branchComputeCPU(workerData &worker, bool isTest);
 
 uint8_t wolfBranch(uint8_t val, uint8_t pos2val, uint32_t opcode);
-void wolfPermute(uint8_t *in, uint8_t *out, uint8_t op, uint8_t pos1, uint8_t pos2);
+void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker);
 void wolfCompute(workerData &worker, bool isTest);
 
 #if defined(__AVX2__)

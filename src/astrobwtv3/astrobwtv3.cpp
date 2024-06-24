@@ -7413,7 +7413,7 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
   int reducedChars = 0;
 
   #pragma unroll 64
-  for (int it = 0; it < 277; it++) 
+  for (int it = 0; it < 278; it++) 
   {
   // while(true) {
     if(isTest) {
@@ -7645,94 +7645,164 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
 
 void wolfCompute(workerData &worker, bool isTest)
 {
-  while (true)
+  byte prevOp;
+  for (int it = 0; it < 278; ++it)
   {
+  // while(true) {
     if(isTest) {
+      // __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
+      // __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+      // uint32_t mask = (1 << (worker.pos2 - worker.pos1)) - 1;
+      // int result = _mm256_movemask_epi8(cmp);
 
+      // if ((result & mask) == mask) {
+      //   worker.isSame = true;
+      // }
     } else {
       worker.tries++;
       worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries;
+      // __builtin_prefetch(&worker.random_switcher,0,3);
       // printf("%d worker.random_switcher %d %08jx\n", worker.tries, worker.random_switcher, worker.random_switcher);
 
+      prevOp = worker.op;
       worker.op = static_cast<byte>(worker.random_switcher);
-      if (debugOpOrder) worker.opsB.push_back(worker.op);
+      // if (debugOpOrder) worker.opsA.push_back(worker.op);
 
       // printf("op: %d\n", worker.op);
 
-      worker.pos1 = static_cast<byte>(worker.random_switcher >> 8);
-      worker.pos2 = static_cast<byte>(worker.random_switcher >> 16);
+      byte p1 = static_cast<byte>(worker.random_switcher >> 8);
+      byte p2 = static_cast<byte>(worker.random_switcher >> 16);
 
-      // __builtin_prefetch(worker.chunk + worker.pos1, 0, 1);
-      // __builtin_prefetch(worker.maskTable, 0, 0);
-
-      if (worker.pos1 > worker.pos2)
+      if (p1 > p2)
       {
-        std::swap(worker.pos1, worker.pos2);
+        std::swap(p1, p2);
       }
 
-      if (worker.pos2 - worker.pos1 > 32)
+      if (p2 - p1 > 32)
       {
-        worker.pos2 = worker.pos1 + ((worker.pos2 - worker.pos1) & 0x1f);
+        p2 = p1 + ((p2 - p1) & 0x1f);
       }
 
-      // int otherpos = std::find(branchedOps.begin(), branchedOps.end(), worker.op) == branchedOps.end() ? 0 : worker.chunk[worker.pos2];
-      // __builtin_prefetch(&worker.chunk[worker.pos1], 0, 0);
-      // __builtin_prefetch(&worker.lookup[lookupIndex(worker.op,0,otherpos)]);
+      if (p1 < worker.pos1 || p2 > worker.pos2) worker.isSame = false;
+
+      worker.pos1 = p1;
+      worker.pos2 = p2;
+
       worker.chunk = &worker.sData[(worker.tries - 1) * 256];
+
       if (worker.tries == 1) {
         worker.prev_chunk = worker.chunk;
       } else {
         worker.prev_chunk = &worker.sData[(worker.tries - 2) * 256];
 
-        #if defined(__AVX2__)
-          // Calculate the start and end blocks
-          int start_block = 0;
-          int end_block = worker.pos1 / 16;
+        __builtin_prefetch(worker.prev_chunk,0,3);
+        __builtin_prefetch(worker.prev_chunk+64,0,3);
+        __builtin_prefetch(worker.prev_chunk+128,0,3);
+        __builtin_prefetch(worker.prev_chunk+192,0,3);
 
-          // Copy the blocks before worker.pos1
-          for (int i = start_block; i < end_block; i++) {
-              __m128i prev_data = _mm_loadu_si128((__m128i*)&worker.prev_chunk[i * 16]);
-              _mm_storeu_si128((__m128i*)&worker.chunk[i * 16], prev_data);
-          }
+        // Calculate the start and end blocks
+        int start_block = 0;
+        int end_block = worker.pos1 / 16;
 
-          // Copy the remaining bytes before worker.pos1
-          for (int i = end_block * 16; i < worker.pos1; i++) {
-              worker.chunk[i] = worker.prev_chunk[i];
-          }
+        // Copy the blocks before worker.pos1
+        for (int i = start_block; i < end_block; i++) {
+            __m128i prev_data = _mm_loadu_si128((__m128i*)&worker.prev_chunk[i * 16]);
+            _mm_storeu_si128((__m128i*)&worker.chunk[i * 16], prev_data);
+        }
 
-          // Calculate the start and end blocks
-          start_block = (worker.pos2 + 15) / 16;
-          end_block = 16;
-
-          // Copy the blocks after worker.pos2
-          for (int i = start_block; i < end_block; i++) {
-              __m128i prev_data = _mm_loadu_si128((__m128i*)&worker.prev_chunk[i * 16]);
-              _mm_storeu_si128((__m128i*)&worker.chunk[i * 16], prev_data);
-          }
-
-          // Copy the remaining bytes after worker.pos2
-          for (int i = worker.pos2; i < start_block * 16; i++) {
+        // Copy the remaining bytes before worker.pos1
+        for (int i = end_block * 16; i < worker.pos1; i++) {
             worker.chunk[i] = worker.prev_chunk[i];
-          }
-        #else
-          memcpy(worker.chunk, worker.prev_chunk, 256);
-        #endif
-      }
+        }
 
-      if (debugOpOrder && worker.op == sus_op) {
-        printf("Lookup pre op %d, pos1: %d, pos2: %d::\n", worker.op, worker.pos1, worker.pos2);
-        for (int i = 0; i < 256; i++) {
-            printf("%02X ", worker.prev_chunk[i]);
-        } 
-        printf("\n");
+        // Calculate the start and end blocks
+        start_block = (worker.pos2 + 15) / 16;
+        end_block = 16;
+
+        // Copy the blocks after worker.pos2
+        for (int i = start_block; i < end_block; i++) {
+            __m128i prev_data = _mm_loadu_si128((__m128i*)&worker.prev_chunk[i * 16]);
+            _mm_storeu_si128((__m128i*)&worker.chunk[i * 16], prev_data);
+        }
+
+        // Copy the remaining bytes after worker.pos2
+        for (int i = worker.pos2; i < start_block * 16; i++) {
+          worker.chunk[i] = worker.prev_chunk[i];
+        }
       }
     }
+
+    __builtin_prefetch(&worker.chunk[worker.pos1],1,3);
+
+    // if (debugOpOrder && worker.op == sus_op) {
+    //   printf("SIMD pre op %d:\n", worker.op);
+    //   for (int i = 0; i < 256; i++) {
+    //       printf("%02X ", worker.prev_chunk[i]);
+    //   } 
+    //   printf("\n");
+    // }
     // fmt::printf("op: %d, ", worker.op);
     // fmt::printf("worker.pos1: %d, worker.pos2: %d\n", worker.pos1, worker.pos2);
 
-    // printf("index: %d\n", lookupIndex(op, worker.chunk[worker.pos1], worker.chunk[worker.pos2]));
+    // if (worker.op > astro_branched_zOp::branchComputeSize) return;
+    // if (!isTest) {
+    //   printf("op: %d, Input State: ", worker.op);
+    //   for (int i = worker.pos1; i < worker.pos2; i++) {
+    //     printf("%02X ", worker.prev_chunk[i]);
+    //   }
+    //   printf(", same: %d", worker.isSame);
+    //   printf("\n");
+    // }
 
-    if (worker.op == 253) {
+    #if defined(__AVX2__)
+
+    __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
+    __m256i old = data;
+    if (!isTest && !worker.isSame) {
+      __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
+      uint32_t mask = (1 << (worker.pos2 - worker.pos1)) - 1;
+      int result = _mm256_movemask_epi8(cmp);
+
+      if ((result & mask) == mask) {
+        worker.isSame = true;
+        // if (worker.pos2 - worker.pos1 > 0) printf("same after op: %d, for op: %d\n", prevOp, worker.op);
+      }
+    } else {
+      // sameCount++;
+    }
+
+    if (worker.isSame)
+    {
+      if (worker.op == 253)
+      {
+        _mm256_storeu_si256((__m256i *)&worker.chunk[worker.pos1], data);
+        byte newVal = worker.lookup3D[worker.branched_idx[worker.op] * 256 * 256 + worker.prev_chunk[worker.pos2] * 256 + worker.prev_chunk[worker.pos1]];
+        if (worker.prev_chunk[worker.pos1] == newVal)
+        {
+          worker.prev_lhash = (worker.lhash * (worker.pos2 - worker.pos1)) + worker.prev_lhash;
+          worker.lhash = XXHash64::hash(worker.chunk, worker.pos2, 0);
+          goto after;
+        }
+#pragma GCC unroll 32
+        for (int i = worker.pos1; i < worker.pos2; i++)
+        {
+          // INSERT_RANDOM_CODE_START
+          worker.chunk[i] = rl8(worker.chunk[i], 3);    // rotate  bits by 3
+          worker.chunk[i] ^= rl8(worker.chunk[i], 2);   // rotate  bits by 2
+          worker.chunk[i] ^= worker.chunk[worker.pos2]; // XOR
+          worker.chunk[i] = rl8(worker.chunk[i], 3);    // rotate  bits by 3
+          // INSERT_RANDOM_CODE_END
+
+          worker.prev_lhash = worker.lhash + worker.prev_lhash;
+          worker.lhash = XXHash64::hash(worker.chunk, worker.pos2, 0);
+        }
+        goto after;
+      }
+    }
+    #endif
+
+    if (worker.op == 253)
+    {
 #pragma GCC unroll 32
       for (int i = worker.pos1; i < worker.pos2; i++)
       {
@@ -7757,7 +7827,8 @@ void wolfCompute(workerData &worker, bool isTest)
       RC4_set_key(&worker.key, 256,  worker.prev_chunk);
     }
     {
-      wolfPermute(worker.prev_chunk, worker.chunk, worker.op, worker.pos1, worker.pos2);
+      uint16_t OP = worker.isSame ? 256 + worker.isBranched[worker.op] : worker.op;
+      wolfPermute(worker.prev_chunk, worker.chunk, worker.op, worker.pos1, worker.pos2, worker);
     }
 
     if (!worker.op) {
@@ -7766,6 +7837,7 @@ void wolfCompute(workerData &worker, bool isTest)
         worker.t2 = worker.chunk[worker.pos2];
         worker.chunk[worker.pos1] = reverse8(worker.t2);
         worker.chunk[worker.pos2] = reverse8(worker.t1);
+        worker.isSame = false;
       }
     }
 
@@ -7826,6 +7898,7 @@ after:
       // }
       // prefetch(worker.chunk, 0, 1);
       RC4(&worker.key, 256, worker.chunk,  worker.chunk);
+      worker.isSame = false;
     }
 
     worker.chunk[255] = worker.chunk[255] ^ worker.chunk[worker.pos1] ^ worker.chunk[worker.pos2];
