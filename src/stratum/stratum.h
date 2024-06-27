@@ -14,9 +14,9 @@ namespace XelisStratum {
   const byte STRATUM_WARN = 1;
   const byte STRATUM_INFO = 0;
 
-  int logLevel = 2;
+  static int logLevel = 2;
 
-  bJson stratumCall({
+  static bJson stratumCall({
     {"id", 0},
     {"method", ""},
     {"params", bJson({})}
@@ -54,22 +54,22 @@ namespace XelisStratum {
   };
 
   // Server calls
-  std::string s_notify = "mining.notify";
-  std::string s_setDifficulty = "mining.set_difficulty";
-  std::string s_setExtraNonce = "mining.set_extranonce";
-  std::string s_ping = "mining.ping";
-  std::string s_print = "mining.print";
+  static std::string s_notify = "mining.notify";
+  static std::string s_setDifficulty = "mining.set_difficulty";
+  static std::string s_setExtraNonce = "mining.set_extranonce";
+  static std::string s_ping = "mining.ping";
+  static std::string s_print = "mining.print";
 
-  std::string k1ping = "ping~{}\n";
-  std::string k1pong = "pong~{}\n";
+  static std::string k1ping = "ping~{}\n";
+  static std::string k1pong = "pong~{}\n";
 
   // Server responses IDs
   const byte subscribeID = 1;
   const byte authorizeID = 2;
   const byte submitID = 7;
 
-  uint64_t lastReceivedJobTime = 0;
-  int jobTimeout = 90;
+  static uint64_t lastReceivedJobTime = 0;
+  static int jobTimeout = 90;
 }
 
 int handleXStratumPacket(boost::json::object packet, bool isDev);
@@ -83,13 +83,13 @@ namespace SpectreStratum {
   const byte STRATUM_WARN = 1;
   const byte STRATUM_INFO = 0;
 
-  int logLevel = 2;
+  static int logLevel = 2;
 
   typedef struct jobCache{
     uint64_t header[4];
   } jobCache;
 
-  bJson stratumCall({
+  static bJson stratumCall({
     {"id", 0},
     {"method", ""},
     {"params", bJson({})}
@@ -127,26 +127,26 @@ namespace SpectreStratum {
   };
 
   // Server calls
-  std::string s_notify = "mining.notify";
-  std::string s_setDifficulty = "mining.set_difficulty";
-  std::string s_setExtraNonce = "mining.set_extranonce";
-  std::string s_ping = "mining.ping";
-  std::string s_print = "mining.print";
+  static std::string s_notify = "mining.notify";
+  static std::string s_setDifficulty = "mining.set_difficulty";
+  static std::string s_setExtraNonce = "mining.set_extranonce";
+  static std::string s_ping = "mining.ping";
+  static std::string s_print = "mining.print";
 
-  std::string k1ping = "ping~{}\n";
-  std::string k1pong = "pong~{}\n";
+  static std::string k1ping = "ping~{}\n";
+  static std::string k1pong = "pong~{}\n";
 
   // Server responses IDs
   const byte subscribeID = 1;
   const byte authorizeID = 2;
   const byte submitID = 7;
 
-  uint64_t lastReceivedJobTime = 0;
-  uint64_t lastShareSubmissionTime = 0;
+  static uint64_t lastReceivedJobTime = 0;
+  static uint64_t lastShareSubmissionTime = 0;
 
   const int shareSubmitTimeout = 70;
 
-  int jobTimeout = 30;
+  static int jobTimeout = 30;
 }
 
 int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCache *cache, bool isDev);
