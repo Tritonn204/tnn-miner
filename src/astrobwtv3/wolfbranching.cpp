@@ -39,7 +39,7 @@ alignas(32) uint32_t CodeLUT[257] =
 	0x02020E0F, 0x0B090D09, 0x05020703, 0x0C020D04, 0x03000501, 0x0F060C0D, 0x00000D01, 0x0F0B0205,
 	0x04000506, 0x0E09030B, 0x00000103, 0x0F0C090B, 0x040C080F, 0x010F0C07, 0x000B0700, 0x0F0C0F04,
 	0x0401090F, 0x080E0E0A, 0x050A090E, 0x0009080C, 0x080E0C06, 0x0D0C030D, 0x090D0C0D, 0x090D0C0D,
-  0x00000000
+  0x10000000
 };
 
 
@@ -177,7 +177,13 @@ void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t p
   __m256i data = _mm256_loadu_si256((__m256i*)&in[pos1]);
   __m256i old = data;
 
+  // if (pos2==pos1) {
+  //   _mm256_storeu_si256((__m256i*)&out[pos1], data);
+  //   return;
+  // }
+
   wolfBranch_avx2(data, in[pos2], Opcode, worker);
+  // data = _mm256_blendv_epi8(old, data, _mm256_load_si256((__m256i*)&worker.maskTable_bytes[(pos2 - pos1)*32]));
   data = _mm256_blendv_epi8(old, data, genMask(pos2 - pos1));
 
   _mm256_storeu_si256((__m256i*)&out[pos1], data);

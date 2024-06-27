@@ -484,8 +484,8 @@ inline void initWorker(workerData &worker) {
   __m256i temp[32];
   for(int i = 0; i < 32; i++) {
     temp[i] = genMask(i);
+    _mm256_store_si256((__m256i*)&worker.maskTable_bytes[i*32], temp[i]);
   }
-  memcpy(worker.maskTable_bytes, temp, 32*sizeof(__m256i));
   // printf("worker.maskTable\n");
   // uint32_t v[8];
   // for(int i = 0; i < 32; i++) {

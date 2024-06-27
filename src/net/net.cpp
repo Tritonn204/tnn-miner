@@ -196,13 +196,13 @@ void dero_session(
 
   while (true)
   {
+    bool *B = isDev ? &submittingDev : &submitting;
     try
     {
       buffer.clear();
       workInfo.str("");
       workInfo.clear();
 
-      bool *B = isDev ? &submittingDev : &submitting;
 
       if (*B)
       {
@@ -212,9 +212,10 @@ void dero_session(
         // std::cout << msg;
         // wsMutex.unlock();
         ws.async_write(boost::asio::buffer(msg), yield[ec]);
-        if (ec)
-        {
-          return fail(ec, "Submission Error");
+        if (ec) {
+            setcolor(RED);
+            printf("\nasync_write: submission error\n");
+            setcolor(BRIGHT_WHITE);
         }
         *B = false;
       }
@@ -616,11 +617,10 @@ void xatum_session(
         // Acquire a lock before writing to the WebSocket
         beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(10));
         boost::asio::async_write(stream, boost::asio::buffer(msg), yield[ec]);
-        if (ec)
-        {
-          bool *C = isDev ? &devConnected : &isConnected;
-          (*C) = false;
-          return fail(ec, "Xatum submission");
+        if (ec) {
+            setcolor(RED);
+            printf("\nasync_write: submission error\n");
+            setcolor(BRIGHT_WHITE);
         }
         (*B) = false;
       }
@@ -914,13 +914,13 @@ void xelis_stratum_session(
 
   while (true)
   {
+    bool *C = isDev ? &devConnected : &isConnected;
     try
     {
       if (
           XelisStratum::lastReceivedJobTime > 0 &&
           std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count() - XelisStratum::lastReceivedJobTime > XelisStratum::jobTimeout)
       {
-        bool *C = isDev ? &devConnected : &isConnected;
         (*C) = false;
         return fail(ec, "Stratum session timed out");
       }
@@ -941,11 +941,10 @@ void xelis_stratum_session(
         // std::cout << "sending in: " << msg << std::endl;
         beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(10));
         boost::asio::async_write(stream, boost::asio::buffer(msg), yield[ec]);
-        if (ec)
-        {
-          bool *C = isDev ? &devConnected : &isConnected;
-          (*C) = false;
-          return fail(ec, "Stratum submit");
+        if (ec) {
+            setcolor(RED);
+            printf("\nasync_write: submission error\n");
+            setcolor(BRIGHT_WHITE);
         }
         (*B) = false;
       }
@@ -961,8 +960,10 @@ void xelis_stratum_session(
               beast::get_lowest_layer(stream).cancel();
           } });
       trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
-      if (ec && trans > 0)
+      if (ec && trans > 0) {
+        (*C) = false;
         return fail(ec, "Stratum async_read");
+      }
 
       if (trans > 0)
       {
@@ -979,8 +980,10 @@ void xelis_stratum_session(
               stream,
               boost::asio::buffer(XelisStratum::k1pong),
               yield[ec]);
-          if (ec && trans > 0)
+          if (ec && trans > 0) {
+            (*C) = false;
             return fail(ec, "Stratum pong (K1 style)");
+          }
         }
         else
         {
@@ -996,8 +999,10 @@ void xelis_stratum_session(
                   stream,
                   boost::asio::buffer(pongPacket),
                   yield[ec]);
-              if (ec && trans > 0)
+              if (ec && trans > 0) {
+                (*C) = false;
                 return fail(ec, "Stratum pong");
+              }
             }
             else
               handleXStratumPacket(sRPC, isDev);
@@ -1332,8 +1337,9 @@ void spectre_stratum_session(
 
   while (true)
   {
+    bool *C = isDev ? &devConnected : &isConnected;
     try
-{
+    {
       if (
         !isDev &&
         SpectreStratum::lastShareSubmissionTime > 0 &&
@@ -1346,7 +1352,6 @@ void spectre_stratum_session(
           SpectreStratum::lastReceivedJobTime > 0 &&
           std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count() - SpectreStratum::lastReceivedJobTime > SpectreStratum::jobTimeout)
       {
-        bool *C = isDev ? &devConnected : &isConnected;
         (*C) = false;
         return fail(ec, "Stratum session timed out");
       }
@@ -1367,11 +1372,10 @@ void spectre_stratum_session(
         // std::cout << "sending in: " << msg << std::endl;
         beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(10));
         boost::asio::async_write(stream, boost::asio::buffer(msg), yield[ec]);
-        if (ec)
-        {
-          bool *C = isDev ? &devConnected : &isConnected;
-          (*C) = false;
-          return fail(ec, "Stratum submit");
+        if (ec) {
+            setcolor(RED);
+            printf("\nasync_write: submission error\n");
+            setcolor(BRIGHT_WHITE);
         }
         if (!isDev) SpectreStratum::lastShareSubmissionTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
         (*B) = false;
@@ -1388,8 +1392,10 @@ void spectre_stratum_session(
               beast::get_lowest_layer(stream).cancel();
           } });
       trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
-      if (ec && trans > 0)
+      if (ec && trans > 0) {
+        (*C) = false;
         return fail(ec, "Stratum async_read");
+      }
 
       if (trans > 0)
       {
@@ -1423,8 +1429,10 @@ void spectre_stratum_session(
                     stream,
                     boost::asio::buffer(pongPacket),
                     yield[ec]);
-                if (ec && trans > 0)
+                if (ec && trans > 0) {
+                  (*C) = false;
                   return fail(ec, "Stratum pong");
+                }
               }
               else
                 handleSpectreStratumPacket(sRPC, &jobCache, isDev);
@@ -1461,8 +1469,10 @@ void spectre_stratum_session(
                         stream,
                         boost::asio::buffer(pongPacket),
                         yield[ec]);
-                    if (ec && trans > 0)
+                    if (ec && trans > 0) {
+                      (*C) = false;
                       return fail(ec, "Stratum pong");
+                    }
                   }
                   else
                     handleSpectreStratumPacket(sRPC, &jobCache, isDev);
