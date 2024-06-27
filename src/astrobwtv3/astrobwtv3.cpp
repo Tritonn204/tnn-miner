@@ -7827,8 +7827,8 @@ void wolfCompute(workerData &worker, bool isTest)
       RC4_set_key(&worker.key, 256,  worker.prev_chunk);
     }
     {
-      uint16_t OP = worker.isSame ? 256 + worker.isBranched[worker.op] : worker.op;
-      wolfPermute(worker.prev_chunk, worker.chunk, worker.op, worker.pos1, worker.pos2, worker);
+      uint16_t OP = (worker.isSame && !worker.isBranched[worker.op]) ? 256 : worker.op;
+      wolfPermute(worker.prev_chunk, worker.chunk, OP, worker.pos1, worker.pos2, worker);
     }
 
     if (!worker.op) {

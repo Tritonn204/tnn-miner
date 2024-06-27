@@ -5,7 +5,7 @@
 // The base for the following code was contributed by @Wolf9466 on Discord
 
 // Last instruction is a special case, and duplicated.
-alignas(32) uint32_t CodeLUT[256] =
+alignas(32) uint32_t CodeLUT[257] =
 {
 	0x090F020A, 0x060B0500, 0x09080609, 0x0A0D030B, 0x04070A01, 0x09030607, 0x060D0401, 0x000A0904,
 	0x040F0F06, 0x030E070C, 0x04020D02, 0x0B0F050A, 0x0C020C04, 0x0B03070F, 0x07060206, 0x0C060501,
@@ -39,6 +39,7 @@ alignas(32) uint32_t CodeLUT[256] =
 	0x02020E0F, 0x0B090D09, 0x05020703, 0x0C020D04, 0x03000501, 0x0F060C0D, 0x00000D01, 0x0F0B0205,
 	0x04000506, 0x0E09030B, 0x00000103, 0x0F0C090B, 0x040C080F, 0x010F0C07, 0x000B0700, 0x0F0C0F04,
 	0x0401090F, 0x080E0E0A, 0x050A090E, 0x0009080C, 0x080E0C06, 0x0D0C030D, 0x090D0C0D, 0x090D0C0D,
+  0x00000000
 };
 
 
@@ -97,6 +98,9 @@ void wolfBranch_avx2(__m256i &in, uint8_t pos2val, uint32_t opcode, workerData &
     case 15:
       in = _mm256_rol_epi8(in, 5);
       break;
+    case 16:
+      in = _mm256_set1_epi8(worker.simpleLookup[worker.reg_idx[worker.op] * 256 + worker.prev_chunk[worker.pos1]]);
+      return;
     }      
   }
 }

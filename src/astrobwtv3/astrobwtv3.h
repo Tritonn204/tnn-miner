@@ -201,6 +201,7 @@ public:
   std::bitset<256> unchangedBytes[regOps_size];
   std::bitset<256> isBranched;
 
+  alignas(32) byte maskTable_bytes[1024];
   byte branchedOps[branchedOps_size*2];
   byte regularOps[regOps_size*2];
 
@@ -478,31 +479,13 @@ inline __m256i _mm256_reverse_epi8(__m256i input) {
 #endif
 
 inline void initWorker(workerData &worker) {
-  // #if defined(__AVX2__)
+  #if defined(__AVX2__)
 
-  // __m256i temp[32];
-  // for(int i = 0; i < 32; i++) {
-  //   temp[i] = _mm256_setzero_si256(); // Initialize mask with all zeros
-
-  //   __m128i lower_part = _mm_set1_epi64x(0);
-  //   __m128i upper_part = _mm_set1_epi64x(0);
-
-  //   if (i > 24) {
-  //     lower_part = _mm_set1_epi64x(-1ULL);
-  //     upper_part = _mm_set_epi64x(-1ULL >> (32-i)*8,-1ULL);
-  //   } else if (i > 16) {
-  //     lower_part = _mm_set_epi64x(-1ULL,-1ULL);
-  //     upper_part = _mm_set_epi64x(0,-1ULL >> (24-i)*8);
-  //   } else if (i > 8) {
-  //     lower_part = _mm_set_epi64x(-1ULL >> (16-i)*8,-1ULL);
-  //   } else if (i > 0) {
-  //     lower_part = _mm_set_epi64x(0,-1ULL >> (8-i)*8);
-  //   }
-
-  //   temp[i] = _mm256_insertf128_si256(temp[i], lower_part, 0); // Set lower 128 bits
-  //   temp[i] = _mm256_insertf128_si256(temp[i], upper_part, 1); // Set upper 128 bits
-  // }
-  // memcpy(worker.maskTable, temp, 32*sizeof(__m256i));
+  __m256i temp[32];
+  for(int i = 0; i < 32; i++) {
+    temp[i] = genMask(i);
+  }
+  memcpy(worker.maskTable_bytes, temp, 32*sizeof(__m256i));
   // printf("worker.maskTable\n");
   // uint32_t v[8];
   // for(int i = 0; i < 32; i++) {
@@ -510,7 +493,7 @@ inline void initWorker(workerData &worker) {
   //   printf("%02d v8_u32: %x %x %x %x %x %x %x %x\n", i, v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
   // }
 
-  // #endif
+  #endif
 
   std::copy(branchedOps_global.begin(), branchedOps_global.end(), worker.branchedOps);
   std::vector<byte> full(256);
