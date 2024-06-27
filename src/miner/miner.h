@@ -1,3 +1,5 @@
+#pragma once
+
 #ifndef MINER
 #define MINER
 
@@ -12,39 +14,20 @@
 #include <terminal.h>
 #include <string>
 #include <num.h>
-#include <xatum.h>
 
 #ifdef _WIN32
 #include <windows.h>
 #endif
 
-#define DERO_HASH 0
-#define XELIS_HASH 1
-#define SPECTRE_X 2
-
-#define DERO_SOLO 0
-
-#define XELIS_SOLO 10
-#define XELIS_XATUM 11
-#define XELIS_STRATUM 12
-
-#define SPECTRE_SOLO 20
-#define SPECTRE_STRATUM 21
-
 const int workerThreads = 2;
 
-const char *nullArg = "NULL";
-
 std::string symbol = nullArg;
-std::string host = nullArg;
 std::string port = nullArg;
-std::string wallet = nullArg;
 std::string workerName = "default";
 
 bool useStratum = false;
 
 int miningAlgo = DERO_HASH;
-int protocol = XELIS_SOLO;
 
 int reportInterval = 3;
 int threads = 0;
@@ -56,13 +39,6 @@ bool broadcastStats = false;
 
 int cudaMemNumerator = 1000;
 int cudaMemDenominator = 750; //Kilobytes per worker in VRAM
-
-// Dev fee config
-// Dev fee is a % of hashrate
-int batchSize = 5000;
-double minFee = 1;
-double devFee = 2.5;
-const char *devPool = "dero.rabidmining.com";
 
 std::string defaultHost[] = {
   "dero.rabidmining.com",
@@ -107,8 +83,6 @@ Num maxU256;
 void getWork(bool isDev, int algo);
 void sendWork();
 void devWork();
-
-int handleXatumPacket(Xatum::packet xPacket, bool isDev);
 
 void mine(int tid, int algo = DERO_HASH);
 void cudaMine();

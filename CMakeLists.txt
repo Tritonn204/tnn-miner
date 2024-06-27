@@ -6,7 +6,7 @@ cmake_print_variables(CMAKE_HOST_SYSTEM_NAME)
 
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   -O3 -fPIE -DNDEBUG")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fuse-ld=lld -O3 -Wuninitialized -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -Wuninitialized -DNDEBUG")
 
 if(USE_GCC)
   set(CMAKE_C_COMPILER gcc)
@@ -188,6 +188,7 @@ include_directories(
   "${PROJECT_SOURCE_DIR}/src/spectrex/"
   "${PROJECT_SOURCE_DIR}/src/xatum/"
   "${PROJECT_SOURCE_DIR}/src/stratum/"
+  "${PROJECT_SOURCE_DIR}/src/net/"
   "${PROJECT_SOURCE_DIR}/src/miner/"
   "${TNN_BOOST_INCLUDES}"
   "${PROJECT_SOURCE_DIR}/src/broadcast/"
@@ -207,6 +208,7 @@ file(GLOB all_SRCS
   "${PROJECT_SOURCE_DIR}/src/spectrex/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/spectrex/*.c"
   "${PROJECT_SOURCE_DIR}/src/broadcast/*.cpp"
+  "${PROJECT_SOURCE_DIR}/src/net/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/miner/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/miner/*.c"
 )

@@ -11,9 +11,9 @@
 
 namespace po = boost::program_options;  // from <boost/program_options.hpp>
 
-const char *versionString = "0.3.7";
-const char *consoleLine = " TNN-MINER ";
-const char *TNN = R"(
+static const char *versionString = "0.3.7";
+static const char *consoleLine = " TNN-MINER ";
+static const char *TNN = R"(
   
                                                             YB&&@5
                                               :GBB7         &@@@@P
@@ -40,7 +40,7 @@ const char *TNN = R"(
 
 )";  
 
-const char *DERO = R"(
+static const char *DERO = R"(
                                                                   
                               @                                 
                          @@       @@                            
@@ -70,21 +70,21 @@ const char *DERO = R"(
                                                                 
 )";
 
-const char* coinPrompt = "Please enter the symbol for the coin you'd like to mine (i.e. DERO, XEL)";
-const char* daemonPrompt = "Please enter your mining deamon/host address: ";
-const char* portPrompt = "Please enter your mining port: ";
-const char* walletPrompt = "Please enter your wallet address for mining rewards: ";
-const char* threadPrompt = "Please provide the desired amount of mining threads: ";
+static const char* coinPrompt = "Please enter the symbol for the coin you'd like to mine (i.e. DERO, XEL)";
+static const char* daemonPrompt = "Please enter your mining deamon/host address: ";
+static const char* portPrompt = "Please enter your mining port: ";
+static const char* walletPrompt = "Please enter your wallet address for mining rewards: ";
+static const char* threadPrompt = "Please provide the desired amount of mining threads: ";
 
-const char* inputIntro = "Please provide your mining settings (leave fields blank to use defaults)";
+static const char* inputIntro = "Please provide your mining settings (leave fields blank to use defaults)";
 
-int colorPreTable[] = {
+static int colorPreTable[] = {
   0,0,0,0,91,
   0,0,0,0,1,
   0,0,0,0,1,
   0
 };
-int colorTable[] = {
+static int colorTable[] = {
   0,0,0,36,91,
   0,0,0,0,91,
   0,0,0,0,93,

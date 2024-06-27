@@ -18,17 +18,19 @@ stages:
   - release
 
 variables:
+  TNN_BUILD_MAC: false
+  TNN_BUILD_WIN: false
   AMD64_TARGET_LEVEL: x86-64-v3
-  #PACKAGE_VERSION: "0.3.4"
-  LINUX_AMD64_TGZ: "Tnn-miner-amd64.tar.gz"
-  MACOS_ARM64_TGZ: "Tnn-miner-macos-arm64.tar.gz"
-  WIN_AMD64_ZIP: "Tnn-miner-win64.zip"
+  PACKAGE_VERSION: "0.0.3"
+  LINUX_AMD64_TGZ: "Tnn-miner-amd64-${PACKAGE_VERSION}.tar.gz"
+  MACOS_ARM64_TGZ: "Tnn-miner-macos-arm64-${PACKAGE_VERSION}.tar.gz"
+  WIN_AMD64_ZIP: "Tnn-miner-win64-${PACKAGE_VERSION}.zip"
   # https://docs.gitlab.com/ee/ci/runners/hosted_runners/macos.html#optimizing-homebrew
   HOMEBREW_NO_AUTO_UPDATE: 1
 
 .macos_saas_runners:
   tags:
-    - saas-macos-large-m2pro
+    - saas-macos-medium-m1
   image: macos-14-xcode-15
   before_script:
     - echo "started by ${GITLAB_USER_NAME} / @${GITLAB_USER_LOGIN}"
@@ -81,7 +83,7 @@ build-linux:
 
 build-macos:
   rules:
-    - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
+    - if: $CI_COMMIT_TAG && $TNN_BUILD_MAC == "true"                 # Run this job when a tag is created
   extends:
     - .macos_saas_runners
   stage: build
@@ -109,14 +111,15 @@ build-macos:
 
 build-windows:
   rules:
-    - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
+    - if: $CI_COMMIT_TAG && $TNN_BUILD_WIN == "true"                 # Run this job when a tag is created
   extends:
     - .windows_job
   stage: build
   script:
     - echo "running scripts in the build job"
+    - $PSVersionTable.PSVersion
     - .\scripts\prereqs.bat ci
-    - .\scripts\build.bat ci
+    - .\scripts\build.ps1 ci
     - dir .\build\
     - move build\Tnn-miner.exe .\
     - 7z.exe a ${WIN_AMD64_ZIP} Tnn-miner.exe
@@ -145,7 +148,7 @@ test:
     - ls -la ./
   script:
     - tar -xvf ./${LINUX_AMD64_TGZ}
-    - gdb --batch -ex "run" -ex "bt" --args ./Tnn-miner --dero-test
+    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./Tnn-miner --dero-test
 
 #upload:
 #  stage: upload
@@ -168,8 +171,8 @@ release_job:
   needs:
     - job: build-linux
       artifacts: true
-    - job: build-macos
-      artifacts: true
+    #- job: build-macos
+    #  artifacts: true
   rules:
     - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
   script:
@@ -188,11 +191,11 @@ release_job:
     assets:
       links:
         - name: "${LINUX_AMD64_TGZ}"
-          url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${LINUX_BUILD_JOB_ID}/artifacts/download"
+          url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${LINUX_BUILD_JOB_ID}/artifacts/raw/${LINUX_AMD64_TGZ}"
           filepath: "/${LINUX_AMD64_TGZ}"
-        - name: "${MACOS_ARM64_TGZ}"
-          url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${MACOS_BUILD_JOB_ID}/artifacts/download"
-          filepath: "/${MACOS_ARM64_TGZ}"
-        - name: "${WIN_AMD64_ZIP}"
-          url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${WIN_BUILD_JOB_ID}/artifacts/download"
-          filepath: "/${WIN_AMD64_ZIP}"
+        #- name: "${MACOS_ARM64_TGZ}"
+        #  url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${MACOS_BUILD_JOB_ID}/artifacts/download"
+        #  filepath: "/${MACOS_ARM64_TGZ}"
+        #- name: "${WIN_AMD64_ZIP}"
+        #  url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${WIN_BUILD_JOB_ID}/artifacts/download"
+        #  filepath: "/${WIN_AMD64_ZIP}"
