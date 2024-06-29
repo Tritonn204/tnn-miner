@@ -165,6 +165,9 @@ void openssl_log_callback(const SSL *ssl, int where, int ret)
   }
 }
 
+void initConstants() {
+  initWolfLUT();
+}
 
 //------------------------------------------------------------------------------
 
@@ -692,6 +695,7 @@ Mining:
 
   // Create worker threads and set CPU affinity
  //  mutex.lock();
+  initConstants();
   if (false /*gpuMine*/)
   {
     // boost::thread t(cudaMine);

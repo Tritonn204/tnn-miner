@@ -39,15 +39,91 @@ alignas(32) uint32_t CodeLUT[257] =
 	0x02020E0F, 0x0B090D09, 0x05020703, 0x0C020D04, 0x03000501, 0x0F060C0D, 0x00000D01, 0x0F0B0205,
 	0x04000506, 0x0E09030B, 0x00000103, 0x0F0C090B, 0x040C080F, 0x010F0C07, 0x000B0700, 0x0F0C0F04,
 	0x0401090F, 0x080E0E0A, 0x050A090E, 0x0009080C, 0x080E0C06, 0x0D0C030D, 0x090D0C0D, 0x090D0C0D,
-  0x10000000
+  0x00000000
 };
 
+alignas(32) uint16_t *CodeLUT_16 = (uint16_t*)malloc_huge_pages(257*4);
+
+void initWolfLUT() {
+  for (int i = 0; i < 256; i++) {
+    uint16_t t = 0;
+    uint32_t opcode = CodeLUT[i];
+    for (int j = 3; j >= 0; j--) {
+      uint8_t insn = (opcode >> (j << 3)) & 0xFF;
+      t |= (insn << (j << 2));
+    }
+    CodeLUT_16[i] = t;
+  }
+
+  // printf("%02X\n", CodeLUT_16[0]);
+}
 
 void wolfBranch_avx2(__m256i &in, uint8_t pos2val, uint32_t opcode, workerData &worker)
 {
+  // if (!opcode) {
+  //   in = _mm256_set1_epi8(worker.simpleLookup[worker.reg_idx[worker.op] * 256 + worker.prev_chunk[worker.pos1]]);
+  //   return;
+  // }
+  
+  // for (int i = 3; i >= 0; --i)
+  // {
+  //   uint8_t insn = (opcode >> (i << 3)) & 0xFF;
+  //   switch (insn)
+  //   {
+  //   case 0:
+  //     in = _mm256_add_epi8(in, in);
+  //     break;
+  //   case 1:
+  //     in = _mm256_sub_epi8(in, _mm256_xor_si256(in, _mm256_set1_epi8(97)));
+  //     break;
+  //   case 2:
+  //     in = _mm256_mul_epi8(in, in);
+  //     break;
+  //   case 3:
+  //     in = _mm256_xor_si256(in, _mm256_set1_epi8(pos2val));
+  //     break;
+  //   case 4:
+  //     in = _mm256_xor_si256(in, _mm256_set1_epi64x(-1LL));
+  //     break;
+  //   case 5:
+  //     in = _mm256_and_si256(in, _mm256_set1_epi8(pos2val));
+  //     break;
+  //   case 6:
+  //     in = _mm256_sllv_epi8(in,_mm256_and_si256(in,vec_3));
+  //     break;
+  //   case 7:
+  //     in = _mm256_srlv_epi8(in,_mm256_and_si256(in,vec_3));
+  //     break;
+  //   case 8:
+  //     in = _mm256_reverse_epi8(in);
+  //     break;
+  //   case 9:
+  //     in = _mm256_xor_si256(in, popcnt256_epi8(in));
+  //     break;
+  //   case 10:
+  //     in = _mm256_rolv_epi8(in, in);
+  //     break;
+  //   case 11:
+  //     in = _mm256_rol_epi8(in, 1);
+  //     break;
+  //   case 12:
+  //     in = _mm256_xor_si256(in, _mm256_rol_epi8(in, 2));
+  //     break;
+  //   case 13:
+  //     in = _mm256_rol_epi8(in, 3);
+  //     break;
+  //   case 14:
+  //     in = _mm256_xor_si256(in, _mm256_rol_epi8(in, 4));
+  //     break;
+  //   case 15:
+  //     in = _mm256_rol_epi8(in, 5);
+  //     break;
+  //   }  
+  // }
+  
   for (int i = 3; i >= 0; --i)
   {
-    uint8_t insn = (opcode >> (i << 3)) & 0xFF;
+    uint8_t insn = (opcode >> (i << 2)) & 0xF;
     switch (insn)
     {
     case 0:
@@ -98,12 +174,10 @@ void wolfBranch_avx2(__m256i &in, uint8_t pos2val, uint32_t opcode, workerData &
     case 15:
       in = _mm256_rol_epi8(in, 5);
       break;
-    case 16:
-      in = _mm256_set1_epi8(worker.simpleLookup[worker.reg_idx[worker.op] * 256 + worker.prev_chunk[worker.pos1]]);
-      return;
     }      
   }
 }
+
 
 uint8_t wolfBranch(uint8_t val, uint8_t pos2val, uint32_t opcode)
 {
@@ -172,7 +246,7 @@ uint8_t wolfBranch(uint8_t val, uint8_t pos2val, uint32_t opcode)
 void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker)
 {
   // printf("AVX2 WOLF\n");
-	uint32_t Opcode = CodeLUT[op];
+	uint32_t Opcode = CodeLUT_16[op];
 
   __m256i data = _mm256_loadu_si256((__m256i*)&in[pos1]);
   __m256i old = data;
@@ -189,6 +263,31 @@ void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t p
   _mm256_storeu_si256((__m256i*)&out[pos1], data);
 }
 
+void wolfSame(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker)
+{
+  // printf("AVX2 WOLF\n");
+
+  __m256i data = _mm256_loadu_si256((__m256i*)&in[pos1]);
+  __m256i old = data;
+
+  // if (worker.isBranched[op]) {
+  //   data = _mm256_set1_epi8(worker.lookup3D[worker.branched_idx[worker.op] * 256 * 256 +
+  //                                 in[worker.pos2] * 256 +
+  //                                 in[worker.pos1]]);
+  // } else {
+    data = _mm256_set1_epi8(worker.simpleLookup[worker.reg_idx[worker.op] * 256 + in[pos1]]);
+  // }
+
+  // if (pos2==pos1) {
+  //   _mm256_storeu_si256((__m256i*)&out[pos1], data);
+  //   return;
+  // }
+
+  // data = _mm256_blendv_epi8(old, data, _mm256_load_si256((__m256i*)&worker.maskTable_bytes[(pos2 - pos1)*32]));
+  data = _mm256_blendv_epi8(old, data, genMask(pos2 - pos1));
+
+  _mm256_storeu_si256((__m256i*)&out[pos1], data);
+}
 // __attribute__((target("default")))
 // void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2)
 // {

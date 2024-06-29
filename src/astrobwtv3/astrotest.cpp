@@ -269,6 +269,8 @@ int runDeroOpTests(int testOp, int dataLen) {
   testPopcnt256_epi8();
   #endif
 
+  initWolfLUT();
+
   workerData *controlWorker = (workerData*)malloc_huge_pages(sizeof(workerData));
   initWorker(*controlWorker);
   lookupGen(*controlWorker, nullptr, nullptr);
