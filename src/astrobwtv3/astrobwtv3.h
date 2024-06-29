@@ -201,7 +201,7 @@ public:
   std::bitset<256> unchangedBytes[regOps_size];
   std::bitset<256> isBranched;
 
-  alignas(32) byte maskTable_bytes[1024];
+  byte maskTable_bytes[1024];
   byte branchedOps[branchedOps_size*2];
   byte regularOps[regOps_size*2];
 
@@ -484,7 +484,7 @@ inline void initWorker(workerData &worker) {
   __m256i temp[32];
   for(int i = 0; i < 32; i++) {
     temp[i] = genMask(i);
-    _mm256_store_si256((__m256i*)&worker.maskTable_bytes[i*32], temp[i]);
+    _mm256_storeu_si256((__m256i*)&worker.maskTable_bytes[i*32], temp[i]);
   }
   // printf("worker.maskTable\n");
   // uint32_t v[8];

@@ -275,7 +275,7 @@ void wolfSame(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2
   //                                 in[worker.pos2] * 256 +
   //                                 in[worker.pos1]]);
   // } else {
-    data = _mm256_set1_epi8(worker.simpleLookup[worker.reg_idx[worker.op] * 256 + in[pos1]]);
+  data = _mm256_set1_epi8(worker.simpleLookup[worker.reg_idx[worker.op] * 256 + in[pos1]]);
   // }
 
   // if (pos2==pos1) {
