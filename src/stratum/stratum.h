@@ -129,7 +129,7 @@ namespace SpectreStratum {
   // Server calls
   static std::string s_notify = "mining.notify";
   static std::string s_setDifficulty = "mining.set_difficulty";
-  static std::string s_setExtraNonce = "mining.set_extranonce";
+  static std::string s_setExtraNonce = "set_extranonce";
   static std::string s_ping = "mining.ping";
   static std::string s_print = "mining.print";
 

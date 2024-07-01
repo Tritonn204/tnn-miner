@@ -16,6 +16,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include <stdlib.h> 
+
 namespace beast = boost::beast;         // from <boost/beast.hpp>
 namespace http = beast::http;           // from <boost/beast/http.hpp>
 namespace websocket = beast::websocket; // from <boost/beast/websocket.hpp>
@@ -1255,6 +1257,23 @@ void spectre_stratum_session(
   std::string minerName = "tnn-miner/" + std::string(versionString);
   boost::json::object packet;
 
+  // Subscribe to Stratum
+  packet = XelisStratum::stratumCall;
+  packet["id"] = SpectreStratum::subscribe.id;
+  packet["method"] = SpectreStratum::subscribe.method;
+  packet["params"] = boost::json::array({
+    minerName
+  });
+  std::string subscription = boost::json::serialize(packet) + "\n";
+
+  // std::cout << authResString << std::endl;
+
+  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
+  size_t trans = boost::asio::async_write(stream, boost::asio::buffer(subscription), yield[ec]);
+  if (ec)
+    return fail(ec, "Stratum subscribe");
+
+  
   // Authorize Stratum Worker
   packet = XelisStratum::stratumCall;
   packet.at("id") = XelisStratum::authorize.id;
@@ -1270,21 +1289,12 @@ void spectre_stratum_session(
   if (ec)
     return fail(ec, "Stratum authorize");
 
-  packet = XelisStratum::stratumCall;
-
-  packet["id"] = SpectreStratum::subscribe.id;
-  packet["method"] = SpectreStratum::subscribe.method;
-  packet["params"] = boost::json::array({
-    minerName
-  });
-
   boost::asio::streambuf subRes;
   beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-  size_t trans = boost::asio::read_until(stream, subRes, "\n");
+   trans = boost::asio::read_until(stream, subRes, "\n");
 
-  std::string authResString = beast::buffers_to_string(subRes.data());
+  std::string subResString = beast::buffers_to_string(subRes.data());
   subRes.consume(trans);
-  boost::json::object authResJson = boost::json::parse(authResString.c_str(), jsonEc).as_object();
   if (jsonEc)
   {
     std::cerr << jsonEc.message() << std::endl;
@@ -1294,14 +1304,6 @@ void spectre_stratum_session(
   // packet.at("id") = SpectreStratum::subscribe.id;
   // packet.at("method") = SpectreStratum::subscribe.method;
   // packet.at("params") = {minerName};
-  std::string subscription = boost::json::serialize(packet) + "\n";
-
-  // std::cout << authResString << std::endl;
-
-  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-  trans = boost::asio::async_write(stream, boost::asio::buffer(subscription), yield[ec]);
-  if (ec)
-    return fail(ec, "Stratum subscribe");
 
   // beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
   // trans = boost::asio::read_until(stream, subRes, "\n");
@@ -1338,6 +1340,7 @@ void spectre_stratum_session(
   while (true)
   {
     bool *C = isDev ? &devConnected : &isConnected;
+    bool *B = isDev ? &submittingDev : &submitting;
     try
     {
       if (
@@ -1353,9 +1356,9 @@ void spectre_stratum_session(
           std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count() - SpectreStratum::lastReceivedJobTime > SpectreStratum::jobTimeout)
       {
         (*C) = false;
+        (*B) = false;
         return fail(ec, "Stratum session timed out");
       }
-      bool *B = isDev ? &submittingDev : &submitting;
       if (*B)
       {
         boost::json::object *S = &share;
@@ -1394,6 +1397,7 @@ void spectre_stratum_session(
       trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
       if (ec && trans > 0) {
         (*C) = false;
+        (*B) = false;
         return fail(ec, "Stratum async_read");
       }
 
@@ -1431,6 +1435,7 @@ void spectre_stratum_session(
                     yield[ec]);
                 if (ec && trans > 0) {
                   (*C) = false;
+                  (*B) = false;
                   return fail(ec, "Stratum pong");
                 }
               }
@@ -1505,6 +1510,7 @@ void spectre_stratum_session(
     {
       bool *C = isDev ? &devConnected : &isConnected;
       (*C) = false;
+      (*B) = false;
       setcolor(RED);
       std::cerr << e.what() << std::endl;
       setcolor(BRIGHT_WHITE);
@@ -1672,18 +1678,22 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
   else if (M.compare(SpectreStratum::s_setExtraNonce) == 0)
   {
     // std::cout << boost::json::serialize(packet).c_str() << std::endl;
-    // json *J = isDev ? &devJob : &job;
+    json *J = isDev ? &devJob : &job;
     // uint64_t *h = isDev ? &devHeight : &ourHeight;
 
     // std::string bs = (*J).at("template").get<std::string>();
     // char *blob = (char *)bs.c_str();
-    // const char *en = packet.at("params").as_array()[0].as_string().c_str();
-    // int enLen = packet.at("params").as_array()[0].as_string().size();
+    const char *en = packet.at("params").as_array()[0].as_string().c_str();
+    // char *c = NULL;
+    int enLen = packet.at("params").as_array()[0].as_string().size();
+
+    // uint32_t EN = strtoul(en, &c, 16);
+
 
     // memset(&blob[48], '0', 64);
     // memcpy(&blob[48], en, enLen);
 
-    // (*J).at("template") = std::string(blob).c_str();
+    (*J)["extraNonce"] = std::string(en);
 
     // (*h)++;
     // jobCounter++;

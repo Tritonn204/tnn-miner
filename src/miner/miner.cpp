@@ -1696,13 +1696,16 @@ waitForJob:
         byte *WORK = (devMine && devConnected) ? &devWork[0] : &work[0];
         byte *nonceBytes = &WORK[72];
         uint64_t n;
+
+        int enLen = 0;
         
         json &J = devMine ? myJobDev : myJob;
         if (J["extraNonce"].is_null() || J["extraNonce"].get<std::string>().size() == 0)
           n = ((tid - 1) % (256 * 256)) | ((rand() % 256) << 16) | ((*nonce) << 24);
         else {
-          int eN = J["extraNonce"].get<uint32_t>();
-          n = eN | (((tid - 1) % (256 * 256)) << 24) | ((*nonce) << 40);
+          uint64_t eN = strtoull(J["extraNonce"].get<std::string>().c_str(), NULL, 16);
+          enLen = J["extraNonce"].get<std::string>().size()/2;
+          n = ((tid - 1) % (256 * 256)) | ((*nonce) << 16) | (eN << 56);
         }
         memcpy(nonceBytes, (byte *)&n, 8);
 
@@ -1726,6 +1729,7 @@ waitForJob:
         if (localJobCounter != jobCounter || localOurHeight != ourHeight)
           break;
 
+
         if (submit && Num(hexStr(powHash, 32).c_str(), 16) <= cmpDiff)
         {
           std::scoped_lock<boost::mutex> lockGuard(mutex);
@@ -1746,11 +1750,11 @@ waitForJob:
             switch (protocol)
             {
             case SPECTRE_SOLO:
-              devShare = {{"block_template", hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str()}};
+              devShare = {{"block_template", hexStr(&WORK[0], SpectreX::INPUT_SIZE).c_str()}};
               break;
             case SPECTRE_STRATUM:
               std::vector<char> nonceStr;
-              Num(std::to_string(n).c_str(),10).print(nonceStr, 16);
+              Num(std::to_string((n << enLen*8) >> enLen*8).c_str(),10).print(nonceStr, 16);
               devShare = {{{"id", SpectreStratum::submitID},
                         {"method", SpectreStratum::submit.method.c_str()},
                         {"params", {devWorkerName,                                   // WORKER
@@ -1773,11 +1777,11 @@ waitForJob:
             switch (protocol)
             {
             case SPECTRE_SOLO:
-              share = {{"block_template", hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str()}};
+              share = {{"block_template", hexStr(&WORK[0], SpectreX::INPUT_SIZE).c_str()}};
               break;
             case SPECTRE_STRATUM:
               std::vector<char> nonceStr;
-              Num(std::to_string(n).c_str(),10).print(nonceStr, 16);
+              Num(std::to_string((n << enLen*8) >> enLen*8).c_str(),10).print(nonceStr, 16);
               share = {{{"id", SpectreStratum::submitID},
                         {"method", SpectreStratum::submit.method.c_str()},
                         {"params", {workerName,                                   // WORKER
@@ -1785,6 +1789,8 @@ waitForJob:
                                     std::string(nonceStr.data()).c_str()}}}};
 
               // std::cout << "blob: " << hexStr(&WORK[0], SpectreX::INPUT_SIZE).c_str() << std::endl;
+              // std::cout << "nonce: " << nonceStr.data() << std::endl;
+              // std::cout << "extraNonce: " << hexStr(&WORK[SpectreX::INPUT_SIZE - 48], enLen).c_str() << std::endl;
               // std::cout << "hash: " << hexStr(&powHash[0], 32) << std::endl;
               // std::vector<char> diffHex;
               // cmpDiff.print(diffHex, 16);
