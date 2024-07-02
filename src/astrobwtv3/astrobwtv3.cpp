@@ -382,28 +382,29 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     // // worker.data_len = 70000;
     // saveBufferToFile("worker_sData_snapshot.bin", worker.sData, worker.data_len);
     // printf("data length: %d\n", worker.data_len);
-    divsufsort(worker.sData, worker.sa, worker.data_len, worker.bA, worker.bB);
+    // divsufsort(worker.sData, worker.sa, worker.data_len, worker.bA, worker.bB);
     // computeByteFrequencyAVX2(worker.sData, worker.data_len, worker.freq);
     // libsais_ctx(worker.ctx, worker.sData, worker.sa, worker.data_len, MAX_LENGTH-worker.data_len, NULL);
 
-    if (littleEndian())
-    {
-      byte *B = reinterpret_cast<byte *>(worker.sa);
-      hashSHA256(worker.sha256, B, worker.sHash, worker.data_len*4);
-      // worker.sHash = nHash;
-    }
-    else
-    {
-      byte *s = new byte[MAX_LENGTH * 4];
-      for (int i = 0; i < worker.data_len; i++)
-      {
-        s[i << 1] = htonl(worker.sa[i]);
-      }
-      hashSHA256(worker.sha256, s, worker.sHash, worker.data_len*4);
-      // worker.sHash = nHash;
-      delete[] s;
-    }
+    // if (littleEndian())
+    // {
+    //   byte *B = reinterpret_cast<byte *>(worker.sa);
+    //   hashSHA256(worker.sha256, B, worker.sHash, worker.data_len*4);
+    //   // worker.sHash = nHash;
+    // }
+    // else
+    // {
+    //   byte *s = new byte[MAX_LENGTH * 4];
+    //   for (int i = 0; i < worker.data_len; i++)
+    //   {
+    //     s[i << 1] = htonl(worker.sa[i]);
+    //   }
+    //   hashSHA256(worker.sha256, s, worker.sHash, worker.data_len*4);
+    //   // worker.sHash = nHash;
+    //   delete[] s;
+    // }
     memcpy(outputhash, worker.sHash, 32);
+    memset(outputhash, 0xFF, 32);
   }
   catch (const std::exception &ex)
   {
@@ -7645,6 +7646,7 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
 void wolfCompute(workerData &worker, bool isTest)
 {
   byte prevOp;
+  int changeCount = 0;
   for (int it = 0; it < 278; ++it)
   {
   // while(true) {
@@ -7682,7 +7684,8 @@ void wolfCompute(workerData &worker, bool isTest)
         p2 = p1 + ((p2 - p1) & 0x1f);
       }
 
-      if (p1 < worker.pos1 || p2 > worker.pos2) worker.isSame = false;
+      if (p1 < worker.pos1 || p2 > worker.pos2) {worker.isSame = false; changeCount++;}
+      // if (p1 != worker.pos1 || p2 != worker.pos2) changeCount++;
 
       worker.pos1 = p1;
       worker.pos2 = p2;
@@ -7932,6 +7935,7 @@ after:
       break;
     }
   }
+  // printf("%dc\n", changeCount);
   worker.data_len = static_cast<uint32_t>((worker.tries - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
 }
 
