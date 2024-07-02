@@ -20,13 +20,26 @@ else()
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-deprecated")
 endif()
 
+# This looks weird, but we prefer the -D variable over the ENV var
+string(TIMESTAMP VERSION_DEF "%Y.%m.%d.%H.%M-dev")
+set(INTERNAL_TNN_VERSION ${VERSION_DEF})
+if(DEFINED ENV{TNN_VERSION})
+  set(INTERNAL_TNN_VERSION $ENV{TNN_VERSION})
+endif()
+if(DEFINED TNN_VERSION)
+  set(INTERNAL_TNN_VERSION ${TNN_VERSION})
+endif()
+
+string(REGEX REPLACE "^[a-zA-Z]" ""  INTERNAL_TNN_VERSION ${INTERNAL_TNN_VERSION})
+
 project(
   Tnn-miner
-  VERSION 0.3.8
-  DESCRIPTION "Open Source Astrobwt Miner"
+  DESCRIPTION "Open Source Dero/Spectre/Xelis Miner"
 )
+set(PROJECT_VERSION ${INTERNAL_TNN_VERSION})
 
 cmake_print_variables($ENV{GITLAB_CI})
+cmake_print_variables(INTERNAL_TNN_VERSION)
 cmake_print_variables(CMAKE_SYSTEM_PROCESSOR)
 
 # This CMAKE variable isn't defined until 'project' is called.
@@ -57,8 +70,8 @@ else()
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native -m64")
 endif()
 
-set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} ${DO_STATIC}")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${DO_STATIC}")
+set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} ${DO_STATIC} -DTNN_VERSION=${INTERNAL_TNN_VERSION}")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${DO_STATIC} -DTNN_VERSION=${INTERNAL_TNN_VERSION}")
 
 cmake_print_variables(CMAKE_C_FLAGS_RELEASE)
 cmake_print_variables(CMAKE_CXX_FLAGS_RELEASE)

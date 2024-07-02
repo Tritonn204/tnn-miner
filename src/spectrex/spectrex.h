@@ -146,7 +146,7 @@ namespace SpectreX
   void testWithInput(byte* in, byte *out);
   void genPrePowHash(byte *in, worker &worker);
   void hash(worker &worker, byte *in, int len, byte *out);
-  void test();
+  int test();
 
   bool checkPow(Num in, Num diff);
   Num diffToTarget(double diff);

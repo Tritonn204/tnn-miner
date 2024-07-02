@@ -21,12 +21,26 @@ variables:
   TNN_BUILD_MAC: false
   TNN_BUILD_WIN: false
   AMD64_TARGET_LEVEL: x86-64-v3
-  PACKAGE_VERSION: "0.0.3"
+  PACKAGE_VERSION: "0.0.1"
   LINUX_AMD64_TGZ: "Tnn-miner-amd64-${PACKAGE_VERSION}.tar.gz"
   MACOS_ARM64_TGZ: "Tnn-miner-macos-arm64-${PACKAGE_VERSION}.tar.gz"
   WIN_AMD64_ZIP: "Tnn-miner-win64-${PACKAGE_VERSION}.zip"
   # https://docs.gitlab.com/ee/ci/runners/hosted_runners/macos.html#optimizing-homebrew
   HOMEBREW_NO_AUTO_UPDATE: 1
+  CI_DEBUG_TRACE: "true"
+
+# global workflow:rules:variables can change variables outside of jobs
+workflow:
+  rules:
+    # if the pipeline is on the default branch, then change the RUNNER_TAG variable
+    - if: $CI_COMMIT_TAG
+      variables:
+        PACKAGE_VERSION: $CI_COMMIT_TAG
+        LINUX_AMD64_TGZ: "Tnn-miner-amd64-${PACKAGE_VERSION}.tar.gz"
+        MACOS_ARM64_TGZ: "Tnn-miner-macos-arm64-${PACKAGE_VERSION}.tar.gz"
+        WIN_AMD64_ZIP: "Tnn-miner-win64-${PACKAGE_VERSION}.zip"
+    # ensure pipeline still runs if above conditions are not met
+    - when: always
 
 .macos_saas_runners:
   tags:
@@ -63,7 +77,7 @@ build-linux:
     - export
     - mkdir ./build
     - cd ./build
-    - cmake ..
+    - cmake -DTNN_VERSION=$PACKAGE_VERSION ..
     - make -j$(nproc)
     - cd ../
     - mv ./build/Tnn-miner ./Tnn-miner
@@ -91,7 +105,7 @@ build-macos:
     - export
     - mkdir ./build
     - cd ./build
-    - cmake ..
+    - cmake -DTNN_VERSION=$PACKAGE_VERSION ..
     - make -j$(nproc)
     - cd ../
     - mv ./build/Tnn-miner ./Tnn-miner
@@ -119,7 +133,7 @@ build-windows:
     - echo "running scripts in the build job"
     - $PSVersionTable.PSVersion
     - .\scripts\prereqs.bat ci
-    - .\scripts\build.ps1 ci
+    - .\scripts\build.ps1 ci $PACKAGE_VERSION
     - dir .\build\
     - move build\Tnn-miner.exe .\
     - 7z.exe a ${WIN_AMD64_ZIP} Tnn-miner.exe
@@ -134,7 +148,7 @@ build-windows:
 
 
 # run tests using the binary built before
-test:
+test-linux:
   rules:
     - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
   stage: test
@@ -148,7 +162,9 @@ test:
     - ls -la ./
   script:
     - tar -xvf ./${LINUX_AMD64_TGZ}
-    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./Tnn-miner --dero-test
+    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./Tnn-miner --dero-test --quiet
+    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./Tnn-miner --spectre-test --quiet
+    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./Tnn-miner --xelis-test --quiet
 
 #upload:
 #  stage: upload

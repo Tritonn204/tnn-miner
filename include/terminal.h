@@ -11,7 +11,11 @@
 
 namespace po = boost::program_options;  // from <boost/program_options.hpp>
 
-static const char *versionString = "0.3.8";
+// macro tricks so we can use a string to set TNN_VERSION
+#define XSTR(x) STR(x)
+#define STR(x) #x
+
+static const char *versionString = XSTR(TNN_VERSION);
 static const char *consoleLine = " TNN-MINER ";
 static const char *TNN = R"(
   
@@ -156,6 +160,7 @@ inline po::options_description get_prog_opts()
     ("op", po::value<int>(), "Sets which branch op to benchmark (0-255), benchmark will be skipped if unspecified")
     ("len", po::value<int>(), "Sets length of the processed chunk in said benchmark (default 15)")
     ("sabench", "Runs a benchmark for divsufsort on snapshot files in the 'tests' directory")
+    ("quiet", "Do not print TNN banner")
   ;
 
   po::options_description xelis("Xelis", col_width);
@@ -171,10 +176,10 @@ inline po::options_description get_prog_opts()
     ("spectre-test", "Run detailed diagnostics for SpectreX")
   ;
 
-  dero.add(debug);
   general.add(dero);
-  general.add(xelis);
   general.add(spectre);
+  general.add(xelis);
+  general.add(debug);
   return general;
 }
 

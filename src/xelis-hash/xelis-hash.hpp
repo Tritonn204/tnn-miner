@@ -58,7 +58,7 @@ void xelis_hash(byte* input, workerData_xelis &worker, byte *hashResult);
 void xelis_hash_v2(byte* input, workerData_xelis_v2 &worker, byte *hashResult);
 void xelis_benchmark_cpu_hash();
 void xelis_benchmark_cpu_hash_v2();
-void xelis_runTests();
-void xelis_runTests_v2();
+int xelis_runTests();
+int xelis_runTests_v2();
 
 void mineXelis(int tid);

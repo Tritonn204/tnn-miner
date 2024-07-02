@@ -718,7 +718,7 @@ namespace xelis_tests_v2
   }
 }
 
-void xelis_runTests_v2()
+int xelis_runTests_v2()
 {
   bool all_tests_passed = true;
   all_tests_passed &= xelis_tests_v2::test_zero_input();
@@ -729,10 +729,12 @@ void xelis_runTests_v2()
   if (all_tests_passed)
   {
     std::cout << "XELIS-HASH-V2: All tests passed!" << std::endl;
+    return 0;
   }
   else
   {
     std::cout << "XELIS-HASH-V2: Some tests failed!" << std::endl;
+    return 1;
   }
 }
 
@@ -740,14 +742,18 @@ void xelis_runTests_v2()
 // These are just to satisfy compilation on AARCH64
 void xelis_hash_v2(byte *input, workerData_xelis_v2 &worker, byte *hashResult)
 {
+  printf("Xelis is not supported on AArch64\n");
 }
 
 void xelis_benchmark_cpu_hash_v2()
 {
+  printf("Xelis is not supported on AArch64\n");
 }
 
-void xelis_runTests_v2()
+int xelis_runTests_v2()
 {
+  printf("Xelis is not supported on AArch64\n");
+  return 0;
 }
 
 #endif // __x86_64__
