@@ -7917,7 +7917,7 @@ after:
     if (debugOpOrder && worker.op == sus_op) {
       printf("Wolf op %d result:\n", worker.op);
       for (int i = 0; i < 256; i++) {
-          printf("%02X ", worker.chunk[i]);
+        printf("%02X ", worker.chunk[i]);
       } 
       printf("\n");
     }

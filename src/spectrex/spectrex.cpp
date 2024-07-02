@@ -16,7 +16,7 @@ namespace SpectreX
   const Num trueMax("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16);
   const Num maxTarget("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16);
   const Num minHash = (Num(1) << 256) / maxTarget;
-  const Num bigGig(1e3);
+  const Num bigKilo(1e3);
 
   bool checkPow(Num in, Num diff) {
     if (trueMax >> (diff.to_double()) < in) return false; 
@@ -37,7 +37,7 @@ namespace SpectreX
 
     // Calculate the target by dividing maxTarget by difficulty
     Num hv = Num::mul(diff, minHash);
-    Num target = Num::div(hv, bigGig);
+    Num target = Num::div(hv, bigKilo);
 
     return target;
   }
@@ -119,6 +119,7 @@ namespace SpectreX
     alignas(64) workerData *aw = (workerData *)malloc_huge_pages(sizeof(workerData));
     initWorker(*aw);
     lookupGen(*aw, nullptr, nullptr);
+    initWolfLUT();
     w->astroWorker = aw;
 
     newMatrix(in, w->mat);
