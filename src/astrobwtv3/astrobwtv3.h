@@ -672,12 +672,17 @@ void branchComputeCPU(workerData &worker, bool isTest);
 
 uint8_t wolfBranch(uint8_t val, uint8_t pos2val, uint32_t opcode);
 void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker);
+void wolfPermute_avx2(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker);
 void wolfSame(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker);
 void wolfCompute(workerData &worker, bool isTest);
 
 typedef void (*wolfPerm)(uint8_t *, uint8_t *, uint16_t, uint8_t, uint8_t, workerData&);
 
-inline wolfPerm wolfPerms[2] = {wolfPermute, wolfSame};
+#if defined(__AVX2__)
+inline wolfPerm wolfPerms[2] = {wolfPermute_avx2, wolfSame};
+#else
+inline wolfPerm wolfPerms[1] = {wolfPermute};
+#endif
 
 #if defined(__AVX2__)
 void branchComputeCPU_avx2(workerData &worker, bool isTest);

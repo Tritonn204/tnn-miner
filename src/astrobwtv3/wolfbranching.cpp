@@ -58,6 +58,8 @@ void initWolfLUT() {
   // printf("%02X\n", CodeLUT_16[0]);
 }
 
+#if defined(__AVX2__)
+
 void wolfBranch_avx2(__m256i &in, uint8_t pos2val, uint32_t opcode, workerData &worker)
 {
   // if (!opcode) {
@@ -178,6 +180,7 @@ void wolfBranch_avx2(__m256i &in, uint8_t pos2val, uint32_t opcode, workerData &
   }
 }
 
+#endif
 
 uint8_t wolfBranch(uint8_t val, uint8_t pos2val, uint32_t opcode)
 {
@@ -242,8 +245,9 @@ uint8_t wolfBranch(uint8_t val, uint8_t pos2val, uint32_t opcode)
   return (val);
 }
 
+#if defined(__AVX2__)
 // __attribute__((target("avx2")))
-void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker)
+void wolfPermute_avx2(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker)
 {
   // printf("AVX2 WOLF\n");
 	uint32_t Opcode = CodeLUT_16[op];
@@ -288,13 +292,16 @@ void wolfSame(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2
 
   _mm256_storeu_si256((__m256i*)&out[pos1], data);
 }
-// __attribute__((target("default")))
-// void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2)
-// {
-// 	uint32_t Opcode = CodeLUT[op];
 
-// 	for(int i = pos1; i < pos2; ++i)
-// 	{
-// 		out[i] = wolfBranch(in[i], in[pos2], Opcode);
-// 	}		
-// }
+#endif
+
+//__attribute__((target("default")))
+void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker)
+{
+	uint32_t Opcode = CodeLUT[op];
+
+	for(int i = pos1; i < pos2; ++i)
+	{
+		out[i] = wolfBranch(in[i], in[pos2], Opcode);
+	}		
+}

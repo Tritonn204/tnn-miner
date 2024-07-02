@@ -346,16 +346,15 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     }
     else {
       // // start = std::chrono::steady_clock::now();
-      // #if defined(__AVX2__)
-      // // branchComputeCPU_avx2(worker, false);
-      // branchComputeCPU_avx2_zOptimized(worker, false);
-      // #elif defined(__aarch64__)
-      // branchComputeCPU_aarch64(worker, false);
-      // #else
-      // branchComputeCPU(worker, false);
-      // #endif
+      #if defined(__AVX2__)
+        wolfCompute(worker, false);
+      #elif defined(__aarch64__)
+        branchComputeCPU_aarch64(worker, false);
+      #else
+        branchComputeCPU(worker, false);
+      #endif
       // // end = std::chrono::steady_clock::now();
-      wolfCompute(worker, false);
+      //wolfCompute(worker, false);
     }
     
 
@@ -7704,31 +7703,35 @@ void wolfCompute(workerData &worker, bool isTest)
         int start_block = 0;
         int end_block = worker.pos1 / 16;
 
-        // Copy the blocks before worker.pos1
-        for (int i = start_block; i < end_block; i++) {
-            __m128i prev_data = _mm_loadu_si128((__m128i*)&worker.prev_chunk[i * 16]);
-            _mm_storeu_si128((__m128i*)&worker.chunk[i * 16], prev_data);
-        }
+        #if defined(__AVX2__)
+          // Copy the blocks before worker.pos1
+          for (int i = start_block; i < end_block; i++) {
+              __m128i prev_data = _mm_loadu_si128((__m128i*)&worker.prev_chunk[i * 16]);
+              _mm_storeu_si128((__m128i*)&worker.chunk[i * 16], prev_data);
+          }
 
-        // Copy the remaining bytes before worker.pos1
-        for (int i = end_block * 16; i < worker.pos1; i++) {
+          // Copy the remaining bytes before worker.pos1
+          for (int i = end_block * 16; i < worker.pos1; i++) {
+              worker.chunk[i] = worker.prev_chunk[i];
+          }
+
+          // Calculate the start and end blocks
+          start_block = (worker.pos2 + 15) / 16;
+          end_block = 16;
+
+          // Copy the blocks after worker.pos2
+          for (int i = start_block; i < end_block; i++) {
+              __m128i prev_data = _mm_loadu_si128((__m128i*)&worker.prev_chunk[i * 16]);
+              _mm_storeu_si128((__m128i*)&worker.chunk[i * 16], prev_data);
+          }
+
+          // Copy the remaining bytes after worker.pos2
+          for (int i = worker.pos2; i < start_block * 16; i++) {
             worker.chunk[i] = worker.prev_chunk[i];
-        }
-
-        // Calculate the start and end blocks
-        start_block = (worker.pos2 + 15) / 16;
-        end_block = 16;
-
-        // Copy the blocks after worker.pos2
-        for (int i = start_block; i < end_block; i++) {
-            __m128i prev_data = _mm_loadu_si128((__m128i*)&worker.prev_chunk[i * 16]);
-            _mm_storeu_si128((__m128i*)&worker.chunk[i * 16], prev_data);
-        }
-
-        // Copy the remaining bytes after worker.pos2
-        for (int i = worker.pos2; i < start_block * 16; i++) {
-          worker.chunk[i] = worker.prev_chunk[i];
-        }
+          }
+        #else
+          memcpy(worker.chunk, worker.prev_chunk, 256);
+        #endif
       }
     }
 
@@ -7829,7 +7832,11 @@ void wolfCompute(workerData &worker, bool isTest)
     {
       // uint16_t OP = (worker.isSame && !worker.isBranched[worker.op]) ? 256 : worker.op;
       // uint16_t OP = worker.op;
+      #if defined(__AVX2__)
       wolfPerms[worker.isSame && !worker.isBranched[worker.op]](worker.prev_chunk, worker.chunk, worker.op, worker.pos1, worker.pos2, worker);
+      #else
+      wolfPerms[0](worker.prev_chunk, worker.chunk, worker.op, worker.pos1, worker.pos2, worker);
+      #endif
     }
 
     if (!worker.op) {
