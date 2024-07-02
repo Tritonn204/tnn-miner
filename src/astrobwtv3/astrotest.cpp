@@ -263,7 +263,7 @@ int runDeroOpTests(int testOp, int dataLen) {
   benchmarkLoadCompare();
 #endif
 
-  bool useLookup = true;
+  bool useLookup = false;
   int numOpsFailed = 0;
   #if defined(__AVX2__)
   testPopcnt256_epi8();
@@ -302,23 +302,41 @@ int runDeroOpTests(int testOp, int dataLen) {
   }
   printf("\n");
 
-  std::string resultText = std::string("Wolf");
+  std::string archText = std::string("und");
+  std::string resultText = std::string("Undefined");
+  std::string z_resultText = std::string("Undefined");
   void (*testFunc)(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print);
+  void (*z_testFunc)(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print);
+  resultText = std::string("Wolf");
+  testFunc = &optest_wolf;
   // the ampersand is actually optional
-  testFunc = &optest_branchcpu;
+  //testFunc = &optest_branchcpu;
   if(useLookup) {
-    testFunc = &optest_wolf;
+    resultText = "Lookup";
+    testFunc = &optest_lookup;
   } else {
     #if defined(__AVX2__)
+    archText = "AVX2";
     resultText = "AVX2";
     testFunc = &optest_avx2;
+
+    z_resultText = "Wolf";
+    z_testFunc = &optest_wolf;
     #elif defined(__x86_64__)
-    resultText = "Branch";
-    testFunc = &optest_branchcpu;
+    archText = "AMD";
+    resultText = "Lookup";
+    testFunc = &optest_lookup;
+
+    z_resultText = "Wolf";
+    z_testFunc = &optest_wolf;
     #endif
     #if defined(__aarch64__)
+    archText = "A64";
     resultText = "AA64";
     testFunc = &optest_aarch64;
+
+    z_resultText = "Wolf";
+    z_testFunc = &optest_wolf;
     #endif
   }
 
@@ -329,7 +347,8 @@ int runDeroOpTests(int testOp, int dataLen) {
     maxOp = testOp;
   }
                                             //
-  printf("%-7s:   Branch vs %-7s ns         - Valid| Branch vs %-7s ns        - Valid\n", resultText.c_str(), resultText.c_str(), "AVX2_zOp");
+  printf("%-4s:        Branch vs %-7s ns         - Valid| Branch vs %-7s ns          - Valid\n",
+    archText.c_str(), resultText.c_str(), z_resultText.c_str());
   for(int op = startOp; op <= maxOp; op++) {
     // WARMUP, don't print times
     OpTestResult *controlResult = new OpTestResult;
@@ -348,17 +367,17 @@ int runDeroOpTests(int testOp, int dataLen) {
     optest_branchcpu(op, *controlWorker, test, *controlResult, false);
     //printf("  Op: %3d - %6ld ns\n", op, controlResult->duration_ns);
 
-    z_testWorker->pos1 = 0; z_testWorker->pos2 = dataLen+1;
-    optest_avx2(op, *z_testWorker, test, *z_testResult, false);
-
-    z_testWorker->pos1 = 0; z_testWorker->pos2 = dataLen+1;
-    optest_avx2(op, *z_testWorker, test, *z_testResult, false);
-
     testWorker->pos1 = 0; testWorker->pos2 = dataLen+1;
     testFunc(op, *testWorker, test, *testResult, false);
 
     testWorker->pos1 = 0; testWorker->pos2 = dataLen+1;
     testFunc(op, *testWorker, test, *testResult, false);
+
+    z_testWorker->pos1 = 0; z_testWorker->pos2 = dataLen+1;
+    z_testFunc(op, *z_testWorker, test, *z_testResult, false);
+
+    z_testWorker->pos1 = 0; z_testWorker->pos2 = dataLen+1;
+    z_testFunc(op, *z_testWorker, test, *z_testResult, false);
 
     auto control_dur = controlResult->duration_ns.count();
     auto test_dur = testResult->duration_ns.count();
@@ -372,8 +391,9 @@ int runDeroOpTests(int testOp, int dataLen) {
     if(testWorker->opt[op]) {
       isOpt = '*';
     }
-    printf("%cOp: %3d - %7ld / %7ld = %6.2f %% - %s | %7ld / %7ld = %6.2f %% - %s\n", isOpt, op, controlResult->duration_ns.count(), testResult->duration_ns.count(), 
-      percent_speedup, valid ? "true" : "false", controlResult->duration_ns.count(), z_testResult->duration_ns.count(), z_percent_speedup, z_valid ? "true" : "false");
+    printf(" %cOp: %3d - %7ld / %7ld = %7.2f %% - %s | %7ld / %7ld = %7.2f %% - %s\n", isOpt, op, 
+      controlResult->duration_ns.count(), testResult->duration_ns.count(), percent_speedup, valid ? "true" : "false",
+      controlResult->duration_ns.count(), z_testResult->duration_ns.count(), z_percent_speedup, z_valid ? "true" : "false");
     if(!valid) {
       numOpsFailed++;
       printf("Vanilla: ");
@@ -394,8 +414,8 @@ int runDeroOpTests(int testOp, int dataLen) {
       for (int i = 0; i < dataLen+1; i++) {
         printf("%02x", controlResult->result[i]);
       }
-      printf("\nZ optimized: ");
-      printf("%7s: ", resultText.c_str());
+      //printf("\nZ optimized: ");
+      printf("\n%7s: ", z_resultText.c_str());
       for (int i = 0; i < dataLen+1; i++) {
         printf("%02x", z_testResult->result[i]);
       }

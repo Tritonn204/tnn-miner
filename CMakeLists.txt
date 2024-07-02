@@ -174,6 +174,10 @@ endif()
 # This is universal regardless of how wheter we compiled or found Boost
 set(TNN_BOOST_LIBS Boost::chrono Boost::context Boost::json Boost::thread Boost::atomic Boost::program_options)
 
+if(APPLE)
+  CPMAddPackage("gh:robinlinden/libsodium-cmake#f568ff02f1bed155ea598c0e803ef3c9db2703d2")
+endif()
+
 #cmake_print_variables(TNN_BOOST_INCLUDES)
 #cmake_print_variables(TNN_BOOST_LIBS)
 

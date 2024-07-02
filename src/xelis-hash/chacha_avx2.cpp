@@ -1,3 +1,5 @@
+#if defined(__AVX2__)
+
 #include "chacha20.hpp"
 #include <inttypes.h>
 #include <immintrin.h>
@@ -195,3 +197,5 @@ void ChaChaCore<R>::process_blocks(Block* blocks)
 
 template void ChaChaCore<10>::process_block(Block&);
 template void ChaChaCore<10>::process_blocks(Block*);
+
+#endif
