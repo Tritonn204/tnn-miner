@@ -12,6 +12,7 @@
 #include <numeric>
 #include <chrono>
 #include <cstring>
+#include <iomanip>
 #include <array>
 #include <cassert>
 #if !defined(__AES__)

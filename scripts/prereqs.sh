@@ -8,11 +8,13 @@ me=$(whoami)
 if [[ "$me" != "root" ]]; then
   SUDO=sudo
 fi
-if [[ -f /etc/lsb-release ]]; then
-  source /etc/lsb-release
+if [[ -f /etc/os-release ]]; then
+  source /etc/os-release
   $SUDO apt update
-  $SUDO apt install -y git wget build-essential cmake clang libssl-dev libudns-dev libfmt-dev libc++-dev lld libsodium-dev
-  if [[ "$DISTRIB_CODENAME" == "noble" ]]; then
+  $SUDO apt install -y git wget build-essential cmake clang libssl-dev libudns-dev libc++-dev lld libsodium-dev
+  if [[ "$VERSION_CODENAME" == "noble" ]]; then
     $SUDO apt install -y libboost1.83-all-dev
+  #elif [[ "$VERSION_CODENAME" == "bookworm" ]]; then
+  #  $SUDO apt install -y libboost1.81-all-dev
   fi
 fi
