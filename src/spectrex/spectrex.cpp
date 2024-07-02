@@ -108,7 +108,7 @@ namespace SpectreX
     free(aw);
   }
 
-  void test() {
+  int test() {
     const char* input = "cb75500eabb7db4d2df02372d033c64085a9cec8f29d66a84ed9a8e38d2be6fcab42ea598f01000000000000000000000000000000000000000000000000000000000000000000000300000103000000";
     byte *in = new byte[80];
     byte out[32];
@@ -127,13 +127,28 @@ namespace SpectreX
 
     // std::reverse(out, out+32);
 
+    int pieces_failed = 0;
+    const char *pow_expected = "ae63221b94390528bd5a092be6247f7173099978bf6b150031c034ed22b37cea";
     printf("POW hash: %s\n", hexStr(w->sha3Hash, 32).c_str());
-    printf("WANT    : ae63221b94390528bd5a092be6247f7173099978bf6b150031c034ed22b37cea\n\n");
+    printf("WANT    : %s\n\n", pow_expected);
 
+    const char *bwt_expected = "271bd27bf393fc8854e4ada0f255cef19c0e86c9b7245088bdafc01318172dc5";
     printf("BWT hash: %s\n", hexStr(w->astrobwtv3Hash, 32).c_str());
-    printf("WANT    : 271bd27bf393fc8854e4ada0f255cef19c0e86c9b7245088bdafc01318172dc5\n\n");
+    printf("WANT    : %s\n\n", bwt_expected);
 
+    const char *heavy_expected = "0b68c38a0d359b9ef74fecfae4b2b0a0ea026fdcee22c1d48bcc824f32050ef5";
     printf("Heavy hash: %s\n", hexStr(out, 32).c_str());
-    printf("WANT      : 0b68c38a0d359b9ef74fecfae4b2b0a0ea026fdcee22c1d48bcc824f32050ef5\n\n");
+    printf("WANT      : %s\n\n", heavy_expected);
+
+    if(memcmp(hexStr(w->sha3Hash, 32).c_str(), pow_expected, 32) != 0) {
+      pieces_failed += 1;
+    }
+    if(memcmp(hexStr(w->astrobwtv3Hash, 32).c_str(), bwt_expected, 32) != 0) {
+      pieces_failed += 1;
+    }
+    if(memcmp(hexStr(out, 32).c_str(), heavy_expected, 32) != 0) {
+      pieces_failed += 1;
+    }
+    return pieces_failed;
   }
 }

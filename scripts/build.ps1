@@ -16,11 +16,16 @@ if (!(Get-Command clang -ErrorAction SilentlyContinue)) {
     Write-Output "Build will fail. Cannot find clang.exe"
 }
 
+VER_SETTING=
+if ($args[1] -neq "") {
+  VER_SETTING=-DTNN_VERSION=$args[1]
+}
+
 # Determine CMake command based on argument
 if ($args[0] -eq "ci") {
-    & c:\mingw64\bin\cmake.exe -DCMAKE_MAKE_PROGRAM=c:/mingw64/bin/ninja.exe -G "Ninja" ..
+    & c:\mingw64\bin\cmake.exe $VER_SETTING -DCMAKE_MAKE_PROGRAM=c:/mingw64/bin/ninja.exe -G "Ninja" ..
 } else {
-    & c:\mingw64\bin\cmake.exe ..
+    & c:\mingw64\bin\cmake.exe $VER_SETTING ..
 }
 
 # Run Ninja build

@@ -163,32 +163,11 @@ void openssl_log_callback(const SSL *ssl, int where, int ret)
   }
 }
 
-void initConstants() {
-  initWolfLUT();
-}
-
 //------------------------------------------------------------------------------
 
 int main(int argc, char **argv)
 {
-#if defined(_WIN32)
-  SetConsoleOutputCP(CP_UTF8);
-#endif
-  setcolor(BRIGHT_WHITE);
-  printf("%s", TNN);
-  boost::this_thread::sleep_for(boost::chrono::seconds(1));
-#if defined(_WIN32)
-  SetConsoleOutputCP(CP_UTF8);
-  HANDLE hSelfToken = NULL;
-
-  ::OpenProcessToken(::GetCurrentProcess(), TOKEN_ALL_ACCESS, &hSelfToken);
-  if (SetPrivilege(hSelfToken, SE_LOCK_MEMORY_NAME, true))
-    std::cout << "Permission Granted for Huge Pages!" << std::endl;
-  else
-    std::cout << "Huge Pages: Permission Failed..." << std::endl;
-
-  SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
-#endif
+  initWolfLUT();
   // Check command line arguments.
   lookup2D_global = (uint16_t *)malloc_huge_pages(regOps_size * (256 * 256) * sizeof(uint16_t));
   lookup3D_global = (byte *)malloc_huge_pages(branchedOps_size * (256 * 256) * sizeof(byte));
@@ -210,16 +189,38 @@ int main(int argc, char **argv)
   }
   catch (std::exception &e)
   {
+    printf("%s v%s\n", consoleLine, versionString);
     std::cerr << "Error: " << e.what() << "\n";
     std::cerr << "Remember: Long options now use a double-dash -- instead of a single-dash -\n";
     return -1;
   }
   catch (...)
   {
-    std::cerr << "Unknown error!"
-              << "\n";
+    std::cerr << "Unknown error!" << "\n";
     return -1;
   }
+
+#if defined(_WIN32)
+  SetConsoleOutputCP(CP_UTF8);
+#endif
+  setcolor(BRIGHT_WHITE);
+  printf("%s v%s\n", consoleLine, versionString);
+  if (!vm.count("quiet")) {
+    printf("%s", TNN);
+  }
+  boost::this_thread::sleep_for(boost::chrono::seconds(1));
+#if defined(_WIN32)
+  SetConsoleOutputCP(CP_UTF8);
+  HANDLE hSelfToken = NULL;
+
+  ::OpenProcessToken(::GetCurrentProcess(), TOKEN_ALL_ACCESS, &hSelfToken);
+  if (SetPrivilege(hSelfToken, SE_LOCK_MEMORY_NAME, true))
+    std::cout << "Permission Granted for Huge Pages!" << std::endl;
+  else
+    std::cout << "Huge Pages: Permission Failed..." << std::endl;
+
+  SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
+#endif
 
   if (vm.count("help"))
   {
@@ -261,15 +262,14 @@ int main(int argc, char **argv)
 
   if (vm.count("spectre-test"))
   {
-    SpectreX::test();
-    return 0;
+    return SpectreX::test();
   }
 
   if (vm.count("xelis-test"))
   {
-    xelis_runTests();
-    xelis_runTests_v2();
-    return 0;
+    int rc = xelis_runTests();
+    rc += xelis_runTests_v2();
+    return rc;
   }
 
   if (vm.count("xelis-bench"))
@@ -689,7 +689,6 @@ Mining:
 
   // Create worker threads and set CPU affinity
  //  mutex.lock();
-  initConstants();
   if (false /*gpuMine*/)
   {
     // boost::thread t(cudaMine);
