@@ -74,8 +74,8 @@ cmake_print_variables(CMAKE_CXX_FLAGS_RELEASE)
 
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fstack-protector")
 
-set (CMAKE_STANDARD_REQUIRED TRUE)
 set (CMAKE_CXX_STANDARD 20)
+set (CMAKE_STANDARD_REQUIRED TRUE)
 
 enable_language(ASM)
 
@@ -115,7 +115,6 @@ endif()
 include(${CPM_DOWNLOAD_LOCATION})
 
 CPMAddPackage("gh:nlohmann/json@3.10.5")
-CPMAddPackage("gh:fmtlib/fmt#10.2.1")
 
 set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL REQUIRED)
@@ -231,4 +230,4 @@ endif()
 if(NOT APPLE AND NOT WIN32)
   target_link_libraries(${PROJECT_NAME} udns)
 endif()
-target_link_libraries(${PROJECT_NAME} fmt Threads::Threads nlohmann_json::nlohmann_json ${TNN_BOOST_LIBS} OpenSSL::SSL OpenSSL::Crypto sodium) # blake3)
+target_link_libraries(${PROJECT_NAME} Threads::Threads nlohmann_json::nlohmann_json ${TNN_BOOST_LIBS} OpenSSL::SSL OpenSSL::Crypto sodium) # blake3)

@@ -13,8 +13,6 @@
 //
 //------------------------------------------------------------------------------
 
-#define FMT_HEADER_ONLY
-
 #include "tnn-common.hpp"
 #include "rootcert.h"
 #include "DNSResolver.hpp"
@@ -54,8 +52,6 @@
 #include <thread>
 
 #include <chrono>
-#include <fmt/format.h>
-#include <fmt/printf.h>
 
 #include <hugepages.h>
 #include <future>
@@ -639,25 +635,21 @@ Benchmarking:
   auto now = std::chrono::steady_clock::now();
   auto seconds = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
   int64_t hashrate = counter / bench_duration;
-  std::string intro = fmt::sprintf("Mined for %d seconds, average rate of ", seconds);
-  std::cout << intro << std::flush;
+  std::cout << "Mined for " << seconds << " seconds, average rate of " << std::flush;
+
+  std::string rateSuffix = " H/s";
+  double rate = (double)hashrate;
   if (hashrate >= 1000000)
   {
-    double rate = (double)(hashrate / 1000000.0);
-    std::string hrate = fmt::sprintf("%.3f MH/s", rate);
-    std::cout << hrate << std::endl;
+    rate = (double)(hashrate / 1000000.0);
+    rateSuffix = " MH/s";
   }
   else if (hashrate >= 1000)
   {
-    double rate = (double)(hashrate / 1000.0);
-    std::string hrate = fmt::sprintf("%.3f KH/s", rate);
-    std::cout << hrate << std::endl;
+    rate = (double)(hashrate / 1000.0);
+    rateSuffix = " KH/s";
   }
-  else
-  {
-    std::string hrate = fmt::sprintf("%.3f H/s", (double)hashrate);
-    std::cout << hrate << std::endl;
-  }
+  std::cout << std::setprecision(3) << rate << rateSuffix << std::endl;
   boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
   return 0;
 }
@@ -816,37 +808,28 @@ startReporting:
 
       int64_t hashrate = 1.0 * std::accumulate(rate30sec.begin(), rate30sec.end(), 0LL) / (rate30sec.size() * reportInterval);
 
+      std::string rateSuffix = " H/s";
+      double rate = (double)hashrate;
       if (hashrate >= 1000000)
       {
-        double rate = (double)(hashrate / 1000000.0);
-        std::string hrate = fmt::sprintf("HASHRATE %.3f MH/s", rate);
-       //  mutex.lock();
-        setcolor(BRIGHT_WHITE);
-        std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine << versionString << " ";
-        setcolor(CYAN);
-        std::cout << std::setw(2) << hrate << " | " << std::flush;
+        rate = (double)(hashrate / 1000000.0);
+        rateSuffix = " MH/s";
       }
       else if (hashrate >= 1000)
       {
-        double rate = (double)(hashrate / 1000.0);
-        std::string hrate = fmt::sprintf("HASHRATE %.3f KH/s", rate);
-       //  mutex.lock();
-        setcolor(BRIGHT_WHITE);
-        std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine << versionString << " ";
-        setcolor(CYAN);
-        std::cout << std::setw(2) << hrate << " | " << std::flush;
-      }
-      else
-      {
-        std::string hrate = fmt::sprintf("HASHRATE %.0f H/s", (double)hashrate, hrate);
-       //  mutex.lock();
-        setcolor(BRIGHT_WHITE);
-        std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine << versionString << " ";
-        setcolor(CYAN);
-        std::cout << std::setw(2) << hrate << " | " << std::flush;
+        rate = (double)(hashrate / 1000.0);
+        rateSuffix = " KH/s";
       }
 
-      std::string uptime = fmt::sprintf("%dd-%dh-%dm-%ds >> ", daysUp, hoursUp, minutesUp, secondsUp);
+      setcolor(BRIGHT_WHITE);
+      std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine << versionString << " ";
+      setcolor(CYAN);
+      std::cout << std::setw(2) << std::setprecision(3) << "HASHRATE " << rate << rateSuffix << " | " << std::flush;
+
+      std::string uptime = std::to_string(daysUp) + "d-" +
+                     std::to_string(hoursUp) + "h-" +
+                     std::to_string(minutesUp) + "m-" +
+                     std::to_string(secondsUp) + "s >> ";
 
       double dPrint;
 
