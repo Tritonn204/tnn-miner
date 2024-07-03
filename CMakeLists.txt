@@ -227,6 +227,7 @@ file(GLOB all_SRCS
   "${PROJECT_SOURCE_DIR}/src/net/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/miner/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/miner/*.c"
+  "${PROJECT_SOURCE_DIR}/lib/ChaCha20-SIMD/*.c"
 )
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/lib/BLAKE3/c)
@@ -247,4 +248,4 @@ endif()
 if(NOT APPLE AND NOT WIN32)
   target_link_libraries(${PROJECT_NAME} udns)
 endif()
-target_link_libraries(${PROJECT_NAME} Threads::Threads nlohmann_json::nlohmann_json ${TNN_BOOST_LIBS} OpenSSL::SSL OpenSSL::Crypto sodium) # blake3)
+target_link_libraries(${PROJECT_NAME} Threads::Threads nlohmann_json::nlohmann_json ${TNN_BOOST_LIBS} OpenSSL::SSL OpenSSL::Crypto sodium blake3) # blake3)

@@ -11,7 +11,7 @@
 #include <cstring>
 #include <array>
 #include <cassert>
-#include <chacha20.hpp>
+// #include <chacha20.hpp>
 
 #if !defined(__AES__)
   #include <openssl/aes.h>

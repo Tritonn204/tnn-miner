@@ -1,9 +1,10 @@
 #include "xelis-hash.hpp"
 #include <stdlib.h>
 #include <iostream>
-#include "chacha20.hpp"
+#include "chacha20.h"
 #include <crc32.h>
 #include <BLAKE3/c/blake3.h>
+#include <chacha20.h>
 
 #if defined(__x86_64__)
 #include <emmintrin.h>
@@ -227,32 +228,12 @@ static inline void aes_round(uint8_t *block, const uint8_t *key)
 //   // std::cout << "Stage 1 scratch pad CRC32: 0x" << std::hex << std::setw(8) << std::setfill('0') << crc32.result() << std::endl;
 // }
 
-void stage_1_sodium(const uint8_t *input, uint64_t *scratch_pad, size_t INPUT_LEN) {
-  const size_t CHUNK_SIZE = 32;
-  const size_t NONCE_SIZE = 12;
-  const size_t OUTPUT_SIZE = XELIS_MEMORY_SIZE_V2 * 8;
-  const size_t CHUNKS = 4;
-
-	uint8_t key[CHUNK_SIZE*CHUNKS] = {0};
-	uint8_t nonce[32] = {1};
-	memcpy(key, input, INPUT_LEN);
-	// blake3(input, INPUT_LEN, nonce);
-
-	uint8_t *t = reinterpret_cast<uint8_t *>(scratch_pad);
-	crypto_stream_chacha20(t, OUTPUT_SIZE/CHUNKS, nonce, key+0*CHUNK_SIZE);
-
-	t += OUTPUT_SIZE/CHUNKS;
-	crypto_stream_chacha20_ietf(t, OUTPUT_SIZE/CHUNKS, t-NONCE_SIZE, key+1*CHUNK_SIZE);
-
-	t += OUTPUT_SIZE/CHUNKS;
-	crypto_stream_chacha20_ietf(t, OUTPUT_SIZE/CHUNKS, t-NONCE_SIZE, key+2*CHUNK_SIZE);
-
-	t += OUTPUT_SIZE/CHUNKS;
-	crypto_stream_chacha20_ietf(t, OUTPUT_SIZE/CHUNKS, t-NONCE_SIZE, key+3*CHUNK_SIZE);
-
-  // Crc32 crc32;
-  // crc32.input(scratch_pad, 10);
-  // std::cout << "Stage 1 SODIUM scratch pad CRC32: 0x" << std::hex << std::setw(8) << std::setfill('0') << crc32.result() << std::endl;
+void chacha_encrypt(uint8_t *key, uint8_t *nonce, uint8_t *in, uint8_t *out, size_t bytes, uint32_t rounds)
+{
+	uint8_t state[48] = {0};
+	ChaCha20SetKey(state, key);
+	ChaCha20SetNonce(state, nonce);
+	ChaCha20EncryptBytes(state, in, out, bytes, rounds);
 }
 
 void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
@@ -264,37 +245,40 @@ void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
 
   uint8_t *t = reinterpret_cast<uint8_t *>(sp);
   uint8_t key[chunk_size * chunks] = {0};
-  uint8_t nonce[32] = {1};
+  uint8_t K2[32] = {0};
+  uint8_t buffer[chunk_size*2] = {0};
+
   memcpy(key, input, input_len);
-  // blake3(input, input_len, nonce);
+  blake3(input, input_len, buffer);
 
-  int outlen;
-  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-
-  EVP_EncryptInit_ex(ctx, EVP_chacha20(), NULL, key + 0 * chunk_size, nonce);
-  EVP_EncryptUpdate(ctx, t, &outlen, t, output_size / chunks);
-  EVP_EncryptFinal_ex(ctx, t + outlen, &outlen);
+  memcpy(buffer + chunk_size, key, chunk_size);
+  blake3(buffer, chunk_size*2, K2);
+  chacha_encrypt(K2, buffer, NULL, t, output_size / chunks, 8);
 
   t += output_size / chunks;
 
-  EVP_EncryptInit_ex(ctx, EVP_chacha20(), NULL, key + 1 * chunk_size, t - 12);
-  EVP_EncryptUpdate(ctx, t, &outlen, t, output_size / chunks);
-  EVP_EncryptFinal_ex(ctx, t + outlen, &outlen);
+  memcpy(buffer, K2, chunk_size);
+  memcpy(buffer + chunk_size, key + chunk_size, chunk_size);
+  blake3(buffer, chunk_size*2, K2);
+  chacha_encrypt(K2, t - nonce_size, NULL, t, output_size / chunks, 8);
 
   t += output_size / chunks;
 
-  EVP_EncryptInit_ex(ctx, EVP_chacha20(), NULL, key + 2 * chunk_size, t - 12);
-  EVP_EncryptUpdate(ctx, t, &outlen, t, output_size / chunks);
-  EVP_EncryptFinal_ex(ctx, t + outlen, &outlen);
+  memcpy(buffer, K2, chunk_size);
+  memcpy(buffer + chunk_size, key + 2*chunk_size, chunk_size);
+  blake3(buffer, chunk_size*2, K2);
+  chacha_encrypt(K2, t - nonce_size, NULL, t, output_size / chunks, 8);
 
   t += output_size / chunks;
 
-  EVP_EncryptInit_ex(ctx, EVP_chacha20(), NULL, key + 3 * chunk_size, t - 12);
-  EVP_EncryptUpdate(ctx, t, &outlen, t, output_size / chunks);
-  EVP_EncryptFinal_ex(ctx, t + outlen, &outlen);
+  memcpy(buffer, K2, chunk_size);
+  memcpy(buffer + chunk_size, key + 3*chunk_size, chunk_size);
+  blake3(buffer, chunk_size*2, K2);
+  chacha_encrypt(K2, t - nonce_size, NULL, t, output_size / chunks, 8);
 
-  EVP_CIPHER_CTX_free(ctx);
-
+  // Crc32 crc32;
+  // crc32.input((uint8_t *)sp, XELIS_MEMORY_SIZE_V2 * 8);
+  // printf("%lu\n", crc32.result());
   // Crc32 crc32;
   // crc32.input(scratch_pad, 10);
   // std::cout << "Stage 1 scratch pad CRC32: 0x" << std::hex << std::setw(8) << std::setfill('0') << crc32.result() << std::endl;
@@ -316,7 +300,7 @@ void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
 //     mem_buffer_b[i] = scratchPad[(addr_b + i) % XELIS_MEMORY_SIZE];
 //   }
 
-//   for (uint16_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V2; ++i)
+//   for (uint16_t i = 0; i < XELIS_SCRATCHPAD_XELIS_SCRATCHPAD_ITERS_V2_V2; ++i)
 //   {
 //     __builtin_prefetch(&mem_buffer_a[(i + 1) % XELIS_BUFFER_SIZE_V2], 0, 3);
 //     __builtin_prefetch(&mem_buffer_b[(i + 1) % XELIS_BUFFER_SIZE_V2], 0, 3);
@@ -401,7 +385,7 @@ void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
 //     addr_a = (result >> 15) & 0x7FFF;
 //     scratchPad[addr_a] = result;
 
-//     size_t index = XELIS_SCRATCHPAD_ITERS_V2 - i - 1;
+//     size_t index = XELIS_SCRATCHPAD_XELIS_SCRATCHPAD_ITERS_V2_V2 - i - 1;
 //     // printf("post result: %llu\n", result);
 //     if (index < 4)
 //     {
@@ -442,11 +426,82 @@ inline uint64_t wrapping_mul(uint64_t a, uint64_t b) {
     return a * b;
 }
 
+#define COMBINE_UINT64(high, low) (((__uint128_t)(high) << 64) | (low))
+static inline __uint128_t combine_uint64(uint64_t high, uint64_t low)
+{
+	return ((__uint128_t)high << 64) | low;
+}
+
+void static inline uint64_to_le_bytes(uint64_t value, uint8_t *bytes)
+{
+	for (int i = 0; i < 8; i++)
+	{
+		bytes[i] = value & 0xFF;
+		value >>= 8;
+	}
+}
+
+uint64_t static inline le_bytes_to_uint64(const uint8_t *bytes)
+{
+	uint64_t value = 0;
+	for (int i = 7; i >= 0; i--)
+		value = (value << 8) | bytes[i];
+	return value;
+}
+
+void static inline aes_single_round(uint8_t *block, const uint8_t *key)
+{
+	__m128i block_vec = _mm_loadu_si128((const __m128i *)block);
+	__m128i key_vec = _mm_loadu_si128((const __m128i *)key);
+
+	// Perform single AES encryption round
+	block_vec = _mm_aesenc_si128(block_vec, key_vec);
+
+	_mm_storeu_si128((__m128i *)block, block_vec);
+}
+
+static inline uint64_t Divide128Div64To64(uint64_t high, uint64_t low, uint64_t divisor, uint64_t *remainder)
+{
+	uint64_t result;
+	__asm__("divq %[v]"
+			: "=a"(result), "=d"(*remainder) // Output parametrs, =a for rax, =d for rdx, [v] is an
+			// alias for divisor, input paramters "a" and "d" for low and high.
+			: [v] "r"(divisor), "a"(low), "d"(high));
+	return result;
+}
+
+static inline uint64_t udiv(uint64_t high, uint64_t low, uint64_t divisor)
+{
+	uint64_t remainder;
+
+	if (high < divisor)
+	{
+		return Divide128Div64To64(high, low, divisor, &remainder);
+	}
+	else
+	{
+		uint64_t qhi = Divide128Div64To64(0, high, divisor, &high);
+		return Divide128Div64To64(high, low, divisor, &remainder);
+	}
+  return low;
+}
+
+static inline uint64_t ROTR(uint64_t x, uint32_t r)
+{
+	asm("rorq %%cl, %0" : "+r"(x) : "c"(r));
+	return x;
+}
+
+static inline uint64_t ROTL(uint64_t x, uint32_t r)
+{
+	asm("rolq %%cl, %0" : "+r"(x) : "c"(r));
+	return x;
+}
+
 void stage_3(uint64_t *scratch_pad)
 {
     alignas(64) const uint8_t *key = KEY;
     alignas(64) uint8_t block[16] = {0};
-    const uint64_t buffer_size = XELIS_BUFFER_SIZE_V2;
 
     alignas(64) uint64_t *mem_buffer_a = scratch_pad;
     alignas(64) uint64_t *mem_buffer_b = scratch_pad + XELIS_BUFFER_SIZE_V2;
@@ -456,16 +511,19 @@ void stage_3(uint64_t *scratch_pad)
     size_t r = 0;
 
     for (size_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V2; ++i) {
-        alignas(64) uint64_t mem_a = mem_buffer_a[addr_a % buffer_size];
-        alignas(64) uint64_t mem_b = mem_buffer_b[addr_b % buffer_size];
+        uint64_t mem_a = mem_buffer_a[addr_a % XELIS_BUFFER_SIZE_V2];
+        uint64_t mem_b = mem_buffer_b[addr_b % XELIS_BUFFER_SIZE_V2];
 
-        std::copy(&mem_b, &mem_b + 8, block);
-        std::copy(&mem_a, &mem_a + 8, block + 8);
+        // std::copy(&mem_b, &mem_b + 8, block);
+        // std::copy(&mem_a, &mem_a + 8, block + 8);
+        uint64_to_le_bytes(mem_b, block);
+		    uint64_to_le_bytes(mem_a, block + 8);
 
         aes_round(block, key);
 
-        uint64_t hash1 = 0, hash2 = 0;
-        std::copy(block, block + 8, &hash1);
+        alignas(64) uint64_t hash1 = 0, hash2 = 0;
+        hash1 = le_bytes_to_uint64(block);
+        // std::copy(block, block + 8, &hash1);
         // hash1 = _byteswap_uint64(hash1);
         hash2 = mem_a ^ mem_b;
 
@@ -474,39 +532,72 @@ void stage_3(uint64_t *scratch_pad)
         // printf("pre result: %llu\n", result);
 
         for (size_t j = 0; j < XELIS_BUFFER_SIZE_V2; ++j) {
-            uint64_t a = mem_buffer_a[(result % buffer_size)];
-            uint64_t b = mem_buffer_b[~rr64(result, r) % buffer_size];
+            uint64_t a = mem_buffer_a[(result % XELIS_BUFFER_SIZE_V2)];
+            uint64_t b = mem_buffer_b[~ROTR(result, r) % XELIS_BUFFER_SIZE_V2];
             uint64_t c = (r < XELIS_BUFFER_SIZE_V2) ? mem_buffer_a[r] : mem_buffer_b[r - XELIS_BUFFER_SIZE_V2];
-            r = (r + 1) % XELIS_MEMORY_SIZE_V2;
+            r = (r < XELIS_MEMORY_SIZE_V2 - 1) ? r + 1 : 0;
 
-            // printf("%d, ", rl64(result, (uint32_t)c) & 0xF);
+            // printf("a %llu, b %llu, c %llu, ", a, b, c);
             uint64_t v;
-            switch (rl64(result, (uint32_t)c) & 0xF) {
-                case 0: v = result ^ rl64(c, (uint32_t)(i * j)) ^ b; break;
-                case 1: v = result ^ rr64(c, (uint32_t)(i * j)) ^ a; break;
-                case 2: v = result ^ a ^ b ^ c; break;
-                case 3: v = result ^ wrapping_mul(wrapping_add(a, b), c); break;
-                case 4: v = result ^ wrapping_mul(wrapping_sub(b, c), a); break;
-                case 5: v = result ^ wrapping_add(wrapping_sub(c, a), b); break;
-                case 6: v = result ^ wrapping_add(wrapping_sub(a, b), c); break;
-                case 7: v = result ^ wrapping_add(wrapping_mul(b, c), a); break;
-                case 8: v = result ^ wrapping_add(wrapping_mul(c, a), b); break;
-                case 9: v = result ^ wrapping_mul(wrapping_mul(a, b), c); break;
-                case 10: v = result ^ ((__uint128_t)a << 64 | b) % (c + 1); break;
-                case 11: v = result ^ ((__uint128_t)b << 64 | c) % ((__uint128_t)rl64(result, (uint32_t)r) << 64 | a + 2); break;
-                case 12: v = result ^ ((__uint128_t)c << 64 | a) / ((__uint128_t)(b + 3)); break;
-                case 13: v = result ^ ((__uint128_t)rl64(result, (uint32_t)r) << 64 | b) / (((__uint128_t)a << 64) | (c + 4)); break;
-                case 14: v = result ^ (((__uint128_t)b << 64 | a) * c >> 64); break;
-                case 15: v = result ^ (((__uint128_t)a << 64 | c) * ((__uint128_t)rr64(result, (uint32_t)r) << 64 | b) >> 64); break;
+            __uint128_t t1, t2;
+            int scase = ROTL(result, (uint32_t)c) & 0xF;
+            switch (ROTL(result, (uint32_t)c) & 0xF) {
+              case 0: v = ROTL(c, i * j) ^ b; break;
+              case 1: v = ROTR(c, i * j) ^ a; break;
+              case 2:
+                v = a ^ b ^ c;
+                break;
+              case 3:
+                v = ((a + b) * c);
+                break;
+              case 4:
+                v = ((b - c) * a);
+                break;
+              case 5:
+                v = (c - a + b);
+                break;
+              case 6:
+                v = (a - b + c);
+                break;
+              case 7:
+                v = (b * c + a);
+                break;
+              case 8:
+                v = (c * a + b);
+                break;
+              case 9:
+                v = (a * b * c);
+                break;
+              case 10:
+              {
+                v = COMBINE_UINT64(a,b) % (c | 1);
+              }
+              break;
+              case 11:
+              {
+                t2 = COMBINE_UINT64(ROTL(result, r), a | 2);
+                v = (t2 > COMBINE_UINT64(b,c)) ? c : COMBINE_UINT64(b,c) % t2;
+              }
+              break;
+              case 12: v = udiv(c, a, b | 4); break;
+              case 13:
+              {
+                t1 = COMBINE_UINT64(ROTL(result, r), b);
+                t2 = COMBINE_UINT64(a, c | 8);
+                v = (t1 > t2) ? t1 / t2 : a ^ b;
+              }
+              break;
+              case 14: v = (COMBINE_UINT64(b,a) * c) >> 64; break;
+              case 15: v = (COMBINE_UINT64(a,c) * COMBINE_UINT64(ROTR(result, r), b)) >> 64; break;
             }
 
-            result = rl64(v, 1);
+            result = ROTL(result ^ v, 1);
 
-            // printf("post result: %llu\n", result);
+            // printf("post result: %llu, case: %d\n", result, scase);
 
             uint64_t t = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - j - 1] ^ result;
             mem_buffer_a[XELIS_BUFFER_SIZE_V2 - j - 1] = t;
-            mem_buffer_b[j] ^= rr64(t, (uint32_t)result);
+            mem_buffer_b[j] ^= ROTR(t, (uint32_t)result);
         }
         // printf("post result: %llu\n", result);
         addr_a = result;
@@ -514,9 +605,124 @@ void stage_3(uint64_t *scratch_pad)
     }
 
   // Crc32 crc32;
-  // crc32.input(scratch_pad, XELIS_MEMORY_SIZE_V2 * 8);
-  // std::cout << "Stage 3 scratch pad CRC32: 0x" << std::hex << std::setw(8) << std::setfill('0') << crc32.result() << std::endl;
+  // crc32.input((uint8_t *)scratch_pad, XELIS_MEMORY_SIZE_V2 * 8);
+  // printf("%llu\n", crc32.result());
 }
+
+
+// void stage_3(uint64_t *scratch)
+// {
+// 	uint64_t *mem_buffer_a = scratch;
+// 	uint64_t *mem_buffer_b = &scratch[XELIS_BUFFER_SIZE_V2];
+
+// 	uint64_t addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V2 - 1];
+// 	uint64_t addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - 1] >> 32;
+// 	uint32_t r = 0;
+
+// 	for (uint32_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V2; i++)
+// 	{
+// 		uint64_t mem_a = mem_buffer_a[addr_a % XELIS_BUFFER_SIZE_V2];
+// 		uint64_t mem_b = mem_buffer_b[addr_b % XELIS_BUFFER_SIZE_V2];
+
+// 		uint8_t block[16];
+// 		uint64_to_le_bytes(mem_b, block);
+// 		uint64_to_le_bytes(mem_a, block + 8);
+// 		aes_single_round(block, KEY);
+
+// 		uint64_t hash1 = le_bytes_to_uint64(block);
+// 		uint64_t hash2 = mem_a ^ mem_b;
+// 		uint64_t result = ~(hash1 ^ hash2);
+
+// 		for (uint32_t j = 0; j < XELIS_BUFFER_SIZE_V2; j++)
+// 		{
+// 			uint64_t a = mem_buffer_a[result % XELIS_BUFFER_SIZE_V2];
+// 			uint64_t b = mem_buffer_b[~rr64(result, r) % XELIS_BUFFER_SIZE_V2];
+// 			uint64_t c = (r < XELIS_BUFFER_SIZE_V2) ? mem_buffer_a[r] : mem_buffer_b[r - XELIS_BUFFER_SIZE_V2];
+// 			r = (r < XELIS_MEMORY_SIZE_V2 - 1) ? r + 1 : 0;
+
+// 			uint64_t v;
+// 			__uint128_t t1, t2;
+// 			switch (rl64(result, (uint32_t)c) & 0xf)
+// 			{
+// 			case 0:
+// 				v = rl64(c, i * j) ^ b;
+// 				break;
+// 			case 1:
+// 				v = rr64(c, i * j) ^ a;
+// 				break;
+// 			case 2:
+// 				v = a ^ b ^ c;
+// 				break;
+// 			case 3:
+// 				v = ((a + b) * c);
+// 				break;
+// 			case 4:
+// 				v = ((b - c) * a);
+// 				break;
+// 			case 5:
+// 				v = (c - a + b);
+// 				break;
+// 			case 6:
+// 				v = (a - b + c);
+// 				break;
+// 			case 7:
+// 				v = (b * c + a);
+// 				break;
+// 			case 8:
+// 				v = (c * a + b);
+// 				break;
+// 			case 9:
+// 				v = (a * b * c);
+// 				break;
+// 			case 10:
+// 			{
+// 				t1 = combine_uint64(a, b);
+// 				uint64_t t2 = c | 1;
+// 				v = t1 % t2;
+// 			}
+// 			break;
+// 			case 11:
+// 			{
+// 				t1 = combine_uint64(b, c);
+// 				t2 = combine_uint64(rl64(result, r), a | 2);
+// 				v = (t2 > t1) ? c : t1 % t2;
+// 			}
+// 			break;
+// 			case 12:
+// 				v = udiv(c, a, b | 4);
+// 				break;
+// 			case 13:
+// 			{
+// 				t1 = combine_uint64(rl64(result, r), b);
+// 				t2 = combine_uint64(a, c | 8);
+// 				v = (t1 > t2) ? t1 / t2 : a ^ b;
+// 			}
+// 			break;
+// 			case 14:
+// 			{
+// 				t1 = combine_uint64(b, a);
+// 				uint64_t t2 = c;
+// 				v = (t1 * t2) >> 64;
+// 			}
+// 			break;
+// 			case 15:
+// 			{
+// 				t1 = combine_uint64(a, c);
+// 				t2 = combine_uint64(rr64(result, r), b);
+// 				v = (t1 * t2) >> 64;
+// 			}
+// 			break;
+// 			}
+// 			result = rl64(result ^ v, 1);
+
+// 			uint64_t t = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - j - 1] ^ result;
+// 			mem_buffer_a[XELIS_BUFFER_SIZE_V2 - j - 1] = t;
+// 			mem_buffer_b[j] ^= rr64(t, result);
+// 		}
+// 		addr_a = result;
+// 		addr_b = isqrt(result);
+// 	}
+// }
 
 // void xelis_hash_old(byte *input, workerData_xelis_v2 &worker, byte *hashResult)
 // {
@@ -554,7 +760,8 @@ void stage_3(uint64_t *scratch_pad)
 void xelis_hash_v2(byte *input, workerData_xelis_v2 &worker, byte *hashResult)
 {
   stage_1(input, worker.scratchPad, 112);
-  // stage_3(worker.scratchPad);
+  stage_3(worker.scratchPad);
+  blake3((uint8_t*)worker.scratchPad, XELIS_MEMORY_SIZE_V2 * 8, hashResult);
 }
 
 void xelis_benchmark_cpu_hash_v2()
@@ -573,7 +780,7 @@ void xelis_benchmark_cpu_hash_v2()
     // input[0] = i & 0xFF;
     // input[1] = (i >> 8) & 0xFF;
     memset(worker.scratchPad, 0, XELIS_MEMORY_SIZE_V2*8);
-    stage_1(input, worker.scratchPad, 112);
+    xelis_hash_v2(input, worker, hash_result);
   }
   auto end = std::chrono::high_resolution_clock::now();
 
@@ -582,33 +789,14 @@ void xelis_benchmark_cpu_hash_v2()
   std::cout << "H/s: " << ((ITERATIONS * 1000.0) / elapsed.count()) << std::endl;
   std::cout << "ms per hash: " << (elapsed.count() / ITERATIONS) << std::endl;
 
-  Crc32 crc32;
-  crc32.input(reinterpret_cast<uint8_t*>(worker.scratchPad), 10);
-  std::cout << "Stage 1 scratch pad CRC32: 0x" << std::hex << std::setw(8) << std::setfill('0') << crc32.result() << std::endl;
-
-  if(sodium_init() != 0) {
-    std::cout << "Unable to initialize Sodium" << std::endl;
-    exit(1);
+  for (int i = 0; i < 32; i++) {
+    printf("%02x", hash_result[i]);
   }
+  printf("\n");
 
-  start = std::chrono::high_resolution_clock::now();
-  for (uint32_t i = 0; i < ITERATIONS; ++i)
-  {
-    // input[0] = i & 0xFF;
-    // input[1] = (i >> 8) & 0xFF;
-    stage_1_sodium(input, worker2.scratchPad, 112);
-  }
-  end = std::chrono::high_resolution_clock::now();
-
-  elapsed = end - start;
-  std::cout << "\nSODIUM Time took: " << elapsed.count() << " ms" << std::endl;
-  std::cout << "SODIUM H/s: " << ((ITERATIONS * 1000.0) / elapsed.count()) << std::endl;
-  std::cout << "SODIUM ms per hash: " << (elapsed.count() / ITERATIONS) << std::endl;
-
-  Crc32 crc32_2;
-  crc32_2.input(reinterpret_cast<uint8_t*>(worker2.scratchPad), 10);
-  std::cout << "Stage 1 SODIUM scratch pad CRC32: 0x" << std::hex << std::setw(8) << std::setfill('0') << crc32_2.result() << std::endl;
-
+  // Crc32 crc32;
+  // crc32.input(reinterpret_cast<uint8_t*>(worker.scratchPad), 10);
+  // std::cout << "Stage 1 scratch pad CRC32: 0x" << std::hex << std::setw(8) << std::setfill('0') << crc32.result() << std::endl;
 }
 
 static int char2int(char input)
