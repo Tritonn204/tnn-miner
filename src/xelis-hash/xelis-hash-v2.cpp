@@ -827,33 +827,6 @@ namespace xelis_tests_v2
 {
   using Hash = std::array<byte, XELIS_HASH_SIZE>;
 
-  bool test_real()
-  {
-    alignas(64) workerData_xelis_v2 worker;
-    byte hash_result[XELIS_HASH_SIZE] = {0};
-    alignas(64) byte input[XELIS_BYTES_ARRAY_INPUT] = {0};
-
-    hex2bin(testTemplate,
-            (char *)input);
-
-    printf("sanity check: ");
-    for (int i = 0; i < 112; i++)
-    {
-      printf("%02x", input[i]);
-    }
-    printf("\n");
-
-    xelis_hash_v2(input, worker, hash_result);
-
-    printf("hoping for: 446e381b592967518c2b184c7115f9446b65921358eeb751363663e3474e0300\ngot: ");
-    for (int i = 0; i < 32; i++)
-    {
-      printf("%02x", hash_result[i]);
-    }
-    printf("\n");
-    return true;
-  }
-
   bool test_input(const char *test_name, byte *input, size_t input_size, const Hash &expected_hash)
   {
     alignas(64) workerData_xelis_v2 worker;
@@ -885,23 +858,32 @@ namespace xelis_tests_v2
   {
     alignas(32) byte input[112] = {0};
     Hash expected_hash = {
-        21, 151, 162, 132, 117, 237, 123, 209, 162, 83, 125, 103,
-        120, 231, 142, 171, 252, 240, 191, 215, 40, 185,
-        76, 205, 230, 124, 118, 192, 230, 103, 128, 118};
+		126, 219, 112, 240, 116, 133, 115,
+		144, 39, 40, 164, 105, 30, 158, 45,
+		126, 64, 67, 238, 52, 200, 35, 161, 19,
+		144, 211, 214, 225, 95, 190, 146, 27};
 
     return test_input("test_zero_input", input, sizeof(input), expected_hash);
   }
 
   bool test_xelis_input()
   {
-    alignas(64) byte input[XELIS_BYTES_ARRAY_INPUT] = {0};
-
-    const char *custom = "xelis-hashing-algorithm";
-    std::memcpy(input, custom, std::strlen(custom));
+    alignas(64) byte input[] = {
+            172, 236, 108, 212, 181, 31, 109, 45, 44, 242, 54, 225, 143, 133,
+            89, 44, 179, 108, 39, 191, 32, 116, 229, 33, 63, 130, 33, 120, 185, 89,
+            146, 141, 10, 79, 183, 107, 238, 122, 92, 222, 25, 134, 90, 107, 116,
+            110, 236, 53, 255, 5, 214, 126, 24, 216, 97, 199, 148, 239, 253, 102,
+            199, 184, 232, 253, 158, 145, 86, 187, 112, 81, 78, 70, 80, 110, 33,
+            37, 159, 233, 198, 1, 178, 108, 210, 100, 109, 155, 106, 124, 124, 83,
+            89, 50, 197, 115, 231, 32, 74, 2, 92, 47, 25, 220, 135, 249, 122,
+            172, 220, 137, 143, 234, 68, 188
+    };
 
     Hash expected_hash = {
-        106, 106, 173, 8, 207, 59, 118, 108, 176, 196, 9, 124, 250, 195, 3,
-        61, 30, 146, 238, 182, 88, 83, 115, 81, 139, 56, 3, 28, 176, 86, 68, 21};
+            199, 114, 154, 28, 4, 164, 196, 178, 117, 17, 148,
+            203, 125, 228, 51, 145, 162, 222, 106, 202, 205,
+            55, 244, 178, 94, 29, 248, 242, 98, 221, 158, 179
+    };
     return test_input("test_xelis_input", input, sizeof(input), expected_hash);
   }
 }
@@ -911,8 +893,6 @@ int xelis_runTests_v2()
   bool all_tests_passed = true;
   all_tests_passed &= xelis_tests_v2::test_zero_input();
   all_tests_passed &= xelis_tests_v2::test_xelis_input();
-
-  xelis_tests_v2::test_real();
 
   if (all_tests_passed)
   {
