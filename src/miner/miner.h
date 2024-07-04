@@ -152,6 +152,7 @@ inline void printSupported()
   pSupport("SSE3", __builtin_cpu_supports("sse3"));
   pSupport("SSE4.1", __builtin_cpu_supports("sse4.1"));
   pSupport("SSE4.2", __builtin_cpu_supports("sse4.2"));
+  pSupport("AES", __builtin_cpu_supports("aes"));
   pSupport("AVX", __builtin_cpu_supports("avx"));
   pSupport("AVX2", __builtin_cpu_supports("avx2"));
   pSupport("AVX512", __builtin_cpu_supports("avx512f"));

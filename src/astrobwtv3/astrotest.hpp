@@ -76,8 +76,8 @@ int rakeDeroOpTests(int testOp, int dataLen=15);
 void benchmarkSIMDMath();
 void benchmarkLoadCompare();
 
-int TestAstroBWTv3(bool useLookup);
-int TestAstroBWTv3repeattest(bool useLookup);
+int TestAstroBWTv3(bool quiet);
+int TestAstroBWTv3repeattest(bool quiet);
 
 void optest_ref(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print=true);
 void optest_branchcpu(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print=true);
