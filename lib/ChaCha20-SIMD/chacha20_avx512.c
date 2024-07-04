@@ -1,8 +1,9 @@
 #include "chacha20.h"
+
+#if defined(__x86_64__)
+
 #include <immintrin.h>
 #include <memory.h>
-
-
 
 __attribute__((target("avx512f")))
 static inline void PartialXor(const __m512i val, uint8_t* Src, uint8_t* Dest, uint64_t Size)
@@ -715,3 +716,5 @@ void ChaCha20EncryptBytes(uint8_t* state, uint8_t* In, uint8_t* Out, uint64_t Si
 		}
 	}
 }
+
+#endif

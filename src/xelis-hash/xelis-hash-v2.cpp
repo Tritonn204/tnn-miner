@@ -7,8 +7,10 @@
 #include <chacha20.h>
 
 #if defined(__x86_64__)
-#include <emmintrin.h>
-#include <immintrin.h>
+  #include <emmintrin.h>
+  #include <immintrin.h>
+#elif defined(__aarch64__)
+  #include <arm_neon.h>
 #endif
 #include <numeric>
 #include <chrono>
@@ -16,20 +18,14 @@
 #include <iomanip>
 #include <array>
 #include <cassert>
-#if !defined(__AES__)
-#include <openssl/aes.h>
-#endif
 
 #include <sodium.h>
-#include <openssl/evp.h>
 
 #ifdef _WIN32
 #include <winsock2.h>
 #else
 #include <arpa/inet.h>
 #endif
-
-#if defined(__x86_64__)
 
 #define rl64(x, a) (((x << (a & 63)) | (x >> (64 - (a & 63)))))
 #define rr64(x, a) (((x >> (a & 63)) | (x << (64 - (a & 63)))))
@@ -94,15 +90,19 @@ static inline void blake3(const uint8_t *input, int len, uint8_t *output) {
 
 static inline void aes_round(uint8_t *block, const uint8_t *key)
 {
-#if defined(__AES__)
+#if defined(__AES__) && defined(__x86_64__)
   __m128i block_m128i = _mm_load_si128((__m128i *)block);
   __m128i key_m128i = _mm_load_si128((__m128i *)key);
   __m128i result = _mm_aesenc_si128(block_m128i, key_m128i);
   _mm_store_si128((__m128i *)block, result);
+#elif defined(__aarch64__)
+  uint8x16_t blck = vld1q_u8(block);
+  uint8x16_t ky = vld1q_u8(key);
+  // This magic sauce is from here: https://blog.michaelbrase.com/2018/06/04/optimizing-x86-aes-intrinsics-on-armv8-a/
+  uint8x16_t rslt = vaesmcq_u8(vaeseq_u8(blck, (uint8x16_t){})) ^ ky;
+  vst1q_u8(block, rslt);
 #else
-  AES_KEY aes_key;
-  AES_set_encrypt_key(key, 128, &aes_key);
-  AES_encrypt(block, block, &aes_key);
+  printf("Unsupported\n");
 #endif
 }
 
@@ -449,6 +449,8 @@ uint64_t static inline le_bytes_to_uint64(const uint8_t *bytes)
 	return value;
 }
 
+#if defined(__x86_64__)
+
 void static inline aes_single_round(uint8_t *block, const uint8_t *key)
 {
 	__m128i block_vec = _mm_loadu_si128((const __m128i *)block);
@@ -470,6 +472,44 @@ static inline uint64_t Divide128Div64To64(uint64_t high, uint64_t low, uint64_t 
 	return result;
 }
 
+static inline uint64_t ROTR(uint64_t x, uint32_t r)
+{
+	asm("rorq %%cl, %0" : "+r"(x) : "c"(r));
+	return x;
+}
+
+static inline uint64_t ROTL(uint64_t x, uint32_t r)
+{
+	asm("rolq %%cl, %0" : "+r"(x) : "c"(r));
+	return x;
+}
+
+#else // aarch64
+
+static inline uint64_t Divide128Div64To64(uint64_t high, uint64_t low, uint64_t divisor, uint64_t *remainder)
+{
+    // Combine high and low into a 128-bit dividend
+    __uint128_t dividend = ((__uint128_t)high << 64) | low;
+
+    // Perform division using built-in compiler functions
+    *remainder = dividend % divisor;
+    return dividend / divisor;
+}
+
+static inline uint64_t ROTR(uint64_t x, uint32_t r)
+{
+    r %= 64;  // Ensure r is within the range [0, 63] for a 64-bit rotate
+    return (x >> r) | (x << (64 - r));
+}
+
+static inline uint64_t ROTL(uint64_t x, uint32_t r)
+{
+    r %= 64;  // Ensure r is within the range [0, 63] for a 64-bit rotate
+    return (x << r) | (x >> (64 - r));
+}
+
+#endif
+
 static inline uint64_t udiv(uint64_t high, uint64_t low, uint64_t divisor)
 {
 	uint64_t remainder;
@@ -484,18 +524,6 @@ static inline uint64_t udiv(uint64_t high, uint64_t low, uint64_t divisor)
 		return Divide128Div64To64(high, low, divisor, &remainder);
 	}
   return low;
-}
-
-static inline uint64_t ROTR(uint64_t x, uint32_t r)
-{
-	asm("rorq %%cl, %0" : "+r"(x) : "c"(r));
-	return x;
-}
-
-static inline uint64_t ROTL(uint64_t x, uint32_t r)
-{
-	asm("rolq %%cl, %0" : "+r"(x) : "c"(r));
-	return x;
 }
 
 void stage_3(uint64_t *scratch_pad)
@@ -766,7 +794,7 @@ void xelis_hash_v2(byte *input, workerData_xelis_v2 &worker, byte *hashResult)
 
 void xelis_benchmark_cpu_hash_v2()
 {
-  const uint32_t ITERATIONS = 1000;
+  const uint32_t ITERATIONS = 2000;
   byte input[112] = {0};
   alignas(64) workerData_xelis_v2 worker;
   alignas(64) workerData_xelis_v2 worker2;
@@ -905,23 +933,3 @@ int xelis_runTests_v2()
     return 1;
   }
 }
-
-#else
-// These are just to satisfy compilation on AARCH64
-void xelis_hash_v2(byte *input, workerData_xelis_v2 &worker, byte *hashResult)
-{
-  printf("Xelis is not supported on AArch64\n");
-}
-
-void xelis_benchmark_cpu_hash_v2()
-{
-  printf("Xelis is not supported on AArch64\n");
-}
-
-int xelis_runTests_v2()
-{
-  printf("Xelis is not supported on AArch64\n");
-  return 0;
-}
-
-#endif // __x86_64__

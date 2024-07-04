@@ -618,7 +618,7 @@ Benchmarking:
   startBenchmark = true;
 
   boost::thread t2(logSeconds, start_time, bench_duration, &stopBenchmark);
-  setPriority(t2.native_handle(), THREAD_PRIORITY_TIME_CRITICAL);
+  setPriority(t2.native_handle(), THREAD_PRIORITY_NORMAL);
 
   while (true)
   {

@@ -952,15 +952,15 @@ int xelis_runTests()
 #else
 // These are just to satisfy compilation on AARCH64
 void xelis_hash(byte* input, workerData_xelis &worker, byte *hashResult) {
-  printf("Xelis not supported on AArch64 hardware\n");
+  printf("Xelis v1 not supported on AArch64 hardware\n");
 }
 
 void xelis_benchmark_cpu_hash() {
-  printf("Xelis not supported on AArch64 hardware\n");
+  printf("Xelis v1 not supported on AArch64 hardware\n");
 }
 
 int xelis_runTests() {
-  printf("Xelis not supported on AArch64 hardware\n");
+  printf("Xelis v1 not supported on AArch64 hardware\n");
   return 0;
 }
 
