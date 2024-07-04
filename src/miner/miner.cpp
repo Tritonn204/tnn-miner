@@ -73,12 +73,10 @@
 #include <Windows.h>
 #else
 #include <sched.h>
-#define THREAD_PRIORITY_NORMAL 0
 #define THREAD_PRIORITY_ABOVE_NORMAL -5
-#define THREAD_PRIORITY_HIGHEST -15
+#define THREAD_PRIORITY_HIGHEST -20
+#define THREAD_PRIORITY_TIME_CRITICAL -20
 #endif
-
-static int priorityScale[] = {THREAD_PRIORITY_NORMAL, THREAD_PRIORITY_ABOVE_NORMAL, THREAD_PRIORITY_HIGHEST};
 
 #if defined(_WIN32)
 LPTSTR lpNxtPage;  // Address of the next page to ask for
@@ -275,7 +273,7 @@ int main(int argc, char **argv)
   if (vm.count("xelis-bench"))
   {
     boost::thread t(xelis_benchmark_cpu_hash_v2);
-    setPriority(t.native_handle(), THREAD_PRIORITY_NORMAL);
+    setPriority(t.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
     t.join();
     return 0;
   }

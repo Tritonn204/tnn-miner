@@ -1449,12 +1449,12 @@ void spectre_stratum_session(
           } catch(const std::exception &e){
             // printf("\n\n packet count: %d, msg size: %llu\n\n", packets.size(), trans);
 
-            // setcolor(RED);
+            setcolor(RED);
             // printf("BEFORE PACKET\n");
-            // std::cout << packet << std::endl;
+            std::cout << "BAD PACKET: " << packet << std::endl;
             // printf("AFTER PACKET\n");
             // std::cerr << e.what() << std::endl;
-            // setcolor(BRIGHT_WHITE);
+            setcolor(BRIGHT_WHITE);
             bool tryParse = (chopQueue.compare("NULL") != 0);
 
             if (tryParse) {
@@ -1565,7 +1565,7 @@ void do_session(
 int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCache *cache, bool isDev)
 {
   std::string M = packet.at("method").get_string().c_str();
-  // std::cout << "Stratum packet: " << boost::json::serialize(packet).c_str() << std::endl;
+  std::cout << "Stratum packet: " << boost::json::serialize(packet).c_str() << std::endl;
   if (M.compare(SpectreStratum::s_notify) == 0)
   {
     json *J = isDev ? &devJob : &job;
@@ -1652,7 +1652,7 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
   }
   else if (M.compare(SpectreStratum::s_setExtraNonce) == 0)
   {
-    // std::cout << boost::json::serialize(packet).c_str() << std::endl;
+    std::cout << boost::json::serialize(packet).c_str() << std::endl;
     json *J = isDev ? &devJob : &job;
     // uint64_t *h = isDev ? &devHeight : &ourHeight;
 

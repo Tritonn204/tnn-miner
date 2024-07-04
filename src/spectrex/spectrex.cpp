@@ -90,6 +90,8 @@ namespace SpectreX
 
     worker w;
     alignas(32) workerData *aw = (workerData*)malloc_huge_pages(sizeof(workerData));
+    lookupGen(*aw, nullptr, nullptr);
+    initWolfLUT();
     w.astroWorker = aw;
     newMatrix(in, w.mat);
 
@@ -101,6 +103,8 @@ namespace SpectreX
   void testWithInput(byte* in, byte *out) {
     worker w;
     alignas(32) workerData *aw = (workerData*)malloc_huge_pages(sizeof(workerData));
+    lookupGen(*aw, nullptr, nullptr);
+    initWolfLUT();
     w.astroWorker = aw;
     newMatrix(in, w.mat);
 
