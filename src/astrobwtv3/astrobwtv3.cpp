@@ -382,29 +382,29 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     // // worker.data_len = 70000;
     // saveBufferToFile("worker_sData_snapshot.bin", worker.sData, worker.data_len);
     // printf("data length: %d\n", worker.data_len);
-    // divsufsort(worker.sData, worker.sa, worker.data_len, worker.bA, worker.bB);
+    divsufsort(worker.sData, worker.sa, worker.data_len, worker.bA, worker.bB);
     // computeByteFrequencyAVX2(worker.sData, worker.data_len, worker.freq);
     // libsais_ctx(worker.ctx, worker.sData, worker.sa, worker.data_len, MAX_LENGTH-worker.data_len, NULL);
 
-    // if (littleEndian())
-    // {
-    //   byte *B = reinterpret_cast<byte *>(worker.sa);
-    //   hashSHA256(worker.sha256, B, worker.sHash, worker.data_len*4);
-    //   // worker.sHash = nHash;
-    // }
-    // else
-    // {
-    //   byte *s = new byte[MAX_LENGTH * 4];
-    //   for (int i = 0; i < worker.data_len; i++)
-    //   {
-    //     s[i << 1] = htonl(worker.sa[i]);
-    //   }
-    //   hashSHA256(worker.sha256, s, worker.sHash, worker.data_len*4);
-    //   // worker.sHash = nHash;
-    //   delete[] s;
-    // }
+    if (littleEndian())
+    {
+      byte *B = reinterpret_cast<byte *>(worker.sa);
+      hashSHA256(worker.sha256, B, worker.sHash, worker.data_len*4);
+      // worker.sHash = nHash;
+    }
+    else
+    {
+      byte *s = new byte[MAX_LENGTH * 4];
+      for (int i = 0; i < worker.data_len; i++)
+      {
+        s[i << 1] = htonl(worker.sa[i]);
+      }
+      hashSHA256(worker.sha256, s, worker.sHash, worker.data_len*4);
+      // worker.sHash = nHash;
+      delete[] s;
+    }
     memcpy(outputhash, worker.sHash, 32);
-    memset(outputhash, 0xFF, 32);
+    // memset(outputhash, 0xFF, 32);
   }
   catch (const std::exception &ex)
   {

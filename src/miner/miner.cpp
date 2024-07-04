@@ -1312,7 +1312,7 @@ waitForJob:
   goto waitForJob;
 }
 
-void mineXelis(int tid)
+void mineXelis_v1(int tid)
 {
   int64_t localJobCounter;
   int64_t localOurHeight = 0;
@@ -1562,6 +1562,256 @@ waitForJob:
   goto waitForJob;
 }
 
+void mineXelis(int tid)
+{
+  int64_t localJobCounter;
+  int64_t localOurHeight = 0;
+  int64_t localDevHeight = 0;
+
+  uint64_t i = 0;
+  uint64_t i_dev = 0;
+
+  byte powHash[32];
+  alignas(64) byte work[XELIS_TEMPLATE_SIZE] = {0};
+  alignas(64) byte devWork[XELIS_TEMPLATE_SIZE] = {0};
+  alignas(64) byte FINALWORK[XELIS_TEMPLATE_SIZE] = {0};
+
+  alignas(64) workerData_xelis_v2 *worker = (workerData_xelis_v2 *)malloc_huge_pages(sizeof(workerData_xelis));
+
+waitForJob:
+
+  while (!isConnected)
+  {
+    boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+  }
+
+  while (true)
+  {
+    try
+    {
+     //  mutex.lock();
+      json myJob = job;
+      json myJobDev = devJob;
+      localJobCounter = jobCounter;
+
+     //  mutex.unlock();
+
+      if (!myJob.contains("template"))
+        continue;
+      if (ourHeight == 0 && devHeight == 0)
+        continue;
+
+      if (ourHeight == 0 || localOurHeight != ourHeight)
+      {
+        byte *b2 = new byte[XELIS_TEMPLATE_SIZE];
+        switch (protocol)
+        {
+        case XELIS_SOLO:
+          hexstrToBytes(myJob.at("template"), b2);
+          break;
+        case XELIS_XATUM:
+        {
+          std::string b64 = base64::from_base64(myJob.at("template").get<std::string>());
+          memcpy(b2, b64.data(), b64.size());
+          break;
+        }
+        case XELIS_STRATUM:
+          hexstrToBytes(myJob.at("template"), b2);
+          break;
+        }
+        memcpy(work, b2, XELIS_TEMPLATE_SIZE);
+        delete[] b2;
+        localOurHeight = ourHeight;
+        i = 0;
+      }
+
+      if (devConnected && myJobDev.contains("template"))
+      {
+        if (devHeight == 0 || localDevHeight != devHeight)
+        {
+          byte *b2d = new byte[XELIS_TEMPLATE_SIZE];
+          switch (protocol)
+          {
+          case XELIS_SOLO:
+            hexstrToBytes(myJobDev.at("template"), b2d);
+            break;
+          case XELIS_XATUM:
+          {
+            std::string b64 = base64::from_base64(myJobDev.at("template").get<std::string>().c_str());
+            memcpy(b2d, b64.data(), b64.size());
+            break;
+          }
+          case XELIS_STRATUM:
+            hexstrToBytes(myJobDev.at("template"), b2d);
+            break;
+          }
+          memcpy(devWork, b2d, XELIS_TEMPLATE_SIZE);
+          delete[] b2d;
+          localDevHeight = devHeight;
+          i_dev = 0;
+        }
+      }
+
+      bool devMine = false;
+      double which;
+      bool submit = false;
+      uint64_t DIFF;
+      Num cmpDiff;
+
+      while (localJobCounter == jobCounter)
+      {
+        which = (double)(rand() % 10000);
+        devMine = (devConnected && devHeight > 0 && which < devFee * 100.0);
+        DIFF = devMine ? difficultyDev : difficulty;
+        if (DIFF == 0)
+          continue;
+        cmpDiff = ConvertDifficultyToBig(DIFF, XELIS_HASH);
+
+        uint64_t *nonce = devMine ? &i_dev : &i;
+        (*nonce)++;
+
+        // printf("nonce = %llu\n", *nonce);
+
+        byte *WORK = (devMine && devConnected) ? &devWork[0] : &work[0];
+        byte *nonceBytes = &WORK[40];
+        uint64_t n = ((tid - 1) % (256 * 256)) | ((rand()%256) << 16) | ((*nonce) << 24);
+        memcpy(nonceBytes, (byte *)&n, 8);
+
+        // if (littleEndian())
+        // {
+        //   std::swap(nonceBytes[7], nonceBytes[0]);
+        //   std::swap(nonceBytes[6], nonceBytes[1]);
+        //   std::swap(nonceBytes[5], nonceBytes[2]);
+        //   std::swap(nonceBytes[4], nonceBytes[3]);
+        // }
+
+        if (localJobCounter != jobCounter)
+          break;
+
+        memcpy(FINALWORK, WORK, XELIS_TEMPLATE_SIZE);
+        
+        xelis_hash_v2(FINALWORK, *worker, powHash);
+
+        if (littleEndian())
+        {
+          std::reverse(powHash, powHash + 32);
+        }
+
+        counter.fetch_add(1);
+        submit = (devMine && devConnected) ? !submittingDev : !submitting;
+
+        if (localJobCounter != jobCounter || localOurHeight != ourHeight)
+          break;
+
+        if (submit && CheckHash(powHash, cmpDiff, XELIS_HASH))
+        {
+          if (protocol == XELIS_XATUM && littleEndian())
+          {
+            std::reverse(powHash, powHash + 32);
+          }
+          // if (protocol == XELIS_STRATUM && littleEndian())
+          // {
+          //   std::reverse((byte*)&n, (byte*)n + 8);
+          // }
+
+          std::string b64 = base64::to_base64(std::string((char *)&WORK[0], XELIS_TEMPLATE_SIZE));
+          std::string foundBlob = hexStr(&WORK[0], XELIS_TEMPLATE_SIZE);
+          if (devMine)
+          {
+           //  mutex.lock();
+            if (localJobCounter != jobCounter || localDevHeight != devHeight)
+            {
+             //  mutex.unlock();
+              break;
+            }
+            setcolor(CYAN);
+            std::cout << "\n(DEV) Thread " << tid << " found a dev share\n";
+            setcolor(BRIGHT_WHITE);
+            switch (protocol)
+            {
+            case XELIS_SOLO:
+              devShare = {{"block_template", hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str()}};
+              break;
+            case XELIS_XATUM:
+              devShare = {
+                  {"data", b64.c_str()},
+                  {"hash", hexStr(&powHash[0], 32).c_str()},
+              };
+              break;
+            case XELIS_STRATUM:
+              devShare = {{{"id", XelisStratum::submitID},
+                           {"method", XelisStratum::submit.method.c_str()},
+                           {"params", {devWorkerName,                                 // WORKER
+                                       devJob.at("jobId").get<std::string>().c_str(), // JOB ID
+                                       hexStr((byte *)&n, 8).c_str()}}}};
+              break;
+            }
+            submittingDev = true;
+           //  mutex.unlock();
+          }
+          else
+          {
+           //  mutex.lock();
+            if (localJobCounter != jobCounter || localOurHeight != ourHeight)
+            {
+             //  mutex.unlock();
+              break;
+            }
+            setcolor(BRIGHT_YELLOW);
+            std::cout << "\nThread " << tid << " found a nonce!\n";
+            setcolor(BRIGHT_WHITE);
+            switch (protocol)
+            {
+            case XELIS_SOLO:
+              share = {{"block_template", hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str()}};
+              break;
+            case XELIS_XATUM:
+              share = {
+                  {"data", b64.c_str()},
+                  {"hash", hexStr(&powHash[0], 32).c_str()},
+              };
+              break;
+            case XELIS_STRATUM:
+              share = {{{"id", XelisStratum::submitID},
+                        {"method", XelisStratum::submit.method.c_str()},
+                        {"params", {workerName,                                   // WORKER
+                                    myJob.at("jobId").get<std::string>().c_str(), // JOB ID
+                                    hexStr((byte *)&n, 8).c_str()}}}};
+
+              // std::cout << "blob: " << hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str() << std::endl;
+              // std::cout << "hash: " << hexStr(&powHash[0], 32) << std::endl;
+              std::vector<char> diffHex;
+              cmpDiff.print(diffHex, 16);
+              // std::cout << "difficulty (LE): " << std::string(diffHex.data()).c_str() << std::endl;
+              // printf("blob: %s\n", foundBlob.c_str());
+              // printf("hash (BE): %s\n", hexStr(&powHash[0], 32).c_str());
+              // printf("nonce (Full bytes for injection): %s\n", hexStr((byte *)&n, 8).c_str());
+
+              break;
+            }
+            submitting = true;
+           //  mutex.unlock();
+          }
+        }
+
+        if (!isConnected)
+          break;
+      }
+      if (!isConnected)
+        break;
+    }
+    catch (std::exception& e)
+    {
+      std::cerr << "Error in POW Function" << std::endl;
+      std::cerr << e.what() << std::endl;
+    }
+    if (!isConnected)
+      break;
+  }
+  goto waitForJob;
+}
+
+
 void mineSpectre(int tid)
 {
   int64_t localJobCounter;
@@ -1737,11 +1987,12 @@ waitForJob:
               break;
             case SPECTRE_STRATUM:
               std::vector<char> nonceStr;
-              Num(std::to_string((n << enLen*8) >> enLen*8).c_str(),10).print(nonceStr, 16);
+              // Num(std::to_string((n << enLen*8) >> enLen*8).c_str(),10).print(nonceStr, 16);
+              Num(std::to_string(n).c_str(),10).print(nonceStr, 16);
               devShare = {{{"id", SpectreStratum::submitID},
                         {"method", SpectreStratum::submit.method.c_str()},
                         {"params", {devWorkerName,                                   // WORKER
-                                    std::to_string(devJob["jobId"].get<uint64_t>()).c_str(), // JOB ID
+                                    devJob["jobId"].get<std::string>().c_str(), // JOB ID
                                     std::string(nonceStr.data()).c_str()}}}};
 
               break;
@@ -1764,11 +2015,12 @@ waitForJob:
               break;
             case SPECTRE_STRATUM:
               std::vector<char> nonceStr;
-              Num(std::to_string((n << enLen*8) >> enLen*8).c_str(),10).print(nonceStr, 16);
+              // Num(std::to_string((n << enLen*8) >> enLen*8).c_str(),10).print(nonceStr, 16);
+              Num(std::to_string(n).c_str(),10).print(nonceStr, 16);
               share = {{{"id", SpectreStratum::submitID},
                         {"method", SpectreStratum::submit.method.c_str()},
                         {"params", {workerName,                                   // WORKER
-                                    std::to_string(myJob["jobId"].get<uint64_t>()).c_str(), // JOB ID
+                                    myJob["jobId"].get<std::string>().c_str(), // JOB ID
                                     std::string(nonceStr.data()).c_str()}}}};
 
               // std::cout << "blob: " << hexStr(&WORK[0], SpectreX::INPUT_SIZE).c_str() << std::endl;

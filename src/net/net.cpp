@@ -1372,12 +1372,12 @@ void spectre_stratum_session(
         // printf("submitting share: %s\n", msg.c_str());
         // Acquire a lock before writing to the WebSocket
 
-        // std::cout << "sending in: " << msg << std::endl;
+        std::cout << "sending in: " << msg << std::endl;
         beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(10));
         boost::asio::async_write(stream, boost::asio::buffer(msg), yield[ec]);
         if (ec) {
             setcolor(RED);
-            printf("\nasync_write: submission error\n");
+            printf("\nasync_write submission error: %s\n", ec.message().c_str());
             setcolor(BRIGHT_WHITE);
         }
         if (!isDev) SpectreStratum::lastShareSubmissionTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -1565,12 +1565,11 @@ void do_session(
 int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCache *cache, bool isDev)
 {
   std::string M = packet.at("method").get_string().c_str();
+  // std::cout << "Stratum packet: " << boost::json::serialize(packet).c_str() << std::endl;
   if (M.compare(SpectreStratum::s_notify) == 0)
   {
     json *J = isDev ? &devJob : &job;
     uint64_t *h = isDev ? &devHeight : &ourHeight;
-
-    uint64_t id = std::stoull(packet["params"].as_array()[0].get_string().c_str());
 
     uint64_t h1 = packet["params"].as_array()[1].as_array()[0].get_uint64();
     uint64_t h2 = packet["params"].as_array()[1].as_array()[1].get_uint64();
@@ -1616,31 +1615,7 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
 
 
     (*J)["template"] = std::string(newTemplate, SpectreX::INPUT_SIZE*2);
-    // std::string testPrint = (*J)["template"].get<std::string>();
-
-    // byte testOut[160];
-    // memcpy(testOut, testPrint.data(), 160);
-    // for (int i = 0; i < 160; i++) {
-    //   std::cout << testOut[i];
-    // }
-    // printf("\n");
-    // std::cout << testPrint;
-    // printf("\n");
-
-    // std::string bs = (*J).at("template").get<std::string>();
-    // char *blob = (char *)bs.c_str();
-
-    // const char *jobId = packet.at("params").as_array()[0].get_string().c_str();
-    // const char *ts = packet.at("params").as_array()[1].get_string().c_str();
-    // int tsLen = packet.at("params").as_array()[1].get_string().size();
-    // const char *header = packet.at("params").as_array()[2].get_string().c_str();
-
-    // memset(&blob[64], '0', 16);
-    // memcpy(&blob[64 + 16 - tsLen], ts, tsLen);
-    // memcpy(blob, header, 64);
-
-    // (*J).at("template") = std::string(blob);
-    (*J)["jobId"] = id;
+    (*J)["jobId"] = packet["params"].as_array()[0].get_string().c_str();
 
     bool *C = isDev ? &devConnected : &isConnected;
     if (!*C)
@@ -1739,6 +1714,8 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
 
       return res;
     }
+  } else {
+    std::cout << "Stratum: unrecognized packet: " << boost::json::serialize(packet).c_str() << std::endl;
   }
   return 0;
 }
@@ -1748,6 +1725,7 @@ int handleSpectreStratumResponse(boost::json::object packet, bool isDev)
   // if (!isDev) {
   // if (!packet.contains("id")) return 0;
   int64_t id = packet["id"].as_int64();
+  // std::cout << "Stratum packet: " << boost::json::serialize(packet).c_str() << std::endl;
 
   switch (id)
   {
