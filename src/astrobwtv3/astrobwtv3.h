@@ -226,6 +226,8 @@ public:
   friend std::ostream& operator<<(std::ostream& os, const workerData& wd);
 };
 
+extern void (*astroCompFunc)(workerData &worker, bool isTest);
+
 template <std::size_t N>
 inline void generateInitVector(std::uint8_t (&iv_buff)[N]);
 
@@ -689,7 +691,9 @@ void branchComputeCPU_avx2(workerData &worker, bool isTest);
 void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest);
 #endif
 
-void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &scratch, bool lookupMine);
+void astroTune();
+
+void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &scratch, bool unused);
 
 void finishBatch(workerData &worker);
 

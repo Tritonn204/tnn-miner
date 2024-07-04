@@ -17,6 +17,7 @@
 #include "rootcert.h"
 #include "DNSResolver.hpp"
 #include "net.hpp"
+#include "astrobwtv3.h"
 
 #include <boost/program_options.hpp>
 #include <boost/beast/core.hpp>
@@ -169,6 +170,7 @@ int main(int argc, char **argv)
   // Check command line arguments.
   lookup2D_global = (uint16_t *)malloc_huge_pages(regOps_size * (256 * 256) * sizeof(uint16_t));
   lookup3D_global = (byte *)malloc_huge_pages(branchedOps_size * (256 * 256) * sizeof(byte));
+  astroTune();
 
   oneLsh256 = Num(1) << 256;
   maxU256 = Num(2).pow(256) - 1;

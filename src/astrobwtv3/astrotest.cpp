@@ -152,7 +152,23 @@ int DeroTesting(int testOp, int testLen, bool useLookup) {
     failedTests += runDeroOpTests(testOp);
   }
 
-  failedTests += TestAstroBWTv3(useLookup);
+  //extern void (*astroCompFunc)(workerData &worker, bool isTest);
+  void (*allFuncs[]) (workerData &worker, bool isTest) = {branchComputeCPU, lookupCompute, wolfCompute,
+  #if defined(__AVX2__)
+    branchComputeCPU_avx2, branchComputeCPU_avx2_zOptimized
+  #elif defined(__aarch64__)
+    branchComputeCPU_aarch64
+  #endif
+   };
+
+  size_t numFuncs = sizeof(allFuncs)/sizeof(allFuncs[0]);
+
+  failedTests += TestAstroBWTv3(false);
+  for(int x = 0; x < numFuncs; x++) {
+    astroCompFunc = allFuncs[x];
+    failedTests += TestAstroBWTv3(true);
+  }
+  
   // TestAstroBWTv3_cuda();
 
   return failedTests;
@@ -420,6 +436,7 @@ int runDeroOpTests(int testOp, int dataLen) {
       printf("\n");
     }
   }
+
   return numOpsFailed;
 }
 
@@ -533,7 +550,7 @@ int rakeDeroOpTests(int testOp, int dataLen) {
   return numOpsFailed;
 }
 
-int TestAstroBWTv3(bool useLookup=false)
+int TestAstroBWTv3(bool quiet=false)
 {
   int failedTests = 0;
   std::srand(1);
@@ -556,13 +573,15 @@ int TestAstroBWTv3(bool useLookup=false)
     //byte res2[32];
     //AstroBWTv3(buf, (int)t.in.size(), res2, *worker2, true);
     // printf("vanilla result: %s\n", hexStr(res, 32).c_str());
-    AstroBWTv3(buf, (int)t.in.size(), res, *worker, useLookup);
+    AstroBWTv3(buf, (int)t.in.size(), res, *worker, false);
     // printf("lookup result: %s\n", hexStr(res, 32).c_str());
     std::string actualRes = hexStr(res, 32);
     if (actualRes.c_str() != t.out)
     {
       if(t.expectFail) {
-        printf("SUCCESS! Pow function failed as expected! pow(%s) expected !%s received  %s\n", t.in.c_str(), t.out.c_str(), actualRes.c_str());
+        if(!quiet) {
+          printf("SUCCESS! Pow function failed as expected! pow(%s) expected !%s received  %s\n", t.in.c_str(), t.out.c_str(), actualRes.c_str());
+        }
       } else {
         printf("FAIL. pow(%s) expected %s received %s\n", t.in.c_str(), t.out.c_str(), actualRes.c_str());
         failedTests++;
@@ -583,7 +602,9 @@ int TestAstroBWTv3(bool useLookup=false)
     }
     else
     {
-      printf("SUCCESS! pow(%s) expected %s received %s\n", t.in.c_str(), t.out.c_str(), actualRes.c_str());
+      if(!quiet) {
+        printf("SUCCESS! pow(%s) expected %s received %s\n", t.in.c_str(), t.out.c_str(), actualRes.c_str());
+      }
     }
 
     // for (const auto& [a, b, c] : worker->repeats) {
@@ -604,46 +625,17 @@ int TestAstroBWTv3(bool useLookup=false)
   hexstrToBytes(c, data);
   hexstrToBytes(c2, data2);
 
-  printf("Str: %s\nHex: %s\n", c.c_str(), hexStr(data, 48).c_str());
-  printf("Str: %s\nHex: %s\n", c2.c_str(), hexStr(data2, 48).c_str());
+  if(!quiet) {
+    printf("Str: %s\nHex: %s\n", c.c_str(), hexStr(data, 48).c_str());
+    printf("Str: %s\nHex: %s\n", c2.c_str(), hexStr(data2, 48).c_str());
+  }
 
-  failedTests += TestAstroBWTv3repeattest(true);
-  failedTests += TestAstroBWTv3repeattest(false);
+  failedTests += TestAstroBWTv3repeattest(quiet);
 
-  // for (int i = 0; i < 1024; i++)
-  // {
-  //   std::generate(buf.begin(), buf.end(), [&dist, &gen]()
-  //                 { return dist(gen); });
-  //   std::memcpy(random_data, buf.data(), buf.size());
-
-  //   // std::cout << hexStr(data, 48) << std::endl;
-  //   // std::cout << hexStr(random_data, 48) << std::endl;
-
-  //   if (i % 2 == 0)
-  //   {
-  //     byte res[32];
-  //     AstroBWTv3(data, 48, res, *worker, false);
-
-  //     // hexStr(res, 64);
-  //     std::string s = hexStr(res, 32);f
-  //     if (s != "c392762a462fd991ace791bfe858c338c10c23c555796b50f665b636cb8c8440")
-  //     {
-  //       printf("%d test failed hash %s\n", i, s.c_str());
-  //     }
-  //   }
-  //   else
-  //   {
-  //     byte res[32];
-  //     AstroBWTv3(buf.data(), 48, res, *worker, false);
-  //   }
-  // }
-  // std::cout << "Repeated test over" << std::endl;
-  // libcubwt_free_device_storage(storage);
-  // cudaFree(storage);
   return failedTests;
 }
 
-int TestAstroBWTv3repeattest(bool useLookup)
+int TestAstroBWTv3repeattest(bool quiet)
 {
   int rc = 0;
   workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
@@ -685,7 +677,9 @@ int TestAstroBWTv3repeattest(bool useLookup)
       return rc;
     }
   }
-  std::cout << "Repeated test over" << std::endl;
+  if(!quiet) {
+    std::cout << "Repeated test over" << std::endl;
+  }
   return rc;
 }
 

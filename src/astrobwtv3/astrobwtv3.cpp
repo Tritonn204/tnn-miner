@@ -3,6 +3,7 @@
 
 #include <unistd.h>
 
+#include <algorithm>
 #include <bitset>
 #include <iostream>
 #include <fstream>
@@ -70,6 +71,8 @@ std::vector<byte> opsB;
 
 bool debugOpOrder = false;
 
+void (*astroCompFunc)(workerData &worker, bool isTest) = branchComputeCPU;
+
 void saveBufferToFile(const std::string& filename, const byte* buffer, size_t size) {
     // Generate unique filename using timestamp
     std::string timestamp = std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -109,6 +112,115 @@ void checkSIMDSupport() {
     }
 }
 */
+
+template <std::size_t N>
+inline void generateRandomBytesForTune(std::uint8_t (&iv_buff)[N])
+{
+  auto const hes = std::random_device{}();
+
+  using random_bytes_engine = std::independent_bits_engine<std::default_random_engine,
+                                                           CHAR_BIT, unsigned short>;
+
+  random_bytes_engine rbe;
+  rbe.seed(hes);
+
+  std::generate(std::begin(iv_buff), std::end(iv_buff), std::ref(rbe));
+}
+
+void astroTune() {
+  std::vector<std::string> func_names = {"branch", "lookup", "wolf"
+  #if defined(__AVX2__)
+    , "avx2", "avx2z"
+  #elif defined(__aarch64__)
+    , "aarch"
+  #endif
+  };
+
+  void (*allFuncs[]) (workerData &worker, bool isTest) = {branchComputeCPU, lookupCompute, wolfCompute,
+  #if defined(__AVX2__)
+    branchComputeCPU_avx2, branchComputeCPU_avx2_zOptimized
+  #elif defined(__aarch64__)
+    branchComputeCPU_aarch64
+  #endif
+  };
+
+  size_t numFuncs = sizeof(allFuncs)/sizeof(allFuncs[0]);
+  int64_t funcTotal[numFuncs];
+  std::vector<int64_t> durations[numFuncs];
+
+  auto start = std::chrono::steady_clock::now();
+  auto end = std::chrono::steady_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);    
+
+  int fastestCompIdx = 0;
+  void (*fastestComp)(workerData &worker, bool isTest) = branchComputeCPU;
+
+  workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
+  initWorker(*worker);
+  lookupGen(*worker, nullptr, nullptr);
+  byte random_buffer[48];
+  generateRandomBytesForTune<48>(random_buffer);
+  byte res[32];
+
+  auto big_start = std::chrono::steady_clock::now();
+  for(int y = 0; y < 50; y++) {
+    for(int x = 0; x < numFuncs; x++) {
+      astroCompFunc = allFuncs[x];
+      AstroBWTv3(random_buffer, 48, res, *worker, false);
+
+      start = std::chrono::steady_clock::now();
+      AstroBWTv3(random_buffer, 48, res, *worker, false);
+      end = std::chrono::steady_clock::now();
+      duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+      durations[x].push_back(duration.count());
+    }
+
+    generateRandomBytesForTune<48>(random_buffer);
+    for(int x = numFuncs-1; x >= 0; x--) {
+      astroCompFunc = allFuncs[x];
+      AstroBWTv3(random_buffer, 48, res, *worker, false);
+
+      start = std::chrono::steady_clock::now();
+      AstroBWTv3(random_buffer, 48, res, *worker, false);
+      end = std::chrono::steady_clock::now();
+      duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+      durations[x].push_back(duration.count());
+    }
+  }
+  //printf("size: %zu\n", durations[0].size());
+  for(int x = 0; x < numFuncs; x++) {
+    //printf("size: %zu\n", durations[x].size());
+    for(int y = 0; y < 15; y++) {
+      auto maxTime = std::max_element(durations[x].begin(), durations[x].end());
+      durations[x].erase(maxTime);
+    }
+    for(int y = 0; y < 15; y++) {
+      auto minTime = std::min_element(durations[x].begin(), durations[x].end());
+      durations[x].erase(minTime);
+    }
+    //printf("size: %zu\n", durations[x].size());
+  }
+  //printf("size: %zu\n", durations[0].size());
+  double fastest_duration_dbl = std::accumulate(durations[0].begin(), durations[0].end(), 0.0) / double(durations[0].size());
+  fastestComp = allFuncs[0];
+  for(int x = 0; x < numFuncs; x++) {
+    double this_duration = std::accumulate(durations[x].begin(), durations[x].end(), 0.0) / double(durations[x].size());
+    //printf("%s = %f\n", func_names.data()[x].c_str(), this_duration);
+    if(this_duration < fastest_duration_dbl) {
+      fastestComp = astroCompFunc;
+      fastestCompIdx = x;
+      fastest_duration_dbl = this_duration;
+    }
+  }
+
+  astroCompFunc = fastestComp;
+
+  //printf("%p = %p = %s\n", astroCompFunc, fastestComp, func_names.data()[fastestCompIdx].c_str());
+  printf("Using %s for AstroBWTv3\n", func_names.data()[fastestCompIdx].c_str());
+  auto big_end = std::chrono::steady_clock::now();
+  auto duration_big = std::chrono::duration_cast<std::chrono::milliseconds>(big_end - big_start);
+  //printf("dur = %ld ms\n", duration_big.count());
+}
 
 void hashSHA256(SHA256_CTX &sha256, const byte *input, byte *digest, unsigned long inputSize)
 {
@@ -282,7 +394,7 @@ void computeByteFrequencyAVX2(const unsigned char* data, size_t dataSize, int fr
 #endif
 
 
-void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker, bool lookupMine)
+void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker, bool unused)
 {
   // auto recoverFunc = [&outputhash](void *r)
   // {
@@ -339,6 +451,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     // auto start = std::chrono::steady_clock::now();
     // auto end = std::chrono::steady_clock::now();
 
+    /*
     if (lookupMine) {
       // start = std::chrono::steady_clock::now();
       lookupCompute(worker, false);
@@ -356,14 +469,15 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
       // // end = std::chrono::steady_clock::now();
       //wolfCompute(worker, false);
     }
-    
+    */
+    astroCompFunc(worker, false);
 
     // auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
     // if (!lookupMine) printf("AVX2: ");
     // else printf("Lookup: ");
     // printf("branched section took %dns\n", time.count());
     if (debugOpOrder) {
-      if (lookupMine) {
+      if (worker.opsB.size() > 0) {
         printf("Lookup Table:\n-----------\n");
         for (int i = 0; i < worker.opsB.size(); i++) {
           printf("%d, ", worker.opsB[i]);
