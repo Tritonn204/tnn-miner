@@ -1,4 +1,7 @@
 #include "chacha20.h"
+
+#if defined(__x86_64__)
+
 #include <immintrin.h>
 #include <memory.h>
 
@@ -640,3 +643,5 @@ void ChaCha20EncryptBytes(uint8_t* state, uint8_t* In, uint8_t* Out, uint64_t Si
 		}
 	}
 }
+
+#endif

@@ -1,31 +1,14 @@
 #include "chacha20.h"
 #include <memory.h>
 
-
-
 #if defined(USE_SSE) || defined (USE_AVX2) || defined(USE_AVX512)
-#include <immintrin.h>
-
+  #include <immintrin.h>
 #endif
 
 static const int32_t KeyDataSize = 48;
 static const int32_t rounds = 20;
 
-
-
 static const uint32_t ConstState[4] = { 1634760805, 857760878, 2036477234, 1797285236 };  //"expand 32-byte k";;
-
-
-
-
-
-
-
-
-
-
-
-
 
 void ChaCha20SetKey(uint8_t* state, const uint8_t* Key)
 {
@@ -772,7 +755,10 @@ void ChaCha20IncrementNonce(uint8_t* state)
 
 */
 
+// We do this to avoid needing Clang 16+ when building for AArch
+#if defined(__x86_64__)
 __attribute__((target("default")))
+#endif
 void ChaCha20EncryptBytes(uint8_t* state, uint8_t* In, uint8_t* Out, uint64_t Size, int rounds)
 {
 	//portable chacha, no simd
