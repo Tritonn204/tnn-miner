@@ -40,7 +40,6 @@
 #include <iostream>
 #include <string>
 #include <miner.h>
-#include <nlohmann/json.hpp>
 
 #include <random>
 
@@ -106,12 +105,12 @@ int rejected;
 int accepted;
 //static int firstRejected;
 
-uint64_t hashrate;
-uint64_t ourHeight;
-uint64_t devHeight;
+//uint64_t hashrate;
+int64_t ourHeight;
+int64_t devHeight;
 
-uint64_t difficulty;
-uint64_t difficultyDev;
+int64_t difficulty;
+int64_t difficultyDev;
 
 double doubleDiff;
 double doubleDiffDev;
@@ -133,8 +132,6 @@ namespace net = boost::asio;            // from <boost/asio.hpp>
 namespace ssl = boost::asio::ssl;       // from <boost/asio/ssl.hpp>
 namespace po = boost::program_options;  // from <boost/program_options.hpp>
 using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
-
-using json = nlohmann::json;
 
 boost::mutex mutex;
 boost::mutex reportMutex;
@@ -170,7 +167,6 @@ int main(int argc, char **argv)
   // Check command line arguments.
   lookup2D_global = (uint16_t *)malloc_huge_pages(regOps_size * (256 * 256) * sizeof(uint16_t));
   lookup3D_global = (byte *)malloc_huge_pages(branchedOps_size * (256 * 256) * sizeof(byte));
-  astroTune();
 
   oneLsh256 = Num(1) << 256;
   maxU256 = Num(2).pow(256) - 1;
@@ -454,6 +450,9 @@ fillBlanks:
     goto fillBlanks;
   }
 
+  // necessary as long as the bridge is a thing
+  if (miningAlgo == SPECTRE_X) useStratum = true;
+
   if (useStratum)
   {
     switch (miningAlgo)
@@ -563,6 +562,11 @@ fillBlanks:
       }
     }
   }
+
+  setcolor(BRIGHT_YELLOW);
+  if (miningAlgo == DERO_HASH || miningAlgo == SPECTRE_X) astroTune();
+  setcolor(BRIGHT_WHITE);
+
   printf("\n");
 }
 
@@ -1115,12 +1119,12 @@ void benchmark(int tid)
   work[MINIBLOCK_SIZE - 1] = (byte)tid;
   while (true)
   {
-    json myJob = job;
-    json myJobDev = devJob;
+    boost::json::value myJob = job;
+    boost::json::value myJobDev = devJob;
     localJobCounter = jobCounter;
 
     byte *b2 = new byte[MINIBLOCK_SIZE];
-    hexstrToBytes(myJob.at("blockhashing_blob"), b2);
+    hexstrToBytes(std::string(myJob.at("blockhashing_blob").as_string()), b2);
     memcpy(work, b2, MINIBLOCK_SIZE);
     delete[] b2;
 
@@ -1199,20 +1203,20 @@ waitForJob:
     try
     {
      //  mutex.lock();
-      json myJob = job;
-      json myJobDev = devJob;
+      boost::json::value myJob = job;
+      boost::json::value myJobDev = devJob;
       localJobCounter = jobCounter;
      //  mutex.unlock();
 
       byte *b2 = new byte[MINIBLOCK_SIZE];
-      hexstrToBytes(myJob.at("blockhashing_blob"), b2);
+      hexstrToBytes(std::string(myJob.at("blockhashing_blob").as_string()), b2);
       memcpy(work, b2, MINIBLOCK_SIZE);
       delete[] b2;
 
       if (devConnected)
       {
         byte *b2d = new byte[MINIBLOCK_SIZE];
-        hexstrToBytes(myJobDev.at("blockhashing_blob"), b2d);
+        hexstrToBytes(std::string(myJobDev.at("blockhashing_blob").as_string()), b2d);
         memcpy(devWork, b2d, MINIBLOCK_SIZE);
         delete[] b2d;
       }
@@ -1235,7 +1239,7 @@ waitForJob:
       double which;
       bool devMine = false;
       bool submit = false;
-      uint64_t DIFF;
+      int64_t DIFF;
       Num cmpDiff;
       // DIFF = 5000;
 
@@ -1340,13 +1344,13 @@ waitForJob:
     try
     {
      //  mutex.lock();
-      json myJob = job;
-      json myJobDev = devJob;
+      boost::json::value myJob = job;
+      boost::json::value myJobDev = devJob;
       localJobCounter = jobCounter;
 
      //  mutex.unlock();
 
-      if (!myJob.contains("template"))
+      if (!myJob.at("template").is_string())
         continue;
       if (ourHeight == 0 && devHeight == 0)
         continue;
@@ -1357,16 +1361,16 @@ waitForJob:
         switch (protocol)
         {
         case XELIS_SOLO:
-          hexstrToBytes(myJob.at("template"), b2);
+          hexstrToBytes(std::string(myJob.at("template").as_string()), b2);
           break;
         case XELIS_XATUM:
         {
-          std::string b64 = base64::from_base64(myJob.at("template").get<std::string>());
+          std::string b64 = base64::from_base64(std::string(myJob.at("template").as_string().c_str()));
           memcpy(b2, b64.data(), b64.size());
           break;
         }
         case XELIS_STRATUM:
-          hexstrToBytes(myJob.at("template"), b2);
+          hexstrToBytes(std::string(myJob.at("template").as_string()), b2);
           break;
         }
         memcpy(work, b2, XELIS_TEMPLATE_SIZE);
@@ -1375,7 +1379,7 @@ waitForJob:
         i = 0;
       }
 
-      if (devConnected && myJobDev.contains("template"))
+      if (devConnected && myJobDev.at("template").is_string())
       {
         if (devHeight == 0 || localDevHeight != devHeight)
         {
@@ -1383,16 +1387,16 @@ waitForJob:
           switch (protocol)
           {
           case XELIS_SOLO:
-            hexstrToBytes(myJobDev.at("template"), b2d);
+            hexstrToBytes(std::string(myJobDev.at("template").as_string()), b2d);
             break;
           case XELIS_XATUM:
           {
-            std::string b64 = base64::from_base64(myJobDev.at("template").get<std::string>().c_str());
+            std::string b64 = base64::from_base64(std::string(myJobDev.at("template").as_string().c_str()));
             memcpy(b2d, b64.data(), b64.size());
             break;
           }
           case XELIS_STRATUM:
-            hexstrToBytes(myJobDev.at("template"), b2d);
+            hexstrToBytes(std::string(myJobDev.at("template").as_string()), b2d);
             break;
           }
           memcpy(devWork, b2d, XELIS_TEMPLATE_SIZE);
@@ -1493,7 +1497,7 @@ waitForJob:
               devShare = {{{"id", XelisStratum::submitID},
                            {"method", XelisStratum::submit.method.c_str()},
                            {"params", {devWorkerName,                                 // WORKER
-                                       devJob.at("jobId").get<std::string>().c_str(), // JOB ID
+                                       std::to_string(devJob.at("jobId").as_uint64()).c_str(), // JOB ID
                                        hexStr((byte *)&n, 8).c_str()}}}};
               break;
             }
@@ -1526,7 +1530,7 @@ waitForJob:
               share = {{{"id", XelisStratum::submitID},
                         {"method", XelisStratum::submit.method.c_str()},
                         {"params", {workerName,                                   // WORKER
-                                    myJob.at("jobId").get<std::string>().c_str(), // JOB ID
+                                    std::to_string(myJob.at("jobId").as_uint64()).c_str(), // JOB ID
                                     hexStr((byte *)&n, 8).c_str()}}}};
 
               // std::cout << "blob: " << hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str() << std::endl;
@@ -1590,13 +1594,13 @@ waitForJob:
     try
     {
      //  mutex.lock();
-      json myJob = job;
-      json myJobDev = devJob;
+      boost::json::value myJob = job;
+      boost::json::value myJobDev = devJob;
       localJobCounter = jobCounter;
 
      //  mutex.unlock();
 
-      if (!myJob.contains("template"))
+      if (!myJob.at("miner_work").is_string())
         continue;
       if (ourHeight == 0 && devHeight == 0)
         continue;
@@ -1607,16 +1611,16 @@ waitForJob:
         switch (protocol)
         {
         case XELIS_SOLO:
-          hexstrToBytes(myJob.at("template"), b2);
+          hexstrToBytes(std::string(myJob.at("miner_work").as_string()), b2);
           break;
         case XELIS_XATUM:
         {
-          std::string b64 = base64::from_base64(myJob.at("template").get<std::string>());
+          std::string b64 = base64::from_base64(std::string(myJob.at("miner_work").as_string().c_str()));
           memcpy(b2, b64.data(), b64.size());
           break;
         }
         case XELIS_STRATUM:
-          hexstrToBytes(myJob.at("template"), b2);
+          hexstrToBytes(std::string(myJob.at("miner_work").as_string()), b2);
           break;
         }
         memcpy(work, b2, XELIS_TEMPLATE_SIZE);
@@ -1625,7 +1629,7 @@ waitForJob:
         i = 0;
       }
 
-      if (devConnected && myJobDev.contains("template"))
+      if (devConnected && myJobDev.at("miner_work").is_string())
       {
         if (devHeight == 0 || localDevHeight != devHeight)
         {
@@ -1633,16 +1637,16 @@ waitForJob:
           switch (protocol)
           {
           case XELIS_SOLO:
-            hexstrToBytes(myJobDev.at("template"), b2d);
+            hexstrToBytes(std::string(myJobDev.at("miner_work").as_string()), b2d);
             break;
           case XELIS_XATUM:
           {
-            std::string b64 = base64::from_base64(myJobDev.at("template").get<std::string>().c_str());
+            std::string b64 = base64::from_base64(std::string(myJobDev.at("miner_work").as_string().c_str()));
             memcpy(b2d, b64.data(), b64.size());
             break;
           }
           case XELIS_STRATUM:
-            hexstrToBytes(myJobDev.at("template"), b2d);
+            hexstrToBytes(std::string(myJobDev.at("miner_work").as_string()), b2d);
             break;
           }
           memcpy(devWork, b2d, XELIS_TEMPLATE_SIZE);
@@ -1742,7 +1746,7 @@ waitForJob:
               devShare = {{{"id", XelisStratum::submitID},
                            {"method", XelisStratum::submit.method.c_str()},
                            {"params", {devWorkerName,                                 // WORKER
-                                       devJob.at("jobId").get<std::string>().c_str(), // JOB ID
+                                       myJob.at("jobId").as_string().c_str(), // JOB ID
                                        hexStr((byte *)&n, 8).c_str()}}}};
               break;
             }
@@ -1775,7 +1779,7 @@ waitForJob:
               share = {{{"id", XelisStratum::submitID},
                         {"method", XelisStratum::submit.method.c_str()},
                         {"params", {workerName,                                   // WORKER
-                                    myJob.at("jobId").get<std::string>().c_str(), // JOB ID
+                                    myJob.at("jobId").as_string().c_str(), // JOB ID
                                     hexStr((byte *)&n, 8).c_str()}}}};
 
               // std::cout << "blob: " << hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str() << std::endl;
@@ -1802,14 +1806,18 @@ waitForJob:
     }
     catch (std::exception& e)
     {
+      setcolor(RED);
       std::cerr << "Error in POW Function" << std::endl;
       std::cerr << e.what() << std::endl;
+      setcolor(BRIGHT_WHITE);
     }
     if (!isConnected)
       break;
   }
   goto waitForJob;
 }
+
+
 
 
 void mineSpectre(int tid)
@@ -1849,15 +1857,16 @@ waitForJob:
     try
     {
      //  mutex.lock();
-      json myJob = job;
-      json myJobDev = devJob;
+      boost::json::value myJob = job;
+      boost::json::value myJobDev = devJob;
       localJobCounter = jobCounter;
      //  mutex.unlock();
 
       // printf("looping somewhere\n");
 
-      if (!myJob.contains("template"))
+      if (!myJob.at("template").is_string()) {
         continue;
+      }
       if (ourHeight == 0 && devHeight == 0)
         continue;
 
@@ -1867,10 +1876,10 @@ waitForJob:
         switch (protocol)
         {
         case SPECTRE_SOLO:
-          hexstrToBytes(myJob.at("template").get<std::string>(), b2);
+          hexstrToBytes(std::string(myJob.at("template").as_string()), b2);
           break;
         case SPECTRE_STRATUM:
-          hexstrToBytes(myJob.at("template").get<std::string>(), b2);
+          hexstrToBytes(std::string(myJob.at("template").as_string()), b2);
           break;
         }
         memcpy(work, b2, SpectreX::INPUT_SIZE);
@@ -1881,7 +1890,7 @@ waitForJob:
         i = 0;
       }
 
-      if (devConnected && myJobDev.contains("template"))
+      if (devConnected && myJobDev.at("template").is_string())
       {
         if (devHeight == 0 || localDevHeight != devHeight)
         {
@@ -1889,10 +1898,10 @@ waitForJob:
           switch (protocol)
           {
           case SPECTRE_SOLO:
-            hexstrToBytes(myJobDev.at("template").get<std::string>(), b2d);
+            hexstrToBytes(std::string(myJobDev.at("template").as_string()), b2d);
             break;
           case SPECTRE_STRATUM:
-            hexstrToBytes(myJobDev.at("template").get<std::string>(), b2d);
+            hexstrToBytes(std::string(myJobDev.at("template").as_string()), b2d);
             break;
           }
           memcpy(devWork, b2d, SpectreX::INPUT_SIZE);
@@ -1930,15 +1939,15 @@ waitForJob:
         byte *WORK = (devMine && devConnected) ? &devWork[0] : &work[0];
         byte *nonceBytes = &WORK[72];
         uint64_t n;
-
+        
         int enLen = 0;
         
-        json &J = devMine ? myJobDev : myJob;
-        if (J["extraNonce"].is_null() || J["extraNonce"].get<std::string>().size() == 0)
+        boost::json::value &J = devMine ? myJobDev : myJob;
+        if (!J.as_object().if_contains("extraNonce") || J.at("extraNonce").as_string().size() == 0)
           n = ((tid - 1) % (256 * 256)) | ((rand() % 256) << 16) | ((*nonce) << 24);
         else {
-          uint64_t eN = strtoull(J["extraNonce"].get<std::string>().c_str(), NULL, 16);
-          enLen = J["extraNonce"].get<std::string>().size()/2;
+          uint64_t eN = std::stoi(std::string(J.at("extraNonce").as_string().c_str()));
+          enLen = std::string(J.at("extraNonce").as_string()).size()/2;
           n = ((tid - 1) % (256 * 256)) | ((*nonce) << 16) | (eN << 56);
         }
         memcpy(nonceBytes, (byte *)&n, 8);
@@ -1992,7 +2001,7 @@ waitForJob:
               devShare = {{{"id", SpectreStratum::submitID},
                         {"method", SpectreStratum::submit.method.c_str()},
                         {"params", {devWorkerName,                                   // WORKER
-                                    devJob["jobId"].get<std::string>().c_str(), // JOB ID
+                                    std::to_string(devJob.at("jobId").as_uint64()).c_str(), // JOB ID
                                     std::string(nonceStr.data()).c_str()}}}};
 
               break;
@@ -2020,7 +2029,7 @@ waitForJob:
               share = {{{"id", SpectreStratum::submitID},
                         {"method", SpectreStratum::submit.method.c_str()},
                         {"params", {workerName,                                   // WORKER
-                                    myJob["jobId"].get<std::string>().c_str(), // JOB ID
+                                    std::to_string(myJob.at("jobId").as_uint64()).c_str(), // JOB ID
                                     std::string(nonceStr.data()).c_str()}}}};
 
               // std::cout << "blob: " << hexStr(&WORK[0], SpectreX::INPUT_SIZE).c_str() << std::endl;

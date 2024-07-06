@@ -13,8 +13,6 @@
 
 #include <iostream>
 
-#include <nlohmann/json.hpp>
-
 #include "spectrex.h"
 
 #include "stratum.h"
@@ -34,10 +32,8 @@ namespace beast = boost::beast;         // from <boost/beast.hpp>
 namespace net = boost::asio;            // from <boost/asio.hpp>
 namespace ssl = boost::asio::ssl;       // from <boost/asio/ssl.hpp>
 
-using json = nlohmann::json;
-
-extern json job;
-extern json devJob;
+extern boost::json::value job;
+extern boost::json::value devJob;
 
 extern std::string currentBlob;
 extern std::string devBlob;

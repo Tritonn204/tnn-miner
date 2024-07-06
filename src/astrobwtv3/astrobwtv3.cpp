@@ -127,10 +127,16 @@ inline void generateRandomBytesForTune(std::uint8_t (&iv_buff)[N])
   std::generate(std::begin(iv_buff), std::end(iv_buff), std::ref(rbe));
 }
 
+// TODO
+/*
+Make astroTune multithreaded (preferably matching the user's threads setting)
+Cache congestion (and thus advantages) will not show on single threaded benchmarks,
+leaving significant accuracy on the table
+*/
 void astroTune() {
-  std::vector<std::string> func_names = {"branch", "lookup", "wolf"
+  std::vector<std::string> func_names = {"branch", "lookup", "wolf",
   #if defined(__AVX2__)
-    , "avx2", "avx2z"
+      "avx2z"
   #elif defined(__aarch64__)
     , "aarch"
   #endif
@@ -138,11 +144,13 @@ void astroTune() {
 
   void (*allFuncs[]) (workerData &worker, bool isTest) = {branchComputeCPU, lookupCompute, wolfCompute,
   #if defined(__AVX2__)
-    branchComputeCPU_avx2, branchComputeCPU_avx2_zOptimized
+    branchComputeCPU_avx2_zOptimized
   #elif defined(__aarch64__)
     branchComputeCPU_aarch64
   #endif
   };
+
+  printf("Tuning AstroBWTv3\n");
 
   size_t numFuncs = sizeof(allFuncs)/sizeof(allFuncs[0]);
   int64_t funcTotal[numFuncs];
@@ -163,10 +171,13 @@ void astroTune() {
   byte res[32];
 
   auto big_start = std::chrono::steady_clock::now();
-  for(int y = 0; y < 50; y++) {
-    for(int x = 0; x < numFuncs; x++) {
+
+  for (int x = 0; x < numFuncs; x++)
+  {
+    for (int y = 0; y < 500; y++)
+    {
       astroCompFunc = allFuncs[x];
-      AstroBWTv3(random_buffer, 48, res, *worker, false);
+      // AstroBWTv3(random_buffer, 48, res, *worker, false);
 
       start = std::chrono::steady_clock::now();
       AstroBWTv3(random_buffer, 48, res, *worker, false);
@@ -175,8 +186,9 @@ void astroTune() {
       durations[x].push_back(duration.count());
     }
 
-    generateRandomBytesForTune<48>(random_buffer);
-    for(int x = numFuncs-1; x >= 0; x--) {
+    for (int y = 0; y < 500; y++)
+    {
+      generateRandomBytesForTune<48>(random_buffer);
       astroCompFunc = allFuncs[x];
       AstroBWTv3(random_buffer, 48, res, *worker, false);
 
@@ -187,26 +199,31 @@ void astroTune() {
       durations[x].push_back(duration.count());
     }
   }
-  //printf("size: %zu\n", durations[0].size());
-  for(int x = 0; x < numFuncs; x++) {
-    //printf("size: %zu\n", durations[x].size());
-    for(int y = 0; y < 15; y++) {
+  // printf("size: %zu\n", durations[0].size());
+  for (int x = 0; x < numFuncs; x++)
+  {
+    // printf("size: %zu\n", durations[x].size());
+    for (int y = 0; y < 15; y++)
+    {
       auto maxTime = std::max_element(durations[x].begin(), durations[x].end());
       durations[x].erase(maxTime);
     }
-    for(int y = 0; y < 15; y++) {
+    for (int y = 0; y < 15; y++)
+    {
       auto minTime = std::min_element(durations[x].begin(), durations[x].end());
       durations[x].erase(minTime);
     }
-    //printf("size: %zu\n", durations[x].size());
+    printf("size: %zu\n", durations[x].size());
   }
-  //printf("size: %zu\n", durations[0].size());
+  // printf("size: %zu\n", durations[0].size());
   double fastest_duration_dbl = std::accumulate(durations[0].begin(), durations[0].end(), 0.0) / double(durations[0].size());
   fastestComp = allFuncs[0];
-  for(int x = 0; x < numFuncs; x++) {
+  for (int x = 0; x < numFuncs; x++)
+  {
     double this_duration = std::accumulate(durations[x].begin(), durations[x].end(), 0.0) / double(durations[x].size());
-    //printf("%s = %f\n", func_names.data()[x].c_str(), this_duration);
-    if(this_duration < fastest_duration_dbl) {
+    // printf("%s = %f\n", func_names.data()[x].c_str(), this_duration);
+    if (this_duration < fastest_duration_dbl)
+    {
       fastestComp = astroCompFunc;
       fastestCompIdx = x;
       fastest_duration_dbl = this_duration;
@@ -215,11 +232,11 @@ void astroTune() {
 
   astroCompFunc = fastestComp;
 
-  //printf("%p = %p = %s\n", astroCompFunc, fastestComp, func_names.data()[fastestCompIdx].c_str());
+  // printf("%p = %p = %s\n", astroCompFunc, fastestComp, func_names.data()[fastestCompIdx].c_str());
   printf("Using %s for AstroBWTv3\n", func_names.data()[fastestCompIdx].c_str());
   auto big_end = std::chrono::steady_clock::now();
   auto duration_big = std::chrono::duration_cast<std::chrono::milliseconds>(big_end - big_start);
-  //printf("dur = %ld ms\n", duration_big.count());
+  // printf("dur = %ld ms\n", duration_big.count());
 }
 
 void hashSHA256(SHA256_CTX &sha256, const byte *input, byte *digest, unsigned long inputSize)

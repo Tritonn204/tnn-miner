@@ -39,12 +39,12 @@ extern int rejected;
 extern int accepted;
 //static int firstRejected;
 
-extern uint64_t hashrate;
-extern uint64_t ourHeight;
-extern uint64_t devHeight;
+//extern uint64_t hashrate;
+extern int64_t ourHeight;
+extern int64_t devHeight;
 
-extern uint64_t difficulty;
-extern uint64_t difficultyDev;
+extern int64_t difficulty;
+extern int64_t difficultyDev;
 
 extern double doubleDiff;
 extern double doubleDiffDev;
