@@ -484,8 +484,6 @@ void xelis_session(
                 ourHeight++;
                 difficulty = std::stoull(std::string((*J).at("difficulty").as_string().c_str()));
 
-                printf("height increase\n");
-
                 if (!isConnected)
                 {
                   wsMutex.lock();
