@@ -411,7 +411,7 @@ void xelis_session(
         beast::get_lowest_layer(ws).expires_never();
         workInfo << beast::make_printable(buffer.data());
 
-        // std::cout << "Received data: " << workInfo.str() << std::endl;
+        std::cout << "Received data: " << workInfo.str() << std::endl;
         if (json::accept(workInfo.str()))
         {
           json response = json::parse(workInfo.str());
@@ -420,13 +420,13 @@ void xelis_session(
           {
             rejected++;
           }
-          else if (response.contains("new_job") || response.contains("template"))
+          else if (response.contains("new_job") || response.contains("miner_work"))
           {
 
             if (response.contains("new_job"))
               workData = response.at("new_job");
-            else if (response.contains("template"))
-              workData = response;
+            // else if (response.contains("template"))
+            //   workData = response;
 
             if ((isDev ? (workData.at("height") != devHeight) : (workData.at("height") != ourHeight)))
             {
@@ -442,11 +442,14 @@ void xelis_session(
                           << consoleLine << "v" << versionString << " ";
               }
 
+
               if (!isDev)
               {
-                currentBlob = (*J).at("template").get<std::string>();
+                currentBlob = (*J).at("miner_work").get<std::string>();
                 ourHeight++;
                 difficulty = std::stoull((*J).at("difficulty").get<std::string>());
+
+                printf("height increase\n");
 
                 if (!isConnected)
                 {
@@ -464,7 +467,7 @@ void xelis_session(
               }
               else
               {
-                devBlob = (*J).at("template").get<std::string>();
+                devBlob = (*J).at("miner_work").get<std::string>();
                 devHeight++;
                 difficultyDev = std::stoull((*J).at("difficulty").get<std::string>());
 
@@ -1409,7 +1412,7 @@ void spectre_stratum_session(
         // Consume the data from the buffer after processing it
         response.consume(trans);
 
-        // std::cout << data << std::endl;
+        std::cout << data << std::endl;
 
         std::stringstream  jsonStream(data);
 
@@ -1565,7 +1568,7 @@ void do_session(
 int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCache *cache, bool isDev)
 {
   std::string M = packet.at("method").get_string().c_str();
-  std::cout << "Stratum packet: " << boost::json::serialize(packet).c_str() << std::endl;
+  // std::cout << "Stratum packet: " << boost::json::serialize(packet).c_str() << std::endl;
   if (M.compare(SpectreStratum::s_notify) == 0)
   {
     json *J = isDev ? &devJob : &job;
@@ -1652,7 +1655,7 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
   }
   else if (M.compare(SpectreStratum::s_setExtraNonce) == 0)
   {
-    std::cout << boost::json::serialize(packet).c_str() << std::endl;
+    // std::cout << boost::json::serialize(packet).c_str() << std::endl;
     json *J = isDev ? &devJob : &job;
     // uint64_t *h = isDev ? &devHeight : &ourHeight;
 
