@@ -977,7 +977,7 @@ void xelis_stratum_session(
         // Consume the data from the buffer after processing it
         response.consume(trans);
 
-        // std::cout << data << std::endl;
+        std::cout << data << std::endl;
 
         if (data.compare(XelisStratum::k1ping) == 0)
         {
@@ -1768,7 +1768,10 @@ int handleSpectreStratumResponse(boost::json::object packet, bool isDev)
         if (!isDev) rejected++;
         if (!isDev)
           setcolor(RED);
-        std::cout << "Stratum: share rejected: " << packet.at("error").get_array()[1].get_string() << std::endl;
+        boost::json::string ERR;
+        if (packet["error"].is_array()) packet.at("error").get_array()[1].get_string();
+        else ERR = packet.at("error").at("message").get_string();
+        std::cout << "Stratum: share rejected: " << ERR << std::endl;
         setcolor(BRIGHT_WHITE);
       }
       break;
