@@ -6,10 +6,6 @@
 #include <sstream>
 #include <iomanip>
 
-#include <nlohmann/json.hpp>
-
-using json = nlohmann::json;
-
 namespace Xatum
 {
   static std::string handshake = "shake~";
@@ -36,7 +32,7 @@ namespace Xatum
   typedef struct packet
   {
     std::string command;
-    json data;
+    boost::json::value data;
   } packet;
 
   static packet parsePacket(const std::string &str, const std::string &delimiter)
@@ -47,9 +43,9 @@ namespace Xatum
       size_t halfPos = delimiterPos + delimiter.length();
       if (halfPos < str.length())
       {
-        return {str.substr(0, halfPos), json::parse(str.substr(halfPos))};
+        return {str.substr(0, halfPos), boost::json::parse(str.substr(halfPos))};
       }
     }
-    return {str, json({})};
+    return {str, boost::json::value({})};
   }
 }

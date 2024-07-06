@@ -14,10 +14,6 @@
 #include <boost/asio/ip/host_name.hpp>
 #include <boost/json.hpp>
 
-#include <nlohmann/json.hpp>
-
-#include <stdlib.h> 
-
 namespace beast = boost::beast;         // from <boost/beast.hpp>
 namespace http = beast::http;           // from <boost/beast/http.hpp>
 namespace websocket = beast::websocket; // from <boost/beast/websocket.hpp>
@@ -25,13 +21,11 @@ namespace net = boost::asio;            // from <boost/asio.hpp>
 namespace ssl = boost::asio::ssl;       // from <boost/asio/ssl.hpp>
 using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
 
-using json = nlohmann::json;
-
 boost::mutex wsMutex;
 
 /* Start definitions from net.hpp */
-json job = json({});
-json devJob = json({});
+boost::json::value job = boost::json::value({});
+boost::json::value devJob = boost::json::value({});
 
 std::string currentBlob;
 std::string devBlob;
@@ -195,6 +189,37 @@ void dero_session(
   // This buffer will hold the incoming message
   beast::flat_buffer buffer;
   std::stringstream workInfo;
+  boost::json::error_code jsonEc;
+  boost::json::value workData;
+
+  boost::thread([&]() {
+    while(true) {
+      bool *B = isDev ? &submittingDev : &submitting;
+      try {
+        if (*B)
+        {
+          boost::json::object *S = isDev ? &devShare : &share;
+          std::string msg = boost::json::serialize(*S);
+          // wsMutex.lock();
+          // std::cout << msg;
+          // wsMutex.unlock();
+          ws.async_write(boost::asio::buffer(msg), [&](const boost::system::error_code &ec, std::size_t)
+          {
+            if (ec) {
+                setcolor(RED);
+                printf("\nasync_write: submission error\n");
+                setcolor(BRIGHT_WHITE);
+            }
+          });
+          *B = false;
+        }
+      } catch (const std::exception &e) {}
+      boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
+      bool *C = isDev ? &devConnected : &isConnected; 
+      int64_t H = isDev ? devHeight : ourHeight;
+      if (H > 0 && !(*C)) break;
+    }
+  });
 
   while (true)
   {
@@ -205,23 +230,6 @@ void dero_session(
       workInfo.str("");
       workInfo.clear();
 
-
-      if (*B)
-      {
-        boost::json::object *S = isDev ? &devShare : &share;
-        std::string msg = boost::json::serialize(*S);
-        // wsMutex.lock();
-        // std::cout << msg;
-        // wsMutex.unlock();
-        ws.async_write(boost::asio::buffer(msg), yield[ec]);
-        if (ec) {
-            setcolor(RED);
-            printf("\nasync_write: submission error\n");
-            setcolor(BRIGHT_WHITE);
-        }
-        *B = false;
-      }
-
       beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(60));
       ws.async_read(buffer, yield[ec]);
       if (!ec)
@@ -230,9 +238,10 @@ void dero_session(
 
         beast::get_lowest_layer(ws).expires_never();
         workInfo << beast::make_printable(buffer.data());
-        if (json::accept(workInfo.str()))
+
+        workData = boost::json::parse(workInfo.str(), jsonEc);
+        if (!jsonEc)
         {
-          json workData = json::parse(workInfo.str());
           if ((isDev ? (workData.at("height") != devHeight) : (workData.at("height") != ourHeight)))
           {
             // wsMutex.lock();
@@ -240,7 +249,7 @@ void dero_session(
               devJob = workData;
             else
               job = workData;
-            json *J = isDev ? &devJob : &job;
+            boost::json::value *J = isDev ? &devJob : &job;
             // wsMutex.unlock();
 
             if ((*J).at("lasterror") != "")
@@ -251,16 +260,16 @@ void dero_session(
 
             if (!isDev)
             {
-              currentBlob = std::string((*J).at("blockhashing_blob"));
-              blockCounter = (*J).at("blocks");
-              miniBlockCounter = (*J).at("miniblocks");
-              rejected = (*J).at("rejected");
-              hashrate = (*J).at("difficultyuint64");
-              ourHeight = (*J).at("height");
-              difficulty = (*J).at("difficultyuint64");
+              currentBlob = (*J).at("blockhashing_blob").as_string();
+              //blockCounter = (*J).at("blocks");
+              //miniBlockCounter = (*J).at("miniblocks");
+              //rejected = (*J).at("rejected");
+              //hashrate = (*J).at("difficultyuint64");
+              ourHeight = (*J).at("height").as_int64();
+              difficulty = (*J).at("difficultyuint64").as_int64();
               // printf("NEW JOB RECEIVED | Height: %d | Difficulty %" PRIu64 "\n", ourHeight, difficulty);
-              accepted = (*J).at("miniblocks");
-              rejected = (*J).at("rejected");
+              accepted = (*J).at("miniblocks").as_int64();
+              rejected = (*J).at("rejected").as_int64();
               if (!isConnected)
               {
                 wsMutex.lock();
@@ -277,9 +286,9 @@ void dero_session(
             }
             else
             {
-              difficultyDev = (*J).at("difficultyuint64");
-              devBlob = std::string((*J).at("blockhashing_blob"));
-              devHeight = (*J).at("height");
+              difficultyDev = (*J).at("difficultyuint64").as_int64();
+              devBlob = (*J).at("blockhashing_blob").as_string();
+              devHeight = (*J).at("height").as_int64();
               if (!devConnected)
               {
                 wsMutex.lock();
@@ -301,13 +310,13 @@ void dero_session(
         return fail(ec, "async_read");
       }
     }
-    catch (...)
+    catch (const std::exception &e)
     {
       setcolor(RED);
-      std::cout << "ws error\n";
+      std::cout << "ws error: " << e.what() << std::endl;
       setcolor(BRIGHT_WHITE);
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
+    // boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
   }
 
   // // Close the WebSocket connection
@@ -369,7 +378,7 @@ void xelis_session(
   ws.async_handshake(host, ss.str().c_str(), yield[ec]);
   if (ec)
   {
-    return fail(ec, "handshake");
+    return fail(ec, "handshake-xelis");
   }
 
   // This buffer will hold the incoming message
@@ -378,26 +387,40 @@ void xelis_session(
 
   bool subStart = false;
 
+  boost::thread([&](){
+    while(true) {
+      try
+      {
+        bool *B = isDev ? &submittingDev : &submitting;
+        if (*B)
+        {
+          boost::json::object *S = isDev ? &devShare : &share;
+          std::string msg = boost::json::serialize(*S);
+
+          // Acquire a lock before writing to the WebSocket
+          ws.async_write(boost::asio::buffer(msg), [&](const boost::system::error_code &ec, std::size_t)
+          {
+            if (ec) {
+                setcolor(RED);
+                printf("\nasync_write: submission error\n");
+                setcolor(BRIGHT_WHITE);
+            }
+          });
+          (*B) = false;
+        }
+      } catch (const std::exception &e) {}
+      boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
+      bool *C = isDev ? &devConnected : &isConnected; 
+      int64_t H = isDev ? devHeight : ourHeight;
+      if (H > 0 && !(*C)) break;
+    }
+  });
+
   while (true)
   {
     try
     {
       bool *B = isDev ? &submittingDev : &submitting;
-      if (*B)
-      {
-        boost::json::object *S = isDev ? &devShare : &share;
-        std::string msg = boost::json::serialize(*S);
-
-        // Acquire a lock before writing to the WebSocket
-        ws.async_write(boost::asio::buffer(msg), [&](const boost::system::error_code &ec, std::size_t)
-                       {
-            if (ec) {
-                setcolor(RED);
-                printf("\nasync_write: submission error\n");
-                setcolor(BRIGHT_WHITE);
-            } });
-        (*B) = false;
-      }
 
       buffer.clear();
       workInfo.str("");
@@ -411,43 +434,55 @@ void xelis_session(
         beast::get_lowest_layer(ws).expires_never();
         workInfo << beast::make_printable(buffer.data());
 
-        std::cout << "Received data: " << workInfo.str() << std::endl;
-        if (json::accept(workInfo.str()))
+        // std::cout << "Received data: " << workInfo.str() << std::endl;
+        boost::json::error_code jsonEc;
+        boost::json::value response = boost::json::parse(workInfo.str(), jsonEc);
+        if (!jsonEc)
         {
-          json response = json::parse(workInfo.str());
-          json workData;
-          if (response.contains("block_rejected"))
-          {
-            rejected++;
+          if(response.is_string()) {
+            std::string resp = std::string(response.as_string());
+            if(resp.compare("block_accepted") == 0) {
+              accepted++;
+              setcolor(BRIGHT_YELLOW);
+              if (!isDev) printf("Block Accepted!\n");
+              setcolor(BRIGHT_WHITE);
+            } else if(resp.compare("block_rejected") == 0) {
+              rejected++;
+              setcolor(RED);
+              if (!isDev) printf("Block Rejected...\n");
+              setcolor(BRIGHT_WHITE);
+            }
           }
-          else if (response.contains("new_job") || response.contains("miner_work"))
+          else if (response.as_object().contains("new_job") || response.as_object().contains("miner_work"))
           {
-
-            if (response.contains("new_job"))
+            boost::json::value workData;
+            if (response.as_object().contains("new_job")) {
               workData = response.at("new_job");
-            // else if (response.contains("template"))
-            //   workData = response;
+            //} else if (response.as_object().contains("miner_work")) {
+            //  workData = response;
+            }
 
-            if ((isDev ? (workData.at("height") != devHeight) : (workData.at("height") != ourHeight)))
+            if ((isDev ? (workData.at("height").as_int64() != devHeight) : (workData.at("height").as_int64() != ourHeight)))
             {
               if (isDev)
                 devJob = workData;
               else
                 job = workData;
-              json *J = isDev ? &devJob : &job;
+              boost::json::value *J = isDev ? &devJob : &job;
 
-              if ((*J).contains("lasterror") && (*J).at("lasterror") != "")
+              auto lasterror = (*J).as_object().if_contains("lasterror");
+              if (nullptr != lasterror)
               {
-                std::cerr << "received error: " << (*J).at("lasterror") << std::endl
+                std::cerr << "received error: " << (*lasterror).as_string() << std::endl
                           << consoleLine << "v" << versionString << " ";
               }
 
 
               if (!isDev)
               {
-                currentBlob = (*J).at("miner_work").get<std::string>();
+                currentBlob = (*J).at("miner_work").as_string();
                 ourHeight++;
-                difficulty = std::stoull((*J).at("difficulty").get<std::string>());
+                difficulty = std::stoull(std::string((*J).at("difficulty").as_string().c_str()));
 
                 printf("height increase\n");
 
@@ -467,9 +502,9 @@ void xelis_session(
               }
               else
               {
-                devBlob = (*J).at("miner_work").get<std::string>();
+                devBlob = (*J).at("miner_work").as_string();
                 devHeight++;
-                difficultyDev = std::stoull((*J).at("difficulty").get<std::string>());
+                difficultyDev = std::stoull(std::string((*J).at("difficulty").as_string().c_str()));
 
                 if (!devConnected)
                 {
@@ -483,10 +518,6 @@ void xelis_session(
                 jobCounter++;
               }
             }
-          }
-          else
-          {
-            accepted++;
           }
         }
       }
@@ -504,7 +535,7 @@ void xelis_session(
       setcolor(BRIGHT_WHITE);
       // submission_thread.interrupt();
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
+    // boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
   }
 
   // Close the WebSocket connection
@@ -546,7 +577,6 @@ void xatum_session(
   ctx.set_verify_mode(ssl::verify_none); // Accept self-signed certificates
   tcp::socket socket(ioc);
   boost::beast::ssl_stream<boost::beast::tcp_stream> stream(ioc, ctx);
-  boost::asio::deadline_timer deadline(ioc, boost::posix_time::seconds(1));
 
   auto endpoint = resolve_host(wsMutex, ioc, yield, host, port);
   // Set a timeout on the operation
@@ -568,7 +598,7 @@ void xatum_session(
   beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(300));
   stream.async_handshake(ssl::stream_base::client, yield[ec]);
   if (ec)
-    return fail(ec, "handshake");
+    return fail(ec, "handshake-xatum");
 
   boost::json::object handshake_packet = {
       {"addr", wallet.c_str()},
@@ -596,6 +626,43 @@ void xatum_session(
 
   Xatum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
+
+  boost::thread([&](){
+    while (true)
+    {
+      try
+      {
+        bool *B = isDev ? &submittingDev : &submitting;
+        if (*B)
+        {
+          boost::json::object *S = &share;
+          if (isDev)
+            S = &devShare;
+          std::string msg = Xatum::submission + boost::json::serialize(*S) + "\n";
+          // if (lastHash.compare((*S).at("hash").get_string()) == 0) continue;
+          // lastHash = (*S).at("hash").get_string();
+
+          // printf("submitting share: %s\n", msg.c_str());
+          // Acquire a lock before writing to the WebSocket
+          beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(10));
+          boost::asio::async_write(stream, boost::asio::buffer(msg), [&](const boost::system::error_code &ec, std::size_t)
+          {
+            if (ec) {
+                setcolor(RED);
+                printf("\nasync_write: submission error\n");
+                setcolor(BRIGHT_WHITE);
+            }
+          });
+          (*B) = false;
+        }
+      } catch (const std::exception &e) {}
+      boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
+      bool *C = isDev ? &devConnected : &isConnected; 
+      int64_t H = isDev ? devHeight : ourHeight;
+      if (H > 0 && !(*C)) break;
+    }
+  });
+
   while (true)
   {
     try
@@ -609,36 +676,10 @@ void xatum_session(
         return fail(ec, "Xatum session timed out");
       }
       bool *B = isDev ? &submittingDev : &submitting;
-      if (*B)
-      {
-        boost::json::object *S = &share;
-        if (isDev)
-          S = &devShare;
-        std::string msg = Xatum::submission + boost::json::serialize(*S) + "\n";
-        // if (lastHash.compare((*S).at("hash").get_string()) == 0) continue;
-        // lastHash = (*S).at("hash").get_string();
-
-        // printf("submitting share: %s\n", msg.c_str());
-        // Acquire a lock before writing to the WebSocket
-        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(10));
-        boost::asio::async_write(stream, boost::asio::buffer(msg), yield[ec]);
-        if (ec) {
-            setcolor(RED);
-            printf("\nasync_write: submission error\n");
-            setcolor(BRIGHT_WHITE);
-        }
-        (*B) = false;
-      }
       boost::asio::streambuf response;
       std::stringstream workInfo;
       beast::get_lowest_layer(stream).expires_after(std::chrono::milliseconds(45000));
 
-      deadline.expires_from_now(boost::posix_time::seconds(1));
-      deadline.async_wait([&](beast::error_code ec)
-                          {
-          if (!ec) {
-              beast::get_lowest_layer(stream).cancel();
-          } });
       trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
       // if (ec && trans > 0)
       //   return fail(ec, "Xatum async_read_until");
@@ -672,7 +713,7 @@ void xatum_session(
       (*C) = false;
       return fail(ec, "Xatum session error");
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
+    boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
   }
 
   // submission_thread.interrupt();
@@ -682,18 +723,18 @@ void xatum_session(
 int handleXatumPacket(Xatum::packet xPacket, bool isDev)
 {
   std::string command = xPacket.command;
-  json data = xPacket.data;
+    boost::json::value data = xPacket.data;
   int res = 0;
 
   if (command == Xatum::print)
   {
-    if (Xatum::accepted_msg.compare(data.at("msg").get<std::string>()) == 0)
+    if (Xatum::accepted_msg.compare(data.at("msg").as_string()) == 0)
       accepted++;
 
-    if (Xatum::stale_msg.compare(data.at("msg").get<std::string>()) == 0)
+    if (Xatum::stale_msg.compare(data.at("msg").as_string()) == 0)
       rejected++;
 
-    int msgLevel = data.at("lvl").get<int>();
+    int msgLevel = data.at("lvl").as_int64();
     if (msgLevel < Xatum::logLevel)
       return 0;
 
@@ -730,7 +771,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
       break;
     }
 
-    printf("%s\n", data.at("msg").get<std::string>().c_str());
+    printf("%s\n", data.at("msg").as_string().c_str());
 
     setcolor(BRIGHT_WHITE);
     wsMutex.unlock();
@@ -738,15 +779,15 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
 
   else if (command == Xatum::newJob)
   {
-    uint64_t *diff = isDev ? &difficultyDev : &difficulty;
-    json *J = isDev ? &devJob : &job;
-    uint64_t *h = isDev ? &devHeight : &ourHeight;
+    int64_t *diff = isDev ? &difficultyDev : &difficulty;
+    boost::json::value *J = isDev ? &devJob : &job;
+    int64_t *h = isDev ? &devHeight : &ourHeight;
 
     std::string *B = isDev ? &devBlob : &currentBlob;
 
-    if (data.at("blob").get<std::string>().compare(*B) == 0)
+    if (data.at("blob").as_string().compare(*B) == 0)
       return 0;
-    *B = data.at("blob").get<std::string>();
+    *B = data.at("blob").as_string();
 
     Xatum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
@@ -757,12 +798,9 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
       printf("\nNew Xatum job received\n");
       setcolor(BRIGHT_WHITE);
     }
-    *diff = data.at("diff").get<uint64_t>();
+    *diff = data.at("diff").as_uint64();
 
-    if ((*J).contains("template"))
-      (*J).at("template") = (*B).c_str();
-    else
-      (*J).emplace("template", (*B).c_str());
+    (*J).as_object().emplace("miner_work", (*B).c_str());
 
     bool *C = isDev ? &devConnected : &isConnected;
 
@@ -798,7 +836,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
   else if (!isDev && command == Xatum::success)
   {
     // std::cout << data << std::endl;
-    if (data.at("msg").get<std::string>() == "ok")
+    if (data.at("msg").as_string() == "ok")
     {
       printf("Xatum: share accepted!");
       accepted++;
@@ -807,7 +845,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
     {
       rejected++;
       setcolor(RED);
-      printf("\nXatum Share Rejected: %s\n", data.at("msg").get<std::string>().c_str());
+      printf("\nXatum Share Rejected: %s\n", data.at("msg").as_string().c_str());
       setcolor(BRIGHT_WHITE);
     }
   }
@@ -829,6 +867,7 @@ void xelis_stratum_session(
     net::yield_context yield,
     bool isDev)
 {
+  printf("using xelis stratum\n");
   ctx.set_options(boost::asio::ssl::context::default_workarounds |
                   boost::asio::ssl::context::no_sslv2 |
                   boost::asio::ssl::context::no_sslv3 |
@@ -837,7 +876,6 @@ void xelis_stratum_session(
 
   beast::error_code ec;
   boost::system::error_code jsonEc;
-  boost::asio::deadline_timer deadline(ioc, boost::posix_time::seconds(1));
 
   auto endpoint = resolve_host(wsMutex, ioc, yield, host, port);
 
@@ -865,7 +903,7 @@ void xelis_stratum_session(
   beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(300));
   stream.async_handshake(ssl::stream_base::client, yield[ec]);
   if (ec)
-    return fail(ec, "handshake");
+    return fail(ec, "handshake-xelis-strat");
 
   boost::json::object packet = XelisStratum::stratumCall;
   packet.at("id") = XelisStratum::subscribe.id;
@@ -894,8 +932,11 @@ void xelis_stratum_session(
     std::cerr << jsonEc.message() << std::endl;
   }
 
-  // std::cout << boost::json::serialize(subResJson).c_str() << std::endl;
-  handleXStratumResponse(subResJson, isDev);
+  std::cout << boost::json::serialize(subResJson).c_str() << std::endl;
+
+  try {
+    handleXStratumResponse(subResJson, isDev);
+  } catch (const std::exception &e) {setcolor(RED);printf("%s", e.what());setcolor(BRIGHT_WHITE);}
 
   // Authorize Stratum Worker
   packet = XelisStratum::stratumCall;
@@ -904,7 +945,7 @@ void xelis_stratum_session(
   packet.at("params") = boost::json::array({wallet, worker, "x"});
   std::string authorization = boost::json::serialize(packet) + "\n";
 
-  // std::cout << authorization << std::endl;
+  std::cout << authorization << std::endl;
 
   beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
   trans = boost::asio::async_write(stream, boost::asio::buffer(authorization), yield[ec]);
@@ -916,6 +957,46 @@ void xelis_stratum_session(
   std::stringstream workInfo;
 
   XelisStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+
+  printf("made it here\n");
+
+  boost::thread([&](){
+    beast::error_code ec2;
+    while(true) {
+      try {
+        bool *B = isDev ? &submittingDev : &submitting;
+        if (*B)
+        {
+          boost::json::object *S = &share;
+          if (isDev)
+            S = &devShare;
+
+          std::string msg = boost::json::serialize((*S)) + "\n";
+          // if (lastHash.compare((*S).at("hash").get_string()) == 0) continue;
+          // lastHash = (*S).at("hash").get_string();
+
+          // printf("submitting share: %s\n", msg.c_str());
+          // Acquire a lock before writing to the WebSocket
+
+          // std::cout << "sending in: " << msg << std::endl;
+          beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(10));
+          boost::asio::async_write(stream, boost::asio::buffer(msg), [&](const boost::system::error_code &ec, std::size_t)
+          {
+            if (ec) {
+                setcolor(RED);
+                printf("\nasync_write: submission error\n");
+                setcolor(BRIGHT_WHITE);
+            }
+          });
+          (*B) = false;
+        }
+      } catch (const std::exception &e) {}
+      boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
+      bool *C = isDev ? &devConnected : &isConnected; 
+      int64_t H = isDev ? devHeight : ourHeight;
+      if (H > 0 && !(*C)) break;
+    }
+  });
 
   while (true)
   {
@@ -930,40 +1011,10 @@ void xelis_stratum_session(
         return fail(ec, "Stratum session timed out");
       }
       bool *B = isDev ? &submittingDev : &submitting;
-      if (*B)
-      {
-        boost::json::object *S = &share;
-        if (isDev)
-          S = &devShare;
-
-        std::string msg = boost::json::serialize((*S)) + "\n";
-        // if (lastHash.compare((*S).at("hash").get_string()) == 0) continue;
-        // lastHash = (*S).at("hash").get_string();
-
-        // printf("submitting share: %s\n", msg.c_str());
-        // Acquire a lock before writing to the WebSocket
-
-        // std::cout << "sending in: " << msg << std::endl;
-        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(10));
-        boost::asio::async_write(stream, boost::asio::buffer(msg), yield[ec]);
-        if (ec) {
-            setcolor(RED);
-            printf("\nasync_write: submission error\n");
-            setcolor(BRIGHT_WHITE);
-        }
-        (*B) = false;
-      }
 
       boost::asio::streambuf response;
       std::stringstream workInfo;
       beast::get_lowest_layer(stream).expires_after(std::chrono::milliseconds(60000));
-
-      deadline.expires_from_now(boost::posix_time::seconds(1));
-      deadline.async_wait([&](beast::error_code ec)
-                          {
-          if (!ec) {
-              beast::get_lowest_layer(stream).cancel();
-          } });
       trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
       if (ec && trans > 0) {
         (*C) = false;
@@ -1028,7 +1079,7 @@ void xelis_stratum_session(
       setcolor(BRIGHT_WHITE);
       return fail(ec, "Stratum session error");
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
+    boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
   }
 
   // submission_thread.interrupt();
@@ -1037,11 +1088,10 @@ void xelis_stratum_session(
 
 int handleXStratumPacket(boost::json::object packet, bool isDev)
 {
-  std::string M = packet.at("method").get_string().c_str();
+  std::string M = packet["method"].as_string().c_str();
   if (M.compare(XelisStratum::s_notify) == 0)
   {
-
-    if (ourHeight > 0 && packet.at("params").as_array()[4].get_bool() != true)
+    if (ourHeight > 0 && packet["params"].as_array()[4].get_bool() != true)
       return 0;
 
     setcolor(CYAN);
@@ -1051,23 +1101,23 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
 
     XelisStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
-    json *J = isDev ? &devJob : &job;
-    uint64_t *h = isDev ? &devHeight : &ourHeight;
+    boost::json::value *JV = isDev ? &devJob : &job;
+    boost::json::object J = (*JV).as_object();
 
-    std::string bs = (*J).at("template").get<std::string>();
-    char *blob = (char *)bs.c_str();
+    int64_t *h = isDev ? &devHeight : &ourHeight;
 
-    const char *jobId = packet.at("params").as_array()[0].get_string().c_str();
-    const char *ts = packet.at("params").as_array()[1].get_string().c_str();
-    int tsLen = packet.at("params").as_array()[1].get_string().size();
-    const char *header = packet.at("params").as_array()[2].get_string().c_str();
+    char *blob = (char *)J["miner_work"].as_string().c_str();
+    const char *jobId = packet["params"].as_array()[0].as_string().c_str();
+    const char *ts = packet["params"].as_array()[1].as_string().c_str();
+    int tsLen = packet["params"].as_array()[1].as_string().size();
+    const char *header = packet["params"].as_array()[2].as_string().c_str();
 
     memset(&blob[64], '0', 16);
     memcpy(&blob[64 + 16 - tsLen], ts, tsLen);
     memcpy(blob, header, 64);
 
-    (*J).at("template") = std::string(blob);
-    (*J)["jobId"] = jobId;
+    J["miner_work"] = std::string(blob);
+    J["jobId"] = std::string(jobId);
 
     bool *C = isDev ? &devConnected : &isConnected;
     if (!*C)
@@ -1089,6 +1139,8 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
       }
     }
 
+    (*JV) = J;
+
     *C = true;
     (*h)++;
     jobCounter++;
@@ -1096,26 +1148,29 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
   else if (M.compare(XelisStratum::s_setDifficulty) == 0)
   {
 
-    uint64_t *d = isDev ? &difficultyDev : &difficulty;
-    (*d) = packet.at("params").as_array()[0].get_double();
+    int64_t *d = isDev ? &difficultyDev : &difficulty;
+    (*d) = packet["params"].as_array()[0].get_double();
     if ((*d) == 0)
-      (*d) = packet.at("params").as_array()[0].get_uint64();
+      (*d) = packet["params"].as_array()[0].get_uint64();
   }
   else if (M.compare(XelisStratum::s_setExtraNonce) == 0)
   {
 
-    json *J = isDev ? &devJob : &job;
-    uint64_t *h = isDev ? &devHeight : &ourHeight;
+    boost::json::value *JV = isDev ? &devJob : &job;
+    boost::json::object J = (*JV).as_object();
 
-    std::string bs = (*J).at("template").get<std::string>();
-    char *blob = (char *)bs.c_str();
-    const char *en = packet.at("params").as_array()[0].as_string().c_str();
-    int enLen = packet.at("params").as_array()[0].as_string().size();
+    int64_t *h = isDev ? &devHeight : &ourHeight;
+
+    char *blob = (char *)J["miner_work"].as_string().c_str();
+    const char *en = packet["params"].as_array()[0].as_string().c_str();
+    int enLen = packet["params"].as_array()[0].as_string().size();
 
     memset(&blob[48], '0', 64);
     memcpy(&blob[48], en, enLen);
 
-    (*J).at("template") = std::string(blob).c_str();
+    J["miner_work"] = std::string(blob).c_str();
+
+    (*JV) = J;
 
     (*h)++;
     jobCounter++;
@@ -1175,27 +1230,28 @@ int handleXStratumResponse(boost::json::object packet, bool isDev)
   {
   case XelisStratum::subscribeID:
   {
-    json *J = isDev ? &devJob : &job;
-    if (!(*J).contains("template"))
+    boost::json::value *JV = isDev ? &devJob : &job;
+    boost::json::object J = (*JV).as_object();
+    if (J["miner_work"].is_null())
     {
       byte blankBlob[XELIS_TEMPLATE_SIZE * 2];
       memset(blankBlob, '0', XELIS_TEMPLATE_SIZE * 2);
       std::string base = std::string((char *)blankBlob);
       base.resize(XELIS_TEMPLATE_SIZE * 2);
-      (*J).emplace("template", base.c_str());
+      J["miner_work"] = base.c_str();
     }
 
-    std::string bs = (*J).at("template").get<std::string>();
-    char *blob = (char *)bs.c_str();
-    const char *extraNonce = packet.at("result").get_array()[1].get_string().c_str();
-    int enLen = packet.at("result").get_array()[2].get_int64();
-    const char *pubKey = packet.at("result").get_array()[3].get_string().c_str();
+    char *blob = (char *)J["miner_work"].as_string().c_str();
+    const char *extraNonce = packet["result"].get_array()[1].get_string().c_str();
+    int enLen = packet["result"].get_array()[2].get_int64();
+    const char *pubKey = packet["result"].get_array()[3].get_string().c_str();
 
     memset(&blob[96], '0', 64);
     memcpy(&blob[96], extraNonce, enLen * 2);
     memcpy(&blob[160], pubKey, 64);
 
-    (*J).at("template") = std::string(blob).c_str();
+    J["miner_work"] = std::string(blob).c_str();
+    (*JV) = J;
   }
   break;
   case XelisStratum::submitID:
@@ -1244,7 +1300,6 @@ void spectre_stratum_session(
 
   beast::error_code ec;
   boost::system::error_code jsonEc;
-  boost::asio::deadline_timer deadline(ioc, boost::posix_time::seconds(1));
 
   auto endpoint = resolve_host(wsMutex, ioc, yield, host, port);
   boost::beast::tcp_stream stream(ioc);
@@ -1340,6 +1395,44 @@ void spectre_stratum_session(
 
   std::string chopQueue = "NULL";
 
+  boost::thread([&](){
+    while(true) {
+      try {
+        bool *B = isDev ? &submittingDev : &submitting;
+        if (*B)
+        {
+          boost::json::object *S = &share;
+          if (isDev)
+            S = &devShare;
+
+          std::string msg = boost::json::serialize((*S)) + "\n";
+          // if (lastHash.compare((*S).at("hash").get_string()) == 0) continue;
+          // lastHash = (*S).at("hash").get_string();
+
+          // printf("submitting share: %s\n", msg.c_str());
+          // Acquire a lock before writing to the WebSocket
+
+          // std::cout << "sending in: " << msg << std::endl;
+          beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(10));
+          boost::asio::async_write(stream, boost::asio::buffer(msg), [&](const boost::system::error_code &ec, std::size_t)
+          {
+            if (ec) {
+                setcolor(RED);
+                printf("\nasync_write: submission error\n");
+                setcolor(BRIGHT_WHITE);
+            }
+          });
+          if (!isDev) SpectreStratum::lastShareSubmissionTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+          (*B) = false;
+        }
+      } catch (const std::exception &e) {}
+      boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
+      bool *C = isDev ? &devConnected : &isConnected; 
+      int64_t H = isDev ? devHeight : ourHeight;
+      if (H > 0 && !(*C)) break;
+    }
+  });
+
   while (true)
   {
     bool *C = isDev ? &devConnected : &isConnected;
@@ -1362,41 +1455,11 @@ void spectre_stratum_session(
         (*B) = false;
         return fail(ec, "Stratum session timed out");
       }
-      if (*B)
-      {
-        boost::json::object *S = &share;
-        if (isDev)
-          S = &devShare;
-
-        std::string msg = boost::json::serialize((*S)) + "\n";
-        // if (lastHash.compare((*S).at("hash").get_string()) == 0) continue;
-        // lastHash = (*S).at("hash").get_string();
-
-        // printf("submitting share: %s\n", msg.c_str());
-        // Acquire a lock before writing to the WebSocket
-
-        std::cout << "sending in: " << msg << std::endl;
-        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(10));
-        boost::asio::async_write(stream, boost::asio::buffer(msg), yield[ec]);
-        if (ec) {
-            setcolor(RED);
-            printf("\nasync_write submission error: %s\n", ec.message().c_str());
-            setcolor(BRIGHT_WHITE);
-        }
-        if (!isDev) SpectreStratum::lastShareSubmissionTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-        (*B) = false;
-      }
 
       boost::asio::streambuf response;
       std::stringstream workInfo;
       beast::get_lowest_layer(stream).expires_after(std::chrono::milliseconds(60000));
 
-      deadline.expires_from_now(boost::posix_time::seconds(1));
-      deadline.async_wait([&](beast::error_code ec)
-                          {
-          if (!ec) {
-              beast::get_lowest_layer(stream).cancel();
-          } });
       trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
       if (ec && trans > 0) {
         (*C) = false;
@@ -1454,7 +1517,7 @@ void spectre_stratum_session(
 
             setcolor(RED);
             // printf("BEFORE PACKET\n");
-            std::cout << "BAD PACKET: " << packet << std::endl;
+            // std::cout << "BAD PACKET: " << packet << std::endl;
             // printf("AFTER PACKET\n");
             // std::cerr << e.what() << std::endl;
             setcolor(BRIGHT_WHITE);
@@ -1519,7 +1582,7 @@ void spectre_stratum_session(
       setcolor(BRIGHT_WHITE);
       return fail(ec, "Stratum session error");
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
+    boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
   }
 
   // submission_thread.interrupt();
@@ -1571,8 +1634,8 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
   // std::cout << "Stratum packet: " << boost::json::serialize(packet).c_str() << std::endl;
   if (M.compare(SpectreStratum::s_notify) == 0)
   {
-    json *J = isDev ? &devJob : &job;
-    uint64_t *h = isDev ? &devHeight : &ourHeight;
+    boost::json::value *J = isDev ? &devJob : &job;
+    int64_t *h = isDev ? &devHeight : &ourHeight;
 
     uint64_t h1 = packet["params"].as_array()[1].as_array()[0].get_uint64();
     uint64_t h2 = packet["params"].as_array()[1].as_array()[1].get_uint64();
@@ -1617,8 +1680,8 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
     SpectreStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
 
-    (*J)["template"] = std::string(newTemplate, SpectreX::INPUT_SIZE*2);
-    (*J)["jobId"] = packet["params"].as_array()[0].get_string().c_str();
+    (*J).as_object()["template"] = std::string(newTemplate, SpectreX::INPUT_SIZE*2);
+    (*J).as_object()["jobId"] = std::stoull(packet["params"].as_array()[0].get_string().c_str());
 
     bool *C = isDev ? &devConnected : &isConnected;
     if (!*C)
@@ -1656,7 +1719,7 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
   else if (M.compare(SpectreStratum::s_setExtraNonce) == 0)
   {
     // std::cout << boost::json::serialize(packet).c_str() << std::endl;
-    json *J = isDev ? &devJob : &job;
+    boost::json::value *J = isDev ? &devJob : &job;
     // uint64_t *h = isDev ? &devHeight : &ourHeight;
 
     // std::string bs = (*J).at("template").get<std::string>();
@@ -1671,7 +1734,7 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
     // memset(&blob[48], '0', 64);
     // memcpy(&blob[48], en, enLen);
 
-    (*J)["extraNonce"] = std::string(en);
+    (*J).as_object()["extraNonce"] = std::string(en);
 
     // (*h)++;
     // jobCounter++;
@@ -1768,10 +1831,12 @@ int handleSpectreStratumResponse(boost::json::object packet, bool isDev)
         if (!isDev) rejected++;
         if (!isDev)
           setcolor(RED);
+
         boost::json::string ERR;
         if (packet["error"].is_array()) packet.at("error").get_array()[1].get_string();
         else ERR = packet.at("error").at("message").get_string();
         std::cout << "Stratum: share rejected: " << ERR << std::endl;
+        
         setcolor(BRIGHT_WHITE);
       }
       break;
