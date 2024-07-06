@@ -867,7 +867,6 @@ void xelis_stratum_session(
     net::yield_context yield,
     bool isDev)
 {
-  printf("using xelis stratum\n");
   ctx.set_options(boost::asio::ssl::context::default_workarounds |
                   boost::asio::ssl::context::no_sslv2 |
                   boost::asio::ssl::context::no_sslv3 |
@@ -958,8 +957,6 @@ void xelis_stratum_session(
 
   XelisStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
-  printf("made it here\n");
-
   boost::thread([&](){
     beast::error_code ec2;
     while(true) {
@@ -1028,7 +1025,7 @@ void xelis_stratum_session(
         // Consume the data from the buffer after processing it
         response.consume(trans);
 
-        std::cout << data << std::endl;
+        // std::cout << data << std::endl;
 
         if (data.compare(XelisStratum::k1ping) == 0)
         {
@@ -1835,7 +1832,7 @@ int handleSpectreStratumResponse(boost::json::object packet, bool isDev)
         boost::json::string ERR;
         if (packet["error"].is_array()) packet.at("error").get_array()[1].get_string();
         else ERR = packet.at("error").at("message").get_string();
-        std::cout << "Stratum: share rejected: " << ERR << std::endl;
+        std::cout << "Stratum: share rejected: " << ERR.c_str() << std::endl;
         
         setcolor(BRIGHT_WHITE);
       }
