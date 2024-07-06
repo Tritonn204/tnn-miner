@@ -1475,7 +1475,7 @@ void spectre_stratum_session(
         // Consume the data from the buffer after processing it
         response.consume(trans);
 
-        std::cout << data << std::endl;
+        // std::cout << data << std::endl;
 
         std::stringstream  jsonStream(data);
 
