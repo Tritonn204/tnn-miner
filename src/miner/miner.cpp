@@ -1280,7 +1280,7 @@ waitForJob:
             std::cout << "\n(DEV) Thread " << tid << " found a dev share\n";
             setcolor(BRIGHT_WHITE);
             devShare = {
-                {"jobid", myJobDev.at("jobid")},
+                {"jobid", myJobDev.at("jobId").as_string().c_str()},
                 {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
             submittingDev = true;
            //  mutex.unlock();
@@ -1292,7 +1292,7 @@ waitForJob:
             std::cout << "\nThread " << tid << " found a nonce!\n";
             setcolor(BRIGHT_WHITE);
             share = {
-                {"jobid", myJob.at("jobid")},
+                {"jobid", myJob.at("jobId").as_string().c_str()},
                 {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
             submitting = true;
            //  mutex.unlock();
@@ -1497,7 +1497,7 @@ waitForJob:
               devShare = {{{"id", XelisStratum::submitID},
                            {"method", XelisStratum::submit.method.c_str()},
                            {"params", {devWorkerName,                                 // WORKER
-                                       std::to_string(devJob.at("jobId").as_uint64()).c_str(), // JOB ID
+                                       myJobDev.at("jobId").as_string().c_str(), // JOB ID
                                        hexStr((byte *)&n, 8).c_str()}}}};
               break;
             }
@@ -1530,7 +1530,7 @@ waitForJob:
               share = {{{"id", XelisStratum::submitID},
                         {"method", XelisStratum::submit.method.c_str()},
                         {"params", {workerName,                                   // WORKER
-                                    std::to_string(myJob.at("jobId").as_uint64()).c_str(), // JOB ID
+                                    myJob.at("jobId").as_string().c_str(), // JOB ID
                                     hexStr((byte *)&n, 8).c_str()}}}};
 
               // std::cout << "blob: " << hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str() << std::endl;
@@ -1746,7 +1746,7 @@ waitForJob:
               devShare = {{{"id", XelisStratum::submitID},
                            {"method", XelisStratum::submit.method.c_str()},
                            {"params", {devWorkerName,                                 // WORKER
-                                       myJob.at("jobId").as_string().c_str(), // JOB ID
+                                       myJobDev.at("jobId").as_string().c_str(), // JOB ID
                                        hexStr((byte *)&n, 8).c_str()}}}};
               break;
             }
@@ -2001,7 +2001,7 @@ waitForJob:
               devShare = {{{"id", SpectreStratum::submitID},
                         {"method", SpectreStratum::submit.method.c_str()},
                         {"params", {devWorkerName,                                   // WORKER
-                                    std::to_string(devJob.at("jobId").as_uint64()).c_str(), // JOB ID
+                                    myJobDev.at("jobId").as_string().c_str(), // JOB ID
                                     std::string(nonceStr.data()).c_str()}}}};
 
               break;
@@ -2029,7 +2029,7 @@ waitForJob:
               share = {{{"id", SpectreStratum::submitID},
                         {"method", SpectreStratum::submit.method.c_str()},
                         {"params", {workerName,                                   // WORKER
-                                    std::to_string(myJob.at("jobId").as_uint64()).c_str(), // JOB ID
+                                    myJob.at("jobId").as_string().c_str(), // JOB ID
                                     std::string(nonceStr.data()).c_str()}}}};
 
               // std::cout << "blob: " << hexStr(&WORK[0], SpectreX::INPUT_SIZE).c_str() << std::endl;
