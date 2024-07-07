@@ -1946,7 +1946,7 @@ waitForJob:
         if (!J.as_object().if_contains("extraNonce") || J.at("extraNonce").as_string().size() == 0)
           n = ((tid - 1) % (256 * 256)) | ((rand() % 256) << 16) | ((*nonce) << 24);
         else {
-          uint64_t eN = std::stoi(std::string(J.at("extraNonce").as_string().c_str()));
+          uint64_t eN = std::stoull(std::string(J.at("extraNonce").as_string().c_str()).c_str(), NULL, 16);
           enLen = std::string(J.at("extraNonce").as_string()).size()/2;
           n = ((tid - 1) % (256 * 256)) | ((*nonce) << 16) | (eN << 56);
         }
@@ -2001,7 +2001,7 @@ waitForJob:
               devShare = {{{"id", SpectreStratum::submitID},
                         {"method", SpectreStratum::submit.method.c_str()},
                         {"params", {devWorkerName,                                   // WORKER
-                                    myJobDev.at("jobId").as_string().c_str(), // JOB ID
+                                    myJob.at("jobId").as_string().c_str(), // JOB ID
                                     std::string(nonceStr.data()).c_str()}}}};
 
               break;
