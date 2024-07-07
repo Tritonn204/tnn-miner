@@ -1686,6 +1686,12 @@ void spectre_stratum_session(
       {
         (*C) = false;
         (*B) = false;
+        abort = true;
+
+        for (;;) {
+          if (!submitThread) break;
+        }
+        stream.close();
         return fail(ec, "Stratum session timed out");
       }
 
@@ -1703,7 +1709,6 @@ void spectre_stratum_session(
           if (!submitThread) break;
         }
         stream.close();
-        boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
         return fail(ec, "async_read");
       }
 
@@ -1742,6 +1747,14 @@ void spectre_stratum_session(
                 if (ec && trans > 0) {
                   (*C) = false;
                   (*B) = false;
+                  abort = true;
+
+                  for (;;)
+                  {
+                    if (!submitThread)
+                      break;
+                  }
+                  stream.close();
                   return fail(ec, "Stratum pong");
                 }
               }
@@ -1782,6 +1795,14 @@ void spectre_stratum_session(
                         yield[ec]);
                     if (ec && trans > 0) {
                       (*C) = false;
+                      abort = true;
+
+                      for (;;)
+                      {
+                        if (!submitThread)
+                          break;
+                      }
+                      stream.close();
                       return fail(ec, "Stratum pong");
                     }
                   }
@@ -1817,6 +1838,12 @@ void spectre_stratum_session(
       bool *C = isDev ? &devConnected : &isConnected;
       (*C) = false;
       (*B) = false;
+      abort = true;
+
+      for (;;) {
+        if (!submitThread) break;
+      }
+      stream.close();
       setcolor(RED);
       std::cerr << e.what() << std::endl;
       setcolor(BRIGHT_WHITE);
