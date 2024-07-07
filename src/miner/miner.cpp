@@ -1946,7 +1946,7 @@ waitForJob:
         if (!J.as_object().if_contains("extraNonce") || J.at("extraNonce").as_string().size() == 0)
           n = ((tid - 1) % (256 * 256)) | ((rand() % 256) << 16) | ((*nonce) << 24);
         else {
-          uint64_t eN = std::stoull(std::string(J.at("extraNonce").as_string().c_str()).c_str(), NULL, 16);
+          uint64_t eN = std::stoull(std::string(J.at("extraNonce").as_string().c_str()), NULL, 16);
           enLen = std::string(J.at("extraNonce").as_string()).size()/2;
           n = ((tid - 1) % (256 * 256)) | ((*nonce) << 16) | (eN << 56);
         }

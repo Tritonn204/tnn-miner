@@ -1138,7 +1138,7 @@ void xelis_stratum_session_nossl(
     std::cerr << jsonEc.message() << std::endl;
   }
 
-  std::cout << boost::json::serialize(subResJson).c_str() << std::endl;
+  // std::cout << boost::json::serialize(subResJson).c_str() << std::endl;
 
   try {
     handleXStratumResponse(subResJson, isDev);
@@ -1151,7 +1151,7 @@ void xelis_stratum_session_nossl(
   packet.at("params") = boost::json::array({wallet, worker, "x"});
   std::string authorization = boost::json::serialize(packet) + "\n";
 
-  std::cout << authorization << std::endl;
+  // std::cout << authorization << std::endl;
 
   beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
   trans = boost::asio::async_write(stream, boost::asio::buffer(authorization), yield[ec]);
@@ -1234,7 +1234,7 @@ void xelis_stratum_session_nossl(
         // Consume the data from the buffer after processing it
         response.consume(trans);
 
-        std::cout << data << std::endl;
+        // std::cout << data << std::endl;
 
         std::stringstream jsonStream(data);
 
@@ -1248,7 +1248,6 @@ void xelis_stratum_session_nossl(
         {
           try
           {
-
             if (data.compare(XelisStratum::k1ping) == 0)
             {
               trans = boost::asio::async_write(
@@ -1263,7 +1262,7 @@ void xelis_stratum_session_nossl(
             }
             else
             {
-              boost::json::object sRPC = boost::json::parse(data.c_str()).as_object();
+              boost::json::object sRPC = boost::json::parse(packet).as_object();
               if (sRPC.contains("method"))
               {
                 if (std::string(sRPC.at("method").as_string().c_str()).compare(XelisStratum::s_ping) == 0)
