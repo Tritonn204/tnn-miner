@@ -195,6 +195,9 @@ void dero_session(
   boost::thread([&]() {
     while(true) {
       bool *B = isDev ? &submittingDev : &submitting;
+      bool *C = isDev ? &devConnected : &isConnected; 
+      int64_t H = isDev ? devHeight : ourHeight;
+      if (H > 0 && !(*C)) break;
       try {
         if (*B)
         {
@@ -214,10 +217,6 @@ void dero_session(
           *B = false;
         }
       } catch (const std::exception &e) {}
-      boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
-      bool *C = isDev ? &devConnected : &isConnected; 
-      int64_t H = isDev ? devHeight : ourHeight;
-      if (H > 0 && !(*C)) break;
     }
   });
 
@@ -392,6 +391,9 @@ void xelis_session(
       try
       {
         bool *B = isDev ? &submittingDev : &submitting;
+        bool *C = isDev ? &devConnected : &isConnected; 
+        int64_t H = isDev ? devHeight : ourHeight;
+        if (H > 0 && !(*C)) break;
         if (*B)
         {
           boost::json::object *S = isDev ? &devShare : &share;
@@ -409,10 +411,6 @@ void xelis_session(
           (*B) = false;
         }
       } catch (const std::exception &e) {}
-      boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
-      bool *C = isDev ? &devConnected : &isConnected; 
-      int64_t H = isDev ? devHeight : ourHeight;
-      if (H > 0 && !(*C)) break;
     }
   });
 
@@ -631,6 +629,9 @@ void xatum_session(
       try
       {
         bool *B = isDev ? &submittingDev : &submitting;
+        bool *C = isDev ? &devConnected : &isConnected; 
+        int64_t H = isDev ? devHeight : ourHeight;
+        if (H > 0 && !(*C)) break;
         if (*B)
         {
           boost::json::object *S = &share;
@@ -654,10 +655,6 @@ void xatum_session(
           (*B) = false;
         }
       } catch (const std::exception &e) {}
-      boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
-      bool *C = isDev ? &devConnected : &isConnected; 
-      int64_t H = isDev ? devHeight : ourHeight;
-      if (H > 0 && !(*C)) break;
     }
   });
 
@@ -960,6 +957,9 @@ void xelis_stratum_session(
     while(true) {
       try {
         bool *B = isDev ? &submittingDev : &submitting;
+        bool *C = isDev ? &devConnected : &isConnected; 
+        int64_t H = isDev ? devHeight : ourHeight;
+        if (H > 0 && !(*C)) break;
         if (*B)
         {
           boost::json::object *S = &share;
@@ -986,10 +986,6 @@ void xelis_stratum_session(
           (*B) = false;
         }
       } catch (const std::exception &e) {}
-      boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
-      bool *C = isDev ? &devConnected : &isConnected; 
-      int64_t H = isDev ? devHeight : ourHeight;
-      if (H > 0 && !(*C)) break;
     }
   });
 
@@ -1169,6 +1165,10 @@ void xelis_stratum_session_nossl(
     while(true) {
       try {
         bool *B = isDev ? &submittingDev : &submitting;
+        boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
+        bool *C = isDev ? &devConnected : &isConnected; 
+        int64_t H = isDev ? devHeight : ourHeight;
+        if (H > 0 && !(*C)) break;
         if (*B)
         {
           boost::json::object *S = &share;
@@ -1195,10 +1195,6 @@ void xelis_stratum_session_nossl(
           (*B) = false;
         }
       } catch (const std::exception &e) {}
-      boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
-      bool *C = isDev ? &devConnected : &isConnected; 
-      int64_t H = isDev ? devHeight : ourHeight;
-      if (H > 0 && !(*C)) break;
     }
   });
 
@@ -1621,12 +1617,20 @@ void spectre_stratum_session(
 
   std::string chopQueue = "NULL";
 
+  bool submitThread = false;
+  bool abort = false;
+
   boost::thread([&](){
+    submitThread = true;
     while(true) {
       try {
         bool *B = isDev ? &submittingDev : &submitting;
+        bool *C = isDev ? &devConnected : &isConnected; 
+        int64_t H = isDev ? devHeight : ourHeight;
+        if (H > 0 && !(*C)) break;
         if (*B)
         {
+          bool err = false;
           boost::json::object *S = &share;
           if (isDev)
             S = &devShare;
@@ -1639,24 +1643,27 @@ void spectre_stratum_session(
           // Acquire a lock before writing to the WebSocket
 
           // std::cout << "sending in: " << msg << std::endl;
-          beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(10));
-          boost::asio::async_write(stream, boost::asio::buffer(msg), [&](const boost::system::error_code &ec, std::size_t)
-          {
-            if (ec) {
-                setcolor(RED);
-                printf("\nasync_write: submission error\n");
-                setcolor(BRIGHT_WHITE);
-            }
-          });
+          beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(1));
+          boost::asio::write(stream, boost::asio::buffer(msg));
+          if (abort) {
+            stream.cancel();
+            break;
+          }
           if (!isDev) SpectreStratum::lastShareSubmissionTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
           (*B) = false;
+          if (err) break;
         }
-      } catch (const std::exception &e) {}
+      } catch (const std::exception &e) {
+        setcolor(RED);
+        printf("\nSubmit thread error: %s\n", e.what());
+        setcolor(BRIGHT_WHITE);
+
+        stream.cancel();
+        break;
+      }
       boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
-      bool *C = isDev ? &devConnected : &isConnected; 
-      int64_t H = isDev ? devHeight : ourHeight;
-      if (H > 0 && !(*C)) break;
     }
+    submitThread = false;
   });
 
   while (true)
@@ -1684,13 +1691,20 @@ void spectre_stratum_session(
 
       boost::asio::streambuf response;
       std::stringstream workInfo;
-      beast::get_lowest_layer(stream).expires_after(std::chrono::milliseconds(60000));
+      beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(5));
 
       trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
-      if (ec && trans > 0) {
+      if (ec) {
         (*C) = false;
         (*B) = false;
-        return fail(ec, "Stratum async_read");
+        abort = true;
+
+        for (;;) {
+          if (!submitThread) break;
+        }
+        stream.close();
+        boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
+        return fail(ec, "async_read");
       }
 
       if (trans > 0)
@@ -1812,8 +1826,8 @@ void spectre_stratum_session(
   }
 
   // submission_thread.interrupt();
-  printf("\n\n\nflagged connection loss\n");
-  stream.close();
+  // printf("\n\n\nflagged connection loss\n");
+  // stream.close();
 }
 
 void do_session(
@@ -2059,7 +2073,7 @@ int handleSpectreStratumResponse(boost::json::object packet, bool isDev)
           setcolor(RED);
 
         boost::json::string ERR;
-        if (packet["error"].is_array()) packet.at("error").get_array()[1].get_string();
+        if (packet["error"].is_array()) packet.at("error").as_array()[1].as_string();
         else ERR = packet.at("error").at("message").get_string();
         std::cout << "Stratum: share rejected: " << ERR.c_str() << std::endl;
         

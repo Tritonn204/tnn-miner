@@ -134,6 +134,8 @@ namespace po = boost::program_options;  // from <boost/program_options.hpp>
 using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
 
 boost::mutex mutex;
+boost::mutex devMutex;
+boost::mutex userMutex;
 boost::mutex reportMutex;
 
 uint16_t *lookup2D_global; // Storage for computed values of 2-byte chunks
@@ -1974,7 +1976,6 @@ waitForJob:
 
         if (submit && Num(hexStr(powHash, 32).c_str(), 16) <= cmpDiff)
         {
-          std::scoped_lock<boost::mutex> lockGuard(mutex);
           // if (littleEndian())
           // {
           //   std::reverse(powHash, powHash + 32);
@@ -1982,6 +1983,7 @@ waitForJob:
         //   std::string b64 = base64::to_base64(std::string((char *)&WORK[0], XELIS_TEMPLATE_SIZE));
           if (devMine)
           {
+            // std::scoped_lock<boost::mutex> lockGuard(devMutex);
             if (localJobCounter != jobCounter || localDevHeight != devHeight)
             {
               break;
@@ -2010,6 +2012,7 @@ waitForJob:
           }
           else
           {
+            // std::scoped_lock<boost::mutex> lockGuard(userMutex);
             if (localJobCounter != jobCounter || localOurHeight != ourHeight)
             {
               break;
