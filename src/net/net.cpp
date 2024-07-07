@@ -1676,7 +1676,7 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
 
 
     (*J).as_object()["template"] = std::string(newTemplate, SpectreX::INPUT_SIZE*2);
-    (*J).as_object()["jobId"] = std::stoull(packet["params"].as_array()[0].get_string().c_str());
+    (*J).as_object()["jobId"] = packet["params"].as_array()[0].get_string().c_str();
 
     bool *C = isDev ? &devConnected : &isConnected;
     if (!*C)
