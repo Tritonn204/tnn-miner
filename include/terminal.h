@@ -154,13 +154,9 @@ inline po::options_description get_prog_opts()
     ("dero-benchmark", po::value<int>(), "Runs a mining benchmark for <arg> seconds (adheres to -t threads option)")
   ;
 
-  po::options_description debug("DEBUG", col_width);
-  debug.add_options()
-    ("dero-test", "Runs a set of tests to verify AstrobwtV3 is working (1 test expected to fail)")
-    ("op", po::value<int>(), "Sets which branch op to benchmark (0-255), benchmark will be skipped if unspecified")
-    ("len", po::value<int>(), "Sets length of the processed chunk in said benchmark (default 15)")
-    ("sabench", "Runs a benchmark for divsufsort on snapshot files in the 'tests' directory")
-    ("quiet", "Do not print TNN banner")
+  po::options_description spectre("Spectre", col_width);
+  spectre.add_options()
+    ("spectre-test", "Run detailed diagnostics for SpectreX")
   ;
 
   po::options_description xelis("Xelis", col_width);
@@ -171,14 +167,26 @@ inline po::options_description get_prog_opts()
     ("worker-name", po::value<std::string>(), "Sets the worker name for this instance when mining Xelis")
   ;
 
-  po::options_description spectre("Spectre", col_width);
-  spectre.add_options()
-    ("spectre-test", "Run detailed diagnostics for SpectreX")
+  po::options_description advanced("Advanced", col_width);
+  advanced.add_options()
+    ("tune-warmup", po::value<int>()->default_value(1), "Number of seconds to warmup the CPU before starting the AstroBWTv3 tuning")
+    ("tune-duration", po::value<int>()->default_value(2), "Number of seconds to tune *each* AstroBWTv3 algorithm. There will 3 or 4 algorithms depending on supported CPU features")
+    ("no-tune", po::value<std::string>(), "<branch|lookup|avx2|wolf|aarch64> Use the specified AstroBWTv3 algorithm and skip tuning")
+  ;
+
+  po::options_description debug("DEBUG", col_width);
+  debug.add_options()
+    ("dero-test", "Runs a set of tests to verify AstrobwtV3 is working (1 test expected to fail)")
+    ("op", po::value<int>(), "Sets which branch op to benchmark (0-255), benchmark will be skipped if unspecified")
+    ("len", po::value<int>(), "Sets length of the processed chunk in said benchmark (default 15)")
+    ("sabench", "Runs a benchmark for divsufsort on snapshot files in the 'tests' directory")
+    ("quiet", "Do not print TNN banner")
   ;
 
   general.add(dero);
   general.add(spectre);
   general.add(xelis);
+  general.add(advanced);
   general.add(debug);
   return general;
 }

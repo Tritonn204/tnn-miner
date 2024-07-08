@@ -3,6 +3,7 @@
 
 #include <unistd.h>
 
+#include <boost/thread.hpp>
 #include <algorithm>
 #include <bitset>
 #include <iostream>
@@ -127,116 +128,110 @@ inline void generateRandomBytesForTune(std::uint8_t (&iv_buff)[N])
   std::generate(std::begin(iv_buff), std::end(iv_buff), std::ref(rbe));
 }
 
-// TODO
-/*
-Make astroTune multithreaded (preferably matching the user's threads setting)
-Cache congestion (and thus advantages) will not show on single threaded benchmarks,
-leaving significant accuracy on the table
-*/
-void astroTune() {
-  std::vector<std::string> func_names = {"branch", "lookup", "wolf",
-  #if defined(__AVX2__)
-      "avx2z"
-  #elif defined(__aarch64__)
-    , "aarch"
-  #endif
-  };
+bool setAstroAlgo(std::string desiredAlgo) {
+  bool toRet = false;
+  for(int x = 0; x < numAstroFuncs; x++) {
+    if(desiredAlgo.compare(allAstroFuncs[x].funcName) == 0) {
+      printf("Setting AstroBWTv3 override: %s\n", allAstroFuncs[x].funcName.c_str());
+      astroCompFunc = allAstroFuncs[x].funcPtr;
+      toRet = true;
+      break;
+    }
+  }
+  if(!toRet) {
+    printf("Unrecognized AstroBWTv3 algo: %s\nAllowed options are: ", desiredAlgo.c_str());
+    for(int x = 0; x < numAstroFuncs; x++) {
+      printf("%s ", allAstroFuncs[x].funcName.c_str());
+    }
+    printf("\n");
+  }
+  return toRet;
+}
 
-  void (*allFuncs[]) (workerData &worker, bool isTest) = {branchComputeCPU, lookupCompute, wolfCompute,
-  #if defined(__AVX2__)
-    branchComputeCPU_avx2_zOptimized
-  #elif defined(__aarch64__)
-    branchComputeCPU_aarch64
-  #endif
-  };
+void astroTune(int num_threads, int tuneWarmupSec, int tuneDurationSec) {
+  int64_t tuneWarmupMs = tuneWarmupSec * 1000;
+  int64_t tuneDurationMs = tuneDurationSec * 1000;
 
-  printf("Tuning AstroBWTv3\n");
+  int totalTuneTime = numAstroFuncs * (tuneWarmupSec + tuneDurationSec);
+  printf("Tuning %zu AstroBWTv3 algos for %d seconds in total\n", numAstroFuncs, totalTuneTime);
+  fflush(stdout);
 
-  size_t numFuncs = sizeof(allFuncs)/sizeof(allFuncs[0]);
-  int64_t funcTotal[numFuncs];
-  std::vector<int64_t> durations[numFuncs];
-
-  auto start = std::chrono::steady_clock::now();
-  auto end = std::chrono::steady_clock::now();
-  auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);    
+  boost::mutex durLock;
+  std::vector<int64_t> durations[numAstroFuncs];
+  
+  boost::mutex hashLock;
+  int64_t numHashes[numAstroFuncs];
+  for(int x = 0; x < numAstroFuncs; x++) {
+    numHashes[x] = 0;
+  }
 
   int fastestCompIdx = 0;
   void (*fastestComp)(workerData &worker, bool isTest) = branchComputeCPU;
 
-  workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
-  initWorker(*worker);
-  lookupGen(*worker, nullptr, nullptr);
-  byte random_buffer[48];
-  generateRandomBytesForTune<48>(random_buffer);
-  byte res[32];
+  try {
+    byte random_buffer[48];
+    generateRandomBytesForTune<48>(random_buffer);
+    byte res[32];
 
-  auto big_start = std::chrono::steady_clock::now();
-
-  for (int x = 0; x < numFuncs; x++)
-  {
-    for (int y = 0; y < 500; y++)
+    boost::thread tune_threads[num_threads];
+    for (int x = 0; x < numAstroFuncs; x++)
     {
-      astroCompFunc = allFuncs[x];
-      // AstroBWTv3(random_buffer, 48, res, *worker, false);
+      astroCompFunc = allAstroFuncs[x].funcPtr;
 
-      start = std::chrono::steady_clock::now();
-      AstroBWTv3(random_buffer, 48, res, *worker, false);
-      end = std::chrono::steady_clock::now();
-      duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
-      durations[x].push_back(duration.count());
+      // Start each thread with an inline lambda function
+      for (int i = 0; i < num_threads; ++i) {
+        tune_threads[i] = boost::thread([&]() {
+          int tid = i;
+          workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
+          initWorker(*worker);
+          lookupGen(*worker, nullptr, nullptr);
+
+          auto warmupStart = std::chrono::steady_clock::now();
+          for(;;) {
+            AstroBWTv3(random_buffer, 48, res, *worker, false);
+            if(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - warmupStart).count() > tuneWarmupMs) {
+              break;
+            }
+          }
+
+          int hashes = 0;
+          auto start = std::chrono::steady_clock::now();
+          for(;;) {
+            AstroBWTv3(random_buffer, 48, res, *worker, false);
+            hashes++;
+            if(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count() > tuneDurationMs) {
+              break;
+            }
+          }
+          hashLock.lock();
+          numHashes[x] += hashes;
+          hashLock.unlock();
+        });
+      }
+      // Wait for all threads to finish
+      for (int i = 0; i < num_threads; ++i) {
+          tune_threads[i].join();
+      }
+      printf("%s: %2.3f   ", allAstroFuncs[x].funcName.c_str(), (double)numHashes[x] / (double)tuneDurationMs);
     }
-
-    for (int y = 0; y < 500; y++)
-    {
-      generateRandomBytesForTune<48>(random_buffer);
-      astroCompFunc = allFuncs[x];
-      AstroBWTv3(random_buffer, 48, res, *worker, false);
-
-      start = std::chrono::steady_clock::now();
-      AstroBWTv3(random_buffer, 48, res, *worker, false);
-      end = std::chrono::steady_clock::now();
-      duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
-      durations[x].push_back(duration.count());
-    }
+  } catch (const std::exception& e) {
+      std::cerr << "Exception: " << e.what() << "\n";
   }
-  // printf("size: %zu\n", durations[0].size());
-  for (int x = 0; x < numFuncs; x++)
+
+  astroCompFunc = allAstroFuncs[0].funcPtr;
+  int64_t mostHashes = numHashes[0];
+  for (int x = 0; x < numAstroFuncs; x++)
   {
-    // printf("size: %zu\n", durations[x].size());
-    for (int y = 0; y < 15; y++)
+    // printf("%s = %d\n", astroCompFuncNames.data()[x].c_str(), numHashes[x]);
+    if (numHashes[x] > mostHashes)
     {
-      auto maxTime = std::max_element(durations[x].begin(), durations[x].end());
-      durations[x].erase(maxTime);
-    }
-    for (int y = 0; y < 15; y++)
-    {
-      auto minTime = std::min_element(durations[x].begin(), durations[x].end());
-      durations[x].erase(minTime);
-    }
-    printf("size: %zu\n", durations[x].size());
-  }
-  // printf("size: %zu\n", durations[0].size());
-  double fastest_duration_dbl = std::accumulate(durations[0].begin(), durations[0].end(), 0.0) / double(durations[0].size());
-  fastestComp = allFuncs[0];
-  for (int x = 0; x < numFuncs; x++)
-  {
-    double this_duration = std::accumulate(durations[x].begin(), durations[x].end(), 0.0) / double(durations[x].size());
-    // printf("%s = %f\n", func_names.data()[x].c_str(), this_duration);
-    if (this_duration < fastest_duration_dbl)
-    {
-      fastestComp = astroCompFunc;
+      astroCompFunc = allAstroFuncs[x].funcPtr;
+      mostHashes = numHashes[x];
       fastestCompIdx = x;
-      fastest_duration_dbl = this_duration;
     }
   }
 
-  astroCompFunc = fastestComp;
-
-  // printf("%p = %p = %s\n", astroCompFunc, fastestComp, func_names.data()[fastestCompIdx].c_str());
-  printf("Using %s for AstroBWTv3\n", func_names.data()[fastestCompIdx].c_str());
-  auto big_end = std::chrono::steady_clock::now();
-  auto duration_big = std::chrono::duration_cast<std::chrono::milliseconds>(big_end - big_start);
-  // printf("dur = %ld ms\n", duration_big.count());
+  printf("\nUsing %s\n", allAstroFuncs[fastestCompIdx].funcName.c_str());
 }
 
 void hashSHA256(SHA256_CTX &sha256, const byte *input, byte *digest, unsigned long inputSize)

@@ -152,20 +152,9 @@ int DeroTesting(int testOp, int testLen, bool useLookup) {
     failedTests += runDeroOpTests(testOp);
   }
 
-  //extern void (*astroCompFunc)(workerData &worker, bool isTest);
-  void (*allFuncs[]) (workerData &worker, bool isTest) = {branchComputeCPU, lookupCompute, wolfCompute,
-  #if defined(__AVX2__)
-    branchComputeCPU_avx2, branchComputeCPU_avx2_zOptimized
-  #elif defined(__aarch64__)
-    branchComputeCPU_aarch64
-  #endif
-   };
-
-  size_t numFuncs = sizeof(allFuncs)/sizeof(allFuncs[0]);
-
   failedTests += TestAstroBWTv3(false);
-  for(int x = 0; x < numFuncs; x++) {
-    astroCompFunc = allFuncs[x];
+  for(int x = 0; x < numAstroFuncs; x++) {
+    astroCompFunc = allAstroFuncs[x].funcPtr;
     failedTests += TestAstroBWTv3(true);
   }
   
