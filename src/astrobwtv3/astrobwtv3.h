@@ -689,9 +689,21 @@ inline wolfPerm wolfPerms[1] = {wolfPermute};
 #if defined(__AVX2__)
 void branchComputeCPU_avx2(workerData &worker, bool isTest);
 void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest);
+#elif defined(__aarch64__)
+// This is gross.  But we need to do this until 'workerData' gets pushed into it's own include file.
+void branchComputeCPU_aarch64(workerData &worker, bool isTest);
 #endif
 
-void astroTune();
+struct AstroFunc {
+  std::string funcName;
+  void (*funcPtr)(workerData& worker, bool isTest);
+};
+
+extern AstroFunc allAstroFuncs[];
+extern size_t numAstroFuncs;
+
+bool setAstroAlgo(std::string desiredAlgo);
+void astroTune(int num_threads, int tuneWarmupSec, int tuneDurationSec);
 
 void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &scratch, bool unused);
 

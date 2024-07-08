@@ -123,6 +123,20 @@ bool isConnected = false;
 bool devConnected = false;
 /* End definitions from tnn-common.hpp */
 
+/* Start definitions from astrobwtv3.hpp */
+AstroFunc allAstroFuncs[] = {
+  {"branch", branchComputeCPU},
+  {"lookup", lookupCompute},
+  {"wolf", wolfCompute},
+#if defined(__AVX2__)
+  {"avx2z", branchComputeCPU_avx2_zOptimized}
+#elif defined(__aarch64__)
+  {"aarch64", branchComputeCPU_aarch64}
+#endif
+};
+size_t numAstroFuncs;
+/* End definitions from astrobwtv3.hpp */
+
 // #include <cuda_runtime.h>
 
 namespace beast = boost::beast;         // from <boost/beast.hpp>
@@ -163,9 +177,14 @@ void openssl_log_callback(const SSL *ssl, int where, int ret)
 
 //------------------------------------------------------------------------------
 
+void initializeExterns() {
+  numAstroFuncs = std::size(allAstroFuncs); //sizeof(allAstroFuncs)/sizeof(allAstroFuncs[0]);
+}
+
 int main(int argc, char **argv)
 {
   initWolfLUT();
+  initializeExterns();
   // Check command line arguments.
   lookup2D_global = (uint16_t *)malloc_huge_pages(regOps_size * (256 * 256) * sizeof(uint16_t));
   lookup3D_global = (byte *)malloc_huge_pages(branchedOps_size * (256 * 256) * sizeof(byte));
@@ -206,7 +225,6 @@ int main(int argc, char **argv)
   if (!vm.count("quiet")) {
     printf("%s", TNN);
   }
-  boost::this_thread::sleep_for(boost::chrono::seconds(1));
 #if defined(_WIN32)
   SetConsoleOutputCP(CP_UTF8);
   HANDLE hSelfToken = NULL;
@@ -381,6 +399,10 @@ int main(int argc, char **argv)
     printf("Use Lookup\n");
     useLookupMine = true;
   }
+
+  // We can do this because we've set default in terminal.h
+  tuneWarmupSec = vm["tune-warmup"].as<int>();
+  tuneDurationSec = vm["tune-duration"].as<int>();
 
   // Ensure we capture *all* of the other options before we start using goto
   if (vm.count("dero-test"))
@@ -566,7 +588,16 @@ fillBlanks:
   }
 
   setcolor(BRIGHT_YELLOW);
-  if (miningAlgo == DERO_HASH || miningAlgo == SPECTRE_X) astroTune();
+  if (miningAlgo == DERO_HASH || miningAlgo == SPECTRE_X) {
+    if (vm.count("no-tune")) {
+      std::string noTune = vm["no-tune"].as<std::string>();
+      if(!setAstroAlgo(noTune)) {
+        throw po::validation_error(po::validation_error::invalid_option_value, "no-tune");
+      }
+    } else {
+      astroTune(threads, tuneWarmupSec, tuneDurationSec);
+    }
+  }
   setcolor(BRIGHT_WHITE);
 
   printf("\n");
@@ -702,6 +733,7 @@ Mining:
     // continue;
   }
   else
+    std::cout << "Starting threads: ";
     for (int i = 0; i < threads; i++)
     {
 
@@ -718,8 +750,11 @@ Mining:
       // if (threads == 1 || (n > 2 && i <= n - 2))
       // setPriority(t.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
-      std::cout << "Thread " << i + 1 << " started" << std::endl;
+      std::cout << i + 1;
+      if(i+1 != threads)
+        std::cout << ", ";
     }
+    std::cout << std::endl;
  //  mutex.unlock();
 
   auto start_time = std::chrono::steady_clock::now();

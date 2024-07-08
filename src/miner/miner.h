@@ -38,6 +38,9 @@ bool gpuMine = false;
 bool useLookupMine = false;
 bool broadcastStats = false;
 
+int tuneWarmupSec;
+int tuneDurationSec;
+
 int cudaMemNumerator = 1000;
 int cudaMemDenominator = 750; //Kilobytes per worker in VRAM
 
