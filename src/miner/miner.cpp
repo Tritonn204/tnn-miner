@@ -673,7 +673,7 @@ Mining:
     std::cout << "Provided wallet address is not valid for Dero" << std::endl;
     return EXIT_FAILURE;
   }
-  if (miningAlgo == XELIS_HASH && !(wallet.substr(0, 3) == "xel" || wallet.substr(0, 3) == "xet"))
+  if (miningAlgo == XELIS_HASH && !(wallet.substr(0, 3) == "xel" || wallet.substr(0, 3) == "xet" || wallet.substr(0, 2) == "Kr"))
   {
     std::cout << "Provided wallet address is not valid for Xelis" << std::endl;
     return EXIT_FAILURE;
@@ -1282,7 +1282,7 @@ waitForJob:
             std::cout << "\n(DEV) Thread " << tid << " found a dev share\n";
             setcolor(BRIGHT_WHITE);
             devShare = {
-                {"jobid", myJobDev.at("jobId").as_string().c_str()},
+                {"jobid", myJobDev.at("jobid").as_string().c_str()},
                 {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
             submittingDev = true;
            //  mutex.unlock();
@@ -1294,7 +1294,7 @@ waitForJob:
             std::cout << "\nThread " << tid << " found a nonce!\n";
             setcolor(BRIGHT_WHITE);
             share = {
-                {"jobid", myJob.at("jobId").as_string().c_str()},
+                {"jobid", myJob.at("jobid").as_string().c_str()},
                 {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
             submitting = true;
            //  mutex.unlock();

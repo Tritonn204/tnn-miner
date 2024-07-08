@@ -192,32 +192,40 @@ void dero_session(
   boost::json::error_code jsonEc;
   boost::json::value workData;
 
-  boost::thread([&]() {
+  bool submitThread = false;
+  bool abort = false;
+
+  boost::thread([&](){
+    submitThread = true;
     while(true) {
-      bool *B = isDev ? &submittingDev : &submitting;
-      bool *C = isDev ? &devConnected : &isConnected; 
-      int64_t H = isDev ? devHeight : ourHeight;
-      if (H > 0 && !(*C)) break;
+      if (abort) {
+        break;
+      }
       try {
+        bool *B = isDev ? &submittingDev : &submitting;
         if (*B)
         {
-          boost::json::object *S = isDev ? &devShare : &share;
-          std::string msg = boost::json::serialize(*S);
-          // wsMutex.lock();
-          // std::cout << msg;
-          // wsMutex.unlock();
-          ws.async_write(boost::asio::buffer(msg), [&](const boost::system::error_code &ec, std::size_t)
-          {
-            if (ec) {
-                setcolor(RED);
-                printf("\nasync_write: submission error\n");
-                setcolor(BRIGHT_WHITE);
-            }
-          });
-          *B = false;
+          bool err = false;
+          boost::json::object *S = &share;
+          if (isDev)
+            S = &devShare;
+
+          std::string msg = boost::json::serialize((*S)) + "\n";
+          // std::cout << "sending in: " << msg << std::endl;
+          beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(1));
+          ws.write(boost::asio::buffer(msg));
+          (*B) = false;
+          if (err) break;
         }
-      } catch (const std::exception &e) {}
+      } catch (const std::exception &e) {
+        setcolor(RED);
+        printf("\nSubmit thread error: %s\n", e.what());
+        setcolor(BRIGHT_WHITE);
+        break;
+      }
+      boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
     }
+    submitThread = false;
   });
 
   while (true)
@@ -237,6 +245,8 @@ void dero_session(
 
         beast::get_lowest_layer(ws).expires_never();
         workInfo << beast::make_printable(buffer.data());
+
+        // std::cout << workInfo.str() << std::endl;
 
         workData = boost::json::parse(workInfo.str(), jsonEc);
         if (!jsonEc)
@@ -306,6 +316,13 @@ void dero_session(
       {
         bool *B = isDev ? &devConnected : &isConnected;
         (*B) = false;
+        abort = true;
+
+        for (;;) {
+          if (!submitThread) break;
+          boost::this_thread::yield();
+        }
+        
         return fail(ec, "async_read");
       }
     }
@@ -317,16 +334,6 @@ void dero_session(
     }
     // boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
   }
-
-  // // Close the WebSocket connection
-  ws.async_close(websocket::close_code::normal, yield[ec]);
-  if (ec)
-    return fail(ec, "close");
-
-  // If we get here then the connection is closed gracefully
-
-  // The make_printable() function helps print a ConstBufferSequence
-  // std::cout << beast::make_printable(buffer.data()) << std::endl;
 }
 
 void xelis_session(
@@ -384,34 +391,40 @@ void xelis_session(
   beast::flat_buffer buffer;
   std::stringstream workInfo;
 
-  bool subStart = false;
+  bool submitThread = false;
+  bool abort = false;
 
   boost::thread([&](){
+    submitThread = true;
     while(true) {
-      try
-      {
+      if (abort) {
+        break;
+      }
+      try {
         bool *B = isDev ? &submittingDev : &submitting;
-        bool *C = isDev ? &devConnected : &isConnected; 
-        int64_t H = isDev ? devHeight : ourHeight;
-        if (H > 0 && !(*C)) break;
         if (*B)
         {
-          boost::json::object *S = isDev ? &devShare : &share;
-          std::string msg = boost::json::serialize(*S);
+          bool err = false;
+          boost::json::object *S = &share;
+          if (isDev)
+            S = &devShare;
 
-          // Acquire a lock before writing to the WebSocket
-          ws.async_write(boost::asio::buffer(msg), [&](const boost::system::error_code &ec, std::size_t)
-          {
-            if (ec) {
-                setcolor(RED);
-                printf("\nasync_write: submission error\n");
-                setcolor(BRIGHT_WHITE);
-            }
-          });
+          std::string msg = boost::json::serialize((*S)) + "\n";
+          // std::cout << "sending in: " << msg << std::endl;
+          beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(1));
+          ws.write(boost::asio::buffer(msg));
           (*B) = false;
+          if (err) break;
         }
-      } catch (const std::exception &e) {}
+      } catch (const std::exception &e) {
+        setcolor(RED);
+        printf("\nSubmit thread error: %s\n", e.what());
+        setcolor(BRIGHT_WHITE);
+        break;
+      }
+      boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
     }
+    submitThread = false;
   });
 
   while (true)
@@ -521,6 +534,13 @@ void xelis_session(
       {
         bool *B = isDev ? &devConnected : &isConnected;
         (*B) = false;
+        abort = true;
+
+        for (;;) {
+          if (!submitThread) break;
+          boost::this_thread::yield();
+        }
+        
         return fail(ec, "async_read");
       }
     }
@@ -533,13 +553,6 @@ void xelis_session(
     }
     // boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
   }
-
-  // Close the WebSocket connection
-  // submission_thread.interrupt();
-  ws.async_close(websocket::close_code::normal, yield[ec]);
-  printf("loop broken\n");
-  if (ec)
-    return fail(ec, "close");
 }
 
 void xatumFailure(bool isDev) noexcept
