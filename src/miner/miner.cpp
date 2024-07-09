@@ -1307,8 +1307,17 @@ waitForJob:
         counter.fetch_add(1);
         submit = devMine ? !submittingDev : !submitting;
 
-        if (submit && CheckHash(&powHash[0], cmpDiff, DERO_HASH))
+        if (CheckHash(&powHash[0], cmpDiff, DERO_HASH))
         {
+          if (!submit) {
+            for(;;) {
+              if (submit || localJobCounter != jobCounter)
+                break;
+              boost::this_thread::yield();
+            }
+          }
+          if (localJobCounter != jobCounter)
+                break;
           // printf("work: %s, hash: %s\n", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str(), hexStr(powHash, 32).c_str());
           if (devMine)
           {
@@ -1495,8 +1504,15 @@ waitForJob:
         if (localJobCounter != jobCounter || localOurHeight != ourHeight)
           break;
 
-        if (submit && CheckHash(powHash, cmpDiff, XELIS_HASH))
+        if (CheckHash(powHash, cmpDiff, XELIS_HASH))
         {
+          if (!submit) {
+            for(;;) {
+              if (submit || localJobCounter != jobCounter || localOurHeight != ourHeight)
+                break;
+              boost::this_thread::yield();
+            }
+          }
           if (protocol == XELIS_XATUM && littleEndian())
           {
             std::reverse(powHash, powHash + 32);
@@ -1744,8 +1760,15 @@ waitForJob:
         if (localJobCounter != jobCounter || localOurHeight != ourHeight)
           break;
 
-        if (submit && CheckHash(powHash, cmpDiff, XELIS_HASH))
+        if (CheckHash(powHash, cmpDiff, XELIS_HASH))
         {
+          if (!submit) {
+            for(;;) {
+              if (submit || localJobCounter != jobCounter || localOurHeight != ourHeight)
+                break;
+              boost::this_thread::yield();
+            }
+          }
           if (protocol == XELIS_XATUM && littleEndian())
           {
             std::reverse(powHash, powHash + 32);
@@ -2009,8 +2032,15 @@ waitForJob:
           break;
 
 
-        if (submit && Num(hexStr(powHash, 32).c_str(), 16) <= cmpDiff)
+        if (Num(hexStr(powHash, 32).c_str(), 16) <= cmpDiff)
         {
+          if (!submit) {
+            for(;;) {
+              if (submit || localJobCounter != jobCounter || localOurHeight != ourHeight)
+                break;
+              boost::this_thread::yield();
+            }
+          }
           // if (littleEndian())
           // {
           //   std::reverse(powHash, powHash + 32);
