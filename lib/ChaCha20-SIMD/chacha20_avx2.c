@@ -53,21 +53,15 @@ static inline __m256i RotateLeft16(const __m256i val) {
 __attribute__((target("avx2")))
 void ChaCha20EncryptBytes(uint8_t* state, uint8_t* In, uint8_t* Out, uint64_t Size, int rounds)
 {
-
 	uint8_t* CurrentIn = In;
 	uint8_t* CurrentOut = Out;
-
-
+  
 	uint64_t FullBlocksCount = Size / 512;
 	uint64_t RemainingBytes = Size % 512;
-
-
 
 	const __m256i state0 = _mm256_broadcastsi128_si256(_mm_set_epi32(1797285236, 2036477234, 857760878, 1634760805)); //"expand 32-byte k"
 	const __m256i state1 = _mm256_broadcastsi128_si256(_mm_load_si128((const __m128i*)(state)));
 	const __m256i state2 = _mm256_broadcastsi128_si256(_mm_load_si128((const __m128i*)(state + 16)));
-
-
 
 	__m256i CTR0 = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, 4);
 	const __m256i CTR1 = _mm256_set_epi32(0, 0, 0, 1, 0, 0, 0, 5);
@@ -575,9 +569,6 @@ void ChaCha20EncryptBytes(uint8_t* state, uint8_t* In, uint8_t* Out, uint64_t Si
 				PartialXor(tmp, CurrentIn, CurrentOut, RemainingBytes);
 				ChaCha20AddCounter(state, 2);
 				return;
-
-
-
 			}
 			else
 			{
@@ -638,7 +629,6 @@ void ChaCha20EncryptBytes(uint8_t* state, uint8_t* In, uint8_t* Out, uint64_t Si
 				PartialStore(tmp, CurrentOut, RemainingBytes);
 				ChaCha20AddCounter(state, 2);
 				return;
-
 			}
 		}
 	}

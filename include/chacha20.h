@@ -18,7 +18,7 @@ void ChaCha20SetCtr(uint8_t * state, const uint8_t *Ctr);
 #if defined(__x86_64__)
   __attribute__((target("sse2"))) void ChaCha20EncryptBytes(uint8_t * state, uint8_t * In, uint8_t * Out, const uint64_t Size, int rounds); //if In=nullptr - just fill Out
   __attribute__((target("avx2"))) void ChaCha20EncryptBytes(uint8_t * state, uint8_t * In, uint8_t * Out, const uint64_t Size, int rounds); //if In=nullptr - just fill Out
-  __attribute__((target("avx512f"))) void ChaCha20EncryptBytes(uint8_t * state, uint8_t * In, uint8_t * Out, const uint64_t Size, int rounds); //if In=nullptr - just fill Out
+  __attribute__((target("avx512f,avx512dq,avx512bw"))) void ChaCha20EncryptBytes(uint8_t * state, uint8_t * In, uint8_t * Out, const uint64_t Size, int rounds); //if In=nullptr - just fill Out
 #endif
 // We do this to avoid needing Clang 16+ when building for AArch
 #if defined(__x86_64__)
