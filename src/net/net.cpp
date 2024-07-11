@@ -614,7 +614,7 @@ void xatum_session(
       {"work", worker.c_str()},
       {"agent", (std::string("tnn-miner ") + versionString).c_str()},
       {"algos", boost::json::array{
-                    "xel/0",
+                    "xel/1",
                 }}};
 
   // std::string handshakeStr = handshake_packet.serialize();
@@ -932,7 +932,7 @@ void xelis_stratum_session(
   packet.at("id") = XelisStratum::subscribe.id;
   packet.at("method") = XelisStratum::subscribe.method;
   std::string minerName = "tnn-miner/" + std::string(versionString);
-  packet.at("params") = boost::json::array({minerName, boost::json::array({"xel/0"})});
+  packet.at("params") = boost::json::array({minerName, boost::json::array({"xel/1"})});
   std::string subscription = boost::json::serialize(packet) + "\n";
 
   // std::cout << subscription << std::endl;
@@ -1172,7 +1172,7 @@ void xelis_stratum_session_nossl(
   packet.at("id") = XelisStratum::subscribe.id;
   packet.at("method") = XelisStratum::subscribe.method;
   std::string minerName = "tnn-miner/" + std::string(versionString);
-  packet.at("params") = boost::json::array({minerName, boost::json::array({"xel/0"})});
+  packet.at("params") = boost::json::array({minerName, boost::json::array({"xel/1"})});
   std::string subscription = boost::json::serialize(packet) + "\n";
 
   // std::cout << subscription << std::endl;
