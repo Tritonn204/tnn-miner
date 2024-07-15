@@ -35,7 +35,7 @@ This will download mingw and a few other libraries like Boost and OpenSSL
 ```
 Then build! Notice this is a powershell script
 ```
-.\scripts\build.ps1
+powershell -File .\scripts\build.ps1
 ```
 
 ### Clone the source and then build!
