@@ -26,6 +26,7 @@
 #include <arpa/inet.h>
 #endif
 
+#include <atomic>
 #include <libcubwt.cuh>
 #include <hugepages.h>
 // #include <cuda.h>
@@ -42,7 +43,6 @@
 #define POW_CONST
 
 #define TNN_TYPICAL_MAX 71000
-
 #define INSERT	10
 #define MAXST	64
 #define DEEP	150
@@ -52,6 +52,8 @@
 #define LCPART	8
 #define ABIT	7
 const int AMASK	= (1<<ABIT)-1;
+
+#define DERO_BATCH 1
 
 #if defined(__AVX2__)
 #ifdef __GNUC__ 
@@ -124,7 +126,9 @@ const uint32_t sha_standard[8] = {
     0x5be0cd19
 };
 
-const uint32_t MAX_LENGTH = (256 * 276) - 1; // this is the maximum
+#define MAX_LENGTH ((256 * 276) - 1) // this is the maximum
+#define ASTRO_SCRATCH_SIZE ((MAX_LENGTH + 64))
+
 const int deviceAllocMB = 5;
 
 #endif
@@ -150,34 +154,18 @@ public:
   // For aarch64
   byte aarchFixup[256];
   byte opt[256];
-
   byte step_3[256];
-  int freq[256];
-
-  //Archon fields
-  byte s_bin[MAX_LENGTH + TERM + 1];
-  byte *bin = s_bin + TERM;
-  int ndis = (MAX_LENGTH + AMASK) >> ABIT;
-  int nlcp = MAX_LENGTH >> LCPART;
-  int ch;
-  byte *sfin;
-  int baza = 0;
 
   int lucky = 0;
 
   SHA256_CTX sha256;
   ucstk::Salsa20 salsa20;
-  RC4_KEY key;
+  RC4_KEY key[DERO_BATCH];
 
   // std::vector<std::tuple<int,int,int>> repeats;
 
   byte salsaInput[256] = {0};
   byte op;
-
-  byte pos1;
-  byte pos2;
-  byte t1;
-  byte t2;
 
   byte A;
   uint32_t data_len;
@@ -194,27 +182,27 @@ public:
   byte sHash[32];
   byte sha_key[32];
   byte sha_key2[32];
-  byte sData[MAX_LENGTH+64];
-  byte chunkCache[256];
+  byte sData[ASTRO_SCRATCH_SIZE*DERO_BATCH];
 
   std::bitset<256> clippedBytes[regOps_size];
   std::bitset<256> unchangedBytes[regOps_size];
   std::bitset<256> isBranched;
 
-  byte maskTable_bytes[1024];
   byte branchedOps[branchedOps_size*2];
   byte regularOps[regOps_size*2];
 
   byte branched_idx[256];
   byte reg_idx[256];
 
-  uint64_t random_switcher;
+  byte pos1;
+  byte pos2;
+  byte t1;
+  byte t2;
 
+  uint64_t random_switcher;
   uint64_t lhash;
   uint64_t prev_lhash;
-  uint64_t tries;
-
-  byte counter[64];
+  uint16_t tries[DERO_BATCH];
 
   int bA[256];
   int bB[256*256];
@@ -226,7 +214,7 @@ public:
   friend std::ostream& operator<<(std::ostream& os, const workerData& wd);
 };
 
-extern void (*astroCompFunc)(workerData &worker, bool isTest);
+extern void (*astroCompFunc)(workerData &worker, bool isTest, int wIndex);
 
 template <std::size_t N>
 inline void generateInitVector(std::uint8_t (&iv_buff)[N]);
@@ -483,11 +471,11 @@ inline __m256i _mm256_reverse_epi8(__m256i input) {
 inline void initWorker(workerData &worker) {
   #if defined(__AVX2__)
 
-  __m256i temp[32];
-  for(int i = 0; i < 32; i++) {
-    temp[i] = genMask(i);
-    _mm256_storeu_si256((__m256i*)&worker.maskTable_bytes[i*32], temp[i]);
-  }
+  // __m256i temp[32];
+  // for(int i = 0; i < 32; i++) {
+  //   temp[i] = genMask(i);
+  //   _mm256_storeu_si256((__m256i*)&worker.maskTable_bytes[i*32], temp[i]);
+  // }
   // printf("worker.maskTable\n");
   // uint32_t v[8];
   // for(int i = 0; i < 32; i++) {
@@ -669,14 +657,14 @@ void initWolfLUT();
 void mineDero(int tid);
 
 void processAfterMarker(workerData& worker);
-void lookupCompute(workerData &worker, bool isTest);
-void branchComputeCPU(workerData &worker, bool isTest);
+void lookupCompute(workerData &worker, bool isTest, int wIndex);
+void branchComputeCPU(workerData &worker, bool isTest, int wIndex);
 
 uint8_t wolfBranch(uint8_t val, uint8_t pos2val, uint32_t opcode);
 void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker);
 void wolfPermute_avx2(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker);
 void wolfSame(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker);
-void wolfCompute(workerData &worker, bool isTest);
+void wolfCompute(workerData &worker, bool isTest, int wIndex);
 
 typedef void (*wolfPerm)(uint8_t *, uint8_t *, uint16_t, uint8_t, uint8_t, workerData&);
 
@@ -687,16 +675,16 @@ inline wolfPerm wolfPerms[1] = {wolfPermute};
 #endif
 
 #if defined(__AVX2__)
-void branchComputeCPU_avx2(workerData &worker, bool isTest);
-void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest);
+void branchComputeCPU_avx2(workerData &worker, bool isTest, int wIndex);
+void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest, int wIndex);
 #elif defined(__aarch64__)
 // This is gross.  But we need to do this until 'workerData' gets pushed into it's own include file.
-void branchComputeCPU_aarch64(workerData &worker, bool isTest);
+void branchComputeCPU_aarch64(workerData &worker, bool isTest, int wIndex);
 #endif
 
 struct AstroFunc {
   std::string funcName;
-  void (*funcPtr)(workerData& worker, bool isTest);
+  void (*funcPtr)(workerData& worker, bool isTest, int wIndex);
 };
 
 extern AstroFunc allAstroFuncs[];
@@ -705,8 +693,8 @@ extern size_t numAstroFuncs;
 bool setAstroAlgo(std::string desiredAlgo);
 void astroTune(int num_threads, int tuneWarmupSec, int tuneDurationSec);
 
-void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &scratch, bool unused);
-
+void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &scratch, bool unused, int tid = 0);
+void AstroBWTv3_batch(byte *input, int inputLen, byte *outputhash, workerData &worker, bool unused);
 void finishBatch(workerData &worker);
 
 static void construct_SA_pre(const byte *T, int *SA,

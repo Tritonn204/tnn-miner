@@ -18,6 +18,7 @@
 #include <iomanip>
 #include <array>
 #include <cassert>
+#include <chrono>
 
 #include <sodium.h>
 
@@ -32,8 +33,6 @@
 
 #define htonll(x) ((1 == htonl(1)) ? (x) : ((uint64_t)htonl((x) & 0xFFFFFFFF) << 32) | htonl((x) >> 32))
 #define ntohll(x) ((1 == ntohl(1)) ? (x) : ((uint64_t)ntohl((x) & 0xFFFFFFFF) << 32) | ntohl((x) >> 32))
-
-alignas(64) static const byte KEY[] = "xelishash-pow-v2";
 
 alignas(64) const int sign_bit_values_avx512[16][16] = {
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1},
@@ -293,9 +292,9 @@ static inline uint64_t udiv(uint64_t high, uint64_t low, uint64_t divisor)
   return low;
 }
 
-void stage_3(uint64_t *scratch_pad)
+void stage_3(uint64_t *scratch_pad, workerData_xelis_v2 &worker)
 {
-    alignas(64) const uint8_t *key = KEY;
+    alignas(64) const uint8_t key[17] = "xelishash-pow-v2";
     alignas(64) uint8_t block[16] = {0};
 
     alignas(64) uint64_t *mem_buffer_a = scratch_pad;
@@ -334,8 +333,7 @@ void stage_3(uint64_t *scratch_pad)
 
             // printf("a %llu, b %llu, c %llu, ", a, b, c);
             uint64_t v;
-            __uint128_t t1, t2;
-            int scase = ROTL(result, (uint32_t)c) & 0xF;
+            // int scase = ROTL(result, (uint32_t)c) & 0xF;
             switch (ROTL(result, (uint32_t)c) & 0xF) {
               case 0: v = ROTL(c, i * j) ^ b; break;
               case 1: v = ROTR(c, i * j) ^ a; break;
@@ -370,16 +368,16 @@ void stage_3(uint64_t *scratch_pad)
               break;
               case 11:
               {
-                t2 = COMBINE_UINT64(ROTL(result, r), a | 2);
-                v = (t2 > COMBINE_UINT64(b,c)) ? c : COMBINE_UINT64(b,c) % t2;
+                worker.t2 = COMBINE_UINT64(ROTL(result, r), a | 2);
+                v = (worker.t2 > COMBINE_UINT64(b,c)) ? c : COMBINE_UINT64(b,c) % worker.t2;
               }
               break;
               case 12: v = udiv(c, a, b | 4); break;
               case 13:
               {
-                t1 = COMBINE_UINT64(ROTL(result, r), b);
-                t2 = COMBINE_UINT64(a, c | 8);
-                v = (t1 > t2) ? t1 / t2 : a ^ b;
+                worker.t1 = COMBINE_UINT64(ROTL(result, r), b);
+                worker.t2 = COMBINE_UINT64(a, c | 8);
+                v = (worker.t1 > worker.t2) ? worker.t1 / worker.t2 : a ^ b;
               }
               break;
               case 14: v = (COMBINE_UINT64(b,a) * c) >> 64; break;
@@ -404,11 +402,144 @@ void stage_3(uint64_t *scratch_pad)
   // printf("%llu\n", crc32.result());
 }
 
-void xelis_hash_v2(byte *input, workerData_xelis_v2 &worker, byte *hashResult)
+
+// void stage_3(workerData_xelis_v2 &worker)
+// {
+//     memset(worker.block, 0, 16);
+
+//     alignas(64) uint64_t *mem_buffer_a = worker.scratchPad;
+//     alignas(64) uint64_t *mem_buffer_b = worker.scratchPad + XELIS_BUFFER_SIZE_V2;
+
+//     worker.addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V2 - 1];
+//     worker.addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - 1] >> 32;
+//     size_t r = 0;
+
+//     for (size_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V2; ++i) {
+//         worker.mem_a = mem_buffer_a[worker.addr_a % XELIS_BUFFER_SIZE_V2];
+//         worker.mem_b = mem_buffer_b[worker.addr_b % XELIS_BUFFER_SIZE_V2];
+
+//         // std::copy(&worker.mem_b, &worker.mem_b + 8, block);
+//         // std::copy(&worker.mem_a, &worker.mem_a + 8, block + 8);
+//         uint64_to_le_bytes(worker.mem_b, worker.block);
+// 		    uint64_to_le_bytes(worker.mem_a, worker.block + 8);
+
+//         aes_round(worker.block, worker.key);
+
+//         alignas(64) uint64_t hash1 = 0, hash2 = 0;
+//         hash1 = le_bytes_to_uint64(worker.block);
+//         // std::copy(block, block + 8, &hash1);
+//         // hash1 = _byteswap_uint64(hash1);
+//         hash2 = worker.mem_a ^ worker.mem_b;
+
+//         alignas(64) uint64_t result = ~(hash1 ^ hash2);
+
+//         // printf("pre result: %llu\n", result);
+
+//         for (size_t j = 0; j < XELIS_BUFFER_SIZE_V2; ++j) {
+//             worker.a = mem_buffer_a[(result % XELIS_BUFFER_SIZE_V2)];
+//             worker.b = mem_buffer_b[~ROTR(result, r) % XELIS_BUFFER_SIZE_V2];
+//             uint64_t c = (r < XELIS_BUFFER_SIZE_V2) ? mem_buffer_a[r] : mem_buffer_b[r - XELIS_BUFFER_SIZE_V2];
+//             r = (r < XELIS_MEMORY_SIZE_V2 - 1) ? r + 1 : 0;
+
+//             // printf("a %llu, b %llu, c %llu, ", a, b, c);
+//             uint64_t v;
+//             __uint128_t t1, t2;
+//             int scase = ROTL(result, (uint32_t)c) & 0xF;
+//             switch (ROTL(result, (uint32_t)c) & 0xF) {
+//               case 0: v = ROTL(c, i * j) ^ worker.b; break;
+//               case 1: v = ROTR(c, i * j) ^ worker.a; break;
+//               case 2:
+//                 v = worker.a ^ worker.b ^ c;
+//                 break;
+//               case 3:
+//                 v = ((worker.a + worker.b) * c);
+//                 break;
+//               case 4:
+//                 v = ((worker.b - c) * worker.a);
+//                 break;
+//               case 5:
+//                 v = (c - worker.a + worker.b);
+//                 break;
+//               case 6:
+//                 v = (worker.a - worker.b + c);
+//                 break;
+//               case 7:
+//                 v = (worker.b * c + worker.a);
+//                 break;
+//               case 8:
+//                 v = (c * worker.a + worker.b);
+//                 break;
+//               case 9:
+//                 v = (worker.a * worker.b * c);
+//                 break;
+//               case 10:
+//               {
+//                 v = COMBINE_UINT64(worker.a,worker.b) % (c | 1);
+//               }
+//               break;
+//               case 11:
+//               {
+//                 t2 = COMBINE_UINT64(ROTL(result, r), worker.a | 2);
+//                 v = (t2 > COMBINE_UINT64(worker.b,c)) ? c : COMBINE_UINT64(worker.b,c) % t2;
+//               }
+//               break;
+//               case 12: v = udiv(c, worker.a, worker.b | 4); break;
+//               case 13:
+//               {
+//                 t1 = COMBINE_UINT64(ROTL(result, r), worker.b);
+//                 t2 = COMBINE_UINT64(worker.a, c | 8);
+//                 v = (t1 > t2) ? t1 / t2 : worker.a ^ worker.b;
+//               }
+//               break;
+//               case 14: v = (COMBINE_UINT64(worker.b,worker.a) * c) >> 64; break;
+//               case 15: v = (COMBINE_UINT64(worker.a,c) * COMBINE_UINT64(ROTR(result, r), worker.b)) >> 64; break;
+//             }
+
+//             result = ROTL(result ^ v, 1);
+
+//             // printf("post result: %llu, case: %d\n", result, scase);
+
+//             uint64_t t = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - j - 1] ^ result;
+//             mem_buffer_a[XELIS_BUFFER_SIZE_V2 - j - 1] = t;
+//             mem_buffer_b[j] ^= ROTR(t, (uint32_t)result);
+//         }
+//         // printf("post result: %llu\n", result);
+//         worker.addr_a = result;
+//         worker.addr_b = isqrt(result);
+//     }
+
+//   // Crc32 crc32;
+//   // crc32.input((uint8_t *)scratch_pad, XELIS_MEMORY_SIZE_V2 * 8);
+//   // printf("%llu\n", crc32.result());
+// }
+
+void xelis_hash_v2(byte *input, workerData_xelis_v2 *xWorkers, byte *hashResult, int batchSize)
 {
-  stage_1(input, worker.scratchPad, 112);
-  stage_3(worker.scratchPad);
-  blake3((uint8_t*)worker.scratchPad, XELIS_MEMORY_SIZE_V2 * 8, hashResult);
+
+  for (int i = 0; i < batchSize; i++) {
+    auto start = std::chrono::steady_clock::now();
+    stage_1(input + XELIS_TEMPLATE_SIZE*i, xWorkers[i].scratchPad, 112);
+    stage_3(xWorkers[i].scratchPad, xWorkers[i]);
+    auto end = std::chrono::steady_clock::now();
+    auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
+    if (i == 0) printf("stages section #%d section took %dns\n", i+1, time.count());
+    // if (i == 15) printf("stage_1 section #%d section took %dns\n", i+1, time.count());
+    // if (i == 31) printf("stage_1 section #%d section took %dns\n", i+1, time.count());
+  }
+
+  for (int i = 0; i < batchSize; i++) {
+    auto start = std::chrono::steady_clock::now();
+    blake3((uint8_t*)xWorkers[i].scratchPad, XELIS_MEMORY_SIZE_V2 * 8, &hashResult[32*i]);
+    auto end = std::chrono::steady_clock::now();
+    auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
+    if (i == 0) printf("blake3 section #%d section took %dns\n", i+1, time.count());
+    // if (i == 15) printf("blake3 section #%d section took %dns\n", i+1, time.count());
+    // if (i == 31) printf("blake3 section #%d section took %dns\n", i+1, time.count());
+  }
+  // stage_1(input, worker.scratchPad, 112);
+  // stage_3(worker.scratchPad, worker);
+  // blake3((uint8_t*)worker.scratchPad, XELIS_MEMORY_SIZE_V2 * 8, hashResult);
+  memset(hashResult, 0xFF, 32*batchSize); // For testing without node errors
 }
 
 void xelis_benchmark_cpu_hash_v2()
@@ -427,7 +558,7 @@ void xelis_benchmark_cpu_hash_v2()
     // input[0] = i & 0xFF;
     // input[1] = (i >> 8) & 0xFF;
     memset(worker.scratchPad, 0, XELIS_MEMORY_SIZE_V2*8);
-    xelis_hash_v2(input, worker, hash_result);
+    xelis_hash_v2(input, &worker, hash_result, 1);
   }
   auto end = std::chrono::high_resolution_clock::now();
 
@@ -479,7 +610,7 @@ namespace xelis_tests_v2
     alignas(64) workerData_xelis_v2 worker;
     byte hash_result[XELIS_HASH_SIZE] = {0};
 
-    xelis_hash_v2(input, worker, hash_result);
+    xelis_hash_v2(input, &worker, hash_result, 1);
 
     if (std::memcmp(hash_result, expected_hash.data(), XELIS_HASH_SIZE) != 0)
     {

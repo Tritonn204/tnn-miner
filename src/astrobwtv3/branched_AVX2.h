@@ -78,23 +78,23 @@ namespace astro_branched_zOp {
 
   // utility
 
-  void __attribute__((noinline)) blendStep(workerData &worker, __m256i &data, __m256i &old) {
+  void __attribute__((noinline)) blendStep(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     data = _mm256_blendv_epi8(old, data, genMask(worker.pos2 - worker.pos1));
   }
 
-  void __attribute__((noinline)) storeStep(workerData &worker, __m256i &data, __m256i &old) {
+  void __attribute__((noinline)) storeStep(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     _mm256_storeu_si256((__m256i*)&worker.chunk[worker.pos1], data);
   }
 
   // op codes
 
-  void op0(workerData &worker, __m256i &data, __m256i &old) {
+  void op0(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     p0(data);
     r5(data);
     m0(data);
     r0(data);
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
 
     if ((worker.pos2 - worker.pos1) % 2 == 1) {
       worker.t1 = worker.chunk[worker.pos1];
@@ -104,56 +104,56 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op1(workerData &worker, __m256i &data, __m256i &old) {
+  void op1(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     __m256i shift = _mm256_and_si256(data, vec_3);
     data = _mm256_sllv_epi8(data, shift);
     r1(data);
     data = _mm256_and_si256(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos2]));
     a0(data);
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op2(workerData &worker, __m256i &data, __m256i &old) {
+  void op2(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     p0(data);
     revData(data);
     __m256i shift = _mm256_and_si256(data, vec_3);
     data = _mm256_sllv_epi8(data, shift);
     p0(data);
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op3(workerData &worker, __m256i &data, __m256i &old) {
+  void op3(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     data = _mm256_rolv_epi8(data, _mm256_add_epi8(data, vec_3));
     data = _mm256_xor_si256(data, _mm256_set1_epi8(worker.chunk[worker.pos2]));
     r1(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op4(workerData &worker, __m256i &data, __m256i &old) {
+  void op4(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     notData(data);
     sr03(data);
     r0(data);
     subx97(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op5(workerData &worker, __m256i &data, __m256i &old) {
+  void op5(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     p0(data);
     xp2(data, worker.chunk[worker.pos2]);
     sl03(data);
     sr03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op6(workerData &worker, __m256i &data, __m256i &old) {
+  void op6(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sl03(data);
     r3(data);
     notData(data);
@@ -161,187 +161,187 @@ namespace astro_branched_zOp {
     __m256i x = _mm256_xor_si256(data,_mm256_set1_epi8(97));
     data = _mm256_sub_epi8(data, x);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op7(workerData &worker, __m256i &data, __m256i &old) {
+  void op7(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     a0(data);
     r0(data);
 
     p0(data);
     notData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op8(workerData &worker, __m256i &data, __m256i &old) {
+  void op8(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     notData(data);
     r2(data);
     sl03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op9(workerData &worker, __m256i &data, __m256i &old) {
+  void op9(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     xp2(data, worker.chunk[worker.pos2]);
     x0_r4(data);
     sr03(data);
     x0_r2(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op10(workerData &worker, __m256i &data, __m256i &old) {
+  void op10(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     notData(data);
     m0(data);
     r3(data);
     m0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op11(workerData &worker, __m256i &data, __m256i &old) {
+  void op11(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r3(data);
     r3(data);
     data = _mm256_and_si256(data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
     r0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op12(workerData &worker, __m256i &data, __m256i &old) {
+  void op12(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
     m0(data);
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data, 2));
     notData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op13(workerData &worker, __m256i &data, __m256i &old) {
+  void op13(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r1(data);
     data = _mm256_xor_si256(data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
     sr03(data);
     r5(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op14(workerData &worker, __m256i &data, __m256i &old) {
+  void op14(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sr03(data);
     sl03(data);
     m0(data);
     sl03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op15(workerData &worker, __m256i &data, __m256i &old) {
+  void op15(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data,2));
     sl03(data);
     addp2(data, worker.chunk[worker.pos2]);
     subx97(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op16(workerData &worker, __m256i &data, __m256i &old) {
+  void op16(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     data = _mm256_xor_si256(data, _mm256_rol_epi8(data,4));
     m0(data);
     r1(data);
     notData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op17(workerData &worker, __m256i &data, __m256i &old) {
+  void op17(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     xp2(data, worker.chunk[worker.pos2]);
     m0(data);
     r5(data);
     notData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op18(workerData &worker, __m256i &data, __m256i &old) {
+  void op18(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r4(data);
     r1(data);
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op19(workerData &worker, __m256i &data, __m256i &old) {
+  void op19(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     subx97(data);
     r5(data);
     sl03(data);
     a0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op20(workerData &worker, __m256i &data, __m256i &old) {
+  void op20(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     addp2(data, worker.chunk[worker.pos2]);
     xp2(data, worker.chunk[worker.pos2]);
     revData(data);
     x0_r2(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op21(workerData &worker, __m256i &data, __m256i &old) {
+  void op21(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r1(data);
     xp2(data, worker.chunk[worker.pos2]);
     a0(data);
     data = _mm256_and_si256(data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op22(workerData &worker, __m256i &data, __m256i &old) {
+  void op22(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sl03(data);
     revData(data);
     m0(data);
     r1(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op23(workerData &worker, __m256i &data, __m256i &old) {
+  void op23(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     data = _mm256_rol_epi8(data, 4);
     data = _mm256_xor_si256(data,popcnt256_epi8(data));
     data = _mm256_and_si256(data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op24(workerData &worker, __m256i &data, __m256i &old) {
+  void op24(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     a0(data);
     sr03(data);
     x0_r4(data);
     r5(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op25(workerData &worker, __m256i &data, __m256i &old) {
+  void op25(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
@@ -359,127 +359,127 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op26(workerData &worker, __m256i &data, __m256i &old) {
+  void op26(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     m0(data);
     data = _mm256_xor_si256(data,popcnt256_epi8(data));
     a0(data);
     revData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op27(workerData &worker, __m256i &data, __m256i &old) {
+  void op27(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r5(data);
     data = _mm256_and_si256(data,_mm256_set1_epi8(worker.chunk[worker.pos2]));
     x0_r4(data);
     r5(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op28(workerData &worker, __m256i &data, __m256i &old) {
+  void op28(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sl03(data);
     a0(data);
     a0(data);
     r5(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op29(workerData &worker, __m256i &data, __m256i &old) {
+  void op29(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     m0(data);
     xp2(data, worker.chunk[worker.pos2]);
     sr03(data);
     a0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op30(workerData &worker, __m256i &data, __m256i &old) {
+  void op30(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     addp2(data, worker.chunk[worker.pos2]);
     x0_r4(data);
     r5(data);
     sl03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op31(workerData &worker, __m256i &data, __m256i &old) {
+  void op31(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     notData(data);
     x0_r2(data);
     sl03(data);
     m0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op32(workerData &worker, __m256i &data, __m256i &old) {
+  void op32(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r2(data);
     revData(data);
     r3(data);
     x0_r2(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op33(workerData &worker, __m256i &data, __m256i &old) {
+  void op33(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r0(data);
     x0_r4(data);
     revData(data);
     m0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op34(workerData &worker, __m256i &data, __m256i &old) {
+  void op34(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     subx97(data);
     sl03(data);
     sl03(data);
     subx97(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op35(workerData &worker, __m256i &data, __m256i &old) {
+  void op35(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     a0(data);
     notData(data);
     r1(data);
     xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op36(workerData &worker, __m256i &data, __m256i &old) {
+  void op36(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     p0(data);
     r1(data);
     x0_r2(data);
     r1(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op37(workerData &worker, __m256i &data, __m256i &old) {
+  void op37(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r0(data);
     sr03(data);
     sr03(data);
     m0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op38(workerData &worker, __m256i &data, __m256i &old) {
+  void op38(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
@@ -497,56 +497,56 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op39(workerData &worker, __m256i &data, __m256i &old) {
+  void op39(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r2(data);
     xp2(data, worker.chunk[worker.pos2]);
     sr03(data);
     addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op40(workerData &worker, __m256i &data, __m256i &old) {
+  void op40(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r0(data);
     xp2(data, worker.chunk[worker.pos2]);
     p0(data);
     xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op41(workerData &worker, __m256i &data, __m256i &old) {
+  void op41(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r5(data);
     subx97(data);
     r3(data);
     x0_r4(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op42(workerData &worker, __m256i &data, __m256i &old) {
+  void op42(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     data = _mm256_rol_epi8(data, 4);
     x0_r2(data);
     r0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op43(workerData &worker, __m256i &data, __m256i &old) {
+  void op43(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     addp2(data, worker.chunk[worker.pos2]);
     a0(data);
     addp2(data, worker.chunk[worker.pos2]);
     subx97(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op44(workerData &worker, __m256i &data, __m256i &old) {
+  void op44(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
@@ -564,64 +564,64 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op45(workerData &worker, __m256i &data, __m256i &old) {
+  void op45(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r2(data);
     addp2(data, worker.chunk[worker.pos2]);
     p0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op46(workerData &worker, __m256i &data, __m256i &old) {
+  void op46(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     p0(data);
     a0(data);
     r5(data);
     x0_r4(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op47(workerData &worker, __m256i &data, __m256i &old) {
+  void op47(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r5(data);
     addp2(data, worker.chunk[worker.pos2]);
     r5(data);
     sl03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op48(workerData &worker, __m256i &data, __m256i &old) {
+  void op48(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r0(data);
     r5(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op49(workerData &worker, __m256i &data, __m256i &old) {
+  void op49(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     p0(data);
     a0(data);
     revData(data);
     x0_r4(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op50(workerData &worker, __m256i &data, __m256i &old) {
+  void op50(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     revData(data);
     r3(data);
     a0(data);
     r1(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op51(workerData &worker, __m256i &data, __m256i &old) {
+  void op51(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -638,17 +638,17 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op52(workerData &worker, __m256i &data, __m256i &old) {
+  void op52(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r0(data);
     sr03(data);
     notData(data);
     p0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op53(workerData &worker, __m256i &data, __m256i &old) {
+  void op53(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
@@ -662,15 +662,15 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op54(workerData &worker, __m256i &data, __m256i &old) {
+  void op54(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     revData(data);
     xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op55(workerData &worker, __m256i &data, __m256i &old) {
+  void op55(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
@@ -688,398 +688,398 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op56(workerData &worker, __m256i &data, __m256i &old) {
+  void op56(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r2(data);
     m0(data);
     notData(data);
     r1(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op57(workerData &worker, __m256i &data, __m256i &old) {
+  void op57(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r0(data);
     revData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op58(workerData &worker, __m256i &data, __m256i &old) {
+  void op58(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     revData(data);
     x0_r2(data);
     addp2(data, worker.chunk[worker.pos2]);
     a0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op59(workerData &worker, __m256i &data, __m256i &old) {
+  void op59(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r1(data);
     m0(data);
     r0(data);
     notData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op60(workerData &worker, __m256i &data, __m256i &old) {
+  void op60(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     xp2(data, worker.chunk[worker.pos2]);
     notData(data);
     m0(data);
     r3(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op61(workerData &worker, __m256i &data, __m256i &old) {
+  void op61(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r5(data);
     sl03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op62(workerData &worker, __m256i &data, __m256i &old) {
+  void op62(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     addp2(data, worker.chunk[worker.pos2]);
     notData(data);
     x0_r2(data);
     a0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op63(workerData &worker, __m256i &data, __m256i &old) {
+  void op63(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r5(data);
     p0(data);
     subx97(data);
     a0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op64(workerData &worker, __m256i &data, __m256i &old) {
+  void op64(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     xp2(data, worker.chunk[worker.pos2]);
     revData(data);
     x0_r4(data);
     m0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op65(workerData &worker, __m256i &data, __m256i &old) {
+  void op65(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r2(data);
     m0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op66(workerData &worker, __m256i &data, __m256i &old) {
+  void op66(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r2(data);
     revData(data);
     x0_r4(data);
     r1(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op67(workerData &worker, __m256i &data, __m256i &old) {
+  void op67(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r1(data);
     p0(data);
     x0_r2(data);
     r5(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op68(workerData &worker, __m256i &data, __m256i &old) {
+  void op68(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     addp2(data, worker.chunk[worker.pos2]);
     notData(data);
     x0_r4(data);
     xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op69(workerData &worker, __m256i &data, __m256i &old) {
+  void op69(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     a0(data);
     m0(data);
     revData(data);
     sr03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op70(workerData &worker, __m256i &data, __m256i &old) {
+  void op70(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     xp2(data, worker.chunk[worker.pos2]);
     m0(data);
     sr03(data);
     x0_r4(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op71(workerData &worker, __m256i &data, __m256i &old) {
+  void op71(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r5(data);
     notData(data);
     m0(data);
     sl03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op72(workerData &worker, __m256i &data, __m256i &old) {
+  void op72(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     revData(data);
     p0(data);
     xp2(data, worker.chunk[worker.pos2]);
     sl03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op73(workerData &worker, __m256i &data, __m256i &old) {
+  void op73(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     p0(data);
     revData(data);
     r5(data);
     subx97(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op74(workerData &worker, __m256i &data, __m256i &old) {
+  void op74(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     m0(data);
     r3(data);
     revData(data);
     addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op75(workerData &worker, __m256i &data, __m256i &old) {
+  void op75(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     m0(data);
     p0(data);
     addp2(data, worker.chunk[worker.pos2]);
     x0_r4(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op76(workerData &worker, __m256i &data, __m256i &old) {
+  void op76(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r0(data);
     x0_r2(data);
     r5(data);
     sr03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op77(workerData &worker, __m256i &data, __m256i &old) {
+  void op77(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r3(data);
     a0(data);
     sl03(data);
     p0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op78(workerData &worker, __m256i &data, __m256i &old) {
+  void op78(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r0(data);
     revData(data);
     m0(data);
     subx97(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op79(workerData &worker, __m256i &data, __m256i &old) {
+  void op79(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r4(data);
     x0_r2(data);
     a0(data);
     m0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op80(workerData &worker, __m256i &data, __m256i &old) {
+  void op80(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r0(data);
     sl03(data);
     a0(data);
     addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op81(workerData &worker, __m256i &data, __m256i &old) {
+  void op81(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r4(data);
     sl03(data);
     r0(data);
     p0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op82(workerData &worker, __m256i &data, __m256i &old) {
+  void op82(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     xp2(data, worker.chunk[worker.pos2]);
     sr03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op83(workerData &worker, __m256i &data, __m256i &old) {
+  void op83(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sl03(data);
     revData(data);
     r3(data);
     revData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op84(workerData &worker, __m256i &data, __m256i &old) {
+  void op84(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     subx97(data);
     r1(data);
     sl03(data);
     a0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op85(workerData &worker, __m256i &data, __m256i &old) {
+  void op85(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sr03(data);
     xp2(data, worker.chunk[worker.pos2]);
     r0(data);
     sl03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op86(workerData &worker, __m256i &data, __m256i &old) {
+  void op86(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r4(data);
     r0(data);
     x0_r4(data);
     notData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op87(workerData &worker, __m256i &data, __m256i &old) {
+  void op87(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     a0(data);
     r3(data);
     x0_r4(data);
     a0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op88(workerData &worker, __m256i &data, __m256i &old) {
+  void op88(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r2(data);
     r1(data);
     m0(data);
     notData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op89(workerData &worker, __m256i &data, __m256i &old) {
+  void op89(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     a0(data);
     m0(data);
     notData(data);
     x0_r2(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op90(workerData &worker, __m256i &data, __m256i &old) {
+  void op90(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     revData(data);
     r3(data);
     r3(data);
     sr03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op91(workerData &worker, __m256i &data, __m256i &old) {
+  void op91(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     p0(data);
     addp2(data, worker.chunk[worker.pos2]);
     x0_r4(data);
     revData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op92(workerData &worker, __m256i &data, __m256i &old) {
+  void op92(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     p0(data);
     notData(data);
     p0(data);
     addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op93(workerData &worker, __m256i &data, __m256i &old) {
+  void op93(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r2(data);
     m0(data);
     addp2(data, worker.chunk[worker.pos2]);
     a0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op94(workerData &worker, __m256i &data, __m256i &old) {
+  void op94(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r1(data);
     r0(data);
     addp2(data, worker.chunk[worker.pos2]);
     sl03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op95(workerData &worker, __m256i &data, __m256i &old) {
+  void op95(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r1(data);
     notData(data);
     r2(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op96(workerData &worker, __m256i &data, __m256i &old) {
+  void op96(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -1097,315 +1097,315 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op97(workerData &worker, __m256i &data, __m256i &old) {
+  void op97(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r1(data);
     sl03(data);
     p0(data);
     sr03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op98(workerData &worker, __m256i &data, __m256i &old) {
+  void op98(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r4(data);
     sl03(data);
     sr03(data);
     x0_r4(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op99(workerData &worker, __m256i &data, __m256i &old) {
+  void op99(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r4(data);
     subx97(data);
     revData(data);
     sr03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op100(workerData &worker, __m256i &data, __m256i &old) {
+  void op100(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r0(data);
     sl03(data);
     revData(data);
     p0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op101(workerData &worker, __m256i &data, __m256i &old) {
+  void op101(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sr03(data);
     p0(data);
     sr03(data);
     notData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op102(workerData &worker, __m256i &data, __m256i &old) {
+  void op102(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r3(data);
     subx97(data);
     a0(data);
     r3(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op103(workerData &worker, __m256i &data, __m256i &old) {
+  void op103(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r1(data);
     revData(data);
     xp2(data, worker.chunk[worker.pos2]);
     r0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op104(workerData &worker, __m256i &data, __m256i &old) {
+  void op104(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     revData(data);
     p0(data);
     r5(data);
     a0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op105(workerData &worker, __m256i &data, __m256i &old) {
+  void op105(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sl03(data);
     r3(data);
     r0(data);
     x0_r2(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op106(workerData &worker, __m256i &data, __m256i &old) {
+  void op106(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     revData(data);
     x0_r4(data);
     r1(data);
     m0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op107(workerData &worker, __m256i &data, __m256i &old) {
+  void op107(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sr03(data);
     x0_r2(data);
     r3(data);
     r3(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op108(workerData &worker, __m256i &data, __m256i &old) {
+  void op108(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     xp2(data, worker.chunk[worker.pos2]);
     notData(data);
     addp2(data, worker.chunk[worker.pos2]);
     x0_r2(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op109(workerData &worker, __m256i &data, __m256i &old) {
+  void op109(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     m0(data);
     r0(data);
     xp2(data, worker.chunk[worker.pos2]);
     x0_r2(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op110(workerData &worker, __m256i &data, __m256i &old) {
+  void op110(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     a0(data);
     x0_r2(data);
     x0_r2(data);
     sr03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op111(workerData &worker, __m256i &data, __m256i &old) {
+  void op111(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     m0(data);
     revData(data);
     m0(data);
     sr03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op112(workerData &worker, __m256i &data, __m256i &old) {
+  void op112(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r3(data);
     notData(data);
     r5(data);
     subx97(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op113(workerData &worker, __m256i &data, __m256i &old) {
+  void op113(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r3(data);
     r3(data);
     p0(data);
     notData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op114(workerData &worker, __m256i &data, __m256i &old) {
+  void op114(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r1(data);
     revData(data);
     r0(data);
     notData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op115(workerData &worker, __m256i &data, __m256i &old) {
+  void op115(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r0(data);
     r5(data);
     addp2(data, worker.chunk[worker.pos2]);
     r3(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op116(workerData &worker, __m256i &data, __m256i &old) {
+  void op116(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     addp2(data, worker.chunk[worker.pos2]);
     xp2(data, worker.chunk[worker.pos2]);
     p0(data);
     sl03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op117(workerData &worker, __m256i &data, __m256i &old) {
+  void op117(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sl03(data);
     r3(data);
     sl03(data);
     addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op118(workerData &worker, __m256i &data, __m256i &old) {
+  void op118(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sr03(data);
     a0(data);
     sl03(data);
     r5(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op119(workerData &worker, __m256i &data, __m256i &old) {
+  void op119(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     revData(data);
     x0_r2(data);
     notData(data);
     xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op120(workerData &worker, __m256i &data, __m256i &old) {
+  void op120(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r2(data);
     m0(data);
     xp2(data, worker.chunk[worker.pos2]);
     revData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op121(workerData &worker, __m256i &data, __m256i &old) {
+  void op121(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sr03(data);
     a0(data);
     p0(data);
     m0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op122(workerData &worker, __m256i &data, __m256i &old) {
+  void op122(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r4(data);
     r0(data);
     r5(data);
     x0_r2(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op123(workerData &worker, __m256i &data, __m256i &old) {
+  void op123(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     addp2(data, worker.chunk[worker.pos2]);
     notData(data);
     r3(data);
     r3(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op124(workerData &worker, __m256i &data, __m256i &old) {
+  void op124(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r2(data);
     x0_r2(data);
     xp2(data, worker.chunk[worker.pos2]);
     notData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op125(workerData &worker, __m256i &data, __m256i &old) {
+  void op125(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     revData(data);
     x0_r2(data);
     a0(data);
     sr03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op126(workerData &worker, __m256i &data, __m256i &old) {
+  void op126(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r1(data);
     revData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op127(workerData &worker, __m256i &data, __m256i &old) {
+  void op127(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sl03(data);
     m0(data);
     addp2(data, worker.chunk[worker.pos2]);
     xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op128(workerData &worker, __m256i &data, __m256i &old) {
+  void op128(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -1423,588 +1423,588 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op129(workerData &worker, __m256i &data, __m256i &old) {
+  void op129(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     notData(data);
     p0(data);
     p0(data);
     sr03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op130(workerData &worker, __m256i &data, __m256i &old) {
+  void op130(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sr03(data);
     r0(data);
     r1(data);
     x0_r4(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op131(workerData &worker, __m256i &data, __m256i &old) {
+  void op131(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     subx97(data);
     r1(data);
     p0(data);
     m0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op132(workerData &worker, __m256i &data, __m256i &old) {
+  void op132(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     addp2(data, worker.chunk[worker.pos2]);
     revData(data);
     r5(data);
     x0_r2(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op133(workerData &worker, __m256i &data, __m256i &old) {
+  void op133(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     xp2(data, worker.chunk[worker.pos2]);
     r5(data);
     x0_r2(data);
     sl03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op134(workerData &worker, __m256i &data, __m256i &old) {
+  void op134(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     notData(data);
     x0_r4(data);
     r1(data);
     addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op135(workerData &worker, __m256i &data, __m256i &old) {
+  void op135(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sr03(data);
     x0_r2(data);
     a0(data);
     revData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op136(workerData &worker, __m256i &data, __m256i &old) {
+  void op136(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sr03(data);
     subx97(data);
     xp2(data, worker.chunk[worker.pos2]);
     r5(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op137(workerData &worker, __m256i &data, __m256i &old) {
+  void op137(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r5(data);
     sr03(data);
     revData(data);
     r0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op138(workerData &worker, __m256i &data, __m256i &old) {
+  void op138(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     xp2(data, worker.chunk[worker.pos2]);
     xp2(data, worker.chunk[worker.pos2]);
     a0(data);
     subx97(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op139(workerData &worker, __m256i &data, __m256i &old) {
+  void op139(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r2(data);
     r3(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op140(workerData &worker, __m256i &data, __m256i &old) {
+  void op140(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r1(data);
     x0_r2(data);
     xp2(data, worker.chunk[worker.pos2]);
     r5(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op141(workerData &worker, __m256i &data, __m256i &old) {
+  void op141(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r1(data);
     subx97(data);
     p0(data);
     a0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op142(workerData &worker, __m256i &data, __m256i &old) {
+  void op142(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     addp2(data, worker.chunk[worker.pos2]);
     r5(data);
     revData(data);
     x0_r2(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op143(workerData &worker, __m256i &data, __m256i &old) {
+  void op143(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     addp2(data, worker.chunk[worker.pos2]);
     r3(data);
     sr03(data);
     sl03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op144(workerData &worker, __m256i &data, __m256i &old) {
+  void op144(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r0(data);
     sl03(data);
     notData(data);
     r0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op145(workerData &worker, __m256i &data, __m256i &old) {
+  void op145(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     revData(data);
     x0_r4(data);
     x0_r2(data);
     x0_r4(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op146(workerData &worker, __m256i &data, __m256i &old) {
+  void op146(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     addp2(data, worker.chunk[worker.pos2]);
     sl03(data);
     addp2(data, worker.chunk[worker.pos2]);
     p0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op147(workerData &worker, __m256i &data, __m256i &old) {
+  void op147(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     notData(data);
     sl03(data);
     x0_r4(data);
     m0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op148(workerData &worker, __m256i &data, __m256i &old) {
+  void op148(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     addp2(data, worker.chunk[worker.pos2]);
     r5(data);
     sl03(data);
     subx97(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op149(workerData &worker, __m256i &data, __m256i &old) {
+  void op149(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     xp2(data, worker.chunk[worker.pos2]);
     revData(data);
     subx97(data);
     a0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op150(workerData &worker, __m256i &data, __m256i &old) {
+  void op150(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sl03(data);
     sl03(data);
     sl03(data);
     addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op151(workerData &worker, __m256i &data, __m256i &old) {
+  void op151(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     a0(data);
     sl03(data);
     m0(data);
     sl03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op152(workerData &worker, __m256i &data, __m256i &old) {
+  void op152(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sr03(data);
     notData(data);
     sl03(data);
     x0_r2(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op153(workerData &worker, __m256i &data, __m256i &old) {
+  void op153(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     data = _mm256_rol_epi8(data, 4);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op154(workerData &worker, __m256i &data, __m256i &old) {
+  void op154(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r5(data);
     notData(data);
     xp2(data, worker.chunk[worker.pos2]);
     p0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op155(workerData &worker, __m256i &data, __m256i &old) {
+  void op155(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     subx97(data);
     xp2(data, worker.chunk[worker.pos2]);
     p0(data);
     xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op156(workerData &worker, __m256i &data, __m256i &old) {
+  void op156(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sr03(data);
     sr03(data);
     data = _mm256_rol_epi8(data, 4);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op157(workerData &worker, __m256i &data, __m256i &old) {
+  void op157(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sr03(data);
     sl03(data);
     r0(data);
     r1(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op158(workerData &worker, __m256i &data, __m256i &old) {
+  void op158(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     p0(data);
     r3(data);
     a0(data);
     r1(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op159(workerData &worker, __m256i &data, __m256i &old) {
+  void op159(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     subx97(data);
     xp2(data, worker.chunk[worker.pos2]);
     r0(data);
     xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op160(workerData &worker, __m256i &data, __m256i &old) {
+  void op160(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sr03(data);
     revData(data);
     data = _mm256_rol_epi8(data, 4);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op161(workerData &worker, __m256i &data, __m256i &old) {
+  void op161(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     xp2(data, worker.chunk[worker.pos2]);
     xp2(data, worker.chunk[worker.pos2]);
     r5(data);
     r0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op162(workerData &worker, __m256i &data, __m256i &old) {
+  void op162(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     m0(data);
     revData(data);
     x0_r2(data);
     subx97(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op163(workerData &worker, __m256i &data, __m256i &old) {
+  void op163(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sl03(data);
     subx97(data);
     x0_r4(data);
     r1(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op164(workerData &worker, __m256i &data, __m256i &old) {
+  void op164(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     m0(data);
     p0(data);
     subx97(data);
     notData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op165(workerData &worker, __m256i &data, __m256i &old) {
+  void op165(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r4(data);
     xp2(data, worker.chunk[worker.pos2]);
     sl03(data);
     a0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op166(workerData &worker, __m256i &data, __m256i &old) {
+  void op166(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r3(data);
     a0(data);
     x0_r2(data);
     notData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op167(workerData &worker, __m256i &data, __m256i &old) {
+  void op167(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     m0(data);
     sr03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op168(workerData &worker, __m256i &data, __m256i &old) {
+  void op168(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r0(data);
     addp2(data, worker.chunk[worker.pos2]);
     r0(data);
     r1(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op169(workerData &worker, __m256i &data, __m256i &old) {
+  void op169(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r1(data);
     sl03(data);
     x0_r4(data);
     addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op170(workerData &worker, __m256i &data, __m256i &old) {
+  void op170(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     subx97(data);
     revData(data);
     subx97(data);
     m0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op171(workerData &worker, __m256i &data, __m256i &old) {
+  void op171(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r3(data);
     subx97(data);
     p0(data);
     revData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op172(workerData &worker, __m256i &data, __m256i &old) {
+  void op172(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r4(data);
     subx97(data);
     sl03(data);
     r1(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op173(workerData &worker, __m256i &data, __m256i &old) {
+  void op173(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     notData(data);
     sl03(data);
     m0(data);
     a0(data);
 
-  blendStep(worker, data, old);
-    storeStep(worker, data, old);
+  blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op174(workerData &worker, __m256i &data, __m256i &old) {
+  void op174(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     notData(data);
     r0(data);
     p0(data);
     p0(data);
 
-  blendStep(worker, data, old);
-    storeStep(worker, data, old);
+  blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op175(workerData &worker, __m256i &data, __m256i &old) {
+  void op175(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r3(data);
     subx97(data);
     m0(data);
     r5(data);
 
-  blendStep(worker, data, old);
-    storeStep(worker, data, old);
+  blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op176(workerData &worker, __m256i &data, __m256i &old) {
+  void op176(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     xp2(data, worker.chunk[worker.pos2]);
     m0(data);
     xp2(data, worker.chunk[worker.pos2]);
     r5(data);
 
-  blendStep(worker, data, old);
-    storeStep(worker, data, old);
+  blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op177(workerData &worker, __m256i &data, __m256i &old) {
+  void op177(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     p0(data);
     x0_r2(data);
     x0_r2(data);
     addp2(data, worker.chunk[worker.pos2]);
 
-  blendStep(worker, data, old);
-    storeStep(worker, data, old);
+  blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op178(workerData &worker, __m256i &data, __m256i &old) {
+  void op178(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     addp2(data, worker.chunk[worker.pos2]);
     a0(data);
     notData(data);
     r1(data);
 
-  blendStep(worker, data, old);
-    storeStep(worker, data, old);
+  blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op179(workerData &worker, __m256i &data, __m256i &old) {
+  void op179(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r2(data);
     a0(data);
     sr03(data);
     revData(data);
 
-  blendStep(worker, data, old);
-    storeStep(worker, data, old);
+  blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op180(workerData &worker, __m256i &data, __m256i &old) {
+  void op180(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sr03(data);
     x0_r4(data);
     xp2(data, worker.chunk[worker.pos2]);
     subx97(data);
 
-  blendStep(worker, data, old);
-    storeStep(worker, data, old);
+  blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op181(workerData &worker, __m256i &data, __m256i &old) {
+  void op181(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     notData(data);
     sl03(data);
     x0_r2(data);
     r5(data);
 
-  blendStep(worker, data, old);
-    storeStep(worker, data, old);
+  blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op182(workerData &worker, __m256i &data, __m256i &old) {
+  void op182(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     xp2(data, worker.chunk[worker.pos2]);
     r3(data);
     r3(data);
     x0_r4(data);
 
-  blendStep(worker, data, old);
-    storeStep(worker, data, old);
+  blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op183(workerData &worker, __m256i &data, __m256i &old) {
+  void op183(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     a0(data);
     subx97(data);
     subx97(data);
     m0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op184(workerData &worker, __m256i &data, __m256i &old) {
+  void op184(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sl03(data);
     m0(data);
     r5(data);
     xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op185(workerData &worker, __m256i &data, __m256i &old) {
+  void op185(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     notData(data);
     x0_r4(data);
     r5(data);
     sr03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op186(workerData &worker, __m256i &data, __m256i &old) {
+  void op186(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r2(data);
     x0_r4(data);
     subx97(data);
     sr03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op187(workerData &worker, __m256i &data, __m256i &old) {
+  void op187(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     xp2(data, worker.chunk[worker.pos2]);
     notData(data);
     a0(data);
     r3(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op188(workerData &worker, __m256i &data, __m256i &old) {
+  void op188(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
   #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -2017,195 +2017,195 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op189(workerData &worker, __m256i &data, __m256i &old) {
+  void op189(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r5(data);
     x0_r4(data);
     xp2(data, worker.chunk[worker.pos2]);
     subx97(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op190(workerData &worker, __m256i &data, __m256i &old) {
+  void op190(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r5(data);
     sr03(data);
     addp2(data, worker.chunk[worker.pos2]);
     x0_r2(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op191(workerData &worker, __m256i &data, __m256i &old) {
+  void op191(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     a0(data);
     r3(data);
     r0(data);
     sr03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op192(workerData &worker, __m256i &data, __m256i &old) {
+  void op192(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     a0(data);
     sl03(data);
     a0(data);
     m0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op193(workerData &worker, __m256i &data, __m256i &old) {
+  void op193(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     addp2(data, worker.chunk[worker.pos2]);
     sl03(data);
     r0(data);
     r1(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op194(workerData &worker, __m256i &data, __m256i &old) {
+  void op194(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     addp2(data, worker.chunk[worker.pos2]);
     r0(data);
     sl03(data);
     addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op195(workerData &worker, __m256i &data, __m256i &old) {
+  void op195(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     p0(data);
     x0_r2(data);
     xp2(data, worker.chunk[worker.pos2]);
     x0_r4(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op196(workerData &worker, __m256i &data, __m256i &old) {
+  void op196(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r3(data);
     revData(data);
     sl03(data);
     r1(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op197(workerData &worker, __m256i &data, __m256i &old) {
+  void op197(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r4(data);
     r0(data);
     m0(data);
     m0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op198(workerData &worker, __m256i &data, __m256i &old) {
+  void op198(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sr03(data);
     sr03(data);
     revData(data);
     r1(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op199(workerData &worker, __m256i &data, __m256i &old) {
+  void op199(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     notData(data);
     a0(data);
     m0(data);
     xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op200(workerData &worker, __m256i &data, __m256i &old) {
+  void op200(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sr03(data);
     p0(data);
     revData(data);
     revData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op201(workerData &worker, __m256i &data, __m256i &old) {
+  void op201(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r3(data);
     x0_r2(data);
     x0_r4(data);
     notData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op202(workerData &worker, __m256i &data, __m256i &old) {
+  void op202(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     xp2(data, worker.chunk[worker.pos2]);
     notData(data);
     r0(data);
     r5(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op203(workerData &worker, __m256i &data, __m256i &old) {
+  void op203(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     xp2(data, worker.chunk[worker.pos2]);
     addp2(data, worker.chunk[worker.pos2]);
     r1(data);
     r0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op204(workerData &worker, __m256i &data, __m256i &old) {
+  void op204(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r5(data);
     x0_r2(data);
     r0(data);
     xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op205(workerData &worker, __m256i &data, __m256i &old) {
+  void op205(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     p0(data);
     x0_r4(data);
     sl03(data);
     a0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op206(workerData &worker, __m256i &data, __m256i &old) {
+  void op206(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r4(data);
     revData(data);
     revData(data);
     p0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op207(workerData &worker, __m256i &data, __m256i &old) {
+  void op207(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     p0(data);
     p0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op208(workerData &worker, __m256i &data, __m256i &old) {
+  void op208(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
   #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -2218,406 +2218,406 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op209(workerData &worker, __m256i &data, __m256i &old) {
+  void op209(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r5(data);
     revData(data);
     p0(data);
     subx97(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op210(workerData &worker, __m256i &data, __m256i &old) {
+  void op210(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r2(data);
     r0(data);
     r5(data);
     notData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op211(workerData &worker, __m256i &data, __m256i &old) {
+  void op211(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r4(data);
     a0(data);
     subx97(data);
     r0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op212(workerData &worker, __m256i &data, __m256i &old) {
+  void op212(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r0(data);
     x0_r2(data);
     // xp2(data, worker.chunk[worker.pos2]);
     // xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op213(workerData &worker, __m256i &data, __m256i &old) {
+  void op213(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     a0(data);
     sl03(data);
     r3(data);
     subx97(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op214(workerData &worker, __m256i &data, __m256i &old) {
+  void op214(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     xp2(data, worker.chunk[worker.pos2]);
     subx97(data);
     sr03(data);
     notData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op215(workerData &worker, __m256i &data, __m256i &old) {
+  void op215(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     xp2(data, worker.chunk[worker.pos2]);
     addp2(data, worker.chunk[worker.pos2]);
     sl03(data);
     m0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op216(workerData &worker, __m256i &data, __m256i &old) {
+  void op216(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r0(data);
     notData(data);
     subx97(data);
     addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op217(workerData &worker, __m256i &data, __m256i &old) {
+  void op217(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r5(data);
     a0(data);
     r1(data);
     x0_r4(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op218(workerData &worker, __m256i &data, __m256i &old) {
+  void op218(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     revData(data);
     notData(data);
     m0(data);
     subx97(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op219(workerData &worker, __m256i &data, __m256i &old) {
+  void op219(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r4(data);
     r3(data);
     addp2(data, worker.chunk[worker.pos2]);
     revData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op220(workerData &worker, __m256i &data, __m256i &old) {
+  void op220(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r1(data);
     sl03(data);
     revData(data);
     sl03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op221(workerData &worker, __m256i &data, __m256i &old) {
+  void op221(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r5(data);
     xp2(data, worker.chunk[worker.pos2]);
     notData(data);
     revData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op222(workerData &worker, __m256i &data, __m256i &old) {
+  void op222(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     sr03(data);
     sl03(data);
     xp2(data, worker.chunk[worker.pos2]);
     m0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op223(workerData &worker, __m256i &data, __m256i &old) {
+  void op223(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r3(data);
     xp2(data, worker.chunk[worker.pos2]);
     r0(data);
     subx97(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op224(workerData &worker, __m256i &data, __m256i &old) {
+  void op224(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r2(data);
     data = _mm256_rol_epi8(data, 4);
     sl03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op225(workerData &worker, __m256i &data, __m256i &old) {
+  void op225(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     notData(data);
     sr03(data);
     revData(data);
     r3(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op226(workerData &worker, __m256i &data, __m256i &old) {
+  void op226(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     revData(data);
     subx97(data);
     m0(data);
     xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op227(workerData &worker, __m256i &data, __m256i &old) {
+  void op227(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     notData(data);
     sl03(data);
     subx97(data);
     addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op228(workerData &worker, __m256i &data, __m256i &old) {
+  void op228(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     a0(data);
     sr03(data);
     a0(data);
     p0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op229(workerData &worker, __m256i &data, __m256i &old) {
+  void op229(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r3(data);
     r0(data);
     x0_r2(data);
     p0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op230(workerData &worker, __m256i &data, __m256i &old) {
+  void op230(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     m0(data);
     addp2(data, worker.chunk[worker.pos2]);
     r0(data);
     r0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op231(workerData &worker, __m256i &data, __m256i &old) {
+  void op231(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r3(data);
     sr03(data);
     xp2(data, worker.chunk[worker.pos2]);
     revData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op232(workerData &worker, __m256i &data, __m256i &old) {
+  void op232(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     m0(data);
     m0(data);
     x0_r4(data);
     r5(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op233(workerData &worker, __m256i &data, __m256i &old) {
+  void op233(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r1(data);
     p0(data);
     r3(data);
     p0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op234(workerData &worker, __m256i &data, __m256i &old) {
+  void op234(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     addp2(data, worker.chunk[worker.pos2]);
     m0(data);
     sr03(data);
     xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op235(workerData &worker, __m256i &data, __m256i &old) {
+  void op235(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r2(data);
     m0(data);
     r3(data);
     notData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op236(workerData &worker, __m256i &data, __m256i &old) {
+  void op236(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     xp2(data, worker.chunk[worker.pos2]);
     a0(data);
     addp2(data, worker.chunk[worker.pos2]);
     subx97(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op237(workerData &worker, __m256i &data, __m256i &old) {
+  void op237(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r5(data);
     sl03(data);
     x0_r2(data);
     r3(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op238(workerData &worker, __m256i &data, __m256i &old) {
+  void op238(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     a0(data);
     a0(data);
     r3(data);
     subx97(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op239(workerData &worker, __m256i &data, __m256i &old) {
+  void op239(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r3(data);
     r3(data);
     m0(data);
     addp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op240(workerData &worker, __m256i &data, __m256i &old) {
+  void op240(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     notData(data);
     a0(data);
     addp2(data, worker.chunk[worker.pos2]);
     sl03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op241(workerData &worker, __m256i &data, __m256i &old) {
+  void op241(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     x0_r4(data);
     p0(data);
     xp2(data, worker.chunk[worker.pos2]);
     r1(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op242(workerData &worker, __m256i &data, __m256i &old) {
+  void op242(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     a0(data);
     a0(data);
     subx97(data);
     xp2(data, worker.chunk[worker.pos2]);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op243(workerData &worker, __m256i &data, __m256i &old) {
+  void op243(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r5(data);
     x0_r2(data);
     p0(data);
     r1(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op244(workerData &worker, __m256i &data, __m256i &old) {
+  void op244(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     notData(data);
     x0_r2(data);
     revData(data);
     r5(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op245(workerData &worker, __m256i &data, __m256i &old) {
+  void op245(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     subx97(data);
     r5(data);
     x0_r2(data);
     sr03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op246(workerData &worker, __m256i &data, __m256i &old) {
+  void op246(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     a0(data);
     r1(data);
     sr03(data);
     a0(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op247(workerData &worker, __m256i &data, __m256i &old) {
+  void op247(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     r5(data);
     x0_r2(data);
     r5(data);
     notData(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op248(workerData &worker, __m256i &data, __m256i &old) {
+  void op248(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     notData(data);
     subx97(data);
     p0(data);
     r5(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op249(workerData &worker, __m256i &data, __m256i &old) {
+  void op249(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
   #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -2630,38 +2630,38 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op250(workerData &worker, __m256i &data, __m256i &old) {
+  void op250(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     addp2(data, worker.chunk[worker.pos2]);
     r0(data);
     p0(data);
     x0_r4(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op251(workerData &worker, __m256i &data, __m256i &old) {
+  void op251(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     a0(data);
     p0(data);
     revData(data);
     x0_r2(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op252(workerData &worker, __m256i &data, __m256i &old) {
+  void op252(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     revData(data);
     x0_r4(data);
     x0_r2(data);
     sl03(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op253(workerData &worker, __m256i &data, __m256i &old) {
-    storeStep(worker, data, old);
+  void op253(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
+    storeStep(worker, data, old, wIndex);
   #pragma GCC unroll 32
     for (int i = worker.pos1; i < worker.pos2; i++)
     {
@@ -2677,35 +2677,35 @@ namespace astro_branched_zOp {
     }
   }
 
-  void op254(workerData &worker, __m256i &data, __m256i &old) {
-    RC4_set_key(&worker.key, 256, worker.prev_chunk);
+  void op254(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
+    RC4_set_key(&worker.key[wIndex], 256, worker.prev_chunk);
 
     p0(data);
     r3(data);
     x0_r2(data);
     r3(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void op255(workerData &worker, __m256i &data, __m256i &old) {
-    RC4_set_key(&worker.key, 256, worker.prev_chunk);
+  void op255(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
+    RC4_set_key(&worker.key[wIndex], 256, worker.prev_chunk);
 
     p0(data);
     r3(data);
     x0_r2(data);
     r3(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void r_op0(workerData &worker, __m256i &data, __m256i &old) {
+  void r_op0(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     byte newVal = worker.simpleLookup[worker.prev_chunk[worker.pos1]];
     __m256i newVec = _mm256_set1_epi8(newVal);
     data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2 - worker.pos1));
-    storeStep(worker, data, old);
+    storeStep(worker, data, old, wIndex);
 
     if ((worker.pos2 - worker.pos1) % 2 == 1) {
       worker.t1 = worker.chunk[worker.pos1];
@@ -2716,27 +2716,27 @@ namespace astro_branched_zOp {
     }
   }
 
-  void r_op1(workerData &worker, __m256i &data, __m256i &old) {
+  void r_op1(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     byte newVal = worker.lookup3D[worker.branched_idx[worker.op] * 256 * 256 +
                                   worker.prev_chunk[worker.pos2] * 256 +
                                   worker.prev_chunk[worker.pos1]];
 
     __m256i newVec = _mm256_set1_epi8(newVal);
     data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2 - worker.pos1));
-    storeStep(worker, data, old);
+    storeStep(worker, data, old, wIndex);
 
     return;
   }
 
-  void r_op2(workerData &worker, __m256i &data, __m256i &old) {
+  void r_op2(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
     byte newVal = worker.simpleLookup[worker.reg_idx[worker.op] * 256 + worker.prev_chunk[worker.pos1]];
     __m256i newVec = _mm256_set1_epi8(newVal);
     data = _mm256_blendv_epi8(data, newVec, genMask(worker.pos2 - worker.pos1));
-    storeStep(worker, data, old);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void r_op253(workerData &worker, __m256i &data, __m256i &old) {
-    storeStep(worker, data, old);
+  void r_op253(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
+    storeStep(worker, data, old, wIndex);
     if (worker.isSame) {
       byte newVal = worker.lookup3D[worker.branched_idx[worker.op]*256*256 + worker.prev_chunk[worker.pos2]*256 + worker.prev_chunk[worker.pos1]];
       if (worker.prev_chunk[worker.pos1] == newVal) {
@@ -2760,31 +2760,31 @@ namespace astro_branched_zOp {
     }
   }
 
-  void r_op254(workerData &worker, __m256i &data, __m256i &old) {
-    RC4_set_key(&worker.key, 256, worker.prev_chunk);
+  void r_op254(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
+    RC4_set_key(&worker.key[wIndex], 256, worker.prev_chunk);
 
     p0(data);
     r3(data);
     x0_r2(data);
     r3(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  void r_op255(workerData &worker, __m256i &data, __m256i &old) {
-    RC4_set_key(&worker.key, 256, worker.prev_chunk);
+  void r_op255(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
+    RC4_set_key(&worker.key[wIndex], 256, worker.prev_chunk);
 
     p0(data);
     r3(data);
     x0_r2(data);
     r3(data);
 
-    blendStep(worker, data, old);
-    storeStep(worker, data, old);
+    blendStep(worker, data, old, wIndex);
+    storeStep(worker, data, old, wIndex);
   }
 
-  typedef void (*OpFunc)(workerData &, __m256i &, __m256i &);
+  typedef void (*OpFunc)(workerData &, __m256i &, __m256i &, int);
 
   alignas(32) OpFunc branchCompute[512] = {
     // standard versions

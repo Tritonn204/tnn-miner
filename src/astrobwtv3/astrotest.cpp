@@ -560,9 +560,10 @@ int TestAstroBWTv3(bool quiet=false)
     memcpy(buf, t.in.c_str(), t.in.size());
     byte res[32];
     //byte res2[32];
-    //AstroBWTv3(buf, (int)t.in.size(), res2, *worker2, true);
-    // printf("vanilla result: %s\n", hexStr(res, 32).c_str());
     AstroBWTv3(buf, (int)t.in.size(), res, *worker, false);
+    // printf("vanilla result: %s\n", hexStr(res, 32).c_str());
+    // AstroBWTv3_batch(buf, (int)t.in.size(), res, *worker, false);
+    // AstroBWTv3_batch(buf, (int)t.in.size(), res, *worker, false);
     // printf("lookup result: %s\n", hexStr(res, 32).c_str());
     std::string actualRes = hexStr(res, 32);
     if (actualRes.c_str() != t.out)
@@ -3756,7 +3757,7 @@ void optest_ref(int op, workerData &worker, byte testData[32], OpTestResult &tes
       break;
     case 254:
     case 255:
-      RC4_set_key(&worker.key, 256,  worker.step_3);
+      RC4_set_key(&worker.key[0], 256,  worker.step_3);
 // worker.step_3 = highwayhash.Sum(worker.step_3[:], worker.step_3[:])
 #pragma GCC unroll 32
       for (int i = worker.pos1; i < worker.pos2; i++)
@@ -3810,7 +3811,7 @@ void optest_branchcpu(int op, workerData &worker, byte testData[32], OpTestResul
     //worker.pos1 = 0; worker.pos2 = 32;
     worker.chunk = worker.step_3;
     worker.prev_chunk = worker.chunk;
-    branchComputeCPU(worker, true);
+    branchComputeCPU(worker, true, 0);
   }
 
   auto test_end = std::chrono::steady_clock::now();
@@ -3851,7 +3852,7 @@ void optest_lookup(int op, workerData &worker, byte testData[32], OpTestResult &
     //worker.pos1 = 0; worker.pos2 = 32;
     worker.chunk = worker.step_3;
     worker.prev_chunk = worker.chunk;
-    lookupCompute(worker, true);
+    lookupCompute(worker, true, 0);
   }
 
   auto test_end = std::chrono::steady_clock::now();
@@ -3892,7 +3893,7 @@ void optest_wolf(int op, workerData &worker, byte testData[32], OpTestResult &te
     //worker.pos1 = 0; worker.pos2 = 32;
     worker.chunk = worker.step_3;
     worker.prev_chunk = worker.chunk;
-    wolfCompute(worker, true);
+    wolfCompute(worker, true, 0);
   }
 
   auto test_end = std::chrono::steady_clock::now();
@@ -3934,7 +3935,7 @@ void optest_avx2(int op, workerData &worker, byte testData[32], OpTestResult &te
     //worker.pos1 = 0; worker.pos2 = 32;
     worker.chunk = worker.step_3;
     worker.prev_chunk = worker.chunk;
-    branchComputeCPU_avx2_zOptimized(worker, true);
+    branchComputeCPU_avx2_zOptimized(worker, true, 0);
   }
 
   auto test_end = std::chrono::steady_clock::now();
@@ -3977,7 +3978,7 @@ void optest_aarch64(int op, workerData &worker, byte testData[32], OpTestResult 
     //worker.pos1 = 0; worker.pos2 = 32;
     worker.chunk = worker.step_3;
     worker.prev_chunk = worker.chunk;
-    branchComputeCPU_aarch64(worker, true);
+    branchComputeCPU_aarch64(worker, true, 0);
   }
 
   auto test_end = std::chrono::steady_clock::now();

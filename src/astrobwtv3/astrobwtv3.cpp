@@ -8,6 +8,7 @@
 #include <bitset>
 #include <iostream>
 #include <fstream>
+#include <thread>
 
 #include <fnv1a.h>
 #include <xxhash64.h>
@@ -72,7 +73,7 @@ std::vector<byte> opsB;
 
 bool debugOpOrder = false;
 
-void (*astroCompFunc)(workerData &worker, bool isTest) = branchComputeCPU;
+void (*astroCompFunc)(workerData &worker, bool isTest, int wIndex) = branchComputeCPU;
 
 void saveBufferToFile(const std::string& filename, const byte* buffer, size_t size) {
     // Generate unique filename using timestamp
@@ -166,7 +167,7 @@ void astroTune(int num_threads, int tuneWarmupSec, int tuneDurationSec) {
   }
 
   int fastestCompIdx = 0;
-  void (*fastestComp)(workerData &worker, bool isTest) = branchComputeCPU;
+  void (*fastestComp)(workerData &worker, bool isTest, int wIndex) = branchComputeCPU;
 
   try {
     byte random_buffer[48];
@@ -405,8 +406,209 @@ void computeByteFrequencyAVX2(const unsigned char* data, size_t dataSize, int fr
 
 #endif
 
+void AstroBWTv3_batch(byte *input, int inputLen, byte *outputhash, workerData &worker, bool unused)
+{
+  // auto recoverFunc = [&outputhash](void *r)
+  // {
+  //   std::random_device rd;
+  //   std::mt19937 gen(rd());
+  //   std::uniform_int_distribution<uint8_t> dist(0, 255);
+  //   std::array<uint8_t, 16> buf;
+  //   std::generate(buf.begin(), buf.end(), [&dist, &gen]()
+  //                 { return dist(gen); });
+  //   std::memcpy(outputhash, buf.data(), buf.size());
+  //   std::cout << "exception occured, returning random hash" << std::endl;
+  // };
+  // std::function<void(void *)> recover = recoverFunc;
 
-void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker, bool unused)
+  try
+  {
+    for (int i = 0; i < DERO_BATCH; i++) {
+      // auto start = std::chrono::steady_clock::now();
+      std::fill_n(worker.sData + ASTRO_SCRATCH_SIZE*i + 256, 64, 0);
+      memset(worker.sData + ASTRO_SCRATCH_SIZE*i + 256, 0, 64);
+
+      __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 256], 1, 3);
+      __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 256+64], 1, 3);
+      __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 256+128], 1, 3);
+      __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 256+192], 1, 3);
+      
+      hashSHA256(worker.sha256, &input[i*inputLen], &worker.sData[320], inputLen);
+      worker.salsa20.setKey(&worker.sData[ASTRO_SCRATCH_SIZE*i + 320]);
+      worker.salsa20.setIv(&worker.sData[ASTRO_SCRATCH_SIZE*i + 256]);
+
+      __builtin_prefetch(worker.sData + ASTRO_SCRATCH_SIZE*i, 1, 3);
+      __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 64], 1, 3);
+      __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 128], 1, 3);
+      __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 192], 1, 3);
+
+      worker.salsa20.processBytes(worker.salsaInput, &worker.sData[ASTRO_SCRATCH_SIZE*i], 256);
+
+      __builtin_prefetch(&worker.key[i] + 8, 1, 3);
+      __builtin_prefetch(&worker.key[i] + 8+64, 1, 3);
+      __builtin_prefetch(&worker.key[i] + 8+128, 1, 3);
+      __builtin_prefetch(&worker.key[i] + 8+192, 1, 3);
+
+      RC4_set_key(&worker.key[i], 256,  &worker.sData[ASTRO_SCRATCH_SIZE*i]);
+      RC4(&worker.key[i], 256, &worker.sData[ASTRO_SCRATCH_SIZE*i], &worker.sData[ASTRO_SCRATCH_SIZE*i]);
+
+      // auto end = std::chrono::steady_clock::now();
+      // auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
+      // if (i == 0) printf("Prep section #%d section took %dns\n", i+1, time.count());
+      // if (i == DERO_BATCH / 2) printf("Prep section #%d section took %dns\n", i+1, time.count());
+      // if (i == DERO_BATCH - 1) printf("Prep section #%d section took %dns\n", i+1, time.count());
+    }
+    // syncTag.fetch_add(1);
+    // syncTag.notify_all();
+
+    // for(;;) {
+    //   if (syncTag.load() == syncTarget) break;
+    //   std::this_thread::yield();
+    // }
+
+    // syncTag.store(0); syncTag.notify_all();
+    // syncTag.wait(syncTarget);
+
+    // printf(hexStr(worker.chunk, 256).c_str());
+    // printf("\n\n");
+
+    
+    // auto start = std::chrono::steady_clock::now();
+    // auto end = std::chrono::steady_clock::now();
+
+    /*
+    if (lookupMine) {
+      // start = std::chrono::steady_clock::now();
+      lookupCompute(worker, false);
+      // end = std::chrono::steady_clock::now();
+    }
+    else {
+      // // start = std::chrono::steady_clock::now();
+      #if defined(__AVX2__)
+        wolfCompute(worker, false);
+      #elif defined(__aarch64__)
+        branchComputeCPU_aarch64(worker, false);
+      #else
+        branchComputeCPU(worker, false);
+      #endif
+      // // end = std::chrono::steady_clock::now();
+      //wolfCompute(worker, false);
+    }
+    */
+
+    for (int i = 0; i < DERO_BATCH; i++) {
+      worker.lhash = hash_64_fnv1a_256(&worker.sData[ASTRO_SCRATCH_SIZE*i]);
+      worker.prev_lhash = worker.lhash;
+
+      worker.tries[i] = 0;
+      worker.isSame = false;
+
+      // auto start = std::chrono::steady_clock::now();
+      astroCompFunc(worker, false, i);
+      // auto end = std::chrono::steady_clock::now();
+      // auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
+      // if (i == 0) printf("Branched section #%d section took %dns\n", i+1, time.count());
+      // if (i == DERO_BATCH / 2) printf("Branched section #%d section took %dns\n", i+1, time.count());
+      // if (i == DERO_BATCH - 1) printf("Branched section #%d section took %dns\n", i+1, time.count());
+    }
+    // syncTag.fetch_add(1);
+    // syncTag.notify_all();
+
+    // for(;;) {
+    //   if (syncTag == syncTarget) break;
+    //   std::this_thread::yield();
+    // }
+
+    // syncTag.store(0); syncTag.notify_all();
+    // syncTag.wait(syncTarget);
+
+    // auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
+    // if (!lookupMine) printf("AVX2: ");
+    // else printf("Lookup: ");
+    // printf("branched section took %dns\n", time.count());
+    // if (debugOpOrder) {
+    //   if (worker.opsB.size() > 0) {
+    //     printf("Lookup Table:\n-----------\n");
+    //     for (int i = 0; i < worker.opsB.size(); i++) {
+    //       printf("%d, ", worker.opsB[i]);
+    //     }
+    //   } else {
+    //     printf("Scalar:\n-----------\n");
+    //     for (int i = 0; i < worker.opsA.size(); i++) {
+    //       printf("%d, ", worker.opsA[i]);
+    //     }
+    //   }
+
+    //   printf("\n");
+    //   worker.opsA.clear();
+    //   worker.opsB.clear();
+    // }
+    // // worker.data_len = 70000;
+    // saveBufferToFile("worker_sData_snapshot.bin", worker.sData, worker.data_len);
+    // printf("data length: %d\n", worker.data_len);
+    // auto start = std::chrono::steady_clock::now();
+    for (int i = 0; i < DERO_BATCH; i++) {
+      worker.data_len = static_cast<uint32_t>(
+        (worker.tries[i] - 4) * 256 + 
+        (((static_cast<uint64_t>(worker.sData[i*ASTRO_SCRATCH_SIZE + (worker.tries[i]-1)*256 + 253]) << 8) | 
+        static_cast<uint64_t>(worker.sData[i*ASTRO_SCRATCH_SIZE + (worker.tries[i]-1)*256 + 254])) & 0x3ff)
+      );
+      // auto start = std::chrono::steady_clock::now();
+      divsufsort(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.sa, worker.data_len, worker.bA, worker.bB);
+      // auto end = std::chrono::steady_clock::now();
+      // auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
+      // if (i == 0) printf("divsufsort section #%d section took %dns\n", i+1, time.count());
+      // if (i == DERO_BATCH / 2) printf("divsufsort section #%d section took %dns\n", i+1, time.count());
+      // if (i == DERO_BATCH - 1) printf("divsufsort section #%d section took %dns\n", i+1, time.count());
+      if (littleEndian())
+      {
+        byte *B = reinterpret_cast<byte *>(worker.sa);
+        hashSHA256(worker.sha256, B, worker.sHash, worker.data_len*4);
+      } else {
+        byte s[MAX_LENGTH * 4];
+        for (int i = 0; i < worker.data_len; i++)
+        {
+          s[i << 1] = htonl(worker.sa[i]);
+        }
+        hashSHA256(worker.sha256, s, worker.sHash, worker.data_len*4);
+      }
+      memcpy(outputhash + 32*i, worker.sHash, 32);
+      // memset(outputhash + 32*i, 0xFF, 32);
+    }
+    // syncTag.fetch_add(1);
+    // syncTag.notify_all();
+
+    // for(;;) {
+    //   if (syncTag == syncTarget) break;
+    //   std::this_thread::yield();
+    // }
+
+    // if (tid == 1) {syncTag.store(0); syncTag.notify_all();}
+    // syncTag.wait(syncTarget);
+    // printf("\n\n\n");
+    // auto end = std::chrono::steady_clock::now();
+    // auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
+    // printf("SA section took %dns\n", time.count());
+
+    // auto start = std::chrono::steady_clock::now();
+    // for (;;) {
+    //   auto end = std::chrono::steady_clock::now();
+    //   if (std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count() >= 650000) break;
+    //   std::this_thread::yield();
+    // }
+    // std::this_thread::sleep_for(std::chrono::nanoseconds(1107000));
+
+    // computeByteFrequencyAVX2(worker.sData, worker.data_len, worker.freq);
+    // libsais_ctx(worker.ctx, worker.sData, worker.sa, worker.data_len, MAX_LENGTH-worker.data_len, NULL);
+  }
+  catch (const std::exception &ex)
+  {
+    // recover(outputhash);
+    std::cerr << ex.what() << std::endl;
+  }
+}
+
+void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker, bool unused, int tid)
 {
   // auto recoverFunc = [&outputhash](void *r)
   // {
@@ -435,25 +637,26 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     worker.salsa20.setKey(&worker.sData[320]);
     worker.salsa20.setIv(&worker.sData[256]);
 
-    __builtin_prefetch(worker.sData, 1, 3);
+    __builtin_prefetch(&worker.sData, 1, 3);
     __builtin_prefetch(&worker.sData[64], 1, 3);
     __builtin_prefetch(&worker.sData[128], 1, 3);
     __builtin_prefetch(&worker.sData[192], 1, 3);
 
     worker.salsa20.processBytes(worker.salsaInput, worker.sData, 256);
 
-    __builtin_prefetch(&worker.key + 8, 1, 3);
-    __builtin_prefetch(&worker.key + 8+64, 1, 3);
-    __builtin_prefetch(&worker.key + 8+128, 1, 3);
-    __builtin_prefetch(&worker.key + 8+192, 1, 3);
+    __builtin_prefetch(&worker.key[0] + 8, 1, 3);
+    __builtin_prefetch(&worker.key[0] + 8+64, 1, 3);
+    __builtin_prefetch(&worker.key[0] + 8+128, 1, 3);
+    __builtin_prefetch(&worker.key[0] + 8+192, 1, 3);
 
-    RC4_set_key(&worker.key, 256,  worker.sData);
-    RC4(&worker.key, 256, worker.sData,  worker.sData);
+    RC4_set_key(&worker.key[0], 256,  worker.sData);
+    RC4(&worker.key[0], 256, worker.sData,  worker.sData);
+
 
     worker.lhash = hash_64_fnv1a_256(worker.sData);
     worker.prev_lhash = worker.lhash;
 
-    worker.tries = 0;
+    worker.tries[0] = 0;
     worker.isSame = false;
 
     // printf(hexStr(worker.chunk, 256).c_str());
@@ -482,33 +685,47 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
       //wolfCompute(worker, false);
     }
     */
-    astroCompFunc(worker, false);
+
+    astroCompFunc(worker, false, 0);
 
     // auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
     // if (!lookupMine) printf("AVX2: ");
     // else printf("Lookup: ");
     // printf("branched section took %dns\n", time.count());
-    if (debugOpOrder) {
-      if (worker.opsB.size() > 0) {
-        printf("Lookup Table:\n-----------\n");
-        for (int i = 0; i < worker.opsB.size(); i++) {
-          printf("%d, ", worker.opsB[i]);
-        }
-      } else {
-        printf("Scalar:\n-----------\n");
-        for (int i = 0; i < worker.opsA.size(); i++) {
-          printf("%d, ", worker.opsA[i]);
-        }
-      }
+    // if (debugOpOrder) {
+    //   if (worker.opsB.size() > 0) {
+    //     printf("Lookup Table:\n-----------\n");
+    //     for (int i = 0; i < worker.opsB.size(); i++) {
+    //       printf("%d, ", worker.opsB[i]);
+    //     }
+    //   } else {
+    //     printf("Scalar:\n-----------\n");
+    //     for (int i = 0; i < worker.opsA.size(); i++) {
+    //       printf("%d, ", worker.opsA[i]);
+    //     }
+    //   }
 
-      printf("\n");
-      worker.opsA.clear();
-      worker.opsB.clear();
-    }
+    //   printf("\n");
+    //   worker.opsA.clear();
+    //   worker.opsB.clear();
+    // }
     // // worker.data_len = 70000;
     // saveBufferToFile("worker_sData_snapshot.bin", worker.sData, worker.data_len);
     // printf("data length: %d\n", worker.data_len);
+    // auto start = std::chrono::steady_clock::now();
     divsufsort(worker.sData, worker.sa, worker.data_len, worker.bA, worker.bB);
+    // auto end = std::chrono::steady_clock::now();
+    // auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
+    // printf("SA section took %dns\n", time.count());
+
+    // auto start = std::chrono::steady_clock::now();
+    // for (;;) {
+    //   auto end = std::chrono::steady_clock::now();
+    //   if (std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count() >= 650000) break;
+    //   std::this_thread::yield();
+    // }
+    // std::this_thread::sleep_for(std::chrono::nanoseconds(1107000));
+
     // computeByteFrequencyAVX2(worker.sData, worker.data_len, worker.freq);
     // libsais_ctx(worker.ctx, worker.sData, worker.sa, worker.data_len, MAX_LENGTH-worker.data_len, NULL);
 
@@ -540,18 +757,18 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
 }
 
 
-void branchComputeCPU(workerData &worker, bool isTest)
+void branchComputeCPU(workerData &worker, bool isTest, int wIndex)
 {
   while (true)
   {
     if(isTest) {
 
     } else {
-      worker.tries++;
-      if (debugOpOrder) printf("t: 0x%lx p: 0x%lx l: 0x%lx\n", worker.tries, worker.prev_lhash, worker.lhash);
-      worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries;
+      worker.tries[wIndex]++;
+      if (debugOpOrder) printf("t: 0x%lx p: 0x%lx l: 0x%lx\n", worker.tries[wIndex], worker.prev_lhash, worker.lhash);
+      worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries[wIndex];
       // __builtin_prefetch(&worker.random_switcher,0,3);
-      // printf("%d worker.random_switcher %d %08jx\n", worker.tries, worker.random_switcher, worker.random_switcher);
+      // printf("%d worker.random_switcher %d %08jx\n", worker.tries[wIndex], worker.random_switcher, worker.random_switcher);
 
       worker.op = static_cast<byte>(worker.random_switcher);
       //if (debugOpOrder) worker.opsA.push_back(worker.op);
@@ -571,17 +788,17 @@ void branchComputeCPU(workerData &worker, bool isTest)
         worker.pos2 = worker.pos1 + ((worker.pos2 - worker.pos1) & 0x1f);
       }
 
-      worker.chunk = &worker.sData[(worker.tries - 1) * 256];
+      worker.chunk = &worker.sData[wIndex * ASTRO_SCRATCH_SIZE + (worker.tries[wIndex] - 1) * 256];
       if (debugOpOrder) printf("worker.op: %03d p1: %03d p2: %03d\n", worker.op, worker.pos1, worker.pos2);
 
-      if (worker.tries == 1) {
+      if (worker.tries[wIndex] == 1) {
         worker.prev_chunk = worker.chunk;
       } else {
-        worker.prev_chunk = &worker.sData[(worker.tries - 2) * 256];
+        worker.prev_chunk = &worker.sData[wIndex * ASTRO_SCRATCH_SIZE + (worker.tries[wIndex] - 2) * 256];
       }
 
       if (debugOpOrder) {
-        printf("tries: %03lu chunk_before[  0->%03d]: ", worker.tries, worker.pos2);
+        printf("tries: %03lu chunk_before[  0->%03d]: ", worker.tries[wIndex], worker.pos2);
         for (int x = 0; x <= worker.pos2+16 && worker.pos2+16 < 256; x++) {
           printf("%02x", worker.chunk[x]);
         }
@@ -590,7 +807,7 @@ void branchComputeCPU(workerData &worker, bool isTest)
 
       memcpy(worker.chunk, worker.prev_chunk, 256);
       if (debugOpOrder) {
-        printf("tries: %03lu  chunk_fixed[  0->%03d]: ", worker.tries, worker.pos2);
+        printf("tries: %03lu  chunk_fixed[  0->%03d]: ", worker.tries[wIndex], worker.pos2);
         for (int x = 0; x <= worker.pos2+16 && worker.pos2+16 < 256; x++) {
           //printf("%d \n", x);
           printf("%02x", worker.chunk[x]);
@@ -3666,7 +3883,7 @@ void branchComputeCPU(workerData &worker, bool isTest)
       break;
     case 254:
     case 255:
-      RC4_set_key(&worker.key, 256,  worker.chunk);
+      RC4_set_key(&worker.key[wIndex], 256,  worker.chunk);
 // worker.chunk = highwayhash.Sum(worker.chunk[:], worker.chunk[:])
 #pragma GCC unroll 32
       for (int i = worker.pos1; i < worker.pos2; i++)
@@ -3723,7 +3940,7 @@ void branchComputeCPU(workerData &worker, bool isTest)
       __builtin_prefetch(worker.chunk, 0, 0);
       worker.prev_lhash = worker.lhash + worker.prev_lhash;
       HH_ALIGNAS(16)
-      const highwayhash::HH_U64 key2[2] = {worker.tries, worker.prev_lhash};
+      const highwayhash::HH_U64 key2[2] = {worker.tries[wIndex], worker.prev_lhash};
       worker.lhash = highwayhash::SipHash(key2, (char*)worker.chunk, worker.pos2); // more deviations
       // if (debugOpOrder) printf("C: new worker.lhash: %08jx\n", worker.lhash);
     }
@@ -3737,14 +3954,14 @@ void branchComputeCPU(workerData &worker, bool isTest)
       //   }
       // }
         if (debugOpOrder){printf("D\n");}
-      __builtin_prefetch(&worker.key, 0, 0);
-      RC4(&worker.key, 256, worker.chunk,  worker.chunk);
+      __builtin_prefetch(&worker.key[wIndex], 0, 0);
+      RC4(&worker.key[wIndex], 256, worker.chunk,  worker.chunk);
     }
 
     worker.chunk[255] = worker.chunk[255] ^ worker.chunk[worker.pos1] ^ worker.chunk[worker.pos2];
 
     prefetch(worker.chunk, 256, 1);
-    memcpy(&worker.sData[(worker.tries - 1) * 256], worker.chunk, 256);
+    memcpy(&worker.sData[(worker.tries[wIndex] - 1) * 256], worker.chunk, 256);
 
     
     if (debugOpOrder && worker.op == sus_op) {
@@ -3754,33 +3971,33 @@ void branchComputeCPU(workerData &worker, bool isTest)
       } 
       printf("\n");
     }
-    // std::copy(worker.chunk, worker.chunk + 256, &worker.sData[(worker.tries - 1) * 256]);
+    // std::copy(worker.chunk, worker.chunk + 256, &worker.sData[(worker.tries[wIndex] - 1) * 256]);
 
-    // memcpy(&worker->data.data()[(worker.tries - 1) * 256], worker.chunk, 256);
+    // memcpy(&worker->data.data()[(worker.tries[wIndex] - 1) * 256], worker.chunk, 256);
 
     // std::cout << hexStr(worker.chunk, 256) << std::endl;
 
-    if (worker.tries > 260 + 16 || (worker.chunk[255] >= 0xf0 && worker.tries > 260))
+    if (worker.tries[wIndex] > 260 + 16 || (worker.chunk[255] >= 0xf0 && worker.tries[wIndex] > 260))
     {
       break;
     }
   }
-  worker.data_len = static_cast<uint32_t>((worker.tries - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
+  worker.data_len = static_cast<uint32_t>((worker.tries[wIndex] - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
 }
 
 #if defined(__AVX2__)
 
-void branchComputeCPU_avx2(workerData &worker, bool isTest)
+void branchComputeCPU_avx2(workerData &worker, bool isTest, int wIndex)
 {
   while (true)
   {
     if(isTest) {
 
     } else {
-      worker.tries++;
-      worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries;
+      worker.tries[wIndex]++;
+      worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries[wIndex];
       // __builtin_prefetch(&worker.random_switcher,0,3);
-      // printf("%d worker.random_switcher %d %08jx\n", worker.tries, worker.random_switcher, worker.random_switcher);
+      // printf("%d worker.random_switcher %d %08jx\n", worker.tries[wIndex], worker.random_switcher, worker.random_switcher);
 
       worker.op = static_cast<byte>(worker.random_switcher);
       // if (debugOpOrder) worker.opsA.push_back(worker.op);
@@ -3800,12 +4017,12 @@ void branchComputeCPU_avx2(workerData &worker, bool isTest)
         worker.pos2 = worker.pos1 + ((worker.pos2 - worker.pos1) & 0x1f);
       }
 
-      worker.chunk = &worker.sData[(worker.tries - 1) * 256];
+      worker.chunk = &worker.sData[wIndex * ASTRO_SCRATCH_SIZE + (worker.tries[wIndex] - 1) * 256];
 
-      if (worker.tries == 1) {
+      if (worker.tries[wIndex] == 1) {
         worker.prev_chunk = worker.chunk;
       } else {
-        worker.prev_chunk = &worker.sData[(worker.tries - 2) * 256];
+        worker.prev_chunk = &worker.sData[wIndex * ASTRO_SCRATCH_SIZE + (worker.tries[wIndex] - 2) * 256];
 
         __builtin_prefetch(worker.prev_chunk,0,3);
         __builtin_prefetch(worker.prev_chunk+64,0,3);
@@ -7423,7 +7640,7 @@ void branchComputeCPU_avx2(workerData &worker, bool isTest)
           }
         case 254:
         case 255:
-          RC4_set_key(&worker.key, 256, worker.prev_chunk);
+          RC4_set_key(&worker.key[wIndex], 256, worker.prev_chunk);
 
           {
             __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
@@ -7483,7 +7700,7 @@ void branchComputeCPU_avx2(workerData &worker, bool isTest)
     { // 18.75 % probability
       worker.prev_lhash = worker.lhash + worker.prev_lhash;
       HH_ALIGNAS(16)
-      const highwayhash::HH_U64 key2[2] = {worker.tries, worker.prev_lhash};
+      const highwayhash::HH_U64 key2[2] = {worker.tries[wIndex], worker.prev_lhash};
       worker.lhash = highwayhash::SipHash(key2, (char*)worker.chunk, worker.pos2); // more deviations
 
       // uint64_t test = highwayhash::SipHash(key2, (char*)worker.chunk, worker.pos2); // more deviations
@@ -7498,7 +7715,7 @@ void branchComputeCPU_avx2(workerData &worker, bool isTest)
       //     printf("%d, ", worker.key.data[i]);
       //   }
       // }
-      RC4(&worker.key, 256, worker.chunk, worker.chunk);
+      RC4(&worker.key[wIndex], 256, worker.chunk, worker.chunk);
     }
 
     worker.chunk[255] = worker.chunk[255] ^ worker.chunk[worker.pos1] ^ worker.chunk[worker.pos2];
@@ -7511,23 +7728,23 @@ void branchComputeCPU_avx2(workerData &worker, bool isTest)
     //   printf("\n");
     // }
 
-    // memcpy(&worker.sData[(worker.tries - 1) * 256], worker.chunk, 256);
+    // memcpy(&worker.sData[(worker.tries[wIndex] - 1) * 256], worker.chunk, 256);
     
-    // std::copy(worker.chunk, worker.chunk + 256, &worker.sData[(worker.tries - 1) * 256]);
+    // std::copy(worker.chunk, worker.chunk + 256, &worker.sData[(worker.tries[wIndex] - 1) * 256]);
 
-    // memcpy(&worker->data.data()[(worker.tries - 1) * 256], worker.chunk, 256);
+    // memcpy(&worker->data.data()[(worker.tries[wIndex] - 1) * 256], worker.chunk, 256);
 
     // std::cout << hexStr(worker.chunk, 256) << std::endl;
 
-    if (worker.tries > 260 + 16 || (worker.sData[(worker.tries-1)*256+255] >= 0xf0 && worker.tries > 260))
+    if (worker.tries[wIndex] > 260 + 16 || (worker.sData[(worker.tries[wIndex]-1)*256+255] >= 0xf0 && worker.tries[wIndex] > 260))
     {
       break;
     }
   }
-  worker.data_len = static_cast<uint32_t>((worker.tries - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
+  worker.data_len = static_cast<uint32_t>((worker.tries[wIndex] - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
 }
 
-void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
+void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest, int wIndex)
 {
   byte prevOp;
   // int sameCount = 0;
@@ -7552,10 +7769,10 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
       //   worker.isSame = true;
       // }
     } else {
-      worker.tries++;
-      worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries;
+      worker.tries[wIndex]++;
+      worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries[wIndex];
       // __builtin_prefetch(&worker.random_switcher,0,3);
-      // printf("%d worker.random_switcher %d %08jx\n", worker.tries, worker.random_switcher, worker.random_switcher);
+      // printf("%d worker.random_switcher %d %08jx\n", worker.tries[wIndex], worker.random_switcher, worker.random_switcher);
 
       prevOp = worker.op;
       worker.op = static_cast<byte>(worker.random_switcher);
@@ -7581,12 +7798,12 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
       worker.pos1 = p1;
       worker.pos2 = p2;
 
-      worker.chunk = &worker.sData[(worker.tries - 1) * 256];
+      worker.chunk = &worker.sData[wIndex * ASTRO_SCRATCH_SIZE + (worker.tries[wIndex] - 1) * 256];
 
-      if (worker.tries == 1) {
+      if (worker.tries[wIndex] == 1) {
         worker.prev_chunk = worker.chunk;
       } else {
-        worker.prev_chunk = &worker.sData[(worker.tries - 2) * 256];
+        worker.prev_chunk = &worker.sData[wIndex * ASTRO_SCRATCH_SIZE + (worker.tries[wIndex] - 2) * 256];
 
         __builtin_prefetch(worker.prev_chunk,0,3);
         __builtin_prefetch(worker.prev_chunk+64,0,3);
@@ -7662,7 +7879,7 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
       // sameCount++;
     }
 
-    astro_branched_zOp::branchCompute[worker.op + (256*worker.isSame)](worker, data, old);
+    astro_branched_zOp::branchCompute[worker.op + (256*worker.isSame)](worker, data, old, wIndex);
 
     if(isTest) {
       break;
@@ -7704,7 +7921,7 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
     { // 18.75 % probability
       worker.prev_lhash = worker.lhash + worker.prev_lhash;
       HH_ALIGNAS(16)
-      const highwayhash::HH_U64 key2[2] = {worker.tries, worker.prev_lhash};
+      const highwayhash::HH_U64 key2[2] = {worker.tries[wIndex], worker.prev_lhash};
       worker.lhash = highwayhash::SipHash(key2, (char*)worker.chunk, worker.pos2); // more deviations
 
       // uint64_t test = highwayhash::SipHash(key2, (char*)worker.chunk, worker.pos2); // more deviations
@@ -7719,7 +7936,7 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
       //     printf("%d, ", worker.key.data[i]);
       //   }
       // }
-      RC4(&worker.key, 256, worker.chunk, worker.chunk);
+      RC4(&worker.key[wIndex], 256, worker.chunk, worker.chunk);
       worker.isSame = false;
     }
 
@@ -7733,17 +7950,17 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
     //   printf("\n");
     // }
 
-    // memcpy(&worker.sData[(worker.tries - 1) * 256], worker.chunk, 256);
+    // memcpy(&worker.sData[(worker.tries[wIndex] - 1) * 256], worker.chunk, 256);
     
-    // std::copy(worker.chunk, worker.chunk + 256, &worker.sData[(worker.tries - 1) * 256]);
+    // std::copy(worker.chunk, worker.chunk + 256, &worker.sData[(worker.tries[wIndex] - 1) * 256]);
 
-    // memcpy(&worker->data.data()[(worker.tries - 1) * 256], worker.chunk, 256);
+    // memcpy(&worker->data.data()[(worker.tries[wIndex] - 1) * 256], worker.chunk, 256);
 
     // std::cout << hexStr(worker.chunk, 256) << std::endl;
 
-    // if (worker.tries == 1) lastChar = worker.sData[0];
+    // if (worker.tries[wIndex] == 1) lastChar = worker.sData[0];
     // for (int i = 0; i < 256; i++) {
-    //   if ((worker.tries > 1 || i > 0) && worker.chunk[i] != lastChar) {
+    //   if ((worker.tries[wIndex] > 1 || i > 0) && worker.chunk[i] != lastChar) {
     //     lastChar = worker.chunk[i];
     //     maxRepeat = std::max(maxRepeat, repeatCounter);
     //     repeatCounter = 1;
@@ -7753,15 +7970,15 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
     //   }
     // }
 
-    if (worker.tries > 260 + 16 || (worker.sData[(worker.tries-1)*256+255] >= 0xf0 && worker.tries > 260))
+    if (worker.tries[wIndex] > 260 + 16 || (worker.sData[(worker.tries[wIndex]-1)*256+255] >= 0xf0 && worker.tries[wIndex] > 260))
     {
       break;
     }
   }
 
   // if (!isTest) printf("longest repeated length: %d\n", maxRepeat);
-  // if (!isTest) printf("%d out of %d ops had repeating char inputs\n", sameCount, worker.tries);
-  worker.data_len = static_cast<uint32_t>((worker.tries - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
+  // if (!isTest) printf("%d out of %d ops had repeating char inputs\n", sameCount, worker.tries[wIndex]);
+  worker.data_len = static_cast<uint32_t>((worker.tries[wIndex] - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
   // if (!isTest) printf("dataLen vs reducedChars: %d / %d\n", worker.data_len, reducedChars);
 }
 
@@ -7769,7 +7986,7 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest)
 
 // WOLF CODE
 
-void wolfCompute(workerData &worker, bool isTest)
+void wolfCompute(workerData &worker, bool isTest, int wIndex)
 {
   byte prevOp;
   int changeCount = 0;
@@ -7786,10 +8003,10 @@ void wolfCompute(workerData &worker, bool isTest)
       //   worker.isSame = true;
       // }
     } else {
-      worker.tries++;
-      worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries;
+      worker.tries[wIndex]++;
+      worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries[wIndex];
       // __builtin_prefetch(&worker.random_switcher,0,3);
-      // printf("%d worker.random_switcher %d %08jx\n", worker.tries, worker.random_switcher, worker.random_switcher);
+      // printf("%d worker.random_switcher %d %08jx\n", worker.tries[wIndex], worker.random_switcher, worker.random_switcher);
 
       prevOp = worker.op;
       worker.op = static_cast<byte>(worker.random_switcher);
@@ -7816,12 +8033,12 @@ void wolfCompute(workerData &worker, bool isTest)
       worker.pos1 = p1;
       worker.pos2 = p2;
 
-      worker.chunk = &worker.sData[(worker.tries - 1) * 256];
+      worker.chunk = &worker.sData[wIndex * ASTRO_SCRATCH_SIZE + (worker.tries[wIndex] - 1) * 256];
 
-      if (worker.tries == 1) {
+      if (worker.tries[wIndex] == 1) {
         worker.prev_chunk = worker.chunk;
       } else {
-        worker.prev_chunk = &worker.sData[(worker.tries - 2) * 256];
+        worker.prev_chunk = &worker.sData[wIndex * ASTRO_SCRATCH_SIZE + (worker.tries[wIndex] - 2) * 256];
 
         __builtin_prefetch(worker.prev_chunk,0,3);
         __builtin_prefetch(worker.prev_chunk+64,0,3);
@@ -7956,7 +8173,7 @@ void wolfCompute(workerData &worker, bool isTest)
       goto after;
     }
     if (worker.op >= 254) {
-      RC4_set_key(&worker.key, 256,  worker.prev_chunk);
+      RC4_set_key(&worker.key[wIndex], 256,  worker.prev_chunk);
     }
     {
       // uint16_t OP = (worker.isSame && !worker.isBranched[worker.op]) ? 256 : worker.op;
@@ -8018,7 +8235,7 @@ after:
       // __builtin_prefetch(worker.chunk);
       worker.prev_lhash = worker.lhash + worker.prev_lhash;
       HH_ALIGNAS(16)
-      const highwayhash::HH_U64 key2[2] = {worker.tries, worker.prev_lhash};
+      const highwayhash::HH_U64 key2[2] = {worker.tries[wIndex], worker.prev_lhash};
       worker.lhash = highwayhash::SipHash(key2, (char*)worker.chunk, worker.pos2); // more deviations
 
       // uint64_t test = highwayhash::SipHash(key2, (char*)worker.chunk, worker.pos2); // more deviations
@@ -8034,7 +8251,7 @@ after:
       //   }
       // }
       // prefetch(worker.chunk, 0, 1);
-      RC4(&worker.key, 256, worker.chunk,  worker.chunk);
+      RC4(&worker.key[wIndex], 256, worker.chunk,  worker.chunk);
       worker.isSame = false;
     }
 
@@ -8048,37 +8265,37 @@ after:
       printf("\n");
     }
 
-    // memcpy(&worker.sData[(worker.tries - 1) * 256], worker.chunk, 256);
+    // memcpy(&worker.sData[(worker.tries[wIndex] - 1) * 256], worker.chunk, 256);
     
-    // std::copy(worker.chunk, worker.chunk + 256, &worker.sData[(worker.tries - 1) * 256]);
+    // std::copy(worker.chunk, worker.chunk + 256, &worker.sData[(worker.tries[wIndex] - 1) * 256]);
 
-    // memcpy(&worker->data.data()[(worker.tries - 1) * 256], worker.chunk, 256);
+    // memcpy(&worker->data.data()[(worker.tries[wIndex] - 1) * 256], worker.chunk, 256);
 
     // std::cout << hexStr(worker.chunk, 256) << std::endl;
 
-    if (worker.tries > 260 + 16 || (worker.sData[(worker.tries-1)*256+255] >= 0xf0 && worker.tries > 260))
+    if (worker.tries[wIndex] > 260 + 16 || (worker.sData[(worker.tries[wIndex]-1)*256+255] >= 0xf0 && worker.tries[wIndex] > 260))
     {
       break;
     }
   }
   // printf("%dc\n", changeCount);
-  worker.data_len = static_cast<uint32_t>((worker.tries - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
+  worker.data_len = static_cast<uint32_t>((worker.tries[wIndex] - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
 }
 
 
 // Compute the new values for worker.chunk using layered lookup tables instead of
 // branched computational operations
 
-void lookupCompute(workerData &worker, bool isTest)
+void lookupCompute(workerData &worker, bool isTest, int wIndex)
 {
   while (true)
   {
     if(isTest) {
 
     } else {
-      worker.tries++;
-      worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries;
-      // printf("%d worker.random_switcher %d %08jx\n", worker.tries, worker.random_switcher, worker.random_switcher);
+      worker.tries[wIndex]++;
+      worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries[wIndex];
+      // printf("%d worker.random_switcher %d %08jx\n", worker.tries[wIndex], worker.random_switcher, worker.random_switcher);
 
       worker.op = static_cast<byte>(worker.random_switcher);
       if (debugOpOrder) worker.opsB.push_back(worker.op);
@@ -8104,11 +8321,11 @@ void lookupCompute(workerData &worker, bool isTest)
       // int otherpos = std::find(branchedOps.begin(), branchedOps.end(), worker.op) == branchedOps.end() ? 0 : worker.chunk[worker.pos2];
       // __builtin_prefetch(&worker.chunk[worker.pos1], 0, 0);
       // __builtin_prefetch(&worker.lookup[lookupIndex(worker.op,0,otherpos)]);
-      worker.chunk = &worker.sData[(worker.tries - 1) * 256];
-      if (worker.tries == 1) {
+      worker.chunk = &worker.sData[wIndex * ASTRO_SCRATCH_SIZE + (worker.tries[wIndex] - 1) * 256];
+      if (worker.tries[wIndex] == 1) {
         worker.prev_chunk = worker.chunk;
       } else {
-        worker.prev_chunk = &worker.sData[(worker.tries - 2) * 256];
+        worker.prev_chunk = &worker.sData[wIndex * ASTRO_SCRATCH_SIZE + (worker.tries[wIndex] - 2) * 256];
 
         #if defined(__AVX2__)
           // Calculate the start and end blocks
@@ -8180,7 +8397,7 @@ void lookupCompute(workerData &worker, bool isTest)
       goto after;
     }
     if (worker.op >= 254) {
-      RC4_set_key(&worker.key, 256,  worker.prev_chunk);
+      RC4_set_key(&worker.key[wIndex], 256,  worker.prev_chunk);
     }
     {
       bool use2D = std::find(worker.branchedOps, worker.branchedOps + branchedOps_size, worker.op) == worker.branchedOps + branchedOps_size;
@@ -8344,7 +8561,7 @@ after:
       // __builtin_prefetch(worker.chunk);
       worker.prev_lhash = worker.lhash + worker.prev_lhash;
       HH_ALIGNAS(16)
-      const highwayhash::HH_U64 key2[2] = {worker.tries, worker.prev_lhash};
+      const highwayhash::HH_U64 key2[2] = {worker.tries[wIndex], worker.prev_lhash};
       worker.lhash = highwayhash::SipHash(key2, (char*)worker.chunk, worker.pos2); // more deviations
 
       // uint64_t test = highwayhash::SipHash(key2, (char*)worker.chunk, worker.pos2); // more deviations
@@ -8360,7 +8577,7 @@ after:
       //   }
       // }
       // prefetch(worker.chunk, 0, 1);
-      RC4(&worker.key, 256, worker.chunk,  worker.chunk);
+      RC4(&worker.key[wIndex], 256, worker.chunk,  worker.chunk);
     }
 
     worker.chunk[255] = worker.chunk[255] ^ worker.chunk[worker.pos1] ^ worker.chunk[worker.pos2];
@@ -8373,20 +8590,20 @@ after:
       printf("\n");
     }
 
-    // memcpy(&worker.sData[(worker.tries - 1) * 256], worker.chunk, 256);
+    // memcpy(&worker.sData[(worker.tries[wIndex] - 1) * 256], worker.chunk, 256);
     
-    // std::copy(worker.chunk, worker.chunk + 256, &worker.sData[(worker.tries - 1) * 256]);
+    // std::copy(worker.chunk, worker.chunk + 256, &worker.sData[(worker.tries[wIndex] - 1) * 256]);
 
-    // memcpy(&worker->data.data()[(worker.tries - 1) * 256], worker.chunk, 256);
+    // memcpy(&worker->data.data()[(worker.tries[wIndex] - 1) * 256], worker.chunk, 256);
 
     // std::cout << hexStr(worker.chunk, 256) << std::endl;
 
-    if (worker.tries > 260 + 16 || (worker.sData[(worker.tries-1)*256+255] >= 0xf0 && worker.tries > 260))
+    if (worker.tries[wIndex] > 260 + 16 || (worker.sData[(worker.tries[wIndex]-1)*256+255] >= 0xf0 && worker.tries[wIndex] > 260))
     {
       break;
     }
   }
-  worker.data_len = static_cast<uint32_t>((worker.tries - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
+  worker.data_len = static_cast<uint32_t>((worker.tries[wIndex] - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
 }
 
 

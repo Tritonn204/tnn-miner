@@ -8,4 +8,4 @@
 
 #include "lookup.h"
 
-void branchComputeCPU_aarch64(workerData &worker, bool isTest);
+void branchComputeCPU_aarch64(workerData &worker, bool isTest, int wIndex);

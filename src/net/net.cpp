@@ -457,12 +457,13 @@ void xelis_session(
               setcolor(BRIGHT_YELLOW);
               if (!isDev) printf("Block Accepted!\n");
               setcolor(BRIGHT_WHITE);
-            } else if(resp.compare("block_rejected") == 0) {
-              rejected++;
-              setcolor(RED);
-              if (!isDev) printf("Block Rejected...\n");
-              setcolor(BRIGHT_WHITE);
             }
+          } 
+          else if(!response.as_object()["block_rejected"].is_null()) {
+            rejected++;
+            setcolor(RED);
+            if (!isDev) printf("Block Rejected: %s\n", response.as_object()["block_rejected"].as_string().c_str());
+            setcolor(BRIGHT_WHITE);
           }
           else if (response.as_object().contains("new_job") || response.as_object().contains("miner_work"))
           {
@@ -2033,8 +2034,8 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
     memcpy(newTemplate + 64 + 16 - tsStr.size(), tsStr.data(), tsStr.size());
 
     setcolor(CYAN);
-    if (!isDev)
-      printf("\nStratum: new job received\n");
+    // if (!isDev)
+    //   printf("\nStratum: new job received\n");
     setcolor(BRIGHT_WHITE);
 
     SpectreStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -2078,7 +2079,6 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
   }
   else if (M.compare(SpectreStratum::s_setExtraNonce) == 0)
   {
-    // std::cout << boost::json::serialize(packet).c_str() << std::endl;
     boost::json::value *J = isDev ? &devJob : &job;
     // uint64_t *h = isDev ? &devHeight : &ourHeight;
 

@@ -26,7 +26,7 @@ namespace SpectreX
     matrix mat;
     byte sha3Hash[32];
     byte astrobwtv3Hash[32];
-    workerData *astroWorker;
+    workerData astroWorker;
   } worker;
 
   class Xoshiro256PlusPlusHasher

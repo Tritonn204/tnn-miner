@@ -11,6 +11,8 @@ typedef unsigned char byte;
 #define XELIS_USE_SSE2 2
 #define XELIS_USE_SCALAR 1
 
+#define XELIS_BATCHSIZE_V2 1
+
 const uint16_t XELIS_MEMORY_SIZE = 32768;
 const size_t XELIS_MEMORY_SIZE_V2 = 429*128;
 
@@ -39,6 +41,9 @@ typedef struct workerData_xelis {
 
 typedef struct workerData_xelis_v2 {
   alignas(64) uint64_t scratchPad[XELIS_MEMORY_SIZE_V2] = {0};
+  alignas(64) uint8_t block[16] = {0};
+  alignas(64) const byte key[17] = "xelishash-pow-v2";
+  alignas(64)__uint128_t t1, t2;
   // uint64_t *int_input;
   // uint32_t *smallPad;
   // alignas(64) uint32_t slots[XELIS_SLOT_LENGTH] = {0};
@@ -55,7 +60,7 @@ typedef struct xelis_BlockMiner {
 } xelis_BlockMiner;
 
 void xelis_hash(byte* input, workerData_xelis &worker, byte *hashResult);
-void xelis_hash_v2(byte* input, workerData_xelis_v2 &worker, byte *hashResult);
+void xelis_hash_v2(byte *input, workerData_xelis_v2 *xWorkers, byte *hashResult, int batchSize);
 void xelis_benchmark_cpu_hash();
 void xelis_benchmark_cpu_hash_v2();
 int xelis_runTests();

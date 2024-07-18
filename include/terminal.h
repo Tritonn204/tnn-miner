@@ -144,6 +144,7 @@ inline po::options_description get_prog_opts()
     ("dev-fee", po::value<double>(), "Your desired dev fee percentage, default is 2.5, minimum is 1")
     ("report-interval", po::value<int>(), "Your desired status update interval in seconds")
     ("no-lock", "Disables CPU affinity / CPU core binding")
+    ("ignore-wallet", "Disables wallet validation, for specific uses with pool mining")
     // ("gpu", "Mine with GPU instead of CPU")
     // ("batch-size", po::value<int>(), "(GPU Setting) Sets batch size used for GPU mining")
   ;

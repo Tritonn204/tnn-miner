@@ -37,6 +37,7 @@ int processPriority = 0;
 bool gpuMine = false;
 bool useLookupMine = false;
 bool broadcastStats = false;
+bool checkWallet = true;
 
 int tuneWarmupSec;
 int tuneDurationSec;

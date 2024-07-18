@@ -138,7 +138,7 @@ inline uint8x16_t rotate_by_self(uint8x16_t data) {
   //return rotate_bits_by_vector(data);
 }
 
-void branchComputeCPU_aarch64(workerData &worker, bool isTest)
+void branchComputeCPU_aarch64(workerData &worker, bool isTest, int wIndex)
 {
   //if (debugOpOrderAA) printf("cpu\n");
   
@@ -147,11 +147,11 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest)
     if(isTest) {
 
     } else {
-      worker.tries++;
-      if (debugOpOrderAA) printf("t: 0x%lx p: 0x%lx l: 0x%lx\n", worker.tries, worker.prev_lhash, worker.lhash);
-      worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries;
+      worker.tries[wIndex]++;
+      if (debugOpOrderAA) printf("t: 0x%lx p: 0x%lx l: 0x%lx\n", worker.tries[wIndex], worker.prev_lhash, worker.lhash);
+      worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries[wIndex];
       // __builtin_prefetch(&worker.random_switcher,0,3);
-      // printf("%d worker.random_switcher %d %08jx\n", worker.tries, worker.random_switcher, worker.random_switcher);
+      // printf("%d worker.random_switcher %d %08jx\n", worker.tries[wIndex], worker.random_switcher, worker.random_switcher);
 
       worker.op = static_cast<byte>(worker.random_switcher);
       //if (debugOpOrderAA) worker.opsA.push_back(worker.op);
@@ -171,16 +171,16 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest)
         worker.pos2 = worker.pos1 + ((worker.pos2 - worker.pos1) & 0x1f);
       }
 
-      worker.chunk = &worker.sData[(worker.tries - 1) * 256];
+      worker.chunk = &worker.sData[(worker.tries[wIndex] - 1) * 256];
       if (debugOpOrderAA) printf("worker.op: %03d p1: %03d p2: %03d\n", worker.op, worker.pos1, worker.pos2);
 
-      if (worker.tries == 1) {
+      if (worker.tries[wIndex] == 1) {
         worker.prev_chunk = worker.chunk;
       } else {
-        worker.prev_chunk = &worker.sData[(worker.tries - 2) * 256];
+        worker.prev_chunk = &worker.sData[(worker.tries[wIndex] - 2) * 256];
         /*
         if (debugOpOrderAA) {
-          printf("tries: %03lu prev_chunk[0->%03d]: ", worker.tries, worker.pos2);
+          printf("tries: %03lu prev_chunk[0->%03d]: ", worker.tries[wIndex], worker.pos2);
           for (int x = 0; x <= worker.pos2+16 && worker.pos2+16 < 256; x++) {
             printf("%02x", worker.prev_chunk[x]);
           }
@@ -195,7 +195,7 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest)
         // Calculate the start and end blocks
         int start_block = 0;
         int end_block = worker.pos1 / 16;
-        if (debugOpOrderAA) printf("loopa: %03lu %03d < %03d\n", worker.tries, start_block, end_block);
+        if (debugOpOrderAA) printf("loopa: %03lu %03d < %03d\n", worker.tries[wIndex], start_block, end_block);
 
         // Copy the blocks before worker.pos1
         for (int i = start_block; i < end_block; i++) {
@@ -203,7 +203,7 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest)
             _mm_storeu_si128((__m128i*)&worker.chunk[i * 16], prev_data);
         }
 
-        if (debugOpOrderAA) printf("loopb: %03lu %03d < %03d\n", worker.tries, end_block * 16, worker.pos1);
+        if (debugOpOrderAA) printf("loopb: %03lu %03d < %03d\n", worker.tries[wIndex], end_block * 16, worker.pos1);
         // Copy the remaining bytes before worker.pos1
         for (int i = end_block * 16; i < worker.pos1; i++) {
             worker.chunk[i] = worker.prev_chunk[i];
@@ -212,7 +212,7 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest)
         // Calculate the start and end blocks
         start_block = (worker.pos2 + 15) / 16;
         end_block = 16;
-        if (debugOpOrderAA) printf("loopc: %03lu %03d < %03d\n", worker.tries, start_block, end_block);
+        if (debugOpOrderAA) printf("loopc: %03lu %03d < %03d\n", worker.tries[wIndex], start_block, end_block);
 
         // Copy the blocks after worker.pos2
         for (int i = start_block; i < end_block; i++) {
@@ -220,7 +220,7 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest)
             _mm_storeu_si128((__m128i*)&worker.chunk[i * 16], prev_data);
         }
 
-        if (debugOpOrderAA) printf("loopd: %03lu %03d < %03d\n", worker.tries, worker.pos2, start_block * 16);
+        if (debugOpOrderAA) printf("loopd: %03lu %03d < %03d\n", worker.tries[wIndex], worker.pos2, start_block * 16);
         // Copy the remaining bytes after worker.pos2
         for (int i = worker.pos2; i < start_block * 16; i++) {
           worker.chunk[i] = worker.prev_chunk[i];
@@ -229,7 +229,7 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest)
       }
 
       if (debugOpOrderAA) {
-        printf("tries: %03lu chunk_before[  0->%03d]: ", worker.tries, worker.pos2);
+        printf("tries: %03lu chunk_before[  0->%03d]: ", worker.tries[wIndex], worker.pos2);
         for (int x = 0; x <= worker.pos2+16 && worker.pos2+16 < 256; x++) {
           printf("%02x", worker.chunk[x]);
         }
@@ -245,7 +245,7 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest)
       //}
       memcpy(worker.chunk, worker.prev_chunk, 256);
       if (debugOpOrderAA) {
-        printf("tries: %03lu  chunk_fixed[  0->%03d]: ", worker.tries, worker.pos2);
+        printf("tries: %03lu  chunk_fixed[  0->%03d]: ", worker.tries[wIndex], worker.pos2);
         for (int x = 0; x <= worker.pos2+16 && worker.pos2+16 < 256; x++) {
           //printf("%d \n", x);
           printf("%02x", worker.chunk[x]);
@@ -254,14 +254,14 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest)
       }
     }
     
-    //printf("tries: %03d step_3[0->%-3d]: ", worker.tries, worker.pos2);
+    //printf("tries: %03d step_3[0->%-3d]: ", worker.tries[wIndex], worker.pos2);
     //for (int x = 0; x < worker.pos2; x++) {
     //  printf("%02x", worker.step_3[x]);
     //}
     //printf("\n");
 
     //printf("%02d ", worker.op);
-    //if(worker.tries > 100) {
+    //if(worker.tries[wIndex] > 100) {
     //  break;
     //}
 
@@ -4335,7 +4335,7 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest)
     __builtin_prefetch(worker.chunk+192,0,3);
 
     if (debugOpOrderAA) {
-      printf("tries: %03lu  chunk_after[  0->%03d]: ", worker.tries, worker.pos2);
+      printf("tries: %03lu  chunk_after[  0->%03d]: ", worker.tries[wIndex], worker.pos2);
       for (int x = 0; x <= worker.pos2+16 && worker.pos2+16 < 256; x++) {
         printf("%02x", worker.chunk[x]);
       }
@@ -4372,7 +4372,7 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest)
     { // 18.75 % probability
       worker.prev_lhash = worker.lhash + worker.prev_lhash;
       HH_ALIGNAS(16)
-      const highwayhash::HH_U64 key2[2] = {worker.tries, worker.prev_lhash};
+      const highwayhash::HH_U64 key2[2] = {worker.tries[wIndex], worker.prev_lhash};
       worker.lhash = highwayhash::SipHash(key2, (char*)worker.chunk, worker.pos2); // more deviations
 
       // uint64_t test = highwayhash::SipHash(key2, (char*)worker.step_3, worker.pos2); // more deviations
@@ -4400,21 +4400,21 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest)
     //   printf("\n");
     // }
 
-    // memcpy(&worker.sData[(worker.tries - 1) * 256], worker.step_3, 256);
+    // memcpy(&worker.sData[(worker.tries[wIndex] - 1) * 256], worker.step_3, 256);
     
-    // std::copy(worker.step_3, worker.step_3 + 256, &worker.sData[(worker.tries - 1) * 256]);
+    // std::copy(worker.step_3, worker.step_3 + 256, &worker.sData[(worker.tries[wIndex] - 1) * 256]);
 
-    // memcpy(&worker->data.data()[(worker.tries - 1) * 256], worker.step_3, 256);
+    // memcpy(&worker->data.data()[(worker.tries[wIndex] - 1) * 256], worker.step_3, 256);
 
     // std::cout << hexStr(worker.step_3, 256) << std::endl;
 
-    if (worker.tries > 260 + 16 || (worker.sData[(worker.tries-1)*256+255] >= 0xf0 && worker.tries > 260))
+    if (worker.tries[wIndex] > 260 + 16 || (worker.sData[(worker.tries[wIndex]-1)*256+255] >= 0xf0 && worker.tries[wIndex] > 260))
     {
       break;
     }
     if (debugOpOrderAA) printf("\n\n");
   }
-  worker.data_len = static_cast<uint32_t>((worker.tries - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
+  worker.data_len = static_cast<uint32_t>((worker.tries[wIndex] - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
 }
 
 #endif
