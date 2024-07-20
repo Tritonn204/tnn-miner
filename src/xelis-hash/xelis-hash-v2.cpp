@@ -513,33 +513,12 @@ void stage_3(uint64_t *scratch_pad, workerData_xelis_v2 &worker)
 //   // printf("%llu\n", crc32.result());
 // }
 
-void xelis_hash_v2(byte *input, workerData_xelis_v2 *xWorkers, byte *hashResult, int batchSize)
+void xelis_hash_v2(byte *input, workerData_xelis_v2 &worker, byte *hashResult)
 {
-
-  for (int i = 0; i < batchSize; i++) {
-    auto start = std::chrono::steady_clock::now();
-    stage_1(input + XELIS_TEMPLATE_SIZE*i, xWorkers[i].scratchPad, 112);
-    stage_3(xWorkers[i].scratchPad, xWorkers[i]);
-    auto end = std::chrono::steady_clock::now();
-    auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
-    if (i == 0) printf("stages section #%d section took %dns\n", i+1, time.count());
-    // if (i == 15) printf("stage_1 section #%d section took %dns\n", i+1, time.count());
-    // if (i == 31) printf("stage_1 section #%d section took %dns\n", i+1, time.count());
-  }
-
-  for (int i = 0; i < batchSize; i++) {
-    auto start = std::chrono::steady_clock::now();
-    blake3((uint8_t*)xWorkers[i].scratchPad, XELIS_MEMORY_SIZE_V2 * 8, &hashResult[32*i]);
-    auto end = std::chrono::steady_clock::now();
-    auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
-    if (i == 0) printf("blake3 section #%d section took %dns\n", i+1, time.count());
-    // if (i == 15) printf("blake3 section #%d section took %dns\n", i+1, time.count());
-    // if (i == 31) printf("blake3 section #%d section took %dns\n", i+1, time.count());
-  }
-  // stage_1(input, worker.scratchPad, 112);
-  // stage_3(worker.scratchPad, worker);
-  // blake3((uint8_t*)worker.scratchPad, XELIS_MEMORY_SIZE_V2 * 8, hashResult);
-  memset(hashResult, 0xFF, 32*batchSize); // For testing without node errors
+  stage_1(input, worker.scratchPad, 112);
+  stage_3(worker.scratchPad, worker);
+  blake3((uint8_t*)worker.scratchPad, XELIS_MEMORY_SIZE_V2 * 8, hashResult);
+  // memset(hashResult, 0xFF, 32*batchSize); // For testing without node errors
 }
 
 void xelis_benchmark_cpu_hash_v2()
@@ -558,7 +537,7 @@ void xelis_benchmark_cpu_hash_v2()
     // input[0] = i & 0xFF;
     // input[1] = (i >> 8) & 0xFF;
     memset(worker.scratchPad, 0, XELIS_MEMORY_SIZE_V2*8);
-    xelis_hash_v2(input, &worker, hash_result, 1);
+    xelis_hash_v2(input, worker, hash_result);
   }
   auto end = std::chrono::high_resolution_clock::now();
 
@@ -610,7 +589,7 @@ namespace xelis_tests_v2
     alignas(64) workerData_xelis_v2 worker;
     byte hash_result[XELIS_HASH_SIZE] = {0};
 
-    xelis_hash_v2(input, &worker, hash_result, 1);
+    xelis_hash_v2(input, worker, hash_result);
 
     if (std::memcmp(hash_result, expected_hash.data(), XELIS_HASH_SIZE) != 0)
     {
