@@ -29,7 +29,6 @@ extern std::string wallet;
 extern int batchSize;
 extern double minFee;
 extern double devFee;
-extern const char *devPool;
 
 extern int jobCounter;
 
