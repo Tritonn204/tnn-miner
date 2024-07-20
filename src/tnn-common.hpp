@@ -54,3 +54,5 @@ extern std::vector<int64_t> rate30sec;
 
 extern bool isConnected;
 extern bool devConnected;
+
+extern bool beQuiet;

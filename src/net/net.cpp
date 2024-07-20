@@ -35,6 +35,8 @@ boost::json::object devShare = {};
 
 bool submitting = false;
 bool submittingDev = false;
+boost::condition_variable cv;
+bool data_ready = false;
 /* End definitions from net.hpp */
 
 // Report a failure
@@ -46,6 +48,14 @@ void fail(beast::error_code ec, char const *what) noexcept
             << what << ": " << ec.message() << "\n";
   setcolor(BRIGHT_WHITE);
   wsMutex.unlock();
+}
+
+void setForDisconnected(bool *connectedPtr, bool *submitPtr, bool *abortPtr, bool *dataReadyPtr, boost::condition_variable *cvPtr) {
+  if (connectedPtr != nullptr) *connectedPtr = false;
+  if (submitPtr != nullptr)    *submitPtr = false;
+  if (abortPtr != nullptr)     *abortPtr = true;
+  if (dataReadyPtr != nullptr) *dataReadyPtr = true;
+  if (cvPtr != nullptr)        cvPtr->notify_all();
 }
 
 tcp::endpoint resolve_host(boost::mutex &wsMutex, net::io_context &ioc, net::yield_context yield, std::string host, std::string port) {
@@ -206,10 +216,9 @@ void dero_session(
 
   boost::thread([&](){
     submitThread = true;
-    while(true) {
-      if (abort) {
-        break;
-      }
+    while(!abort) {
+      boost::unique_lock<boost::mutex> lock(mutex);
+      cv.wait(lock, []{ return data_ready; });
       try {
         bool *B = isDev ? &submittingDev : &submitting;
         if (*B)
@@ -224,6 +233,7 @@ void dero_session(
           beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(1));
           ws.write(boost::asio::buffer(msg));
           (*B) = false;
+          data_ready = false;
           if (err) break;
         }
       } catch (const std::exception &e) {
@@ -232,14 +242,12 @@ void dero_session(
         setcolor(BRIGHT_WHITE);
         break;
       }
-      boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
     }
     submitThread = false;
   });
 
   while (true)
   {
-    bool *B = isDev ? &submittingDev : &submitting;
     try
     {
       buffer.clear();
@@ -1736,26 +1744,30 @@ void spectre_stratum_session(
 
   boost::thread([&](){
     submitThread = true;
-    while(true) {
-      if (abort) {
-        break;
-      }
+    while(!abort) {
+      boost::unique_lock<boost::mutex> lock(mutex);
+      cv.wait(lock, []{ return data_ready; });
       try {
         bool *B = isDev ? &submittingDev : &submitting;
         if (*B)
         {
-          bool err = false;
           boost::json::object *S = &share;
           if (isDev)
             S = &devShare;
 
+          boost::system::error_code ec;
           std::string msg = boost::json::serialize((*S)) + "\n";
           // std::cout << "sending in: " << msg << std::endl;
           beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(1));
-          boost::asio::write(stream, boost::asio::buffer(msg));
+          boost::asio::write(stream, boost::asio::buffer(msg), ec);
           if (!isDev) SpectreStratum::lastShareSubmissionTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
           (*B) = false;
-          if (err) break;
+          data_ready = false;
+          if (ec) {
+            printf("error on write: %s\n", ec.message().c_str());
+            fflush(stdout);
+            break;
+          }
         }
       } catch (const std::exception &e) {
         setcolor(RED);
@@ -1763,7 +1775,7 @@ void spectre_stratum_session(
         setcolor(BRIGHT_WHITE);
         break;
       }
-      boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
+      //boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
     }
     submitThread = false;
   });
@@ -1786,9 +1798,9 @@ void spectre_stratum_session(
           SpectreStratum::lastReceivedJobTime > 0 &&
           std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count() - SpectreStratum::lastReceivedJobTime > SpectreStratum::jobTimeout)
       {
-        (*C) = false;
-        (*B) = false;
-        abort = true;
+        printf("timeout\n");
+        fflush(stdout);
+        setForDisconnected(C, B, &abort, &data_ready, &cv);
 
         for (;;) {
           if (!submitThread) break;
@@ -1804,12 +1816,16 @@ void spectre_stratum_session(
 
       trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
       if (ec) {
-        (*C) = false;
-        (*B) = false;
-        abort = true;
+        printf("failed to read: %s\n", isDev ? "dev" : "user");
+        fflush(stdout);
+        setForDisconnected(C, B, &abort, &data_ready, &cv);
+        boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
+        cv.notify_all();
 
         for (;;) {
-          if (!submitThread) break;
+          if (!submitThread) {
+            break;
+          }
           boost::this_thread::yield();
         }
         
@@ -1849,10 +1865,14 @@ void spectre_stratum_session(
                     stream,
                     boost::asio::buffer(pongPacket),
                     yield[ec]);
+                if(ec) {
+                  printf("error on write(%zu): %s\n", trans, ec.message().c_str());
+                  fflush(stdout);
+                }
                 if (ec && trans > 0) {
-                  (*C) = false;
-                  (*B) = false;
-                  abort = true;
+                  printf("ec && trans > 0\n");
+                  fflush(stdout);
+                  setForDisconnected(C, B, &abort, &data_ready, &cv);
 
                   for (;;)
                   {
@@ -1899,14 +1919,20 @@ void spectre_stratum_session(
                         stream,
                         boost::asio::buffer(pongPacket),
                         yield[ec]);
+                    if(ec) {
+                      printf("error on write(%zu): %s\n", trans, ec.message().c_str());
+                      fflush(stdout);
+                    }
                     if (ec && trans > 0) {
-                      (*C) = false;
-                      abort = true;
+                      printf("ec && trans > 0\n");
+                      fflush(stdout);
+                      setForDisconnected(C, B, &abort, &data_ready, &cv);
   
                       for (;;)
                       {
-                        if (!submitThread)
+                        if (!submitThread) {
                           break;
+                        }
                         boost::this_thread::yield();
                       }
                       stream.close();
@@ -1943,9 +1969,9 @@ void spectre_stratum_session(
     catch (const std::exception &e)
     {
       bool *C = isDev ? &devConnected : &isConnected;
-      (*C) = false;
-      (*B) = false;
-      abort = true;
+      printf("exception\n");
+      fflush(stdout);
+      setForDisconnected(C, B, &abort, &data_ready, &cv);
 
       for (;;) {
         if (!submitThread) break;
@@ -2055,10 +2081,12 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
     memcpy(newTemplate + 48 + 16 - h4Str.size(), h4Str.data(), h4Str.size());
     memcpy(newTemplate + 64 + 16 - tsStr.size(), tsStr.data(), tsStr.size());
 
-    setcolor(CYAN);
-    // if (!isDev)
-    //   printf("\nStratum: new job received\n");
-    setcolor(BRIGHT_WHITE);
+    if(!beQuiet) {
+      setcolor(CYAN);
+      if (!isDev)
+        printf("\nStratum: new job received\n");
+      setcolor(BRIGHT_WHITE);
+    }
 
     SpectreStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
@@ -2215,9 +2243,12 @@ int handleSpectreStratumResponse(boost::json::object packet, bool isDev)
           setcolor(RED);
 
         boost::json::string ERR;
-        if (packet["error"].is_array()) packet.at("error").as_array()[1].as_string();
-        else ERR = packet.at("error").at("message").get_string();
-        std::cout << "Stratum: share rejected: " << ERR.c_str() << std::endl;
+        if (packet["error"].is_array()) {
+          ERR = packet.at("error").as_array()[1].as_string();
+        } else {
+          ERR = packet.at("error").at("message").get_string();
+        }
+        std::cout << "Spectre: share rejected: " << ERR.c_str() << std::endl;
         
         setcolor(BRIGHT_WHITE);
       }

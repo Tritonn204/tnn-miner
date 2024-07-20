@@ -19,7 +19,7 @@ stages:
 
 variables:
   TNN_BUILD_MAC: false
-  TNN_BUILD_WIN: false
+  TNN_BUILD_WIN: true
   AMD64_TARGET_LEVEL: x86-64-v3
   PACKAGE_VERSION: "0.0.1"
   LINUX_AMD64_TGZ: "Tnn-miner-amd64-${PACKAGE_VERSION}.tar.gz"
@@ -27,11 +27,13 @@ variables:
   WIN_AMD64_ZIP: "Tnn-miner-win64-${PACKAGE_VERSION}.zip"
   # https://docs.gitlab.com/ee/ci/runners/hosted_runners/macos.html#optimizing-homebrew
   HOMEBREW_NO_AUTO_UPDATE: 1
-  CI_DEBUG_TRACE: "true"
+  #CI_DEBUG_TRACE: "true"
 
 # global workflow:rules:variables can change variables outside of jobs
 workflow:
   rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "dev"
     # if the pipeline is on the default branch, then change the RUNNER_TAG variable
     - if: $CI_COMMIT_TAG
       variables:
@@ -39,8 +41,6 @@ workflow:
         LINUX_AMD64_TGZ: "Tnn-miner-amd64-${PACKAGE_VERSION}.tar.gz"
         MACOS_ARM64_TGZ: "Tnn-miner-macos-arm64-${PACKAGE_VERSION}.tar.gz"
         WIN_AMD64_ZIP: "Tnn-miner-win64-${PACKAGE_VERSION}.zip"
-    # ensure pipeline still runs if above conditions are not met
-    - when: always
 
 .macos_saas_runners:
   tags:
@@ -133,7 +133,7 @@ build-windows:
     - echo "running scripts in the build job"
     - $PSVersionTable.PSVersion
     - .\scripts\prereqs.bat ci
-    - .\scripts\build.ps1 ci $PACKAGE_VERSION
+    - .\scripts\build.ps1 $PACKAGE_VERSION
     - dir .\build\
     - move build\Tnn-miner.exe .\
     - 7z.exe a ${WIN_AMD64_ZIP} Tnn-miner.exe
@@ -187,6 +187,8 @@ release_job:
   needs:
     - job: build-linux
       artifacts: true
+    - job: build-windows
+      artifacts: true
     #- job: build-macos
     #  artifacts: true
   rules:
@@ -209,9 +211,9 @@ release_job:
         - name: "${LINUX_AMD64_TGZ}"
           url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${LINUX_BUILD_JOB_ID}/artifacts/raw/${LINUX_AMD64_TGZ}"
           filepath: "/${LINUX_AMD64_TGZ}"
+        - name: "${WIN_AMD64_ZIP}"
+          url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${WIN_BUILD_JOB_ID}/artifacts/raw/${WIN_AMD64_ZIP}"
+          filepath: "/${WIN_AMD64_ZIP}"
         #- name: "${MACOS_ARM64_TGZ}"
-        #  url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${MACOS_BUILD_JOB_ID}/artifacts/download"
+        #  url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${MACOS_BUILD_JOB_ID}/artifacts/raw/${MACOS_ARM64_TGZ}"
         #  filepath: "/${MACOS_ARM64_TGZ}"
-        #- name: "${WIN_AMD64_ZIP}"
-        #  url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${WIN_BUILD_JOB_ID}/artifacts/download"
-        #  filepath: "/${WIN_AMD64_ZIP}"
