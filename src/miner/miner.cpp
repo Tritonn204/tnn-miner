@@ -427,12 +427,12 @@ int main(int argc, char **argv)
   if (vm.count("port"))
   {
     port = std::to_string(vm["port"].as<int>());
-  }
-  try {
-    const int i{std::stoi(port)};
-  } catch (...) {
-    printf("ERROR: provided port is invalid: %s\n", port.c_str());
-    return 1;
+    try {
+      const int i{std::stoi(port)};
+    } catch (...) {
+      printf("ERROR: provided port is invalid: %s\n", port.c_str());
+      return 1;
+    }
   }
   if (vm.count("wallet"))
   {
