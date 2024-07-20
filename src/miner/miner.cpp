@@ -20,11 +20,6 @@
 #include "astrobwtv3.h"
 
 #include <boost/program_options.hpp>
-#include <boost/beast/core.hpp>
-#include <boost/beast/ssl.hpp>
-#include <boost/beast/http.hpp>
-#include <boost/beast/websocket.hpp>
-#include <boost/beast/websocket/ssl.hpp>
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/spawn.hpp>
@@ -34,6 +29,10 @@
 
 #include <boost/thread.hpp>
 #include <boost/atomic.hpp>
+#include <boost/algorithm/string/replace.hpp>
+#include <boost/atomic.hpp>
+#include <boost/thread.hpp>
+#include <boost/tokenizer.hpp>
 
 #include <cstdlib>
 #include <functional>
@@ -87,6 +86,7 @@ DWORD dwPageSize;  // Page size on this computer
 /* Start definitions from tnn-common.hpp */
 int protocol = XELIS_SOLO;
 
+std::string daemonProto = "";
 std::string host = "NULL";
 std::string wallet = "NULL";
 
@@ -95,7 +95,6 @@ std::string wallet = "NULL";
 int batchSize = 5000;
 double minFee = 1.0;
 double devFee = 2.5;
-const char *devPool = "dero.rabidmining.com";
 
 int jobCounter;
 
@@ -139,13 +138,9 @@ size_t numAstroFuncs;
 
 // #include <cuda_runtime.h>
 
-namespace beast = boost::beast;         // from <boost/beast.hpp>
-namespace http = beast::http;           // from <boost/beast/http.hpp>
-namespace websocket = beast::websocket; // from <boost/beast/websocket.hpp>
 namespace net = boost::asio;            // from <boost/asio.hpp>
 namespace ssl = boost::asio::ssl;       // from <boost/asio/ssl.hpp>
 namespace po = boost::program_options;  // from <boost/program_options.hpp>
-using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
 
 boost::mutex mutex;
 boost::mutex devMutex;
@@ -308,11 +303,40 @@ int main(int argc, char **argv)
   if (vm.count("daemon-address"))
   {
     host = vm["daemon-address"].as<std::string>();
-    // TODO: Check if this contains a host:port... and then parse accordingly
+    boost::char_separator<char> sep(":");
+    boost::tokenizer<boost::char_separator<char>> tok(host, sep);
+    std::vector<std::string> tokens;
+    std::copy(tok.begin(), tok.end(), std::back_inserter<std::vector<std::string> >(tokens));
+    if(tokens.size() == 2) {
+      host = tokens[0];
+      try
+      {
+        // given host:port
+        const int i{std::stoi(tokens[1])};
+        port = tokens[1];
+      }
+      catch (...)
+      {
+        // protocol:host
+        daemonProto = tokens[0];
+        host = tokens[1];
+      }
+    } else if(tokens.size() == 3) {
+      daemonProto = tokens[0];  // wss, stratum+tcp, stratum+ssl, et al
+      host = tokens[1];
+      port = tokens[2];
+    }
+    boost::replace_all(host, "/", "");
   }
   if (vm.count("port"))
   {
     port = std::to_string(vm["port"].as<int>());
+  }
+  try {
+    const int i{std::stoi(port)};
+  } catch (...) {
+    printf("ERROR: provided port is invalid: %s\n", port.c_str());
+    return 1;
   }
   if (vm.count("wallet"))
   {
@@ -327,6 +351,14 @@ int main(int argc, char **argv)
       symbol = "SPR";
       protocol = SPECTRE_STRATUM;
     }
+    boost::char_separator<char> sep(".");
+    boost::tokenizer<boost::char_separator<char>> tok(wallet, sep);
+    std::vector<std::string> tokens;
+    std::copy(tok.begin(), tok.end(), std::back_inserter<std::vector<std::string> >(tokens));
+    if(tokens.size() == 2) {
+      wallet = tokens[0];
+      workerNameFromWallet = tokens[1];
+    }
   }
   if (vm.count("ignore-wallet"))
   {
@@ -338,7 +370,11 @@ int main(int argc, char **argv)
   }
   else
   {
-    workerName = boost::asio::ip::host_name();
+    if(workerNameFromWallet != "") {
+      workerName = workerNameFromWallet;
+    } else {
+      workerName = boost::asio::ip::host_name();
+    }
   }
   if (vm.count("threads"))
   {
@@ -631,7 +667,7 @@ Benchmarking:
     winMask += 1 << i;
   }
 
-  host = devPool;
+  host = defaultHost[miningAlgo];
   port = devPort[miningAlgo];
   wallet = devSelection[miningAlgo];
 
@@ -711,19 +747,20 @@ Mining:
   printSupported();
  //  mutex.unlock();
 
-  if (checkWallet) {
-    if (miningAlgo == DERO_HASH && !(wallet.substr(0, 3) == "der" || wallet.substr(0, 3) == "det"))
-    {
-      std::cout << "Provided wallet address is not valid for Dero" << std::endl;
-      return EXIT_FAILURE;
-    }
-    if (miningAlgo == XELIS_HASH && !(wallet.substr(0, 3) == "xel" || wallet.substr(0, 3) == "xet" || wallet.substr(0, 2) == "Kr"))
-    {
-      std::cout << "Provided wallet address is not valid for Xelis" << std::endl;
-      return EXIT_FAILURE;
-    }
+  if (miningAlgo == DERO_HASH && (wallet.find("der", 0) == std::string::npos && wallet.find("det", 0) == std::string::npos))
+  {
+    std::cout << "Provided wallet address is not valid for Dero" << std::endl;
+    return EXIT_FAILURE;
   }
-
+  if (miningAlgo == XELIS_HASH && (wallet.find("xel", 0) == std::string::npos && wallet.find("xet") == std::string::npos && wallet.find("Kr", 0) == std::string::npos))
+  {
+    std::cout << "Provided wallet address is not valid for Xelis" << std::endl;
+    return EXIT_FAILURE;
+  }
+  if (miningAlgo == SPECTRE_X && (wallet.find("spectre", 0) == std::string::npos)) {
+    std::cout << "Provided wallet address is not valid for Spectre" << std::endl;
+    return EXIT_FAILURE;
+  }
   boost::thread GETWORK(getWork, false, miningAlgo);
   // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
@@ -1006,18 +1043,20 @@ connectionAttempt:
     bool err = false;
     if (isDev)
     {
-      std::string HOST, WORKER, PORT;
+      std::string DAEMONPROTO, HOST, WORKER, PORT;
       switch (algo)
       {
         case DERO_HASH:
         {
-          HOST = devPool;
-          WORKER = workerName;
+          DAEMONPROTO = "";
+          HOST = defaultHost[DERO_HASH];
+          WORKER = devWorkerName;
           PORT = devPort[DERO_HASH];
           break;
         }
         case XELIS_HASH:
         {
+          DAEMONPROTO = daemonProto;
           HOST = host;
           WORKER = devWorkerName;
           PORT = port;
@@ -1025,13 +1064,14 @@ connectionAttempt:
         }
         case SPECTRE_X:
         {
+          DAEMONPROTO = daemonProto;
           HOST = host;
           WORKER = devWorkerName;
           PORT = port;
           break;
         }
       }
-      boost::asio::spawn(ioc, std::bind(&do_session, HOST, PORT, devSelection[algo], WORKER, algo, std::ref(ioc), std::ref(ctx), std::placeholders::_1, true),
+      boost::asio::spawn(ioc, std::bind(&do_session, DAEMONPROTO, HOST, PORT, devSelection[algo], WORKER, algo, std::ref(ioc), std::ref(ctx), std::placeholders::_1, true),
                          // on completion, spawn will call this function
                          [&](std::exception_ptr ex)
                          {
@@ -1043,7 +1083,7 @@ connectionAttempt:
                          });
     }
     else
-      boost::asio::spawn(ioc, std::bind(&do_session, host, port, wallet, workerName, algo, std::ref(ioc), std::ref(ctx), std::placeholders::_1, false),
+      boost::asio::spawn(ioc, std::bind(&do_session, daemonProto, host, port, wallet, workerName, algo, std::ref(ioc), std::ref(ctx), std::placeholders::_1, false),
                          // on completion, spawn will call this function
                          [&](std::exception_ptr ex)
                          {

@@ -24,6 +24,7 @@ const int workerThreads = 2;
 std::string symbol = nullArg;
 std::string port = nullArg;
 std::string workerName = "default";
+std::string workerNameFromWallet = "";
 
 bool useStratum = false;
 

@@ -117,18 +117,19 @@ tcp::endpoint resolve_host(boost::mutex &wsMutex, net::io_context &ioc, net::yie
 }
 
 void dero_session(
+    std::string hostProto,
     std::string host,
     std::string const &port,
     std::string const &wallet,
+    std::string const &worker,
     net::io_context &ioc,
     ssl::context &ctx,
     net::yield_context yield,
     bool isDev)
 {
   beast::error_code ec;
-
-  websocket::stream<beast::ssl_stream<beast::tcp_stream>> ws(ioc, ctx);
   auto endpoint = resolve_host(wsMutex, ioc, yield, host, port);
+  websocket::stream<beast::ssl_stream<beast::tcp_stream>> ws(ioc, ctx);
 
   // Set a timeout on the operation
   beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(30));
@@ -142,7 +143,7 @@ void dero_session(
           host.c_str()))
   {
     ec = beast::error_code(static_cast<int>(::ERR_get_error()),
-                           net::error::get_ssl_category());
+                          net::error::get_ssl_category());
     return fail(ec, "connect");
   }
 
@@ -162,6 +163,7 @@ void dero_session(
                 std::string(BOOST_BEAST_VERSION_STRING) +
                     " websocket-client-coro");
       }));
+
   // Perform the SSL/TLS handshake
   ws.next_layer().async_handshake(ssl::stream_base::client, yield[ec]);
   if (ec)
@@ -177,14 +179,21 @@ void dero_session(
           beast::role_type::client));
 
   // Perform the websocket handshake
-  std::stringstream ss;
-  ss << "/ws/" << wallet;
+  std::string url("/ws/" + wallet);
+  if(!worker.empty()) {
+    url += "." + worker;
+  }
 
-  ws.async_handshake(host, ss.str().c_str(), yield[ec]);
+  ws.async_handshake(host, url.c_str(), yield[ec]);
   if (ec)
   {
-    ws.async_close(websocket::close_code::normal, yield[ec]);
-    return fail(ec, "handshake");
+    // Try again without the 'worker' being appended. This is what local nodes require
+    url = "/ws/" + wallet;
+    ws.async_handshake(host, url.c_str(), yield[ec]);
+    if (ec) {
+      ws.async_close(websocket::close_code::normal, yield[ec]);
+      return fail(ec, "handshake");
+    }
   }
   // This buffer will hold the incoming message
   beast::flat_buffer buffer;
@@ -283,7 +292,7 @@ void dero_session(
               {
                 wsMutex.lock();
                 setcolor(BRIGHT_YELLOW);
-                printf("Mining at: %s/ws/%s\n", host.c_str(), wallet.c_str());
+                printf("Mining at: %s%s\n", host.c_str(), url.c_str());
                 setcolor(CYAN);
                 printf("Dev fee: %.2f", devFee);
                 std::cout << "%" << std::endl;
@@ -302,7 +311,7 @@ void dero_session(
               {
                 wsMutex.lock();
                 setcolor(CYAN);
-                printf("Connected to dev node: %s\n", devPool);
+                printf("Connected to dev node: %s\n", host.c_str());
                 setcolor(BRIGHT_WHITE);
                 wsMutex.unlock();
               }
@@ -337,6 +346,7 @@ void dero_session(
 }
 
 void xelis_session(
+    std::string hostProto,
     std::string host,
     std::string const &port,
     std::string const &wallet,
@@ -568,6 +578,7 @@ void xatumFailure(bool isDev) noexcept
 int handleXatumPacket(Xatum::packet xPacket, bool isDev);
 
 void xatum_session(
+    std::string hostProto,
     std::string host,
     std::string const &port,
     std::string const &wallet,
@@ -883,6 +894,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
 }
 
 void xelis_stratum_session(
+    std::string hostProto,
     std::string host,
     std::string const &port,
     std::string const &wallet,
@@ -1140,6 +1152,7 @@ void xelis_stratum_session(
 }
 
 void xelis_stratum_session_nossl(
+    std::string hostProto,
     std::string host,
     std::string const &port,
     std::string const &wallet,
@@ -1605,6 +1618,7 @@ int handleXStratumResponse(boost::json::object packet, bool isDev)
 }
 
 void spectre_stratum_session(
+    std::string hostProto,
     std::string host,
     std::string const &port,
     std::string const &wallet,
@@ -1952,6 +1966,7 @@ void spectre_stratum_session(
 }
 
 void do_session(
+    std::string hostProto,
     std::string host,
     std::string const &port,
     std::string const &wallet,
@@ -1962,29 +1977,36 @@ void do_session(
     net::yield_context yield,
     bool isDev)
 {
+  bool use_ssl = (hostProto.find("ssl") != std::string::npos);
   switch (algo)
   {
   case DERO_HASH:
-    dero_session(host, port, wallet, ioc, ctx, yield, isDev);
+    dero_session(hostProto, host, port, wallet, worker, ioc, ctx, yield, isDev);
     break;
   case XELIS_HASH:
   {
     switch (protocol)
     {
     case XELIS_SOLO:
-      xelis_session(host, port, wallet, worker, ioc, yield, isDev);
+      xelis_session(hostProto, host, port, wallet, worker, ioc, yield, isDev);
       break;
     case XELIS_XATUM:
-      xatum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+      xatum_session(hostProto, host, port, wallet, worker, ioc, ctx, yield, isDev);
       break;
     case XELIS_STRATUM:
-      xelis_stratum_session_nossl(host, port, wallet, worker, ioc, ctx, yield, isDev);
+    {
+      if(use_ssl) {
+        xelis_stratum_session(hostProto, host, port, wallet, worker, ioc, ctx, yield, isDev);
+      } else {
+        xelis_stratum_session_nossl(hostProto, host, port, wallet, worker, ioc, ctx, yield, isDev);
+      }
       break;
+    }
     }
     break;
   }
   case SPECTRE_X:
-    spectre_stratum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+    spectre_stratum_session(hostProto, host, port, wallet, worker, ioc, ctx, yield, isDev);
     break;
   }
 }
