@@ -83,6 +83,12 @@ DWORD dwPages = 0; // Count of pages gotten so far
 DWORD dwPageSize;  // Page size on this computer
 #endif
 
+
+boost::asio::io_context my_context;
+// Construct a timer without setting an expiry time.
+boost::asio::steady_timer update_timer(my_context);
+std::chrono::time_point g_start_time = std::chrono::steady_clock::now();
+
 /* Start definitions from tnn-common.hpp */
 int protocol = XELIS_SOLO;
 
@@ -120,6 +126,8 @@ std::vector<int64_t> rate30sec;
 
 bool isConnected = false;
 bool devConnected = false;
+
+bool beQuiet = false;
 /* End definitions from tnn-common.hpp */
 
 /* Start definitions from astrobwtv3.hpp */
@@ -173,6 +181,92 @@ void openssl_log_callback(const SSL *ssl, int where, int ret)
 
 //------------------------------------------------------------------------------
 
+int update_handler(const boost::system::error_code& error)
+{
+  if (error == boost::asio::error::operation_aborted) {
+    return 1;
+  }
+
+  // Set an expiry time relative to now.
+  update_timer.expires_after(std::chrono::seconds(reportInterval));
+
+  // Start an asynchronous wait.
+  update_timer.async_wait(update_handler);
+
+  if (!isConnected) {
+    return 1;
+  }
+
+  auto now = std::chrono::steady_clock::now();
+  //auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now - g_start_time).count();
+
+  auto daysUp = std::chrono::duration_cast<std::chrono::hours>(now - g_start_time).count() / 24;
+  auto hoursUp = std::chrono::duration_cast<std::chrono::hours>(now - g_start_time).count() % 24;
+  auto minutesUp = std::chrono::duration_cast<std::chrono::minutes>(now - g_start_time).count() % 60;
+  auto secondsUp = std::chrono::duration_cast<std::chrono::seconds>(now - g_start_time).count() % 60;
+
+  std::scoped_lock<boost::mutex> lockGuard(mutex);
+  int64_t currentHashes = counter.load();
+  counter.store(0);
+
+  float ratio = 1.0 * reportInterval;
+  if (rate30sec.size() <= (30 / reportInterval))
+  {
+    rate30sec.push_back((int64_t)(currentHashes * ratio));
+  }
+  else
+  {
+    rate30sec.erase(rate30sec.begin());
+    rate30sec.push_back((int64_t)(currentHashes * ratio));
+  }
+
+  int64_t hashrate = 1.0 * std::accumulate(rate30sec.begin(), rate30sec.end(), 0LL) / (rate30sec.size() * reportInterval);
+  hashrate = (hashrate * 1.0) / reportInterval;
+
+  std::string rateSuffix = " H/s";
+  double rate = (double)hashrate;
+  if (hashrate >= 1000000)
+  {
+    rate = (double)(hashrate / 1000000.0);
+    rateSuffix = " MH/s";
+  }
+  else if (hashrate >= 1000)
+  {
+    rate = (double)(hashrate / 1000.0);
+    rateSuffix = " KH/s";
+  }
+
+  setcolor(BRIGHT_WHITE);
+  std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine << versionString << " ";
+  setcolor(CYAN);
+  std::cout << std::setw(2) << std::setprecision(3) << "HASHRATE " << rate << rateSuffix << " | " << std::flush;
+
+  std::string uptime = std::to_string(daysUp) + "d-" +
+                std::to_string(hoursUp) + "h-" +
+                std::to_string(minutesUp) + "m-" +
+                std::to_string(secondsUp) + "s >> ";
+
+  double dPrint;
+
+  switch(miningAlgo) {
+    case DERO_HASH:
+      dPrint = difficulty;
+      break;
+    case XELIS_HASH:
+      dPrint = difficulty;
+      break;
+    case SPECTRE_X:
+      dPrint = doubleDiff;
+      break;
+  }
+
+  std::cout << std::setw(2) << "ACCEPTED " << accepted << std::setw(2) << " | REJECTED " << rejected
+            << std::setw(2) << " | DIFFICULTY " << dPrint << std::setw(2) << " | UPTIME " << uptime << std::flush;
+  setcolor(BRIGHT_WHITE);
+
+  return 0;
+}
+
 void initializeExterns() {
   numAstroFuncs = std::size(allAstroFuncs); //sizeof(allAstroFuncs)/sizeof(allAstroFuncs[0]);
 }
@@ -220,7 +314,9 @@ int main(int argc, char **argv)
 #endif
   setcolor(BRIGHT_WHITE);
   printf("%s v%s\n", consoleLine, versionString);
-  if (!vm.count("quiet")) {
+  if(vm.count("quiet")) {
+    beQuiet = true;
+  } else {
     printf("%s", TNN);
   }
 #if defined(_WIN32)
@@ -809,7 +905,7 @@ Mining:
     std::cout << std::endl;
  //  mutex.unlock();
 
-  auto start_time = std::chrono::steady_clock::now();
+  g_start_time = std::chrono::steady_clock::now();
   if (broadcastStats)
   {
     boost::thread BROADCAST(BroadcastServer::serverThread, &rate30sec, &accepted, &rejected, versionString, reportInterval);
@@ -820,13 +916,12 @@ Mining:
     boost::this_thread::yield();
   }
 
-  boost::thread reporter(update, start_time);
-  setPriority(reporter.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+  // Set an expiry time relative to now.
+  update_timer.expires_after(std::chrono::seconds(reportInterval));
 
-  while (true)
-  {
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(500));
-  }
+  // Start an asynchronous wait.
+  update_timer.async_wait(update_handler);
+  my_context.run();
 
   return EXIT_SUCCESS;
 }
@@ -853,6 +948,7 @@ void logSeconds(std::chrono::steady_clock::time_point start_time, int duration, 
   }
 }
 
+/*
 void update(std::chrono::steady_clock::time_point start_time)
 {
   auto beginning = start_time;
@@ -960,6 +1056,7 @@ startReporting:
   }
   goto startReporting;
 }
+*/
 
 void setAffinity(boost::thread::native_handle_type t, int core)
 {
@@ -1396,9 +1493,9 @@ waitForJob:
           if (localJobCounter != jobCounter)
                 break;
           // printf("work: %s, hash: %s\n", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str(), hexStr(powHash, 32).c_str());
+          boost::lock_guard<boost::mutex> lock(mutex);
           if (devMine)
           {
-           //  mutex.lock();
             setcolor(CYAN);
             std::cout << "\n(DEV) Thread " << tid << " found a dev share\n";
             setcolor(BRIGHT_WHITE);
@@ -1406,11 +1503,10 @@ waitForJob:
                 {"jobid", myJobDev.at("jobid").as_string().c_str()},
                 {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
             submittingDev = true;
-           //  mutex.unlock();
+            data_ready = true;
           }
           else
           {
-           //  mutex.lock();
             setcolor(BRIGHT_YELLOW);
             std::cout << "\nThread " << tid << " found a nonce!\n";
             setcolor(BRIGHT_WHITE);
@@ -1418,8 +1514,9 @@ waitForJob:
                 {"jobid", myJob.at("jobid").as_string().c_str()},
                 {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
             submitting = true;
-           //  mutex.unlock();
+            data_ready = true;
           }
+          cv.notify_all();
         }
 
         if (!isConnected)
@@ -2123,6 +2220,7 @@ waitForJob:
           //   std::reverse(powHash, powHash + 32);
           // }
         //   std::string b64 = base64::to_base64(std::string((char *)&WORK[0], XELIS_TEMPLATE_SIZE));
+          boost::lock_guard<boost::mutex> lock(mutex);
           if (devMine)
           {
             // std::scoped_lock<boost::mutex> lockGuard(devMutex);
@@ -2151,6 +2249,7 @@ waitForJob:
               break;
             }
             submittingDev = true;
+            data_ready = true;
           }
           else
           {
@@ -2194,22 +2293,33 @@ waitForJob:
               break;
             }
             submitting = true;
+            data_ready = true;
           }
+          cv.notify_all();
         }
 
-        if (!isConnected)
+        if (!isConnected) {
+          data_ready = true;
+          cv.notify_all();
           break;
+        }
       }
-      if (!isConnected)
+      if (!isConnected) {
+        data_ready = true;
+        cv.notify_all();
         break;
+      }
     }
     catch (std::exception& e)
     {
       std::cerr << "Error in POW Function" << std::endl;
       std::cerr << e.what() << std::endl;
     }
-    if (!isConnected)
+    if (!isConnected) {
+      data_ready = true;
+      cv.notify_all();
       break;
+    }
   }
   goto waitForJob;
 }

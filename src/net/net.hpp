@@ -44,6 +44,9 @@ extern boost::json::object devShare;
 extern bool submitting;
 extern bool submittingDev;
 
+extern boost::condition_variable cv;
+extern boost::mutex mutex;
+extern bool data_ready;
 
 tcp::endpoint resolve_host(boost::mutex &wsMutex, net::io_context &ioc, net::yield_context yield, std::string host, std::string port);
 

@@ -1,3 +1,7 @@
+ param (
+    [string]$version = ""
+ )
+
 # Create build directory
 if (!(Test-Path .\build)) {
     New-Item -ItemType Directory -Path .\build
@@ -16,17 +20,14 @@ if (!(Get-Command clang -ErrorAction SilentlyContinue)) {
     Write-Output "Build will fail. Cannot find clang.exe"
 }
 
-VER_SETTING=
-if ($args[1] -neq "") {
-  VER_SETTING=-DTNN_VERSION=$args[1]
+set-variable -name "VER_SETTING" -Value ""
+if (-not $version -eq "") {
+  set-variable -name "VER_SETTING" -value "-DTNN_VERSION=$version"
 }
 
 # Determine CMake command based on argument
-if ($args[0] -eq "ci") {
-    & c:\mingw64\bin\cmake.exe $VER_SETTING -DCMAKE_MAKE_PROGRAM=c:/mingw64/bin/ninja.exe -G "Ninja" ..
-} else {
-    & c:\mingw64\bin\cmake.exe $VER_SETTING ..
-}
+#& c:\mingw64\bin\cmake.exe $VER_SETTING -DCMAKE_MAKE_PROGRAM=c:/mingw64/bin/ninja.exe --debug-trycompile -G "Ninja" ..
+& c:\mingw64\bin\cmake.exe $VER_SETTING --debug-trycompile --trace-expand --trace-redirect=./asdf.txt -G "Ninja" ..
 
 # Run Ninja build
 & c:\mingw64\bin\ninja.exe
