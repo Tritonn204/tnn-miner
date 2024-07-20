@@ -79,7 +79,8 @@ namespace astro_branched_zOp {
   // utility
 
   void __attribute__((noinline)) blendStep(workerData &worker, __m256i &data, __m256i &old, int wIndex) {
-    data = _mm256_blendv_epi8(old, data, genMask(worker.pos2 - worker.pos1));
+    // data = _mm256_blendv_epi8(old, data, _mm256_loadu_si256((__m256i*)&worker.maskTable_bytes[32*(worker.pos2-worker.pos1)]));
+    data = _mm256_blendv_epi8(old, data, _mm256_loadu_si256((__m256i*)&worker.maskTable_bytes[32*(worker.pos2-worker.pos1)]));
   }
 
   void __attribute__((noinline)) storeStep(workerData &worker, __m256i &data, __m256i &old, int wIndex) {

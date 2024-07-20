@@ -1240,8 +1240,8 @@ void mineDero(int tid)
   byte work[MINIBLOCK_SIZE*DERO_BATCH];
 
   workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
-  lookupGen(*worker, lookup2D_global, lookup3D_global);
   initWorker(*worker);
+  lookupGen(*worker, nullptr, nullptr);
 
   // std::cout << *worker << std::endl;
   printf("worker %d initialized\n", tid);
@@ -1328,7 +1328,16 @@ waitForJob:
           }
         }
 
+        // for (int i = 0; i < MINIBLOCK_SIZE; i++) {
+        //   printf("%02x", WORK[i]);
+        // }
+        // printf("\n");
         AstroBWTv3_batch(WORK, MINIBLOCK_SIZE, powHash, *worker, useLookupMine);
+        // AstroBWTv3_batch((byte*)"b", 1, powHash, *worker, useLookupMine);
+        // for (int i = 0; i < 32; i++) {
+        //   printf("%02x", powHash[i]);
+        // }
+        // printf("\n");
         // AstroBWTv3(&WORK[0], MINIBLOCK_SIZE, powHash, *worker, useLookupMine);
         // AstroBWTv3((byte*)("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\0"), MINIBLOCK_SIZE, powHash, *worker, useLookupMine);
 
@@ -1921,17 +1930,17 @@ void mineSpectre(int tid)
   byte work[SpectreX::INPUT_SIZE] = {0};
   byte devWork[SpectreX::INPUT_SIZE] = {0};
 
-  // workerData *astroWorker = (workerData *)malloc_huge_pages(sizeof(workerData));
+  workerData *astroWorker = (workerData *)malloc_huge_pages(sizeof(workerData));
   SpectreX::worker *worker = (SpectreX::worker *)malloc_huge_pages(sizeof(SpectreX::worker));
-  initWorker(worker->astroWorker);
-  lookupGen(worker->astroWorker, nullptr, nullptr);
-  // worker->astroWorker = astroWorker;
+  initWorker(*astroWorker);
+  lookupGen(*astroWorker, nullptr, nullptr);
+  worker->astroWorker = astroWorker;
 
-  // workerData *devAstroWorker = (workerData *)malloc_huge_pages(sizeof(workerData));
+  workerData *devAstroWorker = (workerData *)malloc_huge_pages(sizeof(workerData));
   SpectreX::worker *devWorker = (SpectreX::worker *)malloc_huge_pages(sizeof(SpectreX::worker));
-  // devWorker->astroWorker = devAstroWorker;
-  initWorker(devWorker->astroWorker);
-  lookupGen(devWorker->astroWorker, nullptr, nullptr);
+  initWorker(*devAstroWorker);
+  lookupGen(*devAstroWorker, nullptr, nullptr);
+  devWorker->astroWorker = devAstroWorker;
 
 waitForJob:
 

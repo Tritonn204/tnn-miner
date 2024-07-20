@@ -126,7 +126,7 @@ const uint32_t sha_standard[8] = {
     0x5be0cd19
 };
 
-#define MAX_LENGTH ((256 * 276) - 1) // this is the maximum
+#define MAX_LENGTH ((256 * 277) - 1) // this is the maximum
 #define ASTRO_SCRATCH_SIZE ((MAX_LENGTH + 64))
 
 const int deviceAllocMB = 5;
@@ -155,6 +155,18 @@ public:
   byte aarchFixup[256];
   byte opt[256];
   byte step_3[256];
+  byte simpleLookup[regOps_size*(256*256)];
+  byte lookup3D[branchedOps_size*256*256];
+  uint16_t lookup2D[regOps_size*(256*256)];
+  std::bitset<256> clippedBytes[regOps_size];
+  std::bitset<256> unchangedBytes[regOps_size];
+  std::bitset<256> isBranched;
+
+  byte branchedOps[branchedOps_size*2];
+  byte regularOps[regOps_size*2];
+
+  byte branched_idx[256];
+  byte reg_idx[256];
 
   int lucky = 0;
 
@@ -173,9 +185,8 @@ public:
   byte *chunk;
   byte *prev_chunk;
 
-  byte simpleLookup[regOps_size*(256*256)];
-  byte lookup3D[branchedOps_size*256*256];
-  uint16_t lookup2D[regOps_size*(256*256)];
+  byte maskTable_bytes[32*33];
+  byte padding[32];
 
   bool isSame = false;
 
@@ -183,16 +194,6 @@ public:
   byte sha_key[32];
   byte sha_key2[32];
   byte sData[ASTRO_SCRATCH_SIZE*DERO_BATCH];
-
-  std::bitset<256> clippedBytes[regOps_size];
-  std::bitset<256> unchangedBytes[regOps_size];
-  std::bitset<256> isBranched;
-
-  byte branchedOps[branchedOps_size*2];
-  byte regularOps[regOps_size*2];
-
-  byte branched_idx[256];
-  byte reg_idx[256];
 
   byte pos1;
   byte pos2;
@@ -468,14 +469,34 @@ inline __m256i _mm256_reverse_epi8(__m256i input) {
 
 #endif
 
+inline uint32_t revInt(uint32_t dword)
+{
+  return ((dword >> 24) & 0x000000FF) | ((dword >> 8) & 0x0000FF00) | ((dword << 8) & 0x00FF0000) | ((dword << 24) & 0xFF000000);
+}
+
 inline void initWorker(workerData &worker) {
   #if defined(__AVX2__)
 
-  // __m256i temp[32];
-  // for(int i = 0; i < 32; i++) {
-  //   temp[i] = genMask(i);
-  //   _mm256_storeu_si256((__m256i*)&worker.maskTable_bytes[i*32], temp[i]);
-  // }
+  for(int i = 0; i < 33; i++) {
+    int size = 32-i;
+
+    uint32_t a = ~(size > 28 ? 0xFFFFFFFF >> (std::max(4-(size - 28), 0)*8) : 0);  
+    uint32_t b = ~(size > 24 ? 0xFFFFFFFF >> (std::max(4-(size - 24), 0)*8) : 0);  
+    uint32_t c = ~(size > 20 ? 0xFFFFFFFF >> (std::max(4-(size - 20), 0)*8) : 0);  
+    uint32_t d = ~(size > 16 ? 0xFFFFFFFF >> (std::max(4-(size - 16), 0)*8) : 0);  
+    uint32_t e = ~(size > 12 ? 0xFFFFFFFF >> (std::max(4-(size - 12), 0)*8) : 0);  
+    uint32_t f = ~(size > 8 ? 0xFFFFFFFF >> (std::max(4-(size - 8), 0)*8) : 0);  
+    uint32_t g = ~(size > 4 ? 0xFFFFFFFF >> (std::max(4-(size - 4), 0)*8) : 0);  
+    uint32_t h = ~(size > 0 ? 0xFFFFFFFF >> (std::max(4-size,0)*8) : 0);
+    uint32_t vec[8] = {revInt(a),revInt(b),revInt(c),revInt(d),revInt(e),revInt(f),revInt(g),revInt(h)};
+
+    // printf("genMask bytes for length %d: ", 32-i);
+    // printf("%08X, %08X, %08X, %08X, %08X, %08X, %08X, %08X", a, b, c, d, e, f, g, h);
+    // printf("\n");
+
+    byte *cpyPoint = &worker.maskTable_bytes[32*i];
+    memcpy(cpyPoint, vec, 32);
+  }
   // printf("worker.maskTable\n");
   // uint32_t v[8];
   // for(int i = 0; i < 32; i++) {

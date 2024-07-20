@@ -77,12 +77,11 @@ namespace SpectreX
   void hash(worker &worker, byte *in, int len, byte *out)
   {
     // cshake256("ProofOfWorkHash", in, len, worker.sha3Hash, 32);
-    // newMatrix(in, worker.mat);
-    // cshake256_nil_function_name(in, len, "ProofOfWorkHash", worker.sha3Hash, 32*8);
-    AstroBWTv3_batch(in, 32, worker.astrobwtv3Hash, worker.astroWorker, false);
-    memset(out, 0xff, 32);
+    newMatrix(in, worker.mat);
+    cshake256_nil_function_name(in, len, "ProofOfWorkHash", worker.sha3Hash, 32*8);
+    AstroBWTv3(worker.sha3Hash, 32, worker.astrobwtv3Hash, *(worker.astroWorker), false);
     // AstroBWTv3(worker.sha3Hash, 32, worker.astrobwtv3Hash, *worker.astroWorker, false);
-    // heavyHash(worker.astrobwtv3Hash, worker.mat, out);
+    heavyHash(worker.astrobwtv3Hash, worker.mat, out);
   }
 
   void testWithInput(const char* input, byte *out) {
@@ -91,29 +90,29 @@ namespace SpectreX
     hexstrToBytes(std::string(input), in);
 
     worker w;
-    // alignas(32) workerData *aw = (workerData*)malloc_huge_pages(sizeof(workerData));
-    initWorker(w.astroWorker);
-    lookupGen(w.astroWorker, nullptr, nullptr);
+    alignas(32) workerData *aw = (workerData*)malloc_huge_pages(sizeof(workerData));
+    initWorker(*aw);
+    lookupGen(*aw, nullptr, nullptr);
     initWolfLUT();
-    // w.astroWorker = aw;
+    w.astroWorker = aw;
     newMatrix(in, w.mat);
 
     hash(w, in, 80, out);
-    // free(aw);
+    free(aw);
     free(in);
   }
 
   void testWithInput(byte* in, byte *out) {
     worker w;
-    // alignas(32) workerData *aw = (workerData*)malloc_huge_pages(sizeof(workerData));
-    initWorker(w.astroWorker);
-    lookupGen(w.astroWorker, nullptr, nullptr);
+    alignas(32) workerData *aw = (workerData*)malloc_huge_pages(sizeof(workerData));
+    initWorker(*aw);
+    lookupGen(*aw, nullptr, nullptr);
     initWolfLUT();
-    // w.astroWorker = aw;
+    w.astroWorker = aw;
     newMatrix(in, w.mat);
 
     hash(w, in, 80, out);
-    // free(aw);
+    free(aw);
   }
 
   int test() {
@@ -124,11 +123,11 @@ namespace SpectreX
     hexstrToBytes(std::string(input), in);
 
     alignas(64) SpectreX::worker *w = (SpectreX::worker *)malloc_huge_pages(sizeof(SpectreX::worker));
-    // alignas(64) workerData *aw = (workerData *)malloc_huge_pages(sizeof(workerData));
-    initWorker(w->astroWorker);
-    lookupGen(w->astroWorker, nullptr, nullptr);
+    alignas(64) workerData *aw = (workerData *)malloc_huge_pages(sizeof(workerData));
+    initWorker(*aw);
+    lookupGen(*aw, nullptr, nullptr);
     initWolfLUT();
-    // w->astroWorker = aw;
+    w->astroWorker = aw;
 
     newMatrix(in, w->mat);
 

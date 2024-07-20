@@ -146,6 +146,33 @@ int DeroTesting(int testOp, int testLen, bool useLookup) {
   int failedTests = 0;
   Num diffTest("1234567890123456789", 10);
 
+  int scale = 32-18;
+
+  uint32_t a = ~(scale > 28 ? 0xFFFFFFFF >> (std::max(4-(scale - 28), 0)*8) : 0);  
+  uint32_t b = ~(scale > 24 ? 0xFFFFFFFF >> (std::max(4-(scale - 24), 0)*8) : 0);  
+  uint32_t c = ~(scale > 20 ? 0xFFFFFFFF >> (std::max(4-(scale - 20), 0)*8) : 0);  
+  uint32_t d = ~(scale > 16 ? 0xFFFFFFFF >> (std::max(4-(scale - 16), 0)*8) : 0);  
+  uint32_t e = ~(scale > 12 ? 0xFFFFFFFF >> (std::max(4-(scale - 12), 0)*8) : 0);  
+  uint32_t f = ~(scale > 8 ? 0xFFFFFFFF >> (std::max(4-(scale - 8), 0)*8) : 0);  
+  uint32_t g = ~(scale > 4 ? 0xFFFFFFFF >> (std::max(4-(scale - 4), 0)*8) : 0);  
+  uint32_t h = ~(0xFFFFFFFF >> (std::max(4-scale,0)*8));
+
+  printf("%08X, %08X, %08X, %08X, %08X, %08X, %08X, %08X", a, b, c, d, e, f, g, h);
+  printf("\n");
+
+  __m256i old = _mm256_set1_epi8(0x11);
+  __m256i set = _mm256_set1_epi8(0xBB);
+
+  __m256i validation = _mm256_blendv_epi8(old, set, _mm256_set_epi32(h,g,f,e,d,c,b,a));
+
+  uint32_t v[8];
+  _mm256_storeu_si256((__m256i*)v, _mm256_loadu_si256(&validation));
+  printf("mixed data: %x %x %x %x %x %x %x %x\n", v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
+
+  __m256i masker =_mm256_set_epi32(h,g,f,e,d,c,b,a);
+  _mm256_storeu_si256((__m256i*)v, _mm256_loadu_si256(&masker));
+  printf("mask data in stored order: %08x %08x %08x %08x %08x %08x %08x %08x\n", v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
+
   if (testLen >= 0) {
     failedTests += runDeroOpTests(testOp, testLen);
   } else {
@@ -596,7 +623,6 @@ int TestAstroBWTv3(bool quiet=false)
         printf("SUCCESS! pow(%s) expected %s received %s\n", t.in.c_str(), t.out.c_str(), actualRes.c_str());
       }
     }
-
     // for (const auto& [a, b, c] : worker->repeats) {
     //   printf("op: %d, input: %d, dataLen: %d\n", a, b, c);
     // }
