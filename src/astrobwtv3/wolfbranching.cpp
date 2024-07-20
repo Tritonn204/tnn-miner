@@ -276,13 +276,16 @@ void wolfSame(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2
   __m256i data = _mm256_loadu_si256((__m256i*)&in[pos1]);
   __m256i old = data;
 
-  // if (worker.isBranched[op]) {
-  //   data = _mm256_set1_epi8(worker.lookup3D[worker.branched_idx[worker.op] * 256 * 256 +
-  //                                 in[worker.pos2] * 256 +
-  //                                 in[worker.pos1]]);
-  // } else {
-  data = _mm256_set1_epi8(worker.simpleLookup[worker.reg_idx[worker.op] * 256 + in[pos1]]);
-  // }
+  if (worker.isBranched[op])
+  {
+    data = _mm256_set1_epi8(worker.lookup3D[worker.branched_idx[worker.op] * 256 * 256 +
+                                            in[worker.pos2] * 256 +
+                                            in[worker.pos1]]);
+  }
+  else
+  {
+    data = _mm256_set1_epi8(worker.simpleLookup[worker.reg_idx[worker.op] * 256 + in[pos1]]);
+  }
 
   // if (pos2==pos1) {
   //   _mm256_storeu_si256((__m256i*)&out[pos1], data);

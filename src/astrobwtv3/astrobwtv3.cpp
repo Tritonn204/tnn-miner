@@ -7879,7 +7879,7 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest, int wInde
       // sameCount++;
     }
 
-    astro_branched_zOp::branchCompute[worker.op + (256*worker.isSame)](worker, data, old, wIndex);
+    astro_branched_zOp::branchCompute[worker.op + (256*(worker.isSame))](worker, data, old, wIndex);
 
     if(isTest) {
       break;
