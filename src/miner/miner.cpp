@@ -1442,7 +1442,7 @@ waitForJob:
       // DIFF = 5000;
 
       std::string hex;
-      int32_t i = 0;
+      int32_t nonce = 0;
       while (localJobCounter == jobCounter)
       {
         which = (double)(rand() % 10000);
@@ -1452,9 +1452,13 @@ waitForJob:
         // printf("Difficulty: %" PRIx64 "\n", DIFF);
 
         cmpDiff = ConvertDifficultyToBig(DIFF, DERO_HASH);
-        i++;
+        nonce += DERO_BATCH;
         byte *WORK = devMine ? &devWork[0] : &work[0];
-        memcpy(&WORK[MINIBLOCK_SIZE - 5], &i, sizeof(i));
+
+        for (int i = 0; i < DERO_BATCH; i++) {
+          int N = nonce + i;
+          memcpy(&WORK[MINIBLOCK_SIZE*i + MINIBLOCK_SIZE - 5], &N, sizeof(N));
+        }
 
         // swap endianness
         if (littleEndian())
@@ -1481,42 +1485,45 @@ waitForJob:
         counter.fetch_add(DERO_BATCH);
         submit = devMine ? !submittingDev : !submitting;
 
-        if (CheckHash(&powHash[0], cmpDiff, DERO_HASH))
-        {
-          if (!submit) {
-            for(;;) {
-              if (submit || localJobCounter != jobCounter)
-                break;
-              boost::this_thread::yield();
+        for (int i = 0; i < DERO_BATCH; i++) {
+          byte *currHash = &powHash[32*i];
+          if (CheckHash(currHash, cmpDiff, DERO_HASH))
+          {
+            if (!submit) {
+              for(;;) {
+                if (submit || localJobCounter != jobCounter)
+                  break;
+                boost::this_thread::yield();
+              }
             }
+            if (localJobCounter != jobCounter)
+                  break;
+            // printf("work: %s, hash: %s\n", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str(), hexStr(powHash, 32).c_str());
+            boost::lock_guard<boost::mutex> lock(mutex);
+            if (devMine)
+            {
+              setcolor(CYAN);
+              std::cout << "\n(DEV) Thread " << tid << " found a dev share\n";
+              setcolor(BRIGHT_WHITE);
+              devShare = {
+                  {"jobid", myJobDev.at("jobid").as_string().c_str()},
+                  {"mbl_blob", hexStr(&WORK[MINIBLOCK_SIZE*i], MINIBLOCK_SIZE).c_str()}};
+              submittingDev = true;
+              data_ready = true;
+            }
+            else
+            {
+              setcolor(BRIGHT_YELLOW);
+              std::cout << "\nThread " << tid << " found a nonce!\n";
+              setcolor(BRIGHT_WHITE);
+              share = {
+                  {"jobid", myJob.at("jobid").as_string().c_str()},
+                  {"mbl_blob", hexStr(&WORK[MINIBLOCK_SIZE*i], MINIBLOCK_SIZE).c_str()}};
+              submitting = true;
+              data_ready = true;
+            }
+            cv.notify_all();
           }
-          if (localJobCounter != jobCounter)
-                break;
-          // printf("work: %s, hash: %s\n", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str(), hexStr(powHash, 32).c_str());
-          boost::lock_guard<boost::mutex> lock(mutex);
-          if (devMine)
-          {
-            setcolor(CYAN);
-            std::cout << "\n(DEV) Thread " << tid << " found a dev share\n";
-            setcolor(BRIGHT_WHITE);
-            devShare = {
-                {"jobid", myJobDev.at("jobid").as_string().c_str()},
-                {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
-            submittingDev = true;
-            data_ready = true;
-          }
-          else
-          {
-            setcolor(BRIGHT_YELLOW);
-            std::cout << "\nThread " << tid << " found a nonce!\n";
-            setcolor(BRIGHT_WHITE);
-            share = {
-                {"jobid", myJob.at("jobid").as_string().c_str()},
-                {"mbl_blob", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str()}};
-            submitting = true;
-            data_ready = true;
-          }
-          cv.notify_all();
         }
 
         if (!isConnected)

@@ -433,7 +433,7 @@ void AstroBWTv3_batch(byte *input, int inputLen, byte *outputhash, workerData &w
       __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 256+128], 1, 3);
       __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 256+192], 1, 3);
       
-      hashSHA256(worker.sha256, &input[i*inputLen], &worker.sData[320], inputLen);
+      hashSHA256(worker.sha256, &input[i*inputLen], &worker.sData[ASTRO_SCRATCH_SIZE*i + 320], inputLen);
       worker.salsa20.setKey(&worker.sData[ASTRO_SCRATCH_SIZE*i + 320]);
       worker.salsa20.setIv(&worker.sData[ASTRO_SCRATCH_SIZE*i + 256]);
 
