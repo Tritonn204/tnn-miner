@@ -30,7 +30,7 @@ bool useStratum = false;
 
 int miningAlgo = DERO_HASH;
 
-int reportInterval = 3;
+int reportInterval = 1;
 int threads = 0;
 int testOp = -1;
 int testLen = -1;

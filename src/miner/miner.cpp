@@ -209,7 +209,7 @@ int update_handler(const boost::system::error_code& error)
   int64_t currentHashes = counter.load();
   counter.store(0);
 
-  float ratio = 1.0 * reportInterval;
+  double ratio = 1.0 * reportInterval;
   if (rate30sec.size() <= (30 / reportInterval))
   {
     rate30sec.push_back((int64_t)(currentHashes * ratio));
@@ -221,7 +221,7 @@ int update_handler(const boost::system::error_code& error)
   }
 
   int64_t hashrate = 1.0 * std::accumulate(rate30sec.begin(), rate30sec.end(), 0LL) / (rate30sec.size() * reportInterval);
-  hashrate = (hashrate * 1.0) / reportInterval;
+  hashrate = (hashrate * 1.0) / (double)reportInterval;
 
   std::string rateSuffix = " H/s";
   double rate = (double)hashrate;

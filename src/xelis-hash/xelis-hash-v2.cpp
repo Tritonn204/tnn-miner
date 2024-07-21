@@ -34,7 +34,7 @@
 #define htonll(x) ((1 == htonl(1)) ? (x) : ((uint64_t)htonl((x) & 0xFFFFFFFF) << 32) | htonl((x) >> 32))
 #define ntohll(x) ((1 == ntohl(1)) ? (x) : ((uint64_t)ntohl((x) & 0xFFFFFFFF) << 32) | ntohl((x) >> 32))
 
-alignas(64) const int sign_bit_values_avx512[16][16] = {
+const int sign_bit_values_avx512[16][16] = {
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1},
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0},
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0},
@@ -180,24 +180,37 @@ static inline uint64_t isqrt(uint64_t n)
   return x;
 }
 
-inline uint64_t wrapping_add(uint64_t a, uint64_t b) {
-    return a + b;
-}
-
-inline uint64_t wrapping_sub(uint64_t a, uint64_t b) {
-    return a - b;
-}
-
-inline uint64_t wrapping_mul(uint64_t a, uint64_t b) {
-    return a * b;
-}
-
 #define COMBINE_UINT64(high, low) (((__uint128_t)(high) << 64) | (low))
 static inline __uint128_t combine_uint64(uint64_t high, uint64_t low)
 {
 	return ((__uint128_t)high << 64) | low;
 }
 
+__attribute__((target("avx2")))
+void static inline uint64_to_le_bytes(uint64_t value, uint8_t *bytes) {
+    // // Set up the 64-bit value in a 128-bit register
+    // __m128i val = _mm_set1_epi64x(value);
+
+    // // Mask to isolate each byte
+    // __m128i mask = _mm_set_epi8(
+    //     -1, -1, -1, -1, -1, -1, -1, -1,
+    //     7, 6, 5, 4, 3, 2, 1, 0
+    // );
+
+    // // Shuffle bytes into the correct order for little-endian
+    // __m128i shuffled = _mm_shuffle_epi8(_mm_set1_epi64x(value), _mm_set_epi8(
+    //     -1, -1, -1, -1, -1, -1, -1, -1,
+    //     7, 6, 5, 4, 3, 2, 1, 0
+    // ));
+
+    // Store the result
+    _mm_storel_epi64((__m128i*)bytes, _mm_shuffle_epi8(_mm_set1_epi64x(value), _mm_set_epi8(
+        -1, -1, -1, -1, -1, -1, -1, -1,
+        7, 6, 5, 4, 3, 2, 1, 0
+    )));
+}
+
+__attribute__((target("default")))
 void static inline uint64_to_le_bytes(uint64_t value, uint8_t *bytes)
 {
 	for (int i = 0; i < 8; i++)
@@ -207,6 +220,33 @@ void static inline uint64_to_le_bytes(uint64_t value, uint8_t *bytes)
 	}
 }
 
+__attribute__((target("avx2")))
+uint64_t static inline le_bytes_to_uint64(const uint8_t *bytes) {
+    // // Load the bytes into a 128-bit register
+    // __m128i input = _mm_loadu_si128((const __m128i*)bytes);
+
+    // // Mask to isolate each byte and order them correctly for little-endian
+    // __m128i mask = _mm_set_epi8(
+    //     15, 14, 13, 12, 11, 10, 9, 8,
+    //     7,  6,  5,  4,  3,  2, 1, 0
+    // );
+
+    // // Shuffle bytes into the correct order for 64-bit integer
+    // __m128i shuffled = _mm_shuffle_epi8(_mm_loadu_si128((const __m128i*)bytes), _mm_set_epi8(
+    //     15, 14, 13, 12, 11, 10, 9, 8,
+    //     7,  6,  5,  4,  3,  2, 1, 0
+    // ));
+
+    // Extract the lower 64 bits as a 64-bit integer
+    // uint64_t result = _mm_cvtsi128_si64(shuffled);
+
+    return _mm_cvtsi128_si64(_mm_shuffle_epi8(_mm_loadu_si128((const __m128i*)bytes), _mm_set_epi8(
+        15, 14, 13, 12, 11, 10, 9, 8,
+        7,  6,  5,  4,  3,  2, 1, 0
+    )));
+}
+
+__attribute__((target("default")))
 uint64_t static inline le_bytes_to_uint64(const uint8_t *bytes)
 {
 	uint64_t value = 0;
@@ -215,17 +255,19 @@ uint64_t static inline le_bytes_to_uint64(const uint8_t *bytes)
 	return value;
 }
 
+
+
 #if defined(__x86_64__)
 
 void static inline aes_single_round(uint8_t *block, const uint8_t *key)
 {
-	__m128i block_vec = _mm_loadu_si128((const __m128i *)block);
-	__m128i key_vec = _mm_loadu_si128((const __m128i *)key);
-
 	// Perform single AES encryption round
-	block_vec = _mm_aesenc_si128(block_vec, key_vec);
-
+	__m128i block_vec = _mm_aesenc_si128(_mm_loadu_si128((const __m128i *)block), _mm_loadu_si128((const __m128i *)key));
 	_mm_storeu_si128((__m128i *)block, block_vec);
+}
+
+static inline uint64_t div128(__uint128_t dividend, __uint128_t divisor) {
+  return dividend / divisor;
 }
 
 static inline uint64_t Divide128Div64To64(uint64_t high, uint64_t low, uint64_t divisor, uint64_t *remainder)
@@ -251,6 +293,10 @@ static inline uint64_t ROTL(uint64_t x, uint32_t r)
 }
 
 #else // aarch64
+
+static inline uint64_t div128(__uint128_t dividend, __uint128_t divisor) {
+    return dividend / divisor;
+}
 
 static inline uint64_t Divide128Div64To64(uint64_t high, uint64_t low, uint64_t divisor, uint64_t *remainder)
 {
@@ -292,36 +338,115 @@ static inline uint64_t udiv(uint64_t high, uint64_t low, uint64_t divisor)
   return low;
 }
 
+// __attribute__((noinline))
+static inline uint64_t case_0(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j) { 
+  return ROTL(c, i * j) ^ b; 
+}
+// __attribute__((noinline))
+static inline uint64_t case_1(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j) { 
+  return ROTR(c, i * j) ^ a; 
+}
+// __attribute__((noinline))
+static inline uint64_t case_2(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j) { 
+  return a ^ b ^ c; 
+}
+// __attribute__((noinline))
+static inline uint64_t case_3(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j) { 
+  return (a + b) * c; 
+}
+// __attribute__((noinline))
+static inline uint64_t case_4(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j) { 
+  return (b - c) * a; 
+}
+// __attribute__((noinline))
+static inline uint64_t case_5(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j) { 
+  return c - a + b; 
+}
+// __attribute__((noinline))
+static inline uint64_t case_6(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j) { 
+  return a - b + c; 
+}
+// __attribute__((noinline))
+static inline uint64_t case_7(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j) { 
+  return b * c + a; 
+}
+// __attribute__((noinline))
+static inline uint64_t case_8(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j) { 
+  return c * a + b; 
+}
+// __attribute__((noinline))
+static inline uint64_t case_9(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j) { 
+  return a * b * c; 
+}
+// __attribute__((noinline))
+static inline uint64_t case_10(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j) { 
+  return COMBINE_UINT64(a,b) % (c | 1); 
+}
+// __attribute__((noinline))
+static inline uint64_t case_11(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j) { 
+  __uint128_t t2 = COMBINE_UINT64(ROTL(result, r), a | 2);
+  return (t2 > COMBINE_UINT64(b,c)) ? c : COMBINE_UINT64(b,c) % t2;
+}
+// __attribute__((noinline))
+static inline uint64_t case_12(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j) { 
+  return udiv(c, a, b | 4); 
+}
+// __attribute__((noinline))
+static inline uint64_t case_13(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j) { 
+  __uint128_t t1 = COMBINE_UINT64(ROTL(result, r), b);
+  __uint128_t t2 = COMBINE_UINT64(a, c | 8);
+  return (t1 > t2) ? t1 / t2 : a ^ b;
+}
+// __attribute__((noinline))
+static inline uint64_t case_14(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j) { 
+  return (COMBINE_UINT64(b,a) * c) >> 64; 
+}
+// __attribute__((noinline))
+static inline uint64_t case_15(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j) { 
+  return (COMBINE_UINT64(a,c) * COMBINE_UINT64(ROTR(result, r), b)) >> 64; 
+}
+
+typedef uint64_t (*operation_func)(uint64_t, uint64_t, uint64_t, int, uint64_t, int, int);
+
+operation_func operations[] = {
+    case_0, case_1, case_2, case_3, case_4, case_5, case_6, case_7,
+    case_8, case_9, case_10, case_11, case_12, case_13, case_14, case_15,
+    // Add other functions for cases 10-15
+};
+
 void stage_3(uint64_t *scratch_pad, workerData_xelis_v2 &worker)
 {
-    alignas(64) const uint8_t key[17] = "xelishash-pow-v2";
-    alignas(64) uint8_t block[16] = {0};
+    const uint8_t key[17] = "xelishash-pow-v2";
+    uint8_t block[16] = {0};
 
-    alignas(64) uint64_t *mem_buffer_a = scratch_pad;
-    alignas(64) uint64_t *mem_buffer_b = scratch_pad + XELIS_BUFFER_SIZE_V2;
+    uint64_t *mem_buffer_a = scratch_pad;
+    uint64_t *mem_buffer_b = scratch_pad + XELIS_BUFFER_SIZE_V2;
 
-    alignas(64) uint64_t addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V2 - 1];
-    alignas(64) uint64_t addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - 1] >> 32;
+    uint64_t addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V2 - 1];
+    uint64_t addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - 1] >> 32;
     size_t r = 0;
 
+
+    #pragma unroll 3
     for (size_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V2; ++i) {
         uint64_t mem_a = mem_buffer_a[addr_a % XELIS_BUFFER_SIZE_V2];
         uint64_t mem_b = mem_buffer_b[addr_b % XELIS_BUFFER_SIZE_V2];
 
         // std::copy(&mem_b, &mem_b + 8, block);
         // std::copy(&mem_a, &mem_a + 8, block + 8);
+
         uint64_to_le_bytes(mem_b, block);
 		    uint64_to_le_bytes(mem_a, block + 8);
 
         aes_round(block, key);
 
-        alignas(64) uint64_t hash1 = 0, hash2 = 0;
+        uint64_t hash1 = 0, hash2 = 0;
         hash1 = le_bytes_to_uint64(block);
         // std::copy(block, block + 8, &hash1);
         // hash1 = _byteswap_uint64(hash1);
         hash2 = mem_a ^ mem_b;
 
-        alignas(64) uint64_t result = ~(hash1 ^ hash2);
+        uint64_t result = ~(hash1 ^ hash2);
 
         // printf("pre result: %llu\n", result);
 
@@ -333,60 +458,10 @@ void stage_3(uint64_t *scratch_pad, workerData_xelis_v2 &worker)
 
             // printf("a %llu, b %llu, c %llu, ", a, b, c);
             uint64_t v;
-            // int scase = ROTL(result, (uint32_t)c) & 0xF;
-            switch (ROTL(result, (uint32_t)c) & 0xF) {
-              case 0: v = ROTL(c, i * j) ^ b; break;
-              case 1: v = ROTR(c, i * j) ^ a; break;
-              case 2:
-                v = a ^ b ^ c;
-                break;
-              case 3:
-                v = ((a + b) * c);
-                break;
-              case 4:
-                v = ((b - c) * a);
-                break;
-              case 5:
-                v = (c - a + b);
-                break;
-              case 6:
-                v = (a - b + c);
-                break;
-              case 7:
-                v = (b * c + a);
-                break;
-              case 8:
-                v = (c * a + b);
-                break;
-              case 9:
-                v = (a * b * c);
-                break;
-              case 10:
-              {
-                v = COMBINE_UINT64(a,b) % (c | 1);
-              }
-              break;
-              case 11:
-              {
-                worker.t2 = COMBINE_UINT64(ROTL(result, r), a | 2);
-                v = (worker.t2 > COMBINE_UINT64(b,c)) ? c : COMBINE_UINT64(b,c) % worker.t2;
-              }
-              break;
-              case 12: v = udiv(c, a, b | 4); break;
-              case 13:
-              {
-                worker.t1 = COMBINE_UINT64(ROTL(result, r), b);
-                worker.t2 = COMBINE_UINT64(a, c | 8);
-                v = (worker.t1 > worker.t2) ? worker.t1 / worker.t2 : a ^ b;
-              }
-              break;
-              case 14: v = (COMBINE_UINT64(b,a) * c) >> 64; break;
-              case 15: v = (COMBINE_UINT64(a,c) * COMBINE_UINT64(ROTR(result, r), b)) >> 64; break;
-            }
+            uint32_t idx = ROTL(result, (uint32_t)c) & 0xF;
+            v = operations[idx](a,b,c,r,result,i,j);
 
             result = ROTL(result ^ v, 1);
-
-            // printf("post result: %llu, case: %d\n", result, scase);
 
             uint64_t t = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - j - 1] ^ result;
             mem_buffer_a[XELIS_BUFFER_SIZE_V2 - j - 1] = t;
@@ -407,8 +482,8 @@ void stage_3(uint64_t *scratch_pad, workerData_xelis_v2 &worker)
 // {
 //     memset(worker.block, 0, 16);
 
-//     alignas(64) uint64_t *mem_buffer_a = worker.scratchPad;
-//     alignas(64) uint64_t *mem_buffer_b = worker.scratchPad + XELIS_BUFFER_SIZE_V2;
+//     uint64_t *mem_buffer_a = worker.scratchPad;
+//     uint64_t *mem_buffer_b = worker.scratchPad + XELIS_BUFFER_SIZE_V2;
 
 //     worker.addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V2 - 1];
 //     worker.addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - 1] >> 32;
@@ -425,13 +500,13 @@ void stage_3(uint64_t *scratch_pad, workerData_xelis_v2 &worker)
 
 //         aes_round(worker.block, worker.key);
 
-//         alignas(64) uint64_t hash1 = 0, hash2 = 0;
+//         uint64_t hash1 = 0, hash2 = 0;
 //         hash1 = le_bytes_to_uint64(worker.block);
 //         // std::copy(block, block + 8, &hash1);
 //         // hash1 = _byteswap_uint64(hash1);
 //         hash2 = worker.mem_a ^ worker.mem_b;
 
-//         alignas(64) uint64_t result = ~(hash1 ^ hash2);
+//         uint64_t result = ~(hash1 ^ hash2);
 
 //         // printf("pre result: %llu\n", result);
 
@@ -525,9 +600,9 @@ void xelis_benchmark_cpu_hash_v2()
 {
   const uint32_t ITERATIONS = 2000;
   byte input[112] = {0};
-  alignas(64) workerData_xelis_v2 worker;
-  alignas(64) workerData_xelis_v2 worker2;
-  alignas(64) byte hash_result[XELIS_HASH_SIZE] = {0};
+  workerData_xelis_v2 worker;
+  workerData_xelis_v2 worker2;
+  byte hash_result[XELIS_HASH_SIZE] = {0};
 
   printf("v2 bench\n");
 
@@ -586,7 +661,7 @@ namespace xelis_tests_v2
 
   bool test_input(const char *test_name, byte *input, size_t input_size, const Hash &expected_hash)
   {
-    alignas(64) workerData_xelis_v2 worker;
+    workerData_xelis_v2 worker;
     byte hash_result[XELIS_HASH_SIZE] = {0};
 
     xelis_hash_v2(input, worker, hash_result);
@@ -625,7 +700,7 @@ namespace xelis_tests_v2
 
   bool test_xelis_input()
   {
-    alignas(64) byte input[] = {
+    byte input[] = {
             172, 236, 108, 212, 181, 31, 109, 45, 44, 242, 54, 225, 143, 133,
             89, 44, 179, 108, 39, 191, 32, 116, 229, 33, 63, 130, 33, 120, 185, 89,
             146, 141, 10, 79, 183, 107, 238, 122, 92, 222, 25, 134, 90, 107, 116,
