@@ -446,30 +446,29 @@ void stage_3(uint64_t *scratch_pad, workerData_xelis_v2 &worker)
         // hash1 = _byteswap_uint64(hash1);
         hash2 = mem_a ^ mem_b;
 
-        uint64_t result = ~(hash1 ^ hash2);
+        addr_a = ~(hash1 ^ hash2);
 
         // printf("pre result: %llu\n", result);
 
         for (size_t j = 0; j < XELIS_BUFFER_SIZE_V2; ++j) {
-            uint64_t a = mem_buffer_a[(result % XELIS_BUFFER_SIZE_V2)];
-            uint64_t b = mem_buffer_b[~ROTR(result, r) % XELIS_BUFFER_SIZE_V2];
+            uint64_t a = mem_buffer_a[(addr_a % XELIS_BUFFER_SIZE_V2)];
+            uint64_t b = mem_buffer_b[~ROTR(addr_a, r) % XELIS_BUFFER_SIZE_V2];
             uint64_t c = (r < XELIS_BUFFER_SIZE_V2) ? mem_buffer_a[r] : mem_buffer_b[r - XELIS_BUFFER_SIZE_V2];
             r = (r < XELIS_MEMORY_SIZE_V2 - 1) ? r + 1 : 0;
 
             // printf("a %llu, b %llu, c %llu, ", a, b, c);
             uint64_t v;
-            uint32_t idx = ROTL(result, (uint32_t)c) & 0xF;
-            v = operations[idx](a,b,c,r,result,i,j);
+            uint32_t idx = ROTL(addr_a, (uint32_t)c) & 0xF;
+            v = operations[idx](a,b,c,r,addr_a,i,j);
 
-            result = ROTL(result ^ v, 1);
+            addr_a = ROTL(addr_a ^ v, 1);
 
-            uint64_t t = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - j - 1] ^ result;
+            uint64_t t = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - j - 1] ^ addr_a;
             mem_buffer_a[XELIS_BUFFER_SIZE_V2 - j - 1] = t;
-            mem_buffer_b[j] ^= ROTR(t, (uint32_t)result);
+            mem_buffer_b[j] ^= ROTR(t, (uint32_t)addr_a);
         }
         // printf("post result: %llu\n", result);
-        addr_a = result;
-        addr_b = isqrt(result);
+        addr_b = isqrt(addr_a);
     }
 
   // Crc32 crc32;
