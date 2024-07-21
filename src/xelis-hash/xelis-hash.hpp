@@ -40,15 +40,11 @@ typedef struct workerData_xelis {
 } workerData_xelis;
 
 typedef struct workerData_xelis_v2 {
-  alignas(64) uint64_t scratchPad[XELIS_MEMORY_SIZE_V2] = {0};
-  alignas(64) uint8_t block[16] = {0};
-  alignas(64) const byte key[17] = "xelishash-pow-v2";
-  alignas(64)__uint128_t t1, t2;
+  uint64_t scratchPad[XELIS_MEMORY_SIZE_V2] = {0};
   // uint64_t *int_input;
   // uint32_t *smallPad;
   // alignas(64) uint32_t slots[XELIS_SLOT_LENGTH] = {0};
   // alignas(64) byte indices[XELIS_SLOT_LENGTH] = {0};
-  byte padding[128];
 } workerData_xelis_v2;
 
 typedef struct xelis_BlockMiner {

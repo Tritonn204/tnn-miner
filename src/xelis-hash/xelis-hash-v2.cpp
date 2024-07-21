@@ -441,6 +441,7 @@ void stage_3(uint64_t *scratch_pad, workerData_xelis_v2 &worker)
         aes_round(block, key);
 
         uint64_t hash1 = 0, hash2 = 0;
+        // hash1 = ((uint64_t*)block)[0]; // simple assignment, slower than SIMD on my CPU
         hash1 = le_bytes_to_uint64(block);
         // std::copy(block, block + 8, &hash1);
         // hash1 = _byteswap_uint64(hash1);
