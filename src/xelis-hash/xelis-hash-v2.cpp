@@ -454,7 +454,7 @@ void stage_3(uint64_t *scratch_pad, workerData_xelis_v2 &worker)
             uint64_t a = mem_buffer_a[(addr_a % XELIS_BUFFER_SIZE_V2)];
             uint64_t b = mem_buffer_b[~ROTR(addr_a, r) % XELIS_BUFFER_SIZE_V2];
             uint64_t c = (r < XELIS_BUFFER_SIZE_V2) ? mem_buffer_a[r] : mem_buffer_b[r - XELIS_BUFFER_SIZE_V2];
-            r = (r < XELIS_MEMORY_SIZE_V2 - 1) ? r + 1 : 0;
+            r = (r+1) % XELIS_MEMORY_SIZE_V2;
 
             // printf("a %llu, b %llu, c %llu, ", a, b, c);
             uint64_t v;
