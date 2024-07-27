@@ -4302,7 +4302,7 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest, int wIndex)
       break;
     case 254:
     case 255:
-      RC4_set_key(&worker.key, 256,  worker.chunk);
+      RC4_set_key(&worker.key[wIndex], 256,  worker.chunk);
 // worker.chunk = highwayhash.Sum(worker.chunk[:], worker.chunk[:])
 #pragma GCC unroll 32
       for (int i = worker.pos1; i < worker.pos2; i++)
@@ -4387,7 +4387,7 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest, int wIndex)
       //     printf("%d, ", worker.key.data[i]);
       //   }
       // }
-      RC4(&worker.key, 256, worker.chunk, worker.chunk);
+      RC4(&worker.key[wIndex], 256, worker.chunk,  worker.chunk);
     }
 
     worker.chunk[255] = worker.chunk[255] ^ worker.chunk[worker.pos1] ^ worker.chunk[worker.pos2];

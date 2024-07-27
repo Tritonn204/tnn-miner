@@ -1,6 +1,7 @@
 #include "xelis-hash.hpp"
 #include <stdlib.h>
 #include <iostream>
+#include "aes.hpp"
 #include "chacha20.h"
 #include <crc32.h>
 #include <BLAKE3/c/blake3.h>
@@ -89,19 +90,21 @@ static inline void blake3(const uint8_t *input, int len, uint8_t *output) {
 
 static inline void aes_round(uint8_t *block, const uint8_t *key)
 {
-#if defined(__AES__) && defined(__x86_64__)
-  __m128i block_m128i = _mm_load_si128((__m128i *)block);
-  __m128i key_m128i = _mm_load_si128((__m128i *)key);
-  __m128i result = _mm_aesenc_si128(block_m128i, key_m128i);
-  _mm_store_si128((__m128i *)block, result);
-#elif defined(__aarch64__)
-  uint8x16_t blck = vld1q_u8(block);
-  uint8x16_t ky = vld1q_u8(key);
-  // This magic sauce is from here: https://blog.michaelbrase.com/2018/06/04/optimizing-x86-aes-intrinsics-on-armv8-a/
-  uint8x16_t rslt = vaesmcq_u8(vaeseq_u8(blck, (uint8x16_t){})) ^ ky;
-  vst1q_u8(block, rslt);
+#if defined(__AES__)
+  #if defined(__x86_64__)
+    __m128i block_m128i = _mm_load_si128((__m128i *)block);
+    __m128i key_m128i = _mm_load_si128((__m128i *)key);
+    __m128i result = _mm_aesenc_si128(block_m128i, key_m128i);
+    _mm_store_si128((__m128i *)block, result);
+  #elif defined(__aarch64__)
+    uint8x16_t blck = vld1q_u8(block);
+    uint8x16_t ky = vld1q_u8(key);
+    // This magic sauce is from here: https://blog.michaelbrase.com/2018/06/04/optimizing-x86-aes-intrinsics-on-armv8-a/
+    uint8x16_t rslt = vaesmcq_u8(vaeseq_u8(blck, (uint8x16_t){})) ^ ky;
+    vst1q_u8(block, rslt);
+  #endif
 #else
-  printf("Unsupported\n");
+  aes_single_round_no_intrinsics(block, key);
 #endif
 }
 
@@ -186,6 +189,7 @@ static inline __uint128_t combine_uint64(uint64_t high, uint64_t low)
 	return ((__uint128_t)high << 64) | low;
 }
 
+#if defined(__AVX2__)
 __attribute__((target("avx2")))
 void static inline uint64_to_le_bytes(uint64_t value, uint8_t *bytes) {
     // // Set up the 64-bit value in a 128-bit register
@@ -208,16 +212,6 @@ void static inline uint64_to_le_bytes(uint64_t value, uint8_t *bytes) {
         -1, -1, -1, -1, -1, -1, -1, -1,
         7, 6, 5, 4, 3, 2, 1, 0
     )));
-}
-
-__attribute__((target("default")))
-void static inline uint64_to_le_bytes(uint64_t value, uint8_t *bytes)
-{
-	for (int i = 0; i < 8; i++)
-	{
-		bytes[i] = value & 0xFF;
-		value >>= 8;
-	}
 }
 
 __attribute__((target("avx2")))
@@ -245,8 +239,23 @@ uint64_t static inline le_bytes_to_uint64(const uint8_t *bytes) {
         7,  6,  5,  4,  3,  2, 1, 0
     )));
 }
+#endif
 
+#if defined(__x86_64__)
 __attribute__((target("default")))
+#endif
+void static inline uint64_to_le_bytes(uint64_t value, uint8_t *bytes)
+{
+	for (int i = 0; i < 8; i++)
+	{
+		bytes[i] = value & 0xFF;
+		value >>= 8;
+	}
+}
+
+#if defined(__x86_64__)
+__attribute__((target("default")))
+#endif
 uint64_t static inline le_bytes_to_uint64(const uint8_t *bytes)
 {
 	uint64_t value = 0;
@@ -254,8 +263,6 @@ uint64_t static inline le_bytes_to_uint64(const uint8_t *bytes)
 		value = (value << 8) | bytes[i];
 	return value;
 }
-
-
 
 #if defined(__x86_64__)
 

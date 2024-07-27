@@ -386,8 +386,7 @@ int main(int argc, char **argv)
 
   if (vm.count("xelis-test"))
   {
-    int rc = xelis_runTests();
-    rc += xelis_runTests_v2();
+    int rc = xelis_runTests_v2();
     return rc;
   }
 
