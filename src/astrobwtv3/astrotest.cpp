@@ -148,6 +148,7 @@ int DeroTesting(int testOp, int testLen, bool useLookup) {
 
   int scale = 32-18;
 
+#if defined(__x86_64__)
   uint32_t a = ~(scale > 28 ? 0xFFFFFFFF >> (std::max(4-(scale - 28), 0)*8) : 0);  
   uint32_t b = ~(scale > 24 ? 0xFFFFFFFF >> (std::max(4-(scale - 24), 0)*8) : 0);  
   uint32_t c = ~(scale > 20 ? 0xFFFFFFFF >> (std::max(4-(scale - 20), 0)*8) : 0);  
@@ -172,6 +173,7 @@ int DeroTesting(int testOp, int testLen, bool useLookup) {
   __m256i masker =_mm256_set_epi32(h,g,f,e,d,c,b,a);
   _mm256_storeu_si256((__m256i*)v, _mm256_loadu_si256(&masker));
   printf("mask data in stored order: %08x %08x %08x %08x %08x %08x %08x %08x\n", v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
+#endif
 
   if (testLen >= 0) {
     failedTests += runDeroOpTests(testOp, testLen);
