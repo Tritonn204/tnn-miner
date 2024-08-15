@@ -19,7 +19,7 @@ namespace BroadcastServer
       // Create a JSON object with some sample data
       json_b::object jsonData;
 
-      jsonData["hashrate"] = std::accumulate((*rate30sec_ptr).begin(), (*rate30sec_ptr).end(), 0LL) / (*rate30sec_ptr).size() / interval;
+      jsonData["hashrate"] = std::accumulate((*rate30sec_ptr).begin(), (*rate30sec_ptr).end(), 0LL) / (*rate30sec_ptr).size();
       jsonData["accepted"] = *accepted_ptr;
       jsonData["rejected"] = *rejected_ptr;
 

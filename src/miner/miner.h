@@ -17,6 +17,8 @@
 
 #ifdef _WIN32
 #include <windows.h>
+HANDLE hInput;
+DWORD prev_mode;
 #endif
 
 const int workerThreads = 2;

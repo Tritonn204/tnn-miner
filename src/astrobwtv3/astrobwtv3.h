@@ -1,16 +1,20 @@
 #ifndef astrobwtv3
 #define astrobwtv3
 
+#include "astroworker.h"
+
 #include <algorithm>
 #include <iostream>
 #include <iomanip>
 #include <sstream>
 #include <string>
 
+#include <compile.h>
+
 #include <unordered_map>
 
 #include <random>
-#include <chrono>
+//#include <chrono>
 #include <math.h>
 #include <Salsa20.h>
 
@@ -53,8 +57,6 @@
 #define ABIT	7
 const int AMASK	= (1<<ABIT)-1;
 
-#define DERO_BATCH 1
-
 #if defined(__AVX2__)
 #ifdef __GNUC__ 
 #if __GNUC__ < 8
@@ -90,9 +92,6 @@ const std::vector<unsigned char> branchedOps_global = {
 1,3,5,9,11,13,15,17,20,21,23,27,29,30,35,39,40,43,45,47,51,54,58,60,62,64,68,70,72,74,75,80,82,85,91,92,93,94,103,108,109,115,116,117,119,120,123,124,127,132,133,134,136,138,140,142,143,146,148,149,150,154,155,159,161,165,168,169,176,177,178,180,182,184,187,189,190,193,194,195,199,202,203,204,212,214,215,216,219,221,222,223,226,227,230,231,234,236,239,240,241,242,250,253
 };
 
-const int branchedOps_size = 104; // Manually counted size of branchedOps_global
-const int regOps_size = 256-branchedOps_size; // 256 - branchedOps_global.size()
-
 // const uint64_t maskTips[8] = {
 //   0x0000000000000000,
 //   0xFF00000000000000,
@@ -126,9 +125,6 @@ const uint32_t sha_standard[8] = {
     0x5be0cd19
 };
 
-#define MAX_LENGTH ((256 * 277) - 1) // this is the maximum
-#define ASTRO_SCRATCH_SIZE ((MAX_LENGTH + 64))
-
 const int deviceAllocMB = 5;
 
 #endif
@@ -146,74 +142,7 @@ __m256i shiftLeft256(__m256i a);
 const __m256i vec_3 = _mm256_set1_epi8(3);
 #endif
 
-//--------------------------------------------------------//
 
-class workerData
-{
-public:
-  // For aarch64
-  byte aarchFixup[256];
-  byte opt[256];
-  byte step_3[256];
-  byte simpleLookup[regOps_size*(256*256)];
-  byte lookup3D[branchedOps_size*256*256];
-  uint16_t lookup2D[regOps_size*(256*256)];
-  std::bitset<256> clippedBytes[regOps_size];
-  std::bitset<256> unchangedBytes[regOps_size];
-  std::bitset<256> isBranched;
-
-  byte branchedOps[branchedOps_size*2];
-  byte regularOps[regOps_size*2];
-
-  byte branched_idx[256];
-  byte reg_idx[256];
-
-  int lucky = 0;
-
-  SHA256_CTX sha256;
-  ucstk::Salsa20 salsa20;
-  RC4_KEY key[DERO_BATCH];
-
-  // std::vector<std::tuple<int,int,int>> repeats;
-
-  byte salsaInput[256] = {0};
-  byte op;
-
-  byte A;
-  uint32_t data_len;
-
-  byte *chunk;
-  byte *prev_chunk;
-
-  byte maskTable_bytes[32*33];
-  byte padding[32];
-
-  bool isSame = false;
-
-  byte sHash[32];
-  byte sha_key[32];
-  byte sha_key2[32];
-  byte sData[ASTRO_SCRATCH_SIZE*DERO_BATCH];
-
-  byte pos1;
-  byte pos2;
-  byte t1;
-  byte t2;
-
-  uint64_t random_switcher;
-  uint64_t lhash;
-  uint64_t prev_lhash;
-  uint16_t tries[DERO_BATCH];
-
-  int bA[256];
-  int bB[256*256];
-  int32_t sa[MAX_LENGTH];
-  
-  std::vector<byte> opsA;
-  std::vector<byte> opsB;
-
-  friend std::ostream& operator<<(std::ostream& os, const workerData& wd);
-};
 
 extern void (*astroCompFunc)(workerData &worker, bool isTest, int wIndex);
 
@@ -561,11 +490,11 @@ inline std::ostream& operator<<(std::ostream& os, const workerData& wd) {
     };
 
     // Example: Assuming sizes from your description
-    os << "bA: ";
-    printIntArray(wd.bA, 256); // Based on allocation in init
+    // os << "bA: ";
+    // printIntArray(wd.bA, 256); // Based on allocation in init
 
-    os << "bB: ";
-    printIntArray(wd.bB, 256*256); // Based on allocation in init
+    // os << "bB: ";
+    // printIntArray(wd.bB, 256*256); // Based on allocation in init
 
     os << '\n';
 
@@ -679,12 +608,14 @@ void mineDero(int tid);
 
 void processAfterMarker(workerData& worker);
 void lookupCompute(workerData &worker, bool isTest, int wIndex);
+TNN_TARGETS
 void branchComputeCPU(workerData &worker, bool isTest, int wIndex);
 
 uint8_t wolfBranch(uint8_t val, uint8_t pos2val, uint32_t opcode);
 void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker);
 void wolfPermute_avx2(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker);
 void wolfSame(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker);
+
 void wolfCompute(workerData &worker, bool isTest, int wIndex);
 
 typedef void (*wolfPerm)(uint8_t *, uint8_t *, uint16_t, uint8_t, uint8_t, workerData&);
@@ -696,7 +627,9 @@ inline wolfPerm wolfPerms[1] = {wolfPermute};
 #endif
 
 #if defined(__AVX2__)
+
 void branchComputeCPU_avx2(workerData &worker, bool isTest, int wIndex);
+
 void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest, int wIndex);
 #elif defined(__aarch64__)
 // This is gross.  But we need to do this until 'workerData' gets pushed into it's own include file.
@@ -714,7 +647,9 @@ extern size_t numAstroFuncs;
 bool setAstroAlgo(std::string desiredAlgo);
 void astroTune(int num_threads, int tuneWarmupSec, int tuneDurationSec);
 
+TNN_TARGETS
 void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &scratch, bool unused, int tid = 0);
+TNN_TARGETS
 void AstroBWTv3_batch(byte *input, int inputLen, byte *outputhash, workerData &worker, bool unused);
 void finishBatch(workerData &worker);
 

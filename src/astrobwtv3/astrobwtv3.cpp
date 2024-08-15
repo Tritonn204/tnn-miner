@@ -37,6 +37,11 @@
 #include <filesystem>
 #include <functional>
 #include "lookupcompute.h"
+#if defined(USE_ASTRO_SPSA)
+  #include "spsa.hpp"
+#else
+  #define MINPREFLEN 4
+#endif
 
 extern "C"
 {
@@ -406,6 +411,7 @@ void computeByteFrequencyAVX2(const unsigned char* data, size_t dataSize, int fr
 
 #endif
 
+TNN_TARGETS
 void AstroBWTv3_batch(byte *input, int inputLen, byte *outputhash, workerData &worker, bool unused)
 {
   // auto recoverFunc = [&outputhash](void *r)
@@ -554,7 +560,12 @@ void AstroBWTv3_batch(byte *input, int inputLen, byte *outputhash, workerData &w
         static_cast<uint64_t>(worker.sData[i*ASTRO_SCRATCH_SIZE + (worker.tries[i]-1)*256 + 254])) & 0x3ff)
       );
       // auto start = std::chrono::steady_clock::now();
-      divsufsort(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.sa, worker.data_len, worker.bA, worker.bB);
+      // divsufsort(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.sa, worker.data_len, worker.bA, worker.bB);
+      #if defined(USE_ASTRO_SPSA)
+        SPSA(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.data_len, worker);
+      #else
+        divsufsort(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.sa, worker.data_len, worker.bA, worker.bB);
+      #endif
       // auto end = std::chrono::steady_clock::now();
       // auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
       // if (i == 0) printf("divsufsort section #%d section took %dns\n", i+1, time.count());
@@ -608,6 +619,7 @@ void AstroBWTv3_batch(byte *input, int inputLen, byte *outputhash, workerData &w
   }
 }
 
+TNN_TARGETS
 void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker, bool unused, int tid)
 {
   // auto recoverFunc = [&outputhash](void *r)
@@ -713,7 +725,12 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     // saveBufferToFile("worker_sData_snapshot.bin", worker.sData, worker.data_len);
     // printf("data length: %d\n", worker.data_len);
     // auto start = std::chrono::steady_clock::now();
-    divsufsort(worker.sData, worker.sa, worker.data_len, worker.bA, worker.bB);
+    // divsufsort(worker.sData, worker.sa, worker.data_len, worker.bA, worker.bB);
+    #if defined(USE_ASTRO_SPSA)
+      SPSA(worker.sData, worker.data_len, worker);
+    #else
+      divsufsort(worker.sData, worker.sa, worker.data_len, worker.bA, worker.bB);
+    #endif
     // auto end = std::chrono::steady_clock::now();
     // auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
     // printf("SA section took %dns\n", time.count());
@@ -756,16 +773,23 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
   }
 }
 
-
+TNN_TARGETS
 void branchComputeCPU(workerData &worker, bool isTest, int wIndex)
 {
+  worker.templateIdx = 0;
+  uint8_t chunkCount = 1;
+  int firstChunk = 0;
+
+  uint8_t lp1 = 0;
+  uint8_t lp2 = 255;
+
   while (true)
   {
     if(isTest) {
 
     } else {
       worker.tries[wIndex]++;
-      if (debugOpOrder) printf("t: 0x%lx p: 0x%lx l: 0x%lx\n", worker.tries[wIndex], worker.prev_lhash, worker.lhash);
+      if (debugOpOrder) printf("t: 0x%hx p: 0x%lx l: 0x%lx\n", worker.tries[wIndex], worker.prev_lhash, worker.lhash);
       worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries[wIndex];
       // __builtin_prefetch(&worker.random_switcher,0,3);
       // printf("%d worker.random_switcher %d %08jx\n", worker.tries[wIndex], worker.random_switcher, worker.random_switcher);
@@ -788,6 +812,11 @@ void branchComputeCPU(workerData &worker, bool isTest, int wIndex)
         worker.pos2 = worker.pos1 + ((worker.pos2 - worker.pos1) & 0x1f);
       }
 
+      if (worker.tries[wIndex] > 0) {
+        lp1 = std::min(lp1, worker.pos1);
+        lp2 = std::max(lp2, worker.pos2);
+      }
+
       worker.chunk = &worker.sData[wIndex * ASTRO_SCRATCH_SIZE + (worker.tries[wIndex] - 1) * 256];
       if (debugOpOrder) printf("worker.op: %03d p1: %03d p2: %03d\n", worker.op, worker.pos1, worker.pos2);
 
@@ -798,7 +827,7 @@ void branchComputeCPU(workerData &worker, bool isTest, int wIndex)
       }
 
       if (debugOpOrder) {
-        printf("tries: %03lu chunk_before[  0->%03d]: ", worker.tries[wIndex], worker.pos2);
+        printf("tries: %03hu chunk_before[  0->%03d]: ", worker.tries[wIndex], worker.pos2);
         for (int x = 0; x <= worker.pos2+16 && worker.pos2+16 < 256; x++) {
           printf("%02x", worker.chunk[x]);
         }
@@ -807,7 +836,7 @@ void branchComputeCPU(workerData &worker, bool isTest, int wIndex)
 
       memcpy(worker.chunk, worker.prev_chunk, 256);
       if (debugOpOrder) {
-        printf("tries: %03lu  chunk_fixed[  0->%03d]: ", worker.tries[wIndex], worker.pos2);
+        printf("tries: %03hu  chunk_fixed[  0->%03d]: ", worker.tries[wIndex], worker.pos2);
         for (int x = 0; x <= worker.pos2+16 && worker.pos2+16 < 256; x++) {
           //printf("%d \n", x);
           printf("%02x", worker.chunk[x]);
@@ -3910,6 +3939,14 @@ void branchComputeCPU(workerData &worker, bool isTest, int wIndex)
     //   std::cout << hexStr(&worker.chunk[worker.pos2], 1) << std::endl;
     // }
 
+    uint8_t pushPos1 = lp1;
+    uint8_t pushPos2 = lp2;
+
+    if (worker.pos1 == worker.pos2) {
+      pushPos1 = -1;
+      pushPos2 = -1;
+    }
+
     worker.A = (worker.chunk[worker.pos1] - worker.chunk[worker.pos2]);
     worker.A = (256 + (worker.A % 256)) % 256;
 
@@ -3956,7 +3993,35 @@ void branchComputeCPU(workerData &worker, bool isTest, int wIndex)
         if (debugOpOrder){printf("D\n");}
       __builtin_prefetch(&worker.key[wIndex], 0, 0);
       RC4(&worker.key[wIndex], 256, worker.chunk,  worker.chunk);
+      if (255 - pushPos2 < MINPREFLEN)
+        pushPos2 = 255;
+      if (pushPos1 < MINPREFLEN)
+        pushPos1 = 0;
+
+
+      if (pushPos1 == 255) pushPos1 = 0;
+      
+      worker.astroTemplate[worker.templateIdx] = templateMarker{
+        (uint8_t)(chunkCount > 1 ? pushPos1 : 0),
+        (uint8_t)(chunkCount > 1 ? pushPos2 : 255),
+        (uint16_t)((firstChunk << 7) | chunkCount)
+      };
+
+      pushPos1 = 0;
+      pushPos2 = 255;
+      worker.templateIdx += (worker.tries[wIndex] > 1);
+      firstChunk = worker.tries[wIndex]-1;
+      lp1 = 255;
+      lp2 = 0;
+      chunkCount = 1;
+    } else {
+      chunkCount++;
     }
+
+    if (255 - pushPos2 < MINPREFLEN)
+      pushPos2 = 255;
+    if (pushPos1 < MINPREFLEN)
+      pushPos1 = 0;
 
     worker.chunk[255] = worker.chunk[255] ^ worker.chunk[worker.pos1] ^ worker.chunk[worker.pos2];
 
@@ -3982,6 +4047,20 @@ void branchComputeCPU(workerData &worker, bool isTest, int wIndex)
       break;
     }
   }
+
+  if (chunkCount > 0) {
+    if (255 - lp2 < MINPREFLEN)
+      lp2 = 255;
+    if (lp1 < MINPREFLEN)
+      lp1 = 0;
+    worker.astroTemplate[worker.templateIdx] = templateMarker{
+      (uint8_t)(chunkCount > 1 ? lp1 : 0),
+      (uint8_t)(chunkCount > 1 ? lp2 : 255),
+      (uint16_t)((firstChunk << 7) | chunkCount)
+    };
+    worker.templateIdx++;
+  }
+
   worker.data_len = static_cast<uint32_t>((worker.tries[wIndex] - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
 }
 
@@ -3989,6 +4068,12 @@ void branchComputeCPU(workerData &worker, bool isTest, int wIndex)
 
 void branchComputeCPU_avx2(workerData &worker, bool isTest, int wIndex)
 {
+  worker.templateIdx = 0;
+  uint8_t chunkCount = 1;
+  int firstChunk = 0;
+
+  uint8_t lp1 = 0;
+  uint8_t lp2 = 255;
   while (true)
   {
     if(isTest) {
@@ -4015,6 +4100,11 @@ void branchComputeCPU_avx2(workerData &worker, bool isTest, int wIndex)
       if (worker.pos2 - worker.pos1 > 32)
       {
         worker.pos2 = worker.pos1 + ((worker.pos2 - worker.pos1) & 0x1f);
+      }
+
+      if (worker.tries[wIndex] > 0) {
+        lp1 = std::min(lp1, worker.pos1);
+        lp2 = std::max(lp2, worker.pos2);
       }
 
       worker.chunk = &worker.sData[wIndex * ASTRO_SCRATCH_SIZE + (worker.tries[wIndex] - 1) * 256];
@@ -7675,6 +7765,15 @@ void branchComputeCPU_avx2(workerData &worker, bool isTest, int wIndex)
     // __builtin_prefetch(worker.chunk+128,0,3);
     __builtin_prefetch(worker.chunk+192,0,3);
 
+
+    uint8_t pushPos1 = lp1;
+    uint8_t pushPos2 = lp2;
+
+    if (worker.pos1 == worker.pos2) {
+      pushPos1 = -1;
+      pushPos2 = -1;
+    }
+
     worker.A = (worker.chunk[worker.pos1] - worker.chunk[worker.pos2]);
     worker.A = (256 + (worker.A % 256)) % 256;
 
@@ -7716,9 +7815,37 @@ void branchComputeCPU_avx2(workerData &worker, bool isTest, int wIndex)
       //   }
       // }
       RC4(&worker.key[wIndex], 256, worker.chunk, worker.chunk);
+      if (255 - pushPos2 < MINPREFLEN)
+        pushPos2 = 255;
+      if (pushPos1 < MINPREFLEN)
+        pushPos1 = 0;
+
+
+      if (pushPos1 == 255) pushPos1 = 0;
+      
+      worker.astroTemplate[worker.templateIdx] = templateMarker{
+        (uint8_t)(chunkCount > 1 ? pushPos1 : 0),
+        (uint8_t)(chunkCount > 1 ? pushPos2 : 255),
+        (uint16_t)((firstChunk << 7) | chunkCount)
+      };
+
+      pushPos1 = 0;
+      pushPos2 = 255;
+      worker.templateIdx += (worker.tries[wIndex] > 1);
+      firstChunk = worker.tries[wIndex]-1;
+      lp1 = 255;
+      lp2 = 0;
+      chunkCount = 1;
+    } else {
+      chunkCount++;
     }
 
     worker.chunk[255] = worker.chunk[255] ^ worker.chunk[worker.pos1] ^ worker.chunk[worker.pos2];
+
+    if (255 - pushPos2 < MINPREFLEN)
+      pushPos2 = 255;
+    if (pushPos1 < MINPREFLEN)
+      pushPos1 = 0;
 
     // if (debugOpOrder && worker.op == sus_op) {
     //   printf("SIMD op %d result:\n", worker.op);
@@ -7741,6 +7868,20 @@ void branchComputeCPU_avx2(workerData &worker, bool isTest, int wIndex)
       break;
     }
   }
+
+  if (chunkCount > 0) {
+    if (255 - lp2 < MINPREFLEN)
+      lp2 = 255;
+    if (lp1 < MINPREFLEN)
+      lp1 = 0;
+    worker.astroTemplate[worker.templateIdx] = templateMarker{
+      (uint8_t)(chunkCount > 1 ? lp1 : 0),
+      (uint8_t)(chunkCount > 1 ? lp2 : 255),
+      (uint16_t)((firstChunk << 7) | chunkCount)
+    };
+    worker.templateIdx++;
+  }
+
   worker.data_len = static_cast<uint32_t>((worker.tries[wIndex] - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
 }
 
@@ -7748,6 +7889,12 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest, int wInde
 {
   byte prevOp;
   // int sameCount = 0;
+  worker.templateIdx = 0;
+  uint8_t chunkCount = 1;
+  int firstChunk = 0;
+
+  uint8_t lp1 = 0;
+  uint8_t lp2 = 255;
 
   int repeatCounter = 0;
   byte lastChar = 0;
@@ -7791,6 +7938,11 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest, int wInde
       if (p2 - p1 > 32)
       {
         p2 = p1 + ((p2 - p1) & 0x1f);
+      }
+
+      if (worker.tries[wIndex] > 0) {
+        lp1 = std::min(lp1, p1);
+        lp2 = std::max(lp2, p2);
       }
 
       if (p1 < worker.pos1 || p2 > worker.pos2) worker.isSame = false;
@@ -7896,6 +8048,14 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest, int wInde
     // __builtin_prefetch(worker.chunk+128,0,3);
     __builtin_prefetch(worker.chunk+192,0,3);
 
+    uint8_t pushPos1 = lp1;
+    uint8_t pushPos2 = lp2;
+
+    if (worker.pos1 == worker.pos2) {
+      pushPos1 = -1;
+      pushPos2 = -1;
+    }
+
     worker.A = (worker.chunk[worker.pos1] - worker.chunk[worker.pos2]);
     worker.A = (256 + (worker.A % 256)) % 256;
 
@@ -7938,9 +8098,38 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest, int wInde
       // }
       RC4(&worker.key[wIndex], 256, worker.chunk, worker.chunk);
       worker.isSame = false;
+      if (255 - pushPos2 < MINPREFLEN)
+        pushPos2 = 255;
+      if (pushPos1 < MINPREFLEN)
+        pushPos1 = 0;
+
+
+      if (pushPos1 == 255) pushPos1 = 0;
+      
+      worker.astroTemplate[worker.templateIdx] = templateMarker{
+        (uint8_t)(chunkCount > 1 ? pushPos1 : 0),
+        (uint8_t)(chunkCount > 1 ? pushPos2 : 255),
+        (uint16_t)((firstChunk << 7) | chunkCount)
+      };
+
+      pushPos1 = 0;
+      pushPos2 = 255;
+      worker.templateIdx += (worker.tries[wIndex] > 1);
+      firstChunk = worker.tries[wIndex]-1;
+      lp1 = 255;
+      lp2 = 0;
+      chunkCount = 1;
+    } else {
+      chunkCount++;
     }
 
     worker.chunk[255] = worker.chunk[255] ^ worker.chunk[worker.pos1] ^ worker.chunk[worker.pos2];
+
+    if (255 - pushPos2 < MINPREFLEN)
+      pushPos2 = 255;
+    if (pushPos1 < MINPREFLEN)
+      pushPos1 = 0;
+
 
     // if (debugOpOrder && worker.op == sus_op) {
     //   printf("SIMD op %d result:\n", worker.op);
@@ -7976,6 +8165,19 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest, int wInde
     }
   }
 
+  if (chunkCount > 0) {
+    if (255 - lp2 < MINPREFLEN)
+      lp2 = 255;
+    if (lp1 < MINPREFLEN)
+      lp1 = 0;
+    worker.astroTemplate[worker.templateIdx] = templateMarker{
+      (uint8_t)(chunkCount > 1 ? lp1 : 0),
+      (uint8_t)(chunkCount > 1 ? lp2 : 255),
+      (uint16_t)((firstChunk << 7) | chunkCount)
+    };
+    worker.templateIdx++;
+  }
+
   // if (!isTest) printf("longest repeated length: %d\n", maxRepeat);
   // if (!isTest) printf("%d out of %d ops had repeating char inputs\n", sameCount, worker.tries[wIndex]);
   worker.data_len = static_cast<uint32_t>((worker.tries[wIndex] - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
@@ -7990,6 +8192,14 @@ void wolfCompute(workerData &worker, bool isTest, int wIndex)
 {
   byte prevOp;
   int changeCount = 0;
+
+  worker.templateIdx = 0;
+  uint8_t chunkCount = 1;
+  int firstChunk = 0;
+
+  uint8_t lp1 = 0;
+  uint8_t lp2 = 255;
+
   for (int it = 0; it < 278; ++it)
   {
   // while(true) {
@@ -8025,6 +8235,11 @@ void wolfCompute(workerData &worker, bool isTest, int wIndex)
       if (p2 - p1 > 32)
       {
         p2 = p1 + ((p2 - p1) & 0x1f);
+      }
+
+      if (worker.tries[wIndex] > 0) {
+        lp1 = std::min(lp1, p1);
+        lp2 = std::max(lp2, p2);
       }
 
       if (p1 < worker.pos1 || p2 > worker.pos2) {worker.isSame = false; changeCount++;}
@@ -8206,6 +8421,14 @@ after:
     //   std::cout << hexStr(&worker.chunk[worker.pos2], 1) << std::endl;
     // }
 
+    uint8_t pushPos1 = lp1;
+    uint8_t pushPos2 = lp2;
+
+    if (worker.pos1 == worker.pos2) {
+      pushPos1 = -1;
+      pushPos2 = -1;
+    }
+
     worker.A = (worker.chunk[worker.pos1] - worker.chunk[worker.pos2]);
     worker.A = (256 + (worker.A % 256)) % 256;
 
@@ -8253,9 +8476,37 @@ after:
       // prefetch(worker.chunk, 0, 1);
       RC4(&worker.key[wIndex], 256, worker.chunk,  worker.chunk);
       worker.isSame = false;
+      if (255 - pushPos2 < MINPREFLEN)
+        pushPos2 = 255;
+      if (pushPos1 < MINPREFLEN)
+        pushPos1 = 0;
+
+
+      if (pushPos1 == 255) pushPos1 = 0;
+      
+      worker.astroTemplate[worker.templateIdx] = templateMarker{
+        (uint8_t)(chunkCount > 1 ? pushPos1 : 0),
+        (uint8_t)(chunkCount > 1 ? pushPos2 : 255),
+        (uint16_t)((firstChunk << 7) | chunkCount)
+      };
+
+      pushPos1 = 0;
+      pushPos2 = 255;
+      worker.templateIdx += (worker.tries[wIndex] > 1);
+      firstChunk = worker.tries[wIndex]-1;
+      lp1 = 255;
+      lp2 = 0;
+      chunkCount = 1;
+    } else {
+      chunkCount++;
     }
 
     worker.chunk[255] = worker.chunk[255] ^ worker.chunk[worker.pos1] ^ worker.chunk[worker.pos2];
+
+    if (255 - pushPos2 < MINPREFLEN)
+      pushPos2 = 255;
+    if (pushPos1 < MINPREFLEN)
+      pushPos1 = 0;
 
     if (debugOpOrder && worker.op == sus_op) {
       printf("Wolf op %d result:\n", worker.op);
@@ -8278,6 +8529,20 @@ after:
       break;
     }
   }
+
+  if (chunkCount > 0) {
+    if (255 - lp2 < MINPREFLEN)
+      lp2 = 255;
+    if (lp1 < MINPREFLEN)
+      lp1 = 0;
+    worker.astroTemplate[worker.templateIdx] = templateMarker{
+      (uint8_t)(chunkCount > 1 ? lp1 : 0),
+      (uint8_t)(chunkCount > 1 ? lp2 : 255),
+      (uint16_t)((firstChunk << 7) | chunkCount)
+    };
+    worker.templateIdx++;
+  }
+
   // printf("%dc\n", changeCount);
   worker.data_len = static_cast<uint32_t>((worker.tries[wIndex] - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
 }
@@ -8285,9 +8550,14 @@ after:
 
 // Compute the new values for worker.chunk using layered lookup tables instead of
 // branched computational operations
-
 void lookupCompute(workerData &worker, bool isTest, int wIndex)
 {
+  worker.templateIdx = 0;
+  uint8_t chunkCount = 1;
+  int firstChunk = 0;
+
+  uint8_t lp1 = 0;
+  uint8_t lp2 = 255;
   while (true)
   {
     if(isTest) {
@@ -8316,6 +8586,11 @@ void lookupCompute(workerData &worker, bool isTest, int wIndex)
       if (worker.pos2 - worker.pos1 > 32)
       {
         worker.pos2 = worker.pos1 + ((worker.pos2 - worker.pos1) & 0x1f);
+      }
+
+      if (worker.tries[wIndex] > 0) {
+        lp1 = std::min(lp1, worker.pos1);
+        lp2 = std::max(lp2, worker.pos2);
       }
 
       // int otherpos = std::find(branchedOps.begin(), branchedOps.end(), worker.op) == branchedOps.end() ? 0 : worker.chunk[worker.pos2];
@@ -8532,6 +8807,14 @@ after:
     //   std::cout << hexStr(&worker.chunk[worker.pos2], 1) << std::endl;
     // }
 
+    uint8_t pushPos1 = lp1;
+    uint8_t pushPos2 = lp2;
+
+    if (worker.pos1 == worker.pos2) {
+      pushPos1 = -1;
+      pushPos2 = -1;
+    }
+
     worker.A = (worker.chunk[worker.pos1] - worker.chunk[worker.pos2]);
     worker.A = (256 + (worker.A % 256)) % 256;
 
@@ -8578,9 +8861,37 @@ after:
       // }
       // prefetch(worker.chunk, 0, 1);
       RC4(&worker.key[wIndex], 256, worker.chunk,  worker.chunk);
+      if (255 - pushPos2 < MINPREFLEN)
+        pushPos2 = 255;
+      if (pushPos1 < MINPREFLEN)
+        pushPos1 = 0;
+
+
+      if (pushPos1 == 255) pushPos1 = 0;
+      
+      worker.astroTemplate[worker.templateIdx] = templateMarker{
+        (uint8_t)(chunkCount > 1 ? pushPos1 : 0),
+        (uint8_t)(chunkCount > 1 ? pushPos2 : 255),
+        (uint16_t)((firstChunk << 7) | chunkCount)
+      };
+
+      pushPos1 = 0;
+      pushPos2 = 255;
+      worker.templateIdx += (worker.tries[wIndex] > 1);
+      firstChunk = worker.tries[wIndex]-1;
+      lp1 = 255;
+      lp2 = 0;
+      chunkCount = 1;
+    } else {
+      chunkCount++;
     }
 
     worker.chunk[255] = worker.chunk[255] ^ worker.chunk[worker.pos1] ^ worker.chunk[worker.pos2];
+
+    if (255 - pushPos2 < MINPREFLEN)
+      pushPos2 = 255;
+    if (pushPos1 < MINPREFLEN)
+      pushPos1 = 0;
 
     if (debugOpOrder && worker.op == sus_op) {
       printf("Lookup op %d result:\n", worker.op);
@@ -8603,6 +8914,20 @@ after:
       break;
     }
   }
+
+  if (chunkCount > 0) {
+    if (255 - lp2 < MINPREFLEN)
+      lp2 = 255;
+    if (lp1 < MINPREFLEN)
+      lp1 = 0;
+    worker.astroTemplate[worker.templateIdx] = templateMarker{
+      (uint8_t)(chunkCount > 1 ? lp1 : 0),
+      (uint8_t)(chunkCount > 1 ? lp2 : 255),
+      (uint16_t)((firstChunk << 7) | chunkCount)
+    };
+    worker.templateIdx++;
+  }
+
   worker.data_len = static_cast<uint32_t>((worker.tries[wIndex] - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
 }
 

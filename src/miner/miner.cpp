@@ -77,6 +77,8 @@
 #define THREAD_PRIORITY_TIME_CRITICAL -20
 #endif
 
+const auto processor_count = std::thread::hardware_concurrency();
+
 #if defined(_WIN32)
 LPTSTR lpNxtPage;  // Address of the next page to ask for
 DWORD dwPages = 0; // Count of pages gotten so far
@@ -210,7 +212,6 @@ int update_handler(const boost::system::error_code& error)
   auto minutesUp = std::chrono::duration_cast<std::chrono::minutes>(now - g_start_time).count() % 60;
   auto secondsUp = std::chrono::duration_cast<std::chrono::seconds>(now - g_start_time).count() % 60;
 
-  std::scoped_lock<boost::mutex> lockGuard(mutex);
   int64_t currentHashes = counter.load();
   counter.store(0);
 
@@ -244,7 +245,7 @@ int update_handler(const boost::system::error_code& error)
 
 
     setcolor(BRIGHT_WHITE);
-    std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine << versionString << " ";
+    std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine << versionString << " " << std::flush;
     setcolor(CYAN);
     std::cout << std::setw(2) << std::setprecision(3) << "HASHRATE " << rate << rateSuffix << " | " << std::flush;
 
@@ -270,6 +271,7 @@ int update_handler(const boost::system::error_code& error)
     std::cout << std::setw(2) << "ACCEPTED " << accepted << std::setw(2) << " | REJECTED " << rejected
               << std::setw(2) << " | DIFFICULTY " << dPrint << std::setw(2) << " | UPTIME " << uptime << std::flush;
     setcolor(BRIGHT_WHITE); 
+    fflush(stdout);
     reportCounter = 0;
   }
 
@@ -280,8 +282,27 @@ void initializeExterns() {
   numAstroFuncs = std::size(allAstroFuncs); //sizeof(allAstroFuncs)/sizeof(allAstroFuncs[0]);
 }
 
+void onExit() {
+  setcolor(BRIGHT_WHITE);
+  printf("\n\nExiting Miner...\n");
+  fflush(stdout);
+
+#if defined(_WIN32)
+  SetConsoleMode(hInput, ENABLE_EXTENDED_FLAGS | (prev_mode & ~ENABLE_QUICK_EDIT_MODE));
+#endif
+}
+
+void sigterm(int signum) {
+  std::cout << "\n\nInterrupt signal (" << signum << ") received.\n" << std::flush;
+  exit(0);
+}
+
 int main(int argc, char **argv)
 {
+  std::atexit(onExit);
+  signal(SIGTERM, sigterm);
+  alignas(64) char buf[65536];
+  setvbuf(stdout, buf, _IOFBF, 65536);
   srand(time(NULL)); // Placing higher here to ensure the effect cascades through the entire program
 
   initWolfLUT();
@@ -320,6 +341,9 @@ int main(int argc, char **argv)
 
 #if defined(_WIN32)
   SetConsoleOutputCP(CP_UTF8);
+  hInput = GetStdHandle(STD_INPUT_HANDLE);
+  GetConsoleMode(hInput, &prev_mode); 
+  SetConsoleMode(hInput, ENABLE_EXTENDED_FLAGS | (prev_mode & ~ENABLE_QUICK_EDIT_MODE));
 #endif
   setcolor(BRIGHT_WHITE);
   printf("%s v%s\n", consoleLine, versionString);
@@ -338,7 +362,7 @@ int main(int argc, char **argv)
   else
     std::cout << "Huge Pages: Permission Failed..." << std::endl;
 
-  SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
+  // SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
 #endif
 
   if (vm.count("help"))
@@ -379,12 +403,12 @@ int main(int argc, char **argv)
     devSelection = testDevWallet;
   }
 
-  if (vm.count("spectre-test"))
+  if (vm.count("test-spectre"))
   {
     return SpectreX::test();
   }
 
-  if (vm.count("xelis-test"))
+  if (vm.count("test-xelis"))
   {
     int rc = xelis_runTests_v2();
     return rc;
@@ -502,6 +526,7 @@ int main(int argc, char **argv)
       {
         setcolor(RED);
         printf("ERROR: dev fee must be at least %.2f", minFee);
+        fflush(stdout);
         std::cout << "%" << std::endl;
         setcolor(BRIGHT_WHITE);
         boost::this_thread::sleep_for(boost::chrono::seconds(1));
@@ -519,6 +544,7 @@ int main(int argc, char **argv)
   {
     setcolor(CYAN);
     printf("CPU affinity has been disabled\n");
+    fflush(stdout);
     setcolor(BRIGHT_WHITE);
     lockThreads = false;
   }
@@ -557,7 +583,7 @@ int main(int argc, char **argv)
   tuneDurationSec = vm["tune-duration"].as<int>();
 
   // Ensure we capture *all* of the other options before we start using goto
-  if (vm.count("dero-test"))
+  if (vm.count("test-dero"))
   {
     // temporary for optimization fishing:
     mapZeroes();
@@ -586,6 +612,7 @@ fillBlanks:
   {
     setcolor(CYAN);
     printf("%s\n", coinPrompt);
+    fflush(stdout);
     setcolor(BRIGHT_WHITE);
 
     std::string cmdLine;
@@ -599,6 +626,7 @@ fillBlanks:
       symbol = "DERO";
       setcolor(BRIGHT_YELLOW);
       printf("Default value will be used: %s\n\n", "DERO");
+      fflush(stdout);
       setcolor(BRIGHT_WHITE);
     }
   }
@@ -611,7 +639,7 @@ fillBlanks:
   else
   {
     setcolor(RED);
-    std::cout << "ERROR: Invalid coin symbol: " << symbol << std::endl;
+    std::cout << "ERROR: Invalid coin symbol: " << symbol << std::endl << std::flush;
     setcolor(BRIGHT_YELLOW);
     it = coinSelector.begin();
     printf("Supported symbols are:\n");
@@ -621,6 +649,7 @@ fillBlanks:
       it++;
     }
     printf("\n");
+    fflush(stdout);
     setcolor(BRIGHT_WHITE);
     symbol = nullArg;
     goto fillBlanks;
@@ -639,6 +668,7 @@ fillBlanks:
     {
       setcolor(CYAN);
       printf("%s\n", stringPrompts[i]);
+      fflush(stdout);
       setcolor(BRIGHT_WHITE);
 
       std::string cmdLine;
@@ -652,6 +682,7 @@ fillBlanks:
         *param = stringDefaults[i];
         setcolor(BRIGHT_YELLOW);
         printf("Default value will be used: %s\n\n", (*param).c_str());
+        fflush(stdout);
         setcolor(BRIGHT_WHITE);
       }
 
@@ -702,52 +733,55 @@ fillBlanks:
     }
   }
 
-  if (wallet.find_last_of(".") != std::string::npos) {
-    workerName = wallet.substr(wallet.find_last_of(".") + 1);
-  }
-
   if (threads == 0)
   {
-    if (gpuMine)
-      threads = 1;
-    else
-    {
-      while (true)
-      {
-        setcolor(CYAN);
-        printf("%s\n", threadPrompt);
-        setcolor(BRIGHT_WHITE);
+    // if (gpuMine)
+    //   threads = 1;
+    // else
+    // {
+    //   while (true)
+    //   {
+    //     setcolor(CYAN);
+    //     printf("%s\n", threadPrompt);
+    //     fflush(stdout);
+    //     setcolor(BRIGHT_WHITE);
 
-        std::string cmdLine;
-        std::getline(std::cin, cmdLine);
-        if (cmdLine != "" && cmdLine.find_first_not_of(' ') != std::string::npos)
-        {
-          try
-          {
-            threads = std::stoi(cmdLine.c_str());
-            break;
-          }
-          catch (...)
-          {
-            printf("ERROR: invalid threads parameter... must be an integer\n");
-            continue;
-          }
-        }
-        else
-        {
-          setcolor(BRIGHT_YELLOW);
-          printf("Default value will be used: 1\n\n");
-          setcolor(BRIGHT_WHITE);
-          threads = 1;
-          break;
-        }
+    //     std::string cmdLine;
+    //     std::getline(std::cin, cmdLine);
+    //     if (cmdLine != "" && cmdLine.find_first_not_of(' ') != std::string::npos)
+    //     {
+    //       try
+    //       {
+    //         threads = std::stoi(cmdLine.c_str());
+    //         break;
+    //       }
+    //       catch (...)
+    //       {
+    //         printf("ERROR: invalid threads parameter... must be an integer\n");
+    //         continue;
+    //       }
+    //     }
+    //     else
+    //     {
+    //       setcolor(BRIGHT_YELLOW);
+    //       printf("Default value will be used: 1\n\n");
+    //       fflush(stdout);
+    //       setcolor(BRIGHT_WHITE);
+    //       threads = 1;
+    //       break;
+    //     }
 
-        if (threads == 0)
-          threads = 1;
-        break;
-      }
-    }
+    //     if (threads == 0)
+    //       threads = 1;
+    //     break;
+    //   }
+    // }
+    threads = processor_count;
   }
+
+  #if defined(_WIN32)
+    if (threads > 32) lockThreads = false;
+  #endif
 
   setcolor(BRIGHT_YELLOW);
   if (miningAlgo == DERO_HASH || miningAlgo == SPECTRE_X) {
@@ -760,6 +794,7 @@ fillBlanks:
       astroTune(threads, tuneWarmupSec, tuneDurationSec);
     }
   }
+  fflush(stdout);
   setcolor(BRIGHT_WHITE);
 
   printf("\n");
@@ -934,12 +969,19 @@ Mining:
     boost::this_thread::yield();
   }
 
-  // Set an expiry time relative to now.
-  update_timer.expires_after(std::chrono::seconds(1));
+  // boost::thread reportThread([&]() {
+    // Set an expiry time relative to now.
+    update_timer.expires_after(std::chrono::seconds(1));
 
-  // Start an asynchronous wait.
-  update_timer.async_wait(update_handler);
-  my_context.run();
+    // Start an asynchronous wait.
+    update_timer.async_wait(update_handler);
+    my_context.run();
+  // });
+  // setPriority(reportThread.native_handle(), THREAD_PRIORITY_TIME_CRITICAL);
+
+  for(;;) {
+    std::this_thread::yield();
+  }
 
   return EXIT_SUCCESS;
 }
@@ -1149,7 +1191,7 @@ connectionAttempt:
   *B = false;
  //  mutex.lock();
   setcolor(BRIGHT_YELLOW);
-  std::cout << "Connecting...\n";
+  std::cout << "Connecting...\n" << std::flush;
   setcolor(BRIGHT_WHITE);
  //  mutex.unlock();
   try
@@ -1216,7 +1258,7 @@ connectionAttempt:
        //  mutex.lock();
         setcolor(RED);
         std::cerr << "\nError establishing connections" << std::endl
-                  << "Will try again in 10 seconds...\n\n";
+                  << "Will try again in 10 seconds...\n\n" << std::flush;
         setcolor(BRIGHT_WHITE);
        //  mutex.unlock();
       }
@@ -1236,7 +1278,7 @@ connectionAttempt:
      //  mutex.lock();
       setcolor(RED);
       std::cerr << "\nError establishing connections" << std::endl
-                << "Will try again in 10 seconds...\n\n";
+                << "Will try again in 10 seconds...\n\n" << std::flush;
       setcolor(BRIGHT_WHITE);
      //  mutex.unlock();
     }
@@ -1244,7 +1286,7 @@ connectionAttempt:
     {
      //  mutex.lock();
       setcolor(RED);
-      std::cerr << "Dev connection error\n";
+      std::cerr << "Dev connection error\n" << std::flush;
       setcolor(BRIGHT_WHITE);
      //  mutex.unlock();
     }
@@ -1267,6 +1309,8 @@ connectionAttempt:
     else
       std::cerr << "\nError establishing connection" << std::endl
                 << "Will try again in 10 seconds...\n\n";
+
+    fflush(stdout);
     setcolor(BRIGHT_WHITE);
    //  mutex.unlock();
   }
@@ -1280,6 +1324,8 @@ connectionAttempt:
     else
       std::cerr << "\nError establishing connection to dev node" << std::endl
                 << "Will try again in 10 seconds...\n\n";
+
+    fflush(stdout);
     setcolor(BRIGHT_WHITE);
    //  mutex.unlock();
   }
@@ -1507,6 +1553,7 @@ waitForJob:
           {
             if (!submit) {
               for(;;) {
+                submit = (devMine && devConnected) ? !submittingDev : !submitting;
                 if (submit || localJobCounter != jobCounter)
                   break;
                 boost::this_thread::yield();
@@ -1515,27 +1562,27 @@ waitForJob:
             if (localJobCounter != jobCounter)
                   break;
             // printf("work: %s, hash: %s\n", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str(), hexStr(powHash, 32).c_str());
-            boost::lock_guard<boost::mutex> lock(mutex);
+            // boost::lock_guard<boost::mutex> lock(mutex);
             if (devMine)
             {
+              submittingDev = true;
               setcolor(CYAN);
-              std::cout << "\n(DEV) Thread " << tid << " found a dev share\n";
+              std::cout << "\n(DEV) Thread " << tid << " found a dev share\n" << std::flush;
               setcolor(BRIGHT_WHITE);
               devShare = {
                   {"jobid", myJobDev.at("jobid").as_string().c_str()},
                   {"mbl_blob", hexStr(&WORK[MINIBLOCK_SIZE*i], MINIBLOCK_SIZE).c_str()}};
-              submittingDev = true;
               data_ready = true;
             }
             else
             {
+              submitting = true;
               setcolor(BRIGHT_YELLOW);
-              std::cout << "\nThread " << tid << " found a nonce!\n";
+              std::cout << "\nThread " << tid << " found a nonce!\n" << std::flush;
               setcolor(BRIGHT_WHITE);
               share = {
                   {"jobid", myJob.at("jobid").as_string().c_str()},
                   {"mbl_blob", hexStr(&WORK[MINIBLOCK_SIZE*i], MINIBLOCK_SIZE).c_str()}};
-              submitting = true;
               data_ready = true;
             }
             cv.notify_all();
@@ -1705,6 +1752,7 @@ waitForJob:
         {
           if (!submit) {
             for(;;) {
+              submit = (devMine && devConnected) ? !submittingDev : !submitting;
               if (submit || localJobCounter != jobCounter || localOurHeight != ourHeight)
                 break;
               boost::this_thread::yield();
@@ -1721,8 +1769,10 @@ waitForJob:
 
           std::string b64 = base64::to_base64(std::string((char *)&WORK[0], XELIS_TEMPLATE_SIZE));
           std::string foundBlob = hexStr(&WORK[0], XELIS_TEMPLATE_SIZE);
+          // boost::lock_guard<boost::mutex> lock(mutex);
           if (devMine)
           {
+            submittingDev = true;
            //  mutex.lock();
             if (localJobCounter != jobCounter || localDevHeight != devHeight)
             {
@@ -1730,7 +1780,7 @@ waitForJob:
               break;
             }
             setcolor(CYAN);
-            std::cout << "\n(DEV) Thread " << tid << " found a dev share\n";
+            std::cout << "\n(DEV) Thread " << tid << " found a dev share\n" << std::flush;
             setcolor(BRIGHT_WHITE);
             switch (protocol)
             {
@@ -1751,11 +1801,12 @@ waitForJob:
                                        hexStr((byte *)&n, 8).c_str()}}}};
               break;
             }
-            submittingDev = true;
+            data_ready = true;
            //  mutex.unlock();
           }
           else
           {
+            submitting = true;
            //  mutex.lock();
             if (localJobCounter != jobCounter || localOurHeight != ourHeight)
             {
@@ -1763,7 +1814,7 @@ waitForJob:
               break;
             }
             setcolor(BRIGHT_YELLOW);
-            std::cout << "\nThread " << tid << " found a nonce!\n";
+            std::cout << "\nThread " << tid << " found a nonce!\n" << std::flush;
             setcolor(BRIGHT_WHITE);
             switch (protocol)
             {
@@ -1794,7 +1845,7 @@ waitForJob:
 
               break;
             }
-            submitting = true;
+            data_ready = true;
            //  mutex.unlock();
           }
         }
@@ -1961,6 +2012,7 @@ waitForJob:
         {
           if (!submit) {
             for(;;) {
+              submit = (devMine && devConnected) ? !submittingDev : !submitting;
               if (submit || localJobCounter != jobCounter || localOurHeight != ourHeight)
                 break;
               boost::this_thread::yield();
@@ -1977,8 +2029,10 @@ waitForJob:
 
           std::string b64 = base64::to_base64(std::string((char *)&WORK[0], XELIS_TEMPLATE_SIZE));
           std::string foundBlob = hexStr(&WORK[0], XELIS_TEMPLATE_SIZE);
+          // boost::lock_guard<boost::mutex> lock(mutex);
           if (devMine)
           {
+            submittingDev = true;
            //  mutex.lock();
             if (localJobCounter != jobCounter || localDevHeight != devHeight)
             {
@@ -1986,7 +2040,7 @@ waitForJob:
               break;
             }
             setcolor(CYAN);
-            std::cout << "\n(DEV) Thread " << tid << " found a dev share\n";
+            std::cout << "\n(DEV) Thread " << tid << " found a dev share\n" << std::flush;
             setcolor(BRIGHT_WHITE);
             switch (protocol)
             {
@@ -2007,12 +2061,12 @@ waitForJob:
                                        hexStr((byte *)&n, 8).c_str()}}}};
               break;
             }
-            submittingDev = true;
             data_ready = true;
            //  mutex.unlock();
           }
           else
           {
+            submitting = true;
            //  mutex.lock();
             if (localJobCounter != jobCounter || localOurHeight != ourHeight)
             {
@@ -2020,7 +2074,7 @@ waitForJob:
               break;
             }
             setcolor(BRIGHT_YELLOW);
-            std::cout << "\nThread " << tid << " found a nonce!\n";
+            std::cout << "\nThread " << tid << " found a nonce!\n" << std::flush;
             setcolor(BRIGHT_WHITE);
             switch (protocol)
             {
@@ -2051,7 +2105,6 @@ waitForJob:
 
               break;
             }
-            submitting = true;
             data_ready = true;
            //  mutex.unlock();
           }
@@ -2074,7 +2127,7 @@ waitForJob:
     {
       setcolor(RED);
       std::cerr << "Error in POW Function" << std::endl;
-      std::cerr << e.what() << std::endl;
+      std::cerr << e.what() << std::endl << std::flush;
       setcolor(BRIGHT_WHITE);
     }
     if (!isConnected)
@@ -2118,13 +2171,17 @@ waitForJob:
     boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
   }
 
+
+  boost::json::value myJob = job;
+  boost::json::value myJobDev = devJob;
+
   while (true)
   {
     try
     {
      //  mutex.lock();
-      boost::json::value myJob = job;
-      boost::json::value myJobDev = devJob;
+      myJob = job;
+      myJobDev = devJob;
       localJobCounter = jobCounter;
      //  mutex.unlock();
 
@@ -2149,6 +2206,7 @@ waitForJob:
           break;
         }
         memcpy(work, b2, SpectreX::INPUT_SIZE);
+        SpectreX::newMatrix(work, worker->matBuffer, *worker);
         // SpectreX::genPrePowHash(b2, *worker);/
         // SpectreX::newMatrix(b2, worker->mat);
         delete[] b2;
@@ -2171,6 +2229,7 @@ waitForJob:
             break;
           }
           memcpy(devWork, b2d, SpectreX::INPUT_SIZE);
+          SpectreX::newMatrix(devWork, devWorker->matBuffer, *devWorker);
           // SpectreX::genPrePowHash(b2d, *devWorker);
           // SpectreX::newMatrix(b2d, devWorker->mat);
           delete[] b2d;
@@ -2220,8 +2279,10 @@ waitForJob:
 
         // printf("after nonce: %s\n", hexStr(WORK, SpectreX::INPUT_SIZE).c_str());
 
-        if (localJobCounter != jobCounter)
+        if (localJobCounter != jobCounter) {
+          // printf("thread %d updating job before hash\n", tid);
           break;
+        }
 
         SpectreX::worker &usedWorker = devMine ? *devWorker : *worker;
         SpectreX::hash(usedWorker, WORK, SpectreX::INPUT_SIZE, powHash);
@@ -2234,34 +2295,43 @@ waitForJob:
         counter.fetch_add(1);
         submit = (devMine && devConnected) ? !submittingDev : !submitting;
 
-        if (localJobCounter != jobCounter || localOurHeight != ourHeight)
+        if (localJobCounter != jobCounter || localOurHeight != ourHeight) {
+          // printf("thread %d updating job after hash\n", tid);
           break;
+        }
 
 
         if (Num(hexStr(powHash, 32).c_str(), 16) <= cmpDiff)
         {
+          // printf("thread %d entered submission process\n", tid);
           if (!submit) {
             for(;;) {
+              submit = (devMine && devConnected) ? !submittingDev : !submitting;
               if (submit || localJobCounter != jobCounter || localOurHeight != ourHeight)
                 break;
               boost::this_thread::yield();
             }
+          }
+          if (localJobCounter != jobCounter) {
+            // printf("thread %d updating job after check\n", tid);
+            break;
           }
           // if (littleEndian())
           // {
           //   std::reverse(powHash, powHash + 32);
           // }
         //   std::string b64 = base64::to_base64(std::string((char *)&WORK[0], XELIS_TEMPLATE_SIZE));
-          boost::lock_guard<boost::mutex> lock(mutex);
+          // boost::lock_guard<boost::mutex> lock(mutex);
           if (devMine)
           {
+            submittingDev = true;
             // std::scoped_lock<boost::mutex> lockGuard(devMutex);
-            if (localJobCounter != jobCounter || localDevHeight != devHeight)
-            {
-              break;
-            }
+            // if (localJobCounter != jobCounter || localDevHeight != devHeight)
+            // {
+            //   break;
+            // }
             setcolor(CYAN);
-            std::cout << "\n(DEV) Thread " << tid << " found a dev share\n";
+            std::cout << "\n(DEV) Thread " << tid << " found a dev share\n" << std::flush;
             setcolor(BRIGHT_WHITE);
             switch (protocol)
             {
@@ -2280,18 +2350,18 @@ waitForJob:
 
               break;
             }
-            submittingDev = true;
             data_ready = true;
           }
           else
           {
+            submitting = true;
             // std::scoped_lock<boost::mutex> lockGuard(userMutex);
-            if (localJobCounter != jobCounter || localOurHeight != ourHeight)
-            {
-              break;
-            }
+            // if (localJobCounter != jobCounter || localOurHeight != ourHeight)
+            // {
+            //   break;
+            // }
             setcolor(BRIGHT_YELLOW);
-            std::cout << "\nThread " << tid << " found a nonce!\n";
+            std::cout << "\nThread " << tid << " found a nonce!\n" << std::flush;
             setcolor(BRIGHT_WHITE);
             switch (protocol)
             {
@@ -2324,9 +2394,9 @@ waitForJob:
 
               break;
             }
-            submitting = true;
             data_ready = true;
           }
+          // printf("thread %d finished submission process\n", tid);
           cv.notify_all();
         }
 

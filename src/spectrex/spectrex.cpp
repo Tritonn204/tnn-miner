@@ -77,7 +77,8 @@ namespace SpectreX
   void hash(worker &worker, byte *in, int len, byte *out)
   {
     // cshake256("ProofOfWorkHash", in, len, worker.sha3Hash, 32);
-    newMatrix(in, worker.mat);
+    // newMatrix(in, worker.mat, worker);
+    memcpy(worker.mat, worker.matBuffer, sizeof(matrix));
     cshake256_nil_function_name(in, len, "ProofOfWorkHash", worker.sha3Hash, 32*8);
     AstroBWTv3(worker.sha3Hash, 32, worker.astrobwtv3Hash, *(worker.astroWorker), false);
     // AstroBWTv3(worker.sha3Hash, 32, worker.astrobwtv3Hash, *worker.astroWorker, false);
@@ -95,7 +96,7 @@ namespace SpectreX
     lookupGen(*aw, nullptr, nullptr);
     initWolfLUT();
     w.astroWorker = aw;
-    newMatrix(in, w.mat);
+    newMatrix(in, w.matBuffer, w);
 
     hash(w, in, 80, out);
     free(aw);
@@ -109,7 +110,7 @@ namespace SpectreX
     lookupGen(*aw, nullptr, nullptr);
     initWolfLUT();
     w.astroWorker = aw;
-    newMatrix(in, w.mat);
+    newMatrix(in, w.matBuffer, w);
 
     hash(w, in, 80, out);
     free(aw);
@@ -129,7 +130,7 @@ namespace SpectreX
     initWolfLUT();
     w->astroWorker = aw;
 
-    newMatrix(in, w->mat);
+    newMatrix(in, w->matBuffer, *w);
 
     hash(*w, in, 80, out);
 
