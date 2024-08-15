@@ -35,6 +35,9 @@
 /boost-1.82.0/**
 /.cache
 /scripts/build
+/src/astrobwtv3/build
+/src/astrobwtv3/export
+/lib/astrospsa/
 
 # Xelis rust resources
 /src/xelis-hash/**.rs
@@ -48,3 +51,5 @@
 **.txt
 # Blake3
 !/lib/BLAKE3/c/CMakeLists.txt
+# SPSA
+!/src/astrobwtv3/CMakeLists.txt

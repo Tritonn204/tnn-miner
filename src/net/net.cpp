@@ -218,27 +218,26 @@ void dero_session(
     submitThread = true;
     while(!abort) {
       boost::unique_lock<boost::mutex> lock(mutex);
-      cv.wait(lock, []{ return data_ready; });
+      bool *B = isDev ? &submittingDev : &submitting;
+      cv.wait(lock, [&]{ return (data_ready && (*B)) || abort; });
+      if (abort) break;
       try {
-        bool *B = isDev ? &submittingDev : &submitting;
-        if (*B)
-        {
-          bool err = false;
-          boost::json::object *S = &share;
-          if (isDev)
-            S = &devShare;
+        bool err = false;
+        boost::json::object *S = &share;
+        if (isDev)
+          S = &devShare;
 
-          std::string msg = boost::json::serialize((*S)) + "\n";
-          // std::cout << "sending in: " << msg << std::endl;
-          beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(1));
-          ws.write(boost::asio::buffer(msg));
-          (*B) = false;
-          data_ready = false;
-          if (err) break;
-        }
+        std::string msg = boost::json::serialize((*S)) + "\n";
+        // std::cout << "sending in: " << msg << std::endl;
+        beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(1));
+        ws.write(boost::asio::buffer(msg));
+        (*B) = false;
+        data_ready = false;
+        if (err) break;
       } catch (const std::exception &e) {
         setcolor(RED);
         printf("\nSubmit thread error: %s\n", e.what());
+        fflush(stdout);
         setcolor(BRIGHT_WHITE);
         break;
       }
@@ -301,9 +300,11 @@ void dero_session(
                 wsMutex.lock();
                 setcolor(BRIGHT_YELLOW);
                 printf("Mining at: %s%s\n", host.c_str(), url.c_str());
+                fflush(stdout);
                 setcolor(CYAN);
                 printf("Dev fee: %.2f", devFee);
                 std::cout << "%" << std::endl;
+                fflush(stdout);
                 setcolor(BRIGHT_WHITE);
                 wsMutex.unlock();
               }
@@ -320,6 +321,7 @@ void dero_session(
                 wsMutex.lock();
                 setcolor(CYAN);
                 printf("Connected to dev node: %s\n", host.c_str());
+                fflush(stdout);
                 setcolor(BRIGHT_WHITE);
                 wsMutex.unlock();
               }
@@ -347,6 +349,7 @@ void dero_session(
     {
       setcolor(RED);
       std::cout << "ws error: " << e.what() << std::endl;
+      fflush(stdout);
       setcolor(BRIGHT_WHITE);
     }
     boost::this_thread::yield();
@@ -445,31 +448,31 @@ void xelis_session(
   //   submitThread = false;
   // });
 
+
   boost::thread([&](){
     submitThread = true;
     while(!abort) {
       boost::unique_lock<boost::mutex> lock(mutex);
-      cv.wait(lock, []{ return data_ready; });
+      bool *B = isDev ? &submittingDev : &submitting;
+      cv.wait(lock, [&]{ return (data_ready && (*B)) || abort; });
+      if (abort) break;
       try {
-        bool *B = isDev ? &submittingDev : &submitting;
-        if (*B)
-        {
-          bool err = false;
-          boost::json::object *S = &share;
-          if (isDev)
-            S = &devShare;
+        bool err = false;
+        boost::json::object *S = &share;
+        if (isDev)
+          S = &devShare;
 
-          std::string msg = boost::json::serialize((*S)) + "\n";
-          // std::cout << "sending in: " << msg << std::endl;
-          beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(1));
-          ws.write(boost::asio::buffer(msg));
-          (*B) = false;
-          data_ready = false;
-          if (err) break;
-        }
+        std::string msg = boost::json::serialize((*S)) + "\n";
+        // std::cout << "sending in: " << msg << std::endl;
+        beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(1));
+        ws.write(boost::asio::buffer(msg));
+        (*B) = false;
+        data_ready = false;
+        if (err) break;
       } catch (const std::exception &e) {
         setcolor(RED);
         printf("\nSubmit thread error: %s\n", e.what());
+        fflush(stdout);
         setcolor(BRIGHT_WHITE);
         break;
       }
@@ -506,6 +509,7 @@ void xelis_session(
               accepted++;
               setcolor(BRIGHT_YELLOW);
               if (!isDev) printf("Block Accepted!\n");
+              fflush(stdout);
               setcolor(BRIGHT_WHITE);
             }
           } 
@@ -513,6 +517,7 @@ void xelis_session(
             rejected++;
             setcolor(RED);
             if (!isDev) printf("Block Rejected: %s\n", response.as_object()["block_rejected"].as_string().c_str());
+            fflush(stdout);
             setcolor(BRIGHT_WHITE);
           }
           else if (response.as_object().contains("new_job") || response.as_object().contains("miner_work"))
@@ -551,9 +556,11 @@ void xelis_session(
                   wsMutex.lock();
                   setcolor(BRIGHT_YELLOW);
                   printf("Mining at: %s/getwork/%s/%s\n", host.c_str(), wallet.c_str(), worker.c_str());
+                  fflush(stdout);
                   setcolor(CYAN);
                   printf("Dev fee: %.2f", devFee);
                   std::cout << "%" << std::endl;
+                  fflush(stdout);
                   setcolor(BRIGHT_WHITE);
                   wsMutex.unlock();
                 }
@@ -571,6 +578,7 @@ void xelis_session(
                   wsMutex.lock();
                   setcolor(CYAN);
                   printf("Connected to dev node: %s\n", host.c_str());
+                  fflush(stdout);
                   setcolor(BRIGHT_WHITE);
                   wsMutex.unlock();
                 }
@@ -599,6 +607,7 @@ void xelis_session(
     {
       setcolor(RED);
       std::cout << "ws error: " << e.what() << std::endl;
+      fflush(stdout);
       setcolor(BRIGHT_WHITE);
       // submission_thread.interrupt();
     }
@@ -612,6 +621,7 @@ void xatumFailure(bool isDev) noexcept
   if (isDev)
     printf("DEV | ");
   printf("Xatum Disconnect\n");
+  fflush(stdout);
   setcolor(BRIGHT_WHITE);
 }
 
@@ -692,33 +702,40 @@ void xatum_session(
 
   boost::thread([&](){
     submitThread = true;
-    while(true) {
-      if (abort) {
-        break;
-      }
+    while(!abort) {
+      boost::unique_lock<boost::mutex> lock(mutex);
+      bool *B = isDev ? &submittingDev : &submitting;
+      cv.wait(lock, [&]{ return (data_ready && (*B)) || abort; });
+      if (abort) break;
       try {
-        bool *B = isDev ? &submittingDev : &submitting;
-        if (*B)
-        {
-          bool err = false;
-          boost::json::object *S = &share;
-          if (isDev)
-            S = &devShare;
+        boost::json::object *S = &share;
+        if (isDev)
+          S = &devShare;
 
-          std::string msg = boost::json::serialize((*S)) + "\n";
-          // std::cout << "sending in: " << msg << std::endl;
-          beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(1));
-          boost::asio::write(stream, boost::asio::buffer(msg));
+        boost::system::error_code ec;
+        std::string msg = boost::json::serialize((*S)) + "\n";
+        // std::cout << "sending in: " << msg << std::endl;
+        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(1));
+        boost::asio::async_write(stream, boost::asio::buffer(msg), [&](const boost::system::error_code& error, std::size_t bytes_transferred) {
+          if (error) {
+            printf("error on write: %s\n", error.message().c_str());
+            fflush(stdout);
+            abort = true;
+          }
+          if (!isDev) SpectreStratum::lastShareSubmissionTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
           (*B) = false;
-          if (err) break;
-        }
+          data_ready = false;
+        });
+        (*B) = false;
+        data_ready = false;
       } catch (const std::exception &e) {
         setcolor(RED);
         printf("\nSubmit thread error: %s\n", e.what());
+        fflush(stdout);
         setcolor(BRIGHT_WHITE);
         break;
       }
-      boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
+      //boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
     }
     submitThread = false;
   });
@@ -849,6 +866,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
 
     printf("%s\n", data.at("msg").as_string().c_str());
 
+    fflush(stdout);
     setcolor(BRIGHT_WHITE);
     wsMutex.unlock();
   }
@@ -872,6 +890,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
     {
       setcolor(CYAN);
       printf("\nNew Xatum job received\n");
+      fflush(stdout);
       setcolor(BRIGHT_WHITE);
     }
     *diff = data.at("diff").as_uint64();
@@ -887,9 +906,11 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
         wsMutex.lock();
         setcolor(BRIGHT_YELLOW);
         printf("Mining at: %s to wallet %s\n", host.c_str(), wallet.c_str());
+        fflush(stdout);
         setcolor(CYAN);
         printf("Dev fee: %.2f", devFee);
         std::cout << "%" << std::endl;
+        fflush(stdout);
         setcolor(BRIGHT_WHITE);
         wsMutex.unlock();
       }
@@ -898,6 +919,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
         wsMutex.lock();
         setcolor(CYAN);
         printf("Connected to dev node: %s\n", host.c_str());
+        fflush(stdout);
         setcolor(BRIGHT_WHITE);
         wsMutex.unlock();
       }
@@ -915,6 +937,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
     if (data.at("msg").as_string() == "ok")
     {
       printf("Xatum: share accepted!");
+      fflush(stdout);
       accepted++;
     }
     else
@@ -922,6 +945,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
       rejected++;
       setcolor(RED);
       printf("\nXatum Share Rejected: %s\n", data.at("msg").as_string().c_str());
+      fflush(stdout);
       setcolor(BRIGHT_WHITE);
     }
   }
@@ -1075,32 +1099,34 @@ void xelis_stratum_session(
     submitThread = true;
     while(!abort) {
       boost::unique_lock<boost::mutex> lock(mutex);
-      cv.wait(lock, []{ return data_ready; });
+      bool *B = isDev ? &submittingDev : &submitting;
+      cv.wait(lock, [&]{ return (data_ready && (*B)) || abort; });
+      if (abort) break;
       try {
-        bool *B = isDev ? &submittingDev : &submitting;
-        if (*B)
-        {
-          boost::json::object *S = &share;
-          if (isDev)
-            S = &devShare;
+        boost::json::object *S = &share;
+        if (isDev)
+          S = &devShare;
 
-          boost::system::error_code ec;
-          std::string msg = boost::json::serialize((*S)) + "\n";
-          // std::cout << "sending in: " << msg << std::endl;
-          beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(1));
-          boost::asio::write(stream, boost::asio::buffer(msg), ec);
+        boost::system::error_code ec;
+        std::string msg = boost::json::serialize((*S)) + "\n";
+        // std::cout << "sending in: " << msg << std::endl;
+        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(1));
+        boost::asio::async_write(stream, boost::asio::buffer(msg), [&](const boost::system::error_code& error, std::size_t bytes_transferred) {
+          if (error) {
+            printf("error on write: %s\n", error.message().c_str());
+            fflush(stdout);
+            abort = true;
+          }
           if (!isDev) SpectreStratum::lastShareSubmissionTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
           (*B) = false;
           data_ready = false;
-          if (ec) {
-            printf("error on write: %s\n", ec.message().c_str());
-            fflush(stdout);
-            break;
-          }
-        }
+        });
+        (*B) = false;
+        data_ready = false;
       } catch (const std::exception &e) {
         setcolor(RED);
         printf("\nSubmit thread error: %s\n", e.what());
+        fflush(stdout);
         setcolor(BRIGHT_WHITE);
         break;
       }
@@ -1121,6 +1147,7 @@ void xelis_stratum_session(
       {
         setcolor(RED);
         printf("timeout\n");
+        fflush(stdout);
         fflush(stdout);
         setcolor(BRIGHT_WHITE);
         setForDisconnected(C, B, &abort, &data_ready, &cv);
@@ -1245,6 +1272,7 @@ void xelis_stratum_session(
           {
             setcolor(RED);
             printf("%s\n", e.what());
+            fflush(stdout);
             setcolor(BRIGHT_WHITE);
           }
         }
@@ -1264,6 +1292,7 @@ void xelis_stratum_session(
       stream.shutdown();
       setcolor(RED);
       std::cerr << e.what() << std::endl;
+      fflush(stdout);
       setcolor(BRIGHT_WHITE);
     }
     boost::this_thread::yield();
@@ -1332,7 +1361,7 @@ void xelis_stratum_session_nossl(
 
   try {
     handleXStratumResponse(subResJson, isDev);
-  } catch (const std::exception &e) {setcolor(RED);printf("%s", e.what());setcolor(BRIGHT_WHITE);}
+  } catch (const std::exception &e) {setcolor(RED);printf("%s", e.what());fflush(stdout);setcolor(BRIGHT_WHITE);}
 
   // Authorize Stratum Worker
   packet = XelisStratum::stratumCall;
@@ -1395,32 +1424,34 @@ void xelis_stratum_session_nossl(
     submitThread = true;
     while(!abort) {
       boost::unique_lock<boost::mutex> lock(mutex);
-      cv.wait(lock, []{ return data_ready; });
+      bool *B = isDev ? &submittingDev : &submitting;
+      cv.wait(lock, [&]{ return (data_ready && (*B)) || abort; });
+      if (abort) break;
       try {
-        bool *B = isDev ? &submittingDev : &submitting;
-        if (*B)
-        {
-          boost::json::object *S = &share;
-          if (isDev)
-            S = &devShare;
+        boost::json::object *S = &share;
+        if (isDev)
+          S = &devShare;
 
-          boost::system::error_code ec;
-          std::string msg = boost::json::serialize((*S)) + "\n";
-          // std::cout << "sending in: " << msg << std::endl;
-          beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(1));
-          boost::asio::write(stream, boost::asio::buffer(msg), ec);
+        boost::system::error_code ec;
+        std::string msg = boost::json::serialize((*S)) + "\n";
+        // std::cout << "sending in: " << msg << std::endl;
+        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(1));
+        boost::asio::async_write(stream, boost::asio::buffer(msg), [&](const boost::system::error_code& error, std::size_t bytes_transferred) {
+          if (error) {
+            printf("error on write: %s\n", error.message().c_str());
+            fflush(stdout);
+            abort = true;
+          }
           if (!isDev) SpectreStratum::lastShareSubmissionTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
           (*B) = false;
           data_ready = false;
-          if (ec) {
-            printf("error on write: %s\n", ec.message().c_str());
-            fflush(stdout);
-            break;
-          }
-        }
+        });
+        (*B) = false;
+        data_ready = false;
       } catch (const std::exception &e) {
         setcolor(RED);
         printf("\nSubmit thread error: %s\n", e.what());
+        fflush(stdout);
         setcolor(BRIGHT_WHITE);
         break;
       }
@@ -1565,6 +1596,7 @@ void xelis_stratum_session_nossl(
           {
             setcolor(RED);
             printf("%s\n", e.what());
+            fflush(stdout);
             setcolor(BRIGHT_WHITE);
           }
         }
@@ -1584,6 +1616,7 @@ void xelis_stratum_session_nossl(
       stream.close();
       setcolor(RED);
       std::cerr << e.what() << std::endl;
+      fflush(stdout);
       setcolor(BRIGHT_WHITE);
     }
     boost::this_thread::yield();
@@ -1602,6 +1635,7 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
     setcolor(CYAN);
     if (!isDev)
       printf("\nStratum: new job received\n");
+    fflush(stdout);
     setcolor(BRIGHT_WHITE);
 
     XelisStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -1631,15 +1665,18 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
       {
         setcolor(BRIGHT_YELLOW);
         printf("Mining at: %s to wallet %s\n", host.c_str(), wallet.c_str());
+        fflush(stdout);
         setcolor(CYAN);
         printf("Dev fee: %.2f", devFee);
         std::cout << "%" << std::endl;
+        fflush(stdout);
         setcolor(BRIGHT_WHITE);
       }
       else
       {
         setcolor(CYAN);
         printf("Connected to dev node: %s\n", host.c_str());
+        fflush(stdout);
         setcolor(BRIGHT_WHITE);
       }
     }
@@ -1717,6 +1754,7 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
       }
       printf("%s\n", packet.at("params").as_array()[1].as_string().c_str());
 
+      fflush(stdout);
       setcolor(BRIGHT_WHITE);
 
       return res;
@@ -1771,6 +1809,7 @@ int handleXStratumResponse(boost::json::object packet, bool isDev)
     {
       accepted++;
       std::cout << "Stratum: share accepted" << std::endl;
+      fflush(stdout);
       setcolor(BRIGHT_WHITE);
     }
     else
@@ -1779,6 +1818,7 @@ int handleXStratumResponse(boost::json::object packet, bool isDev)
       if (!isDev)
         setcolor(RED);
       std::cout << "Stratum: share rejected: " << packet.at("error").get_object()["message"].get_string() << std::endl;
+      fflush(stdout);
       setcolor(BRIGHT_WHITE);
     }
     break;
@@ -1908,32 +1948,34 @@ void spectre_stratum_session(
     submitThread = true;
     while(!abort) {
       boost::unique_lock<boost::mutex> lock(mutex);
-      cv.wait(lock, []{ return data_ready; });
+      bool *B = isDev ? &submittingDev : &submitting;
+      cv.wait(lock, [&]{ return (data_ready && (*B)) || abort; });
+      if (abort) break;
       try {
-        bool *B = isDev ? &submittingDev : &submitting;
-        if (*B)
-        {
-          boost::json::object *S = &share;
-          if (isDev)
-            S = &devShare;
+        boost::json::object *S = &share;
+        if (isDev)
+          S = &devShare;
 
-          boost::system::error_code ec;
-          std::string msg = boost::json::serialize((*S)) + "\n";
-          // std::cout << "sending in: " << msg << std::endl;
-          beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(1));
-          boost::asio::write(stream, boost::asio::buffer(msg), ec);
+        boost::system::error_code ec;
+        std::string msg = boost::json::serialize((*S)) + "\n";
+        // std::cout << "sending in: " << msg << std::endl;
+        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(1));
+        boost::asio::async_write(stream, boost::asio::buffer(msg), [&](const boost::system::error_code& error, std::size_t bytes_transferred) {
+          if (error) {
+            printf("error on write: %s\n", error.message().c_str());
+            fflush(stdout);
+            abort = true;
+          }
           if (!isDev) SpectreStratum::lastShareSubmissionTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
           (*B) = false;
           data_ready = false;
-          if (ec) {
-            printf("error on write: %s\n", ec.message().c_str());
-            fflush(stdout);
-            break;
-          }
-        }
+        });
+        (*B) = false;
+        data_ready = false;
       } catch (const std::exception &e) {
         setcolor(RED);
         printf("\nSubmit thread error: %s\n", e.what());
+        fflush(stdout);
         setcolor(BRIGHT_WHITE);
         break;
       }
@@ -2124,6 +2166,7 @@ void spectre_stratum_session(
                 std::cout << chopQueue << std::endl;
                 printf("AFTER PACKET\n");
                 std::cerr << e.what() << std::endl;
+                fflush(stdout);
                 setcolor(BRIGHT_WHITE);
               }
             } else {
@@ -2148,6 +2191,7 @@ void spectre_stratum_session(
       stream.close();
       setcolor(RED);
       std::cerr << e.what() << std::endl;
+      fflush(stdout);
       setcolor(BRIGHT_WHITE);
       return fail(ec, "Stratum session error");
     }
@@ -2253,6 +2297,7 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
       setcolor(CYAN);
       if (!isDev)
         printf("\nStratum: new job received\n");
+      fflush(stdout);
       setcolor(BRIGHT_WHITE);
     }
 
@@ -2269,15 +2314,18 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
       {
         setcolor(BRIGHT_YELLOW);
         printf("Mining at: %s to wallet %s\n", host.c_str(), wallet.c_str());
+        fflush(stdout);
         setcolor(CYAN);
         printf("Dev fee: %.2f", devFee);
         std::cout << "%" << std::endl;
+        fflush(stdout);
         setcolor(BRIGHT_WHITE);
       }
       else
       {
         setcolor(CYAN);
         printf("Connected to dev node: %s\n", host.c_str());
+        fflush(stdout);
         setcolor(BRIGHT_WHITE);
       }
     }
@@ -2354,8 +2402,8 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
       }
       printf("%s\n", packet.at("params").as_array()[1].as_string().c_str());
 
+      fflush(stdout);
       setcolor(BRIGHT_WHITE);
-
       return res;
     }
   } else {
@@ -2386,6 +2434,7 @@ int handleSpectreStratumResponse(boost::json::object packet, bool isDev)
           printf("DEV | ");
         }
         printf("Stratum ERROR: %s\n", errorMsg);
+        fflush(stdout);
         return -1;
       }
     }
@@ -2402,6 +2451,7 @@ int handleSpectreStratumResponse(boost::json::object packet, bool isDev)
       {
         if (!isDev) accepted++;
         std::cout << "Stratum: share accepted" << std::endl;
+        fflush(stdout);
         setcolor(BRIGHT_WHITE);
       }
       else
@@ -2418,6 +2468,7 @@ int handleSpectreStratumResponse(boost::json::object packet, bool isDev)
         }
         std::cout << "Spectre: share rejected: " << ERR.c_str() << std::endl;
         
+        fflush(stdout);
         setcolor(BRIGHT_WHITE);
       }
       break;

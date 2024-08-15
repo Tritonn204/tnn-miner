@@ -3,6 +3,9 @@
 
 #include "astro_aarch64.hpp"
 
+  #define MINPREFLEN 4
+
+
 using byte = unsigned char;
 bool debugOpOrderAA = false;
 
@@ -142,13 +145,20 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest, int wIndex)
 {
   //if (debugOpOrderAA) printf("cpu\n");
   
+  worker.templateIdx = 0;
+  uint8_t chunkCount = 1;
+  int firstChunk = 0;
+
+  uint8_t lp1 = 0;
+  uint8_t lp2 = 255;
+
   while (true)
   {
     if(isTest) {
 
     } else {
       worker.tries[wIndex]++;
-      if (debugOpOrderAA) printf("t: 0x%lx p: 0x%lx l: 0x%lx\n", worker.tries[wIndex], worker.prev_lhash, worker.lhash);
+      if (debugOpOrderAA) printf("t: 0x%hx p: 0x%lx l: 0x%lx\n", worker.tries[wIndex], worker.prev_lhash, worker.lhash);
       worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries[wIndex];
       // __builtin_prefetch(&worker.random_switcher,0,3);
       // printf("%d worker.random_switcher %d %08jx\n", worker.tries[wIndex], worker.random_switcher, worker.random_switcher);
@@ -169,6 +179,11 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest, int wIndex)
       if (worker.pos2 - worker.pos1 > 32)
       {
         worker.pos2 = worker.pos1 + ((worker.pos2 - worker.pos1) & 0x1f);
+      }
+
+      if (worker.tries[wIndex] > 0) {
+        lp1 = std::min(lp1, worker.pos1);
+        lp2 = std::max(lp2, worker.pos2);
       }
 
       worker.chunk = &worker.sData[(worker.tries[wIndex] - 1) * 256];
@@ -229,7 +244,7 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest, int wIndex)
       }
 
       if (debugOpOrderAA) {
-        printf("tries: %03lu chunk_before[  0->%03d]: ", worker.tries[wIndex], worker.pos2);
+        printf("tries: %03hu chunk_before[  0->%03d]: ", worker.tries[wIndex], worker.pos2);
         for (int x = 0; x <= worker.pos2+16 && worker.pos2+16 < 256; x++) {
           printf("%02x", worker.chunk[x]);
         }
@@ -245,7 +260,7 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest, int wIndex)
       //}
       memcpy(worker.chunk, worker.prev_chunk, 256);
       if (debugOpOrderAA) {
-        printf("tries: %03lu  chunk_fixed[  0->%03d]: ", worker.tries[wIndex], worker.pos2);
+        printf("tries: %03hu  chunk_fixed[  0->%03d]: ", worker.tries[wIndex], worker.pos2);
         for (int x = 0; x <= worker.pos2+16 && worker.pos2+16 < 256; x++) {
           //printf("%d \n", x);
           printf("%02x", worker.chunk[x]);
@@ -4335,7 +4350,7 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest, int wIndex)
     __builtin_prefetch(worker.chunk+192,0,3);
 
     if (debugOpOrderAA) {
-      printf("tries: %03lu  chunk_after[  0->%03d]: ", worker.tries[wIndex], worker.pos2);
+      printf("tries: %03hu  chunk_after[  0->%03d]: ", worker.tries[wIndex], worker.pos2);
       for (int x = 0; x <= worker.pos2+16 && worker.pos2+16 < 256; x++) {
         printf("%02x", worker.chunk[x]);
       }
@@ -4345,6 +4360,15 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest, int wIndex)
       break;
     }
     if (worker.op == sus_op && debugOpOrderAA) printf(" CPU: A: c[%02d] %02x c[%02d] %02x\n", worker.pos1, worker.chunk[worker.pos1], worker.pos2, worker.chunk[worker.pos2]);
+    
+    uint8_t pushPos1 = lp1;
+    uint8_t pushPos2 = lp2;
+
+    if (worker.pos1 == worker.pos2) {
+      pushPos1 = -1;
+      pushPos2 = -1;
+    }
+    
     worker.A = (worker.chunk[worker.pos1] - worker.chunk[worker.pos2]);
     worker.A = (256 + (worker.A % 256)) % 256;
 
@@ -4388,7 +4412,35 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest, int wIndex)
       //   }
       // }
       RC4(&worker.key[wIndex], 256, worker.chunk,  worker.chunk);
+      if (255 - pushPos2 < MINPREFLEN)
+        pushPos2 = 255;
+      if (pushPos1 < MINPREFLEN)
+        pushPos1 = 0;
+
+
+      if (pushPos1 == 255) pushPos1 = 0;
+      
+      worker.astroTemplate[worker.templateIdx] = templateMarker{
+        (uint8_t)(chunkCount > 1 ? pushPos1 : 0),
+        (uint8_t)(chunkCount > 1 ? pushPos2 : 255),
+        (uint16_t)((firstChunk << 7) | chunkCount)
+      };
+
+      pushPos1 = 0;
+      pushPos2 = 255;
+      worker.templateIdx += (worker.tries[wIndex] > 1);
+      firstChunk = worker.tries[wIndex]-1;
+      lp1 = 255;
+      lp2 = 0;
+      chunkCount = 1;
+    } else {
+      chunkCount++;
     }
+
+    if (255 - pushPos2 < MINPREFLEN)
+      pushPos2 = 255;
+    if (pushPos1 < MINPREFLEN)
+      pushPos1 = 0;
 
     worker.chunk[255] = worker.chunk[255] ^ worker.chunk[worker.pos1] ^ worker.chunk[worker.pos2];
 
@@ -4414,6 +4466,20 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest, int wIndex)
     }
     if (debugOpOrderAA) printf("\n\n");
   }
+
+  if (chunkCount > 0) {
+    if (255 - lp2 < MINPREFLEN)
+      lp2 = 255;
+    if (lp1 < MINPREFLEN)
+      lp1 = 0;
+    worker.astroTemplate[worker.templateIdx] = templateMarker{
+      (uint8_t)(chunkCount > 1 ? lp1 : 0),
+      (uint8_t)(chunkCount > 1 ? lp2 : 255),
+      (uint16_t)((firstChunk << 7) | chunkCount)
+    };
+    worker.templateIdx++;
+  }
+
   worker.data_len = static_cast<uint32_t>((worker.tries[wIndex] - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
 }
 

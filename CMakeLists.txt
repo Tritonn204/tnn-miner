@@ -4,9 +4,13 @@ cmake_minimum_required(VERSION 3.16.3)
 include(CMakePrintHelpers)
 cmake_print_variables(CMAKE_HOST_SYSTEM_NAME)
 
+set(TARGET_ARCH "amd64")
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   -O3 -fPIE -DNDEBUG")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -Wuninitialized -DNDEBUG")
+
+option(USE_GCC        "Use GCC instead of Clang" OFF)
+option(USE_ASTRO_SPSA "Use Astro Stamped Permutation Suffix Array library" ON)
 
 if(USE_GCC)
   set(CMAKE_C_COMPILER gcc)
@@ -56,18 +60,22 @@ else()
 endif()
 
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
+  set(TARGET_ARCH "aarch64")
   # AES needed for Xelisv2
   set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -flax-vector-conversions -march=armv8-a+aes")
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flax-vector-conversions -march=armv8-a+aes")
 elseif($ENV{GITLAB_CI} MATCHES "true")
-  if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
+    set(TARGET_ARCH "aarch64")
     set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -g -flax-vector-conversions -march=armv8-a+aes")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -g -flax-vector-conversions -march=armv8-a+aes")
   else()
+    set(TARGET_ARCH "amd64")
     set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} ")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=$ENV{AMD64_TARGET_LEVEL}")
   endif()
 else()
+  set(TARGET_ARCH "amd64")
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native -m64")
 endif()
 
@@ -231,6 +239,32 @@ file(GLOB all_SRCS
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/lib/BLAKE3/c)
 
+# AstroSPSA only works on x64 Linux at the moment
+if(USE_ASTRO_SPSA AND UNIX)
+  set(SPSA_OS_PREFIX "linux")
+  if(WIN32)
+    set(SPSA_OS_PREFIX "win")
+  endif()
+  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -DUSE_ASTRO_SPSA=ON")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DUSE_ASTRO_SPSA=ON")
+
+  if(EXISTS ${PROJECT_SOURCE_DIR}/lib/astrospsa/libastroSPSA_${SPSA_OS_PREFIX}_${TARGET_ARCH}.a)
+    set(SPSA_LIB_DIR ${PROJECT_SOURCE_DIR}/lib/astrospsa)
+  else()
+    include(FetchContent)
+    ## Fetch the static library
+    FetchContent_Declare(
+        astrospsa
+        GIT_REPOSITORY https://gitlab.com/Tritonn204/astro-spsa.git
+        GIT_TAG        e1c8074202e621619d16e6b0c9b557a0c949da55
+    )
+    FetchContent_MakeAvailable(astrospsa)
+    set(SPSA_LIB_DIR ${astrospsa_SOURCE_DIR})
+  endif()
+  cmake_print_variables(SPSA_LIB_DIR)
+  include_directories(${SPSA_LIB_DIR})
+endif()
+
 # Remove aarch files from all_SRCS
 #if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" AND NOT CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
 #  list(FILTER all_SRCS EXCLUDE REGEX ".*/.*/*aarch64*")
@@ -246,5 +280,8 @@ if(UNIX)
 endif()
 if(NOT APPLE AND NOT WIN32)
   target_link_libraries(${PROJECT_NAME} udns)
+endif()
+if(USE_ASTRO_SPSA)
+  target_link_libraries(${PROJECT_NAME} ${SPSA_LIB_DIR}/libastroSPSA_${SPSA_OS_PREFIX}_${TARGET_ARCH}.a)
 endif()
 target_link_libraries(${PROJECT_NAME} Threads::Threads ${TNN_BOOST_LIBS} OpenSSL::SSL OpenSSL::Crypto sodium blake3)

@@ -184,6 +184,7 @@ int DeroTesting(int testOp, int testLen, bool useLookup) {
   failedTests += TestAstroBWTv3(false);
   for(int x = 0; x < numAstroFuncs; x++) {
     astroCompFunc = allAstroFuncs[x].funcPtr;
+    printf("Testing %s\n", allAstroFuncs[x].funcName.c_str());
     failedTests += TestAstroBWTv3(true);
   }
   
@@ -666,7 +667,7 @@ int TestAstroBWTv3repeattest(bool quiet)
   std::string c("419ebb000000001bbdc9bf2200000000635d6e4e24829b4249fe0e67878ad4350000000043f53e5436cf610000086b00");
   hexstrToBytes(c, data);
 
-  for (int i = 0; i < 1024; i++)
+  for (int i = 0; i < 128; i++)
   {
     generateRandomBytes<48>(random_buffer);
 

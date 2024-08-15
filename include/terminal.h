@@ -157,14 +157,14 @@ inline po::options_description get_prog_opts()
 
   po::options_description spectre("Spectre", col_width);
   spectre.add_options()
-    ("spectre-test", "Run detailed diagnostics for SpectreX")
+    ("test-spectre", "Run detailed diagnostics for SpectreX")
   ;
 
   po::options_description xelis("Xelis", col_width);
   xelis.add_options()
     ("xatum", "Required for mining to Xatum pools on Xelis")
     ("xelis-bench", "Run a benchmark of xelis-hash with 1 thread")
-    ("xelis-test", "Run the xelis-hash tests from the official source code")
+    ("test-xelis", "Run the xelis-hash tests from the official source code")
     ("worker-name", po::value<std::string>(), "Sets the worker name for this instance when mining Xelis")
   ;
 
@@ -177,7 +177,7 @@ inline po::options_description get_prog_opts()
 
   po::options_description debug("DEBUG", col_width);
   debug.add_options()
-    ("dero-test", "Runs a set of tests to verify AstrobwtV3 is working (1 test expected to fail)")
+    ("test-dero", "Runs a set of tests to verify AstrobwtV3 is working (1 test expected to fail)")
     ("op", po::value<int>(), "Sets which branch op to benchmark (0-255), benchmark will be skipped if unspecified")
     ("len", po::value<int>(), "Sets length of the processed chunk in said benchmark (default 15)")
     ("sabench", "Runs a benchmark for divsufsort on snapshot files in the 'tests' directory")

@@ -23,7 +23,10 @@ namespace SpectreX
 
   typedef struct worker
   {
+    matrix matBuffer;
     matrix mat;
+    double copied[matSize][matSize];
+    std::bitset<matSize> rowsSelected;
     byte sha3Hash[32];
     byte astrobwtv3Hash[32];
     workerData *astroWorker;
@@ -62,25 +65,24 @@ namespace SpectreX
     }
   };
 
-  inline int calculateRank(const matrix mat)
+  inline int calculateRank(const matrix mat, worker &W)
   {
-    std::array<std::array<double, matSize>, matSize> copied;
     for (int i = 0; i < matSize; i++)
     {
       for (int j = 0; j < matSize; j++)
       {
-        copied[i][j] = static_cast<double>(mat[i][j]);
+        W.copied[i][j] = static_cast<double>(mat[i][j]);
       }
     }
 
     int rank = 0;
-    std::array<bool, matSize> rowsSelected{};
+    W.rowsSelected.reset();
     for (int i = 0; i < matSize; i++)
     {
       int j;
       for (j = 0; j < matSize; j++)
       {
-        if (!rowsSelected[j] && std::abs(copied[j][i]) > epsilon)
+        if (!W.rowsSelected[j] && std::abs(W.copied[j][i]) > epsilon)
         {
           break;
         }
@@ -89,22 +91,22 @@ namespace SpectreX
       if (j != matSize)
       {
         rank++;
-        rowsSelected[j] = true;
+        W.rowsSelected.set(j);
         for (int k = i + 1; k < matSize; k++)
         {
-          copied[j][k] /= copied[j][i];
+          W.copied[j][k] /= W.copied[j][i];
         }
 
         for (int k = 0; k < matSize; k++)
         {
-          if (k == j || std::abs(copied[k][i]) <= epsilon)
+          if (k == j || std::abs(W.copied[k][i]) <= epsilon)
           {
             continue;
           }
 
           for (int l = i + 1; l < matSize; l++)
           {
-            copied[k][l] -= copied[j][l] * copied[k][i];
+            W.copied[k][l] -= W.copied[j][l] * W.copied[k][i];
           }
         }
       }
@@ -113,20 +115,21 @@ namespace SpectreX
     return rank;
   }
 
-  inline void newMatrix(byte *hash, matrix out)
+  inline void newMatrix(byte *hash, matrix out, worker &W)
   {
-    for (int i = 0; i < matSize; i++) {
-      memset(out[i], 0, matSize);
-    }
+    // for (int i = 0; i < matSize; i++) {
+    //   memset(out[i], 0, matSize);
+    // }
+    memset(out, 0, matSize*matSize);
 
-    uint64_t s0 = *(uint64_t*)&hash[0];
-    uint64_t s1 = *(uint64_t*)&hash[8];
-    uint64_t s2 = *(uint64_t*)&hash[16];
-    uint64_t s3 = *(uint64_t*)&hash[24];
+    alignas(64) uint64_t s0 = *(uint64_t*)&hash[0];
+    alignas(64) uint64_t s1 = *(uint64_t*)&hash[8];
+    alignas(64) uint64_t s2 = *(uint64_t*)&hash[16];
+    alignas(64) uint64_t s3 = *(uint64_t*)&hash[24];
                   
     Xoshiro256PlusPlusHasher hasher(s0, s1, s2, s3);
 
-    while (calculateRank(out) != matSize)
+    while (calculateRank(out, W) != matSize)
     {
       for (int i = 0; i < matSize; i++)
       {
