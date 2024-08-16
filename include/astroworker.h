@@ -24,6 +24,8 @@ typedef unsigned char byte;
 typedef struct templateMarker {
   uint8_t p1;
   uint8_t p2;
+  uint16_t keySpotA;
+  uint16_t keySpotB;
   uint16_t posData;
 } templateMarker;
 
@@ -84,15 +86,13 @@ public:
   uint64_t prev_lhash;
   uint16_t tries[DERO_BATCH];
 
-  int bA[256];
-  int bB[256*256];
   uint32_t sa_prelim[277*256+1];
   int32_t sa[277*256+1];
   templateMarker astroTemplate[277];
   int templateIdx = 0;
 
-  int keysA[277*277];
-  int keysB[277*277];
+  std::bitset<554> isBSlice;
+  uint8_t stampKeys[554];
   // int stampStarts[554] = {0};
   // int modifiedBytes[MODBUFFER] = {0};
   uint8_t stampTemplates[277];
@@ -107,7 +107,9 @@ public:
   std::vector<byte> opsA;
   std::vector<byte> opsB;
 
+  int bA[256];
+  int bB[256*256];
+
   friend std::ostream& operator<<(std::ostream& os, const workerData& wd);
 };
-
 #endif
