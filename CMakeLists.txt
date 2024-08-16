@@ -240,7 +240,7 @@ file(GLOB all_SRCS
 add_subdirectory(${PROJECT_SOURCE_DIR}/lib/BLAKE3/c)
 
 # AstroSPSA only works on x64 Linux at the moment
-if(USE_ASTRO_SPSA AND UNIX)
+if(USE_ASTRO_SPSA)
   set(SPSA_OS_PREFIX "linux")
   if(WIN32)
     set(SPSA_OS_PREFIX "win")
@@ -256,7 +256,7 @@ if(USE_ASTRO_SPSA AND UNIX)
     FetchContent_Declare(
         astrospsa
         GIT_REPOSITORY https://gitlab.com/Tritonn204/astro-spsa.git
-        GIT_TAG        7989267725e100ff1fdcb5f0581e6936c3306143
+        GIT_TAG        d1eb39d6f8a16e591ad1dfa60f6fb089af83807a
     )
     FetchContent_MakeAvailable(astrospsa)
     set(SPSA_LIB_DIR ${astrospsa_SOURCE_DIR})

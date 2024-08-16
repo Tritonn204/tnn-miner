@@ -230,10 +230,15 @@ void dero_session(
         std::string msg = boost::json::serialize((*S)) + "\n";
         // std::cout << "sending in: " << msg << std::endl;
         beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(1));
-        ws.write(boost::asio::buffer(msg));
+        ws.async_write(boost::asio::buffer(msg), [&](const boost::system::error_code& error, std::size_t bytes_transferred) {
+          if (error) {
+            printf("error on write: %s\n", error.message().c_str());
+            fflush(stdout);
+            abort = true;
+          }
+        });
         (*B) = false;
         data_ready = false;
-        if (err) break;
       } catch (const std::exception &e) {
         setcolor(RED);
         printf("\nSubmit thread error: %s\n", e.what());
@@ -465,10 +470,15 @@ void xelis_session(
         std::string msg = boost::json::serialize((*S)) + "\n";
         // std::cout << "sending in: " << msg << std::endl;
         beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(1));
-        ws.write(boost::asio::buffer(msg));
+        ws.async_write(boost::asio::buffer(msg), [&](const boost::system::error_code& error, std::size_t bytes_transferred) {
+          if (error) {
+            printf("error on write: %s\n", error.message().c_str());
+            fflush(stdout);
+            abort = true;
+          }
+        });
         (*B) = false;
         data_ready = false;
-        if (err) break;
       } catch (const std::exception &e) {
         setcolor(RED);
         printf("\nSubmit thread error: %s\n", e.what());
@@ -723,8 +733,8 @@ void xatum_session(
             abort = true;
           }
           if (!isDev) SpectreStratum::lastShareSubmissionTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-          (*B) = false;
-          data_ready = false;
+          // (*B) = false;
+          // data_ready = false;
         });
         (*B) = false;
         data_ready = false;
@@ -1118,8 +1128,8 @@ void xelis_stratum_session(
             abort = true;
           }
           if (!isDev) SpectreStratum::lastShareSubmissionTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-          (*B) = false;
-          data_ready = false;
+          // (*B) = false;
+          // data_ready = false;
         });
         (*B) = false;
         data_ready = false;
@@ -1443,8 +1453,8 @@ void xelis_stratum_session_nossl(
             abort = true;
           }
           if (!isDev) SpectreStratum::lastShareSubmissionTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-          (*B) = false;
-          data_ready = false;
+          // (*B) = false;
+          // data_ready = false;
         });
         (*B) = false;
         data_ready = false;
@@ -1967,8 +1977,8 @@ void spectre_stratum_session(
             abort = true;
           }
           if (!isDev) SpectreStratum::lastShareSubmissionTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-          (*B) = false;
-          data_ready = false;
+          // (*B) = false;
+          // data_ready = false;
         });
         (*B) = false;
         data_ready = false;

@@ -284,7 +284,7 @@ void initializeExterns() {
 
 void onExit() {
   setcolor(BRIGHT_WHITE);
-  printf("\n\nExiting Miner...\n");
+  printf("\n\nExiting Miner...");
   fflush(stdout);
 
 #if defined(_WIN32)
@@ -1372,9 +1372,11 @@ void benchmark(int tid)
   work[MINIBLOCK_SIZE - 1] = (byte)tid;
   while (true)
   {
+    mutex.lock();
     boost::json::value myJob = job;
     boost::json::value myJobDev = devJob;
     localJobCounter = jobCounter;
+    mutex.unlock();
 
     byte *b2 = new byte[MINIBLOCK_SIZE];
     hexstrToBytes(std::string(myJob.at("blockhashing_blob").as_string()), b2);
@@ -1456,11 +1458,11 @@ waitForJob:
   {
     try
     {
-     //  mutex.lock();
+      mutex.lock();
       boost::json::value myJob = job;
       boost::json::value myJobDev = devJob;
       localJobCounter = jobCounter;
-     //  mutex.unlock();
+      mutex.unlock();
 
       byte *b2 = new byte[MINIBLOCK_SIZE];
       hexstrToBytes(std::string(myJob.at("blockhashing_blob").as_string()), b2);
@@ -1633,12 +1635,12 @@ waitForJob:
   {
     try
     {
-     //  mutex.lock();
+      mutex.lock();
       boost::json::value myJob = job;
       boost::json::value myJobDev = devJob;
       localJobCounter = jobCounter;
 
-     //  mutex.unlock();
+      mutex.unlock();
 
       if (!myJob.at("template").is_string())
         continue;
@@ -1894,12 +1896,12 @@ waitForJob:
   {
     try
     {
-     //  mutex.lock();
+      mutex.lock();
       boost::json::value myJob = job;
       boost::json::value myJobDev = devJob;
       localJobCounter = jobCounter;
 
-     //  mutex.unlock();
+      mutex.unlock();
 
       if (!myJob.at("miner_work").is_string())
         continue;
@@ -2171,21 +2173,15 @@ waitForJob:
     boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
   }
 
-
-  boost::json::value myJob = job;
-  boost::json::value myJobDev = devJob;
-
   while (true)
   {
     try
     {
-     //  mutex.lock();
-      myJob = job;
-      myJobDev = devJob;
+      mutex.lock();
+      boost::json::value myJob = job;
+      boost::json::value myJobDev = devJob;
       localJobCounter = jobCounter;
-     //  mutex.unlock();
-
-      // printf("looping somewhere\n");
+      mutex.unlock();
 
       if (!myJob.at("template").is_string()) {
         continue;
