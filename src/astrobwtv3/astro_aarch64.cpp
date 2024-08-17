@@ -4423,6 +4423,8 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest, int wIndex)
       worker.astroTemplate[worker.templateIdx] = templateMarker{
         (uint8_t)(chunkCount > 1 ? pushPos1 : 0),
         (uint8_t)(chunkCount > 1 ? pushPos2 : 255),
+        0,
+        0,
         (uint16_t)((firstChunk << 7) | chunkCount)
       };
 
@@ -4475,6 +4477,8 @@ void branchComputeCPU_aarch64(workerData &worker, bool isTest, int wIndex)
     worker.astroTemplate[worker.templateIdx] = templateMarker{
       (uint8_t)(chunkCount > 1 ? lp1 : 0),
       (uint8_t)(chunkCount > 1 ? lp2 : 255),
+      0,
+      0,
       (uint16_t)((firstChunk << 7) | chunkCount)
     };
     worker.templateIdx++;
