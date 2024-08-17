@@ -554,7 +554,7 @@ void xelis_session(
                           << consoleLine << "v" << versionString << " ";
               }
 
-
+              std::scoped_lock<boost::mutex> lockGuard(mutex);
               if (!isDev)
               {
                 currentBlob = (*J).at("miner_work").as_string();
@@ -883,6 +883,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
 
   else if (command == Xatum::newJob)
   {
+    std::scoped_lock<boost::mutex> lockGuard(mutex);
     int64_t *diff = isDev ? &difficultyDev : &difficulty;
     boost::json::value *J = isDev ? &devJob : &job;
     int64_t *h = isDev ? &devHeight : &ourHeight;
@@ -2265,6 +2266,7 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
   // std::cout << "Stratum packet: " << boost::json::serialize(packet).c_str() << std::endl;
   if (M.compare(SpectreStratum::s_notify) == 0)
   {
+    std::scoped_lock<boost::mutex> lockGuard(mutex);
     boost::json::value *J = isDev ? &devJob : &job;
     int64_t *h = isDev ? &devHeight : &ourHeight;
 
@@ -2355,6 +2357,7 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
   }
   else if (M.compare(SpectreStratum::s_setExtraNonce) == 0)
   {
+    std::scoped_lock<boost::mutex> lockGuard(mutex);
     boost::json::value *J = isDev ? &devJob : &job;
     // uint64_t *h = isDev ? &devHeight : &ourHeight;
 

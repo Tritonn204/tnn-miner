@@ -1372,12 +1372,12 @@ void benchmark(int tid)
   work[MINIBLOCK_SIZE - 1] = (byte)tid;
   while (true)
   {
-    mutex.lock();
-    boost::json::value myJob = job;
-    boost::json::value myJobDev = devJob;
-    localJobCounter = jobCounter;
-    mutex.unlock();
-
+    boost::json::value myJob;
+    {
+      std::scoped_lock<boost::mutex> lockGuard(mutex);
+      boost::json::value myJob = job;
+      localJobCounter = jobCounter;
+    }
     byte *b2 = new byte[MINIBLOCK_SIZE];
     hexstrToBytes(std::string(myJob.at("blockhashing_blob").as_string()), b2);
     memcpy(work, b2, MINIBLOCK_SIZE);
@@ -1458,11 +1458,14 @@ waitForJob:
   {
     try
     {
-      mutex.lock();
-      boost::json::value myJob = job;
-      boost::json::value myJobDev = devJob;
-      localJobCounter = jobCounter;
-      mutex.unlock();
+      boost::json::value myJob;
+      boost::json::value myJobDev;
+      {
+        std::scoped_lock<boost::mutex> lockGuard(mutex);
+        myJob = job;
+        myJobDev = devJob;
+        localJobCounter = jobCounter;
+      }
 
       byte *b2 = new byte[MINIBLOCK_SIZE];
       hexstrToBytes(std::string(myJob.at("blockhashing_blob").as_string()), b2);
@@ -1599,8 +1602,12 @@ waitForJob:
     }
     catch (std::exception& e)
     {
+      setcolor(RED);
       std::cerr << "Error in POW Function" << std::endl;
-      std::cerr << e.what() << std::endl;
+      std::cerr << e.what() << std::endl << std::flush;
+      setcolor(BRIGHT_WHITE);
+
+      localJobCounter = -1;
     }
     if (!isConnected)
       break;
@@ -1635,12 +1642,14 @@ waitForJob:
   {
     try
     {
-      mutex.lock();
-      boost::json::value myJob = job;
-      boost::json::value myJobDev = devJob;
-      localJobCounter = jobCounter;
-
-      mutex.unlock();
+      boost::json::value myJob;
+      boost::json::value myJobDev;
+      {
+        std::scoped_lock<boost::mutex> lockGuard(mutex);
+        myJob = job;
+        myJobDev = devJob;
+        localJobCounter = jobCounter;
+      }
 
       if (!myJob.at("template").is_string())
         continue;
@@ -1860,8 +1869,14 @@ waitForJob:
     }
     catch (std::exception& e)
     {
+      setcolor(RED);
       std::cerr << "Error in POW Function" << std::endl;
-      std::cerr << e.what() << std::endl;
+      std::cerr << e.what() << std::endl << std::flush;
+      setcolor(BRIGHT_WHITE);
+
+      localJobCounter = -1;
+      localOurHeight = -1;
+      localDevHeight = -1;
     }
     if (!isConnected)
       break;
@@ -1896,12 +1911,14 @@ waitForJob:
   {
     try
     {
-      mutex.lock();
-      boost::json::value myJob = job;
-      boost::json::value myJobDev = devJob;
-      localJobCounter = jobCounter;
-
-      mutex.unlock();
+      boost::json::value myJob;
+      boost::json::value myJobDev;
+      {
+        std::scoped_lock<boost::mutex> lockGuard(mutex);
+        myJob = job;
+        myJobDev = devJob;
+        localJobCounter = jobCounter;
+      }
 
       if (!myJob.at("miner_work").is_string())
         continue;
@@ -2131,6 +2148,10 @@ waitForJob:
       std::cerr << "Error in POW Function" << std::endl;
       std::cerr << e.what() << std::endl << std::flush;
       setcolor(BRIGHT_WHITE);
+
+      localJobCounter = -1;
+      localOurHeight = -1;
+      localDevHeight = -1;
     }
     if (!isConnected)
       break;
@@ -2177,12 +2198,16 @@ waitForJob:
   {
     try
     {
-      mutex.lock();
-      boost::json::value myJob = job;
-      boost::json::value myJobDev = devJob;
-      localJobCounter = jobCounter;
-      mutex.unlock();
-
+      bool assigned = false;
+      boost::json::value myJob;
+      boost::json::value myJobDev;
+      {
+        std::scoped_lock<boost::mutex> lockGuard(mutex);
+        myJob = job;
+        myJobDev = devJob;
+        localJobCounter = jobCounter;
+      }
+      
       if (!myJob.at("template").is_string()) {
         continue;
       }
@@ -2410,8 +2435,14 @@ waitForJob:
     }
     catch (std::exception& e)
     {
+      setcolor(RED);
       std::cerr << "Error in POW Function" << std::endl;
       std::cerr << e.what() << std::endl;
+      setcolor(BRIGHT_WHITE);
+
+      localJobCounter = -1;
+      localOurHeight = -1;
+      localDevHeight = -1;
     }
     if (!isConnected) {
       data_ready = true;
