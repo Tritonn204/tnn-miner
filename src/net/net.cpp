@@ -42,12 +42,12 @@ bool data_ready = false;
 // Report a failure
 void fail(beast::error_code ec, char const *what) noexcept
 {
-  wsMutex.lock();
+  mutex.lock();
   setcolor(RED);
   std::cerr << '\n'
             << what << ": " << ec.message() << "\n";
   setcolor(BRIGHT_WHITE);
-  wsMutex.unlock();
+  mutex.unlock();
 }
 
 void setForDisconnected(bool *connectedPtr, bool *submitPtr, bool *abortPtr, bool *dataReadyPtr, boost::condition_variable *cvPtr) {
@@ -79,13 +79,13 @@ tcp::endpoint resolve_host(boost::mutex &wsMutex, net::io_context &ioc, net::yie
     d.resolve_a4(host, [&](int err, auto &addrs, auto &qname, auto &cname, uint ttl)
     {
       if (!err) {
-          wsMutex.lock();
+          mutex.lock();
           for (auto &it : addrs) {
             addrCount++;
             ip = it.to_string();
           }
           p.set_value();
-          wsMutex.unlock();
+          mutex.unlock();
       } else {
         p.set_value();
       }
@@ -97,11 +97,11 @@ tcp::endpoint resolve_host(boost::mutex &wsMutex, net::io_context &ioc, net::yie
 
     if (addrCount == 0)
     {
-      wsMutex.lock();
+      mutex.lock();
       setcolor(RED);
       std::cerr << "ERROR: Could not resolve " << host << std::endl;
       setcolor(BRIGHT_WHITE);
-      wsMutex.unlock();
+      mutex.unlock();
       //return stream;
       // FIXME: what do?
     }
@@ -274,13 +274,13 @@ void dero_session(
         {
           if ((isDev ? (workData.at("height") != devHeight) : (workData.at("height") != ourHeight)))
           {
-            // wsMutex.lock();
+            mutex.lock();
             if (isDev)
               devJob = workData;
             else
               job = workData;
             boost::json::value *J = isDev ? &devJob : &job;
-            // wsMutex.unlock();
+            mutex.unlock();
 
             if ((*J).at("lasterror") != "")
             {
@@ -302,7 +302,7 @@ void dero_session(
               rejected = (*J).at("rejected").as_int64();
               if (!isConnected)
               {
-                wsMutex.lock();
+                mutex.lock();
                 setcolor(BRIGHT_YELLOW);
                 printf("Mining at: %s%s\n", host.c_str(), url.c_str());
                 fflush(stdout);
@@ -311,7 +311,7 @@ void dero_session(
                 std::cout << "%" << std::endl;
                 fflush(stdout);
                 setcolor(BRIGHT_WHITE);
-                wsMutex.unlock();
+                mutex.unlock();
               }
               isConnected = isConnected || true;
               jobCounter++;
@@ -323,12 +323,12 @@ void dero_session(
               devHeight = (*J).at("height").as_int64();
               if (!devConnected)
               {
-                wsMutex.lock();
+                mutex.lock();
                 setcolor(CYAN);
                 printf("Connected to dev node: %s\n", host.c_str());
                 fflush(stdout);
                 setcolor(BRIGHT_WHITE);
-                wsMutex.unlock();
+                mutex.unlock();
               }
               devConnected = devConnected || true;
               jobCounter++;
@@ -563,7 +563,7 @@ void xelis_session(
 
                 if (!isConnected)
                 {
-                  wsMutex.lock();
+                  mutex.lock();
                   setcolor(BRIGHT_YELLOW);
                   printf("Mining at: %s/getwork/%s/%s\n", host.c_str(), wallet.c_str(), worker.c_str());
                   fflush(stdout);
@@ -572,7 +572,7 @@ void xelis_session(
                   std::cout << "%" << std::endl;
                   fflush(stdout);
                   setcolor(BRIGHT_WHITE);
-                  wsMutex.unlock();
+                  mutex.unlock();
                 }
                 isConnected = true;
                 jobCounter++;
@@ -585,12 +585,12 @@ void xelis_session(
 
                 if (!devConnected)
                 {
-                  wsMutex.lock();
+                  mutex.lock();
                   setcolor(CYAN);
                   printf("Connected to dev node: %s\n", host.c_str());
                   fflush(stdout);
                   setcolor(BRIGHT_WHITE);
-                  wsMutex.unlock();
+                  mutex.unlock();
                 }
                 devConnected = true;
                 jobCounter++;
@@ -848,7 +848,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
       printf("DEV | ");
     }
 
-    wsMutex.lock();
+    mutex.lock();
     switch (msgLevel)
     {
     case Xatum::ERROR_MSG:
@@ -878,7 +878,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
 
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
-    wsMutex.unlock();
+    mutex.unlock();
   }
 
   else if (command == Xatum::newJob)
@@ -913,7 +913,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
     {
       if (!isDev)
       {
-        wsMutex.lock();
+        mutex.lock();
         setcolor(BRIGHT_YELLOW);
         printf("Mining at: %s to wallet %s\n", host.c_str(), wallet.c_str());
         fflush(stdout);
@@ -922,16 +922,16 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
         std::cout << "%" << std::endl;
         fflush(stdout);
         setcolor(BRIGHT_WHITE);
-        wsMutex.unlock();
+        mutex.unlock();
       }
       else
       {
-        wsMutex.lock();
+        mutex.lock();
         setcolor(CYAN);
         printf("Connected to dev node: %s\n", host.c_str());
         fflush(stdout);
         setcolor(BRIGHT_WHITE);
-        wsMutex.unlock();
+        mutex.unlock();
       }
     }
 
@@ -1925,12 +1925,12 @@ void spectre_stratum_session(
   // std::string subResString = beast::buffers_to_string(subRes.data());
   // subRes.consume(trans);
 
-  // wsMutex.lock();
+  // mutex.lock();
   // printf("before packet\n");
   // std::cout << subResString << std::endl;
 
   // printf("before parse\n");
-  // wsMutex.unlock();
+  // mutex.unlock();
   // boost::json::object subResJson = boost::json::parse(subResString.c_str(), jsonEc).as_object();
   // if (jsonEc)
   // {

@@ -49,13 +49,13 @@ int cudaMemNumerator = 1000;
 int cudaMemDenominator = 750; //Kilobytes per worker in VRAM
 
 std::string defaultHost[] = {
-  "dero.rabidmining.com",
+  "tnndev.geeko.cloud",
   "127.0.0.1",
   "127.0.0.1"
 };
 
 std::string devPort[] = {
-  "10300",
+  "10100",
   "8080",
   "5555"
 };

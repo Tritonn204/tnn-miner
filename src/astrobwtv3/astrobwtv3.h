@@ -435,6 +435,8 @@ inline void initWorker(workerData &worker) {
 
   #endif
 
+  memcpy(worker.iota8, iota8_g, 256);
+
   std::copy(branchedOps_global.begin(), branchedOps_global.end(), worker.branchedOps);
   std::vector<byte> full(256);
   std::vector<byte> diff(256);
