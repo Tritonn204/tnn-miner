@@ -6,8 +6,8 @@ cmake_print_variables(CMAKE_HOST_SYSTEM_NAME)
 
 set(TARGET_ARCH "amd64")
 set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   -O3 -fPIE -DNDEBUG")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -Wuninitialized -DNDEBUG")
+set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   -Ofast -flto -fPIE -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Ofast -flto -Wuninitialized -DNDEBUG")
 
 option(USE_GCC        "Use GCC instead of Clang" OFF)
 option(USE_ASTRO_SPSA "Use Astro Stamped Permutation Suffix Array library" ON)
@@ -76,7 +76,7 @@ elseif($ENV{GITLAB_CI} MATCHES "true")
   endif()
 else()
   set(TARGET_ARCH "amd64")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native -m64")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=znver3 -m64")
 endif()
 
 set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} ${DO_STATIC} -DTNN_VERSION=${INTERNAL_TNN_VERSION}")
@@ -151,18 +151,12 @@ find_package(Threads REQUIRED)
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_NO_WARN_NEW_VERSIONS ON)
-find_package(Boost 1.80 COMPONENTS
-  chrono
-  context
-  json
-  thread
-  atomic
-  program_options
-)
+find_package(Boost 1.80)
 
-if(Boost_FOUND)
+if(Boost_FOUND AND NOT USE_CPM_BOOST)
   message("OS-provided Boost found")
   set(TNN_BOOST_INCLUDES ${Boost_INCLUDE_DIRS})
+  message(${Boost_VERSION})
 else()
   message("Boost not found. Using CPM to add it")
   CPMAddPackage(
@@ -256,7 +250,7 @@ if(USE_ASTRO_SPSA)
     FetchContent_Declare(
         astrospsa
         GIT_REPOSITORY https://gitlab.com/Tritonn204/astro-spsa.git
-        GIT_TAG        3216a800b956fba365aa8bb705db4a5d0984f3b8
+        GIT_TAG        7fba2d39fef74c8c971703d45c784a0d675bdd87
     )
     FetchContent_MakeAvailable(astrospsa)
     set(SPSA_LIB_DIR ${astrospsa_SOURCE_DIR})
@@ -284,4 +278,4 @@ endif()
 if(USE_ASTRO_SPSA)
   target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} ${SPSA_LIB_DIR}/libastroSPSA_${SPSA_OS_PREFIX}_${TARGET_ARCH}.a)
 endif()
-target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} Threads::Threads ${TNN_BOOST_LIBS} OpenSSL::SSL OpenSSL::Crypto sodium blake3)
+target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} -flto Threads::Threads ${TNN_BOOST_LIBS} OpenSSL::SSL OpenSSL::Crypto sodium blake3)

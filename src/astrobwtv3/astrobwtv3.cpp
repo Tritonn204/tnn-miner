@@ -33,6 +33,8 @@
 
 #include <Salsa20.h>
 
+// #include <alcp/digest.h>
+
 #include <highwayhash/sip_hash.h>
 #include <filesystem>
 #include <functional>
@@ -411,6 +413,48 @@ void computeByteFrequencyAVX2(const unsigned char* data, size_t dataSize, int fr
 
 #endif
 
+// alc_digest_info_t dinfo = {
+//   .dt_type = ALC_DIGEST_TYPE_SHA2,
+//   .dt_len = ALC_DIGEST_LEN_256,
+//   .dt_mode = {.dm_sha2 = ALC_SHA2_256,},
+// };
+
+// uint64_t aoclSHA256(const Uint8* src,
+//           Uint64       src_size,
+//           Uint8*       output)
+// {
+//     alc_error_t err;
+//     static alc_digest_handle_t s_dg_handle;
+
+//     Uint64 size         = alcp_digest_context_size(&dinfo);
+//     s_dg_handle.context = malloc(size);
+
+//     err = alcp_digest_request(&dinfo, &s_dg_handle);
+
+//     // divide the input size into multiple chunks
+//     const Uint64 last_buf_size = src_size % 64;
+//     const Uint8* p             = src;
+
+//     int c = src_size/64;
+//     while (c-- > 0) {
+//         err = alcp_digest_update(&s_dg_handle, p, 64);
+//         p += 64;
+//         c--;
+//     }
+
+//     if (last_buf_size == 0) {
+//         p = NULL;
+//     }
+
+//     alcp_digest_finalize(&s_dg_handle, p, last_buf_size);
+
+//     err = alcp_digest_copy(&s_dg_handle, output, 32);
+
+//     alcp_digest_finish(&s_dg_handle);
+//     free(s_dg_handle.context);
+//     return err;
+// }
+
 TNN_TARGETS
 void AstroBWTv3_batch(byte *input, int inputLen, byte *outputhash, workerData &worker, bool unused)
 {
@@ -746,23 +790,24 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     // computeByteFrequencyAVX2(worker.sData, worker.data_len, worker.freq);
     // libsais_ctx(worker.ctx, worker.sData, worker.sa, worker.data_len, MAX_LENGTH-worker.data_len, NULL);
 
-    if (littleEndian())
-    {
+    // if (littleEndian())
+    // {
       byte *B = reinterpret_cast<byte *>(worker.sa);
       hashSHA256(worker.sha256, B, worker.sHash, worker.data_len*4);
+      // aoclSHA256(B, worker.data_len*4, worker.sHash);
       // worker.sHash = nHash;
-    }
-    else
-    {
-      byte *s = new byte[MAX_LENGTH * 4];
-      for (int i = 0; i < worker.data_len; i++)
-      {
-        s[i << 1] = htonl(worker.sa[i]);
-      }
-      hashSHA256(worker.sha256, s, worker.sHash, worker.data_len*4);
-      // worker.sHash = nHash;
-      delete[] s;
-    }
+    // }
+    // else
+    // {
+    //   byte *s = new byte[MAX_LENGTH * 4];
+    //   for (int i = 0; i < worker.data_len; i++)
+    //   {
+    //     s[i << 1] = htonl(worker.sa[i]);
+    //   }
+    //   hashSHA256(worker.sha256, s, worker.sHash, worker.data_len*4);
+    //   // worker.sHash = nHash;
+    //   delete[] s;
+    // }
     memcpy(outputhash, worker.sHash, 32);
     // memset(outputhash, 0xFF, 32);
   }

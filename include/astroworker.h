@@ -104,11 +104,11 @@ public:
   uint8_t stampTemplates[277];
   uint8_t sBuckets[256];
   uint16_t buckets_d[256][256];
+  uint32_t bHeads[256][256];
+  uint32_t bHeadIdx[256][256];
   int bucketSort[256];
   // std::bitset<277*256> isIn;
   // std::bitset<277*256> isKey;
-
-  uint8_t headData_d[256][256][5];
 
   std::vector<byte> opsA;
   std::vector<byte> opsB;

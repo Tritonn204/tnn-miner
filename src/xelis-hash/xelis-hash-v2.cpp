@@ -108,6 +108,8 @@ static inline void aes_round(uint8_t *block, const uint8_t *key)
 #endif
 }
 
+const uint8_t chaIn[XELIS_MEMORY_SIZE_V2 * 2] = {0};
+
 void chacha_encrypt(uint8_t *key, uint8_t *nonce, uint8_t *in, uint8_t *out, size_t bytes, uint32_t rounds)
 {
 	uint8_t state[48] = {0};
