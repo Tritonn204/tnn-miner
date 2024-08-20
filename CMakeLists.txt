@@ -250,7 +250,7 @@ if(USE_ASTRO_SPSA)
     FetchContent_Declare(
         astrospsa
         GIT_REPOSITORY https://gitlab.com/Tritonn204/astro-spsa.git
-        GIT_TAG        73afb4d2bedbab375ce315c2e479dfb5e427a29b
+        GIT_TAG        cb7f4abe319f1c82606c5e6a43354073996694dc
     )
     FetchContent_MakeAvailable(astrospsa)
     set(SPSA_LIB_DIR ${astrospsa_SOURCE_DIR})

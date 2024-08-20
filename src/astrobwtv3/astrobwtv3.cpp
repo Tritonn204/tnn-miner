@@ -615,20 +615,20 @@ void AstroBWTv3_batch(byte *input, int inputLen, byte *outputhash, workerData &w
       // if (i == 0) printf("divsufsort section #%d section took %dns\n", i+1, time.count());
       // if (i == DERO_BATCH / 2) printf("divsufsort section #%d section took %dns\n", i+1, time.count());
       // if (i == DERO_BATCH - 1) printf("divsufsort section #%d section took %dns\n", i+1, time.count());
-      if (littleEndian())
-      {
+    //  if (littleEndian())
+    //  {
         byte *B = reinterpret_cast<byte *>(worker.sa);
-        hashSHA256(worker.sha256, B, worker.sHash, worker.data_len*4);
-      } else {
-        byte s[MAX_LENGTH * 4];
-        for (int i = 0; i < worker.data_len; i++)
-        {
-          s[i << 1] = htonl(worker.sa[i]);
-        }
-        hashSHA256(worker.sha256, s, worker.sHash, worker.data_len*4);
-      }
-      memcpy(outputhash + 32*i, worker.sHash, 32);
-      // memset(outputhash + 32*i, 0xFF, 32);
+        hashSHA256(worker.sha256, B, (outputhash + 32*i), worker.data_len*4);
+    //  } else {
+    //    byte s[MAX_LENGTH * 4];
+    //    for (int i = 0; i < worker.data_len; i++)
+    //    {
+    //      s[i << 1] = htonl(worker.sa[i]);
+    //    }
+    //    hashSHA256(worker.sha256, s, worker.sHash, worker.data_len*4);
+    //  }
+    //  memcpy(outputhash + 32*i, worker.sHash, 32);
+    //  // memset(outputhash + 32*i, 0xFF, 32);
     }
     // syncTag.fetch_add(1);
     // syncTag.notify_all();
@@ -793,7 +793,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     // if (littleEndian())
     // {
       byte *B = reinterpret_cast<byte *>(worker.sa);
-      hashSHA256(worker.sha256, B, worker.sHash, worker.data_len*4);
+      hashSHA256(worker.sha256, B, outputhash, worker.data_len*4);
       // aoclSHA256(B, worker.data_len*4, worker.sHash);
       // worker.sHash = nHash;
     // }
@@ -808,7 +808,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     //   // worker.sHash = nHash;
     //   delete[] s;
     // }
-    memcpy(outputhash, worker.sHash, 32);
+    //memcpy(outputhash, worker.sHash, 32);
     // memset(outputhash, 0xFF, 32);
   }
   catch (const std::exception &ex)
