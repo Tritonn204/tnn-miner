@@ -1884,30 +1884,49 @@ void spectre_stratum_session(
   std::string subscription = boost::json::serialize(packet) + "\n";
 
   // std::cout << authResString << std::endl;
+  size_t trans;
 
-  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-  size_t trans = boost::asio::async_write(stream, boost::asio::buffer(subscription), yield[ec]);
-  if (ec)
-    return fail(ec, "Stratum subscribe");
+  try {
+    beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
+    trans = boost::asio::async_write(stream, boost::asio::buffer(subscription), yield[ec]);
+    if (ec)
+      return fail(ec, "Stratum subscribe");
 
-  boost::asio::streambuf subRes;
-  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-   trans = boost::asio::read_until(stream, subRes, "\n");
+    boost::asio::streambuf subRes;
+    beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
+    trans = boost::asio::read_until(stream, subRes, "\n");
 
-  std::string subResString = beast::buffers_to_string(subRes.data());
-  subRes.consume(trans);
-  if (jsonEc)
-  {
-    std::cerr << jsonEc.message() << std::endl;
+    std::string subResString = beast::buffers_to_string(subRes.data());
+    subRes.consume(trans);
+    if (jsonEc)
+    {
+      std::cerr << jsonEc.message() << std::endl;
+    }
+
+    // std::cout << "sub result: " << subResString << std::endl << std::flush;
+
+    std::stringstream  jsonStream(subResString);
+    std::vector<std::string> packets;
+
+    std::string line;
+    while(std::getline(jsonStream,line,'\n'))
+    {
+      packets.push_back(line);
+    }
+
+    for (std::string packet : packets) {
+      boost::json::object subRPC = boost::json::parse(packet.c_str()).as_object();
+      if (subRPC.contains("method"))
+      {
+        handleSpectreStratumPacket(subRPC, &jobCache, isDev);
+      } 
+    }
+  } catch (const std::exception &e) {
+    setcolor(RED);
+    printf("\nStratum Subscribe error: %s\n", e.what());
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
   }
-
-  std::cout << "sub result: " << subResString << std::endl << std::flush;
-  boost::json::object subRPC = boost::json::parse(subResString.c_str()).as_object();
-  if (subRPC.contains("method"))
-  {
-    handleSpectreStratumPacket(subRPC, &jobCache, isDev);
-  }
-
   // Authorize Stratum Worker
   packet = SpectreStratum::stratumCall;
   packet.at("id") = SpectreStratum::authorize.id;
@@ -1916,29 +1935,47 @@ void spectre_stratum_session(
 
   std::string authorization = boost::json::serialize(packet) + "\n";
 
-  // // std::cout << authorization << std::endl;
+  // std::cout << authorization << std::endl;
+  try {
+    beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
+    boost::asio::async_write(stream, boost::asio::buffer(authorization), yield[ec]);
+    if (ec)
+      return fail(ec, "Stratum authorize");
 
-  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-  boost::asio::async_write(stream, boost::asio::buffer(authorization), yield[ec]);
-  if (ec)
-    return fail(ec, "Stratum authorize");
+    boost::asio::streambuf authRes;
+    beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
+    trans = boost::asio::read_until(stream, authRes, "\n");
 
-  boost::asio::streambuf authRes;
-  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-   trans = boost::asio::read_until(stream, authRes, "\n");
+    std::string authResString = beast::buffers_to_string(authRes.data());
+    authRes.consume(trans);
+    if (jsonEc)
+    {
+      std::cerr << jsonEc.message() << std::endl;
+    }
 
-  std::string authResString = beast::buffers_to_string(authRes.data());
-  authRes.consume(trans);
-  if (jsonEc)
-  {
-    std::cerr << jsonEc.message() << std::endl;
-  }
+    // std::cout << "auth result: " << authResString << std::endl << std::flush;
 
-  std::cout << "auth result: " << authResString << std::endl << std::flush;;
-  boost::json::object authRPC = boost::json::parse(authResString.c_str()).as_object();
-  if (authRPC.contains("method"))
-  {
-    handleSpectreStratumPacket(authRPC, &jobCache, isDev);
+    std::stringstream  jsonStream(authResString);
+    std::vector<std::string> packets;
+
+    std::string line;
+    while(std::getline(jsonStream,line,'\n'))
+    {
+      packets.push_back(line);
+    }
+
+    for (std::string packet : packets) {
+      boost::json::object authRPC = boost::json::parse(packet.c_str()).as_object();
+      if (authRPC.contains("method"))
+      {
+        handleSpectreStratumPacket(authRPC, &jobCache, isDev);
+      }
+    }
+  } catch (const std::exception &e) {
+    setcolor(RED);
+    printf("\nStratum Authorize error: %s\n", e.what());
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
   }
   // SpectreStratum::stratumCall;
   // packet.at("id") = SpectreStratum::subscribe.id;
@@ -2083,8 +2120,8 @@ void spectre_stratum_session(
         // Consume the data from the buffer after processing it
         response.consume(trans);
 
-        std::cout << "received: " << data << std::endl << std::flush;
-        printf("received data\n");
+        // std::cout << "received: " << data << std::endl << std::flush;
+        // printf("received data\n");
         fflush(stdout);
 
         std::stringstream  jsonStream(data);
@@ -2455,7 +2492,7 @@ int handleSpectreStratumResponse(boost::json::object packet, bool isDev)
   // if (!isDev) {
   // if (!packet.contains("id")) return 0;
   int64_t id = packet["id"].as_int64();
-  std::cout << "Stratum packet: " << boost::json::serialize(packet).c_str() << std::endl;
+  // std::cout << "Stratum packet: " << boost::json::serialize(packet).c_str() << std::endl;
 
   switch (id)
   {
@@ -2504,7 +2541,7 @@ int handleSpectreStratumResponse(boost::json::object packet, bool isDev)
         } else {
           ERR = packet.at("error").at("message").get_string();
         }
-        std::cout << "Spectre: share rejected: " << ERR.c_str() << std::endl;
+        std::cout << "Stratum: share rejected: " << ERR.c_str() << std::endl;
         
         fflush(stdout);
         setcolor(BRIGHT_WHITE);

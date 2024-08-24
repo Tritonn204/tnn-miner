@@ -49,7 +49,7 @@ int cudaMemNumerator = 1000;
 int cudaMemDenominator = 750; //Kilobytes per worker in VRAM
 
 std::string defaultHost[] = {
-  "tnndev.geeko.cloud",
+  "community-pools.mysrv.cloud",
   "127.0.0.1",
   "127.0.0.1"
 };
