@@ -42,12 +42,12 @@ bool data_ready = false;
 // Report a failure
 void fail(beast::error_code ec, char const *what) noexcept
 {
-  mutex.lock();
+  // mutex.lock();
   setcolor(RED);
   std::cerr << '\n'
             << what << ": " << ec.message() << "\n";
   setcolor(BRIGHT_WHITE);
-  mutex.unlock();
+  // mutex.unlock();
 }
 
 void setForDisconnected(bool *connectedPtr, bool *submitPtr, bool *abortPtr, bool *dataReadyPtr, boost::condition_variable *cvPtr) {
@@ -79,13 +79,13 @@ tcp::endpoint resolve_host(boost::mutex &wsMutex, net::io_context &ioc, net::yie
     d.resolve_a4(host, [&](int err, auto &addrs, auto &qname, auto &cname, uint ttl)
     {
       if (!err) {
-          mutex.lock();
+          // mutex.lock();
           for (auto &it : addrs) {
             addrCount++;
             ip = it.to_string();
           }
           p.set_value();
-          mutex.unlock();
+          // mutex.unlock();
       } else {
         p.set_value();
       }
@@ -97,11 +97,11 @@ tcp::endpoint resolve_host(boost::mutex &wsMutex, net::io_context &ioc, net::yie
 
     if (addrCount == 0)
     {
-      mutex.lock();
+      // mutex.lock();
       setcolor(RED);
       std::cerr << "ERROR: Could not resolve " << host << std::endl;
       setcolor(BRIGHT_WHITE);
-      mutex.unlock();
+      // mutex.unlock();
       //return stream;
       // FIXME: what do?
     }
@@ -140,9 +140,6 @@ void dero_session(
   beast::error_code ec;
   auto endpoint = resolve_host(wsMutex, ioc, yield, host, port);
   websocket::stream<beast::ssl_stream<beast::tcp_stream>> ws(ioc, ctx);
-
-  // Set a timeout on the operation
-  beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(30));
 
   // Make the connection on the IP address we get from a lookup
   beast::get_lowest_layer(ws).connect(endpoint);
@@ -254,6 +251,7 @@ void dero_session(
   {
     try
     {
+      bool *B = isDev ? &submittingDev : &submitting;
       buffer.clear();
       workInfo.str("");
       workInfo.clear();
@@ -264,7 +262,6 @@ void dero_session(
       {
         // handle getwork feed
 
-        beast::get_lowest_layer(ws).expires_never();
         workInfo << beast::make_printable(buffer.data());
 
         // std::cout << workInfo.str() << std::endl;
@@ -274,13 +271,13 @@ void dero_session(
         {
           if ((isDev ? (workData.at("height") != devHeight) : (workData.at("height") != ourHeight)))
           {
-            mutex.lock();
+            // mutex.lock();
             if (isDev)
               devJob = workData;
             else
               job = workData;
             boost::json::value *J = isDev ? &devJob : &job;
-            mutex.unlock();
+            // mutex.unlock();
 
             if ((*J).at("lasterror") != "")
             {
@@ -302,7 +299,7 @@ void dero_session(
               rejected = (*J).at("rejected").as_int64();
               if (!isConnected)
               {
-                mutex.lock();
+                // mutex.lock();
                 setcolor(BRIGHT_YELLOW);
                 printf("Mining at: %s%s\n", host.c_str(), url.c_str());
                 fflush(stdout);
@@ -311,7 +308,7 @@ void dero_session(
                 std::cout << "%" << std::endl;
                 fflush(stdout);
                 setcolor(BRIGHT_WHITE);
-                mutex.unlock();
+                // mutex.unlock();
               }
               isConnected = isConnected || true;
               jobCounter++;
@@ -323,12 +320,12 @@ void dero_session(
               devHeight = (*J).at("height").as_int64();
               if (!devConnected)
               {
-                mutex.lock();
+                // mutex.lock();
                 setcolor(CYAN);
                 printf("Connected to dev node: %s\n", host.c_str());
                 fflush(stdout);
                 setcolor(BRIGHT_WHITE);
-                mutex.unlock();
+                // mutex.unlock();
               }
               devConnected = devConnected || true;
               jobCounter++;
@@ -338,9 +335,10 @@ void dero_session(
       }
       else
       {
-        bool *B = isDev ? &devConnected : &isConnected;
-        (*B) = false;
-        abort = true;
+        bool *C = isDev ? &devConnected : &isConnected;
+        setForDisconnected(C, B, &abort, &data_ready, &cv);
+        // printf("DISCONNECT at read\n");
+        // fflush(stdout);
 
         for (;;) {
           if (!submitThread) break;
@@ -492,9 +490,9 @@ void xelis_session(
 
   while (true)
   {
+    bool *B = isDev ? &submittingDev : &submitting;
     try
     {
-      bool *B = isDev ? &submittingDev : &submitting;
 
       buffer.clear();
       workInfo.str("");
@@ -505,7 +503,6 @@ void xelis_session(
       if (!ec)
       {
         // handle getwork feed
-        beast::get_lowest_layer(ws).expires_never();
         workInfo << beast::make_printable(buffer.data());
 
         // std::cout << "Received data: " << workInfo.str() << std::endl;
@@ -563,7 +560,7 @@ void xelis_session(
 
                 if (!isConnected)
                 {
-                  mutex.lock();
+                  // mutex.lock();
                   setcolor(BRIGHT_YELLOW);
                   printf("Mining at: %s/getwork/%s/%s\n", host.c_str(), wallet.c_str(), worker.c_str());
                   fflush(stdout);
@@ -572,7 +569,7 @@ void xelis_session(
                   std::cout << "%" << std::endl;
                   fflush(stdout);
                   setcolor(BRIGHT_WHITE);
-                  mutex.unlock();
+                  // mutex.unlock();
                 }
                 isConnected = true;
                 jobCounter++;
@@ -585,12 +582,12 @@ void xelis_session(
 
                 if (!devConnected)
                 {
-                  mutex.lock();
+                  // mutex.lock();
                   setcolor(CYAN);
                   printf("Connected to dev node: %s\n", host.c_str());
                   fflush(stdout);
                   setcolor(BRIGHT_WHITE);
-                  mutex.unlock();
+                  // mutex.unlock();
                 }
                 devConnected = true;
                 jobCounter++;
@@ -601,10 +598,9 @@ void xelis_session(
       }
       else
       {
-        bool *B = isDev ? &devConnected : &isConnected;
-        (*B) = false;
-        abort = true;
-
+        bool *C = isDev ? &devConnected : &isConnected;
+        setForDisconnected(C, B, &abort, &data_ready, &cv);
+        
         for (;;) {
           if (!submitThread) break;
           boost::this_thread::yield();
@@ -752,6 +748,7 @@ void xatum_session(
 
   while (true)
   {
+    bool *B = isDev ? &submittingDev : &submitting;
     try
     {
       if (
@@ -759,8 +756,7 @@ void xatum_session(
           std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count() - Xatum::lastReceivedJobTime > Xatum::jobTimeout)
       {
         bool *C = isDev ? &devConnected : &isConnected;
-        (*C) = false;
-        abort = true;
+        setForDisconnected(C, B, &abort, &data_ready, &cv);
 
         for (;;) {
           if (!submitThread) break;
@@ -770,7 +766,6 @@ void xatum_session(
         stream.shutdown();
         return fail(ec, "Xatum session timed out");
       }
-      bool *B = isDev ? &submittingDev : &submitting;
       boost::asio::streambuf response;
       std::stringstream workInfo;
       beast::get_lowest_layer(stream).expires_after(std::chrono::milliseconds(45000));
@@ -805,8 +800,7 @@ void xatum_session(
     catch (const std::exception &e)
     {
       bool *C = isDev ? &devConnected : &isConnected;
-      (*C) = false;
-      abort = true;
+      setForDisconnected(C, B, &abort, &data_ready, &cv);
 
       for (;;) {
         if (!submitThread) break;
@@ -848,7 +842,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
       printf("DEV | ");
     }
 
-    mutex.lock();
+    // mutex.lock();
     switch (msgLevel)
     {
     case Xatum::ERROR_MSG:
@@ -878,7 +872,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
 
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
-    mutex.unlock();
+    // mutex.unlock();
   }
 
   else if (command == Xatum::newJob)
@@ -914,7 +908,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
     {
       if (!isDev)
       {
-        mutex.lock();
+        // mutex.lock();
         setcolor(BRIGHT_YELLOW);
         printf("Mining at: %s to wallet %s\n", host.c_str(), wallet.c_str());
         fflush(stdout);
@@ -923,16 +917,16 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
         std::cout << "%" << std::endl;
         fflush(stdout);
         setcolor(BRIGHT_WHITE);
-        mutex.unlock();
+        // mutex.unlock();
       }
       else
       {
-        mutex.lock();
+        // mutex.lock();
         setcolor(CYAN);
         printf("Connected to dev node: %s\n", host.c_str());
         fflush(stdout);
         setcolor(BRIGHT_WHITE);
-        mutex.unlock();
+        // mutex.unlock();
       }
     }
 
@@ -1226,8 +1220,7 @@ void xelis_stratum_session(
                   yield[ec]);
               if (ec && trans > 0)
               {
-                (*C) = false;
-                abort = true;
+                setForDisconnected(C, B, &abort, &data_ready, &cv);
 
                 for (;;) {
                   if (!submitThread) break;
@@ -1550,8 +1543,7 @@ void xelis_stratum_session_nossl(
                   yield[ec]);
               if (ec && trans > 0)
               {
-                (*C) = false;
-                abort = true;
+                setForDisconnected(C, B, &abort, &data_ready, &cv);
 
                 for (;;) {
                   if (!submitThread) break;

@@ -262,7 +262,6 @@ void wolfPermute_avx2(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint
 
   wolfBranch_avx2(data, in[pos2], Opcode, worker);
   // data = _mm256_blendv_epi8(old, data, _mm256_load_si256((__m256i*)&worker.maskTable_bytes[(pos2 - pos1)*32]));
-  // data = _mm256_blendv_epi8(old, data, _mm256_loadu_si256((__m256i*)&worker.maskTable_bytes[(pos2 - pos1)*32]));
   data = _mm256_blendv_epi8(old, data, _mm256_loadu_si256((__m256i*)&worker.maskTable_bytes[(pos2 - pos1)*32]));
   // data = _mm256_blendv_epi8(old, data, genMask(pos2-pos1));
 
@@ -301,7 +300,7 @@ void wolfSame(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2
 
 #endif
 
-//__attribute__((target("default")))
+__attribute__((target("default")))
 void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker)
 {
 	uint32_t Opcode = CodeLUT[op];
