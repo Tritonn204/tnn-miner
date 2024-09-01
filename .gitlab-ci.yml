@@ -232,6 +232,8 @@ release_job:
   needs:
     - job: build-linux
       artifacts: true
+    - job: build-hiveos
+      artifacts: true
     - job: build-windows
       artifacts: true
     #- job: build-macos
