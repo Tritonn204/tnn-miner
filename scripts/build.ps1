@@ -30,7 +30,7 @@ if (-not $version -eq "") {
 & c:\mingw64\bin\cmake.exe $VER_SETTING --debug-trycompile --trace-expand --trace-redirect=./asdf.txt -G "Ninja" ..
 
 # Run Ninja build
-& c:\mingw64\bin\ninja.exe
+& c:\mingw64\bin\ninja.exe -j (Get-CimInstance -ClassName Win32_ComputerSystem).NumberOfLogicalProcessors
 
 # Return to original directory
 popd
