@@ -151,7 +151,14 @@ find_package(Threads REQUIRED)
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_NO_WARN_NEW_VERSIONS ON)
-find_package(Boost 1.80)
+find_package(Boost 1.80 COMPONENTS
+  chrono
+  context
+  json
+  thread
+  atomic
+  program_options
+)
 
 if(Boost_FOUND AND NOT USE_CPM_BOOST)
   message("OS-provided Boost found")
