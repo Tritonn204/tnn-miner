@@ -84,20 +84,17 @@ build-linux:
     - mv ./build/Tnn-miner-${PACKAGE_VERSION} ./Tnn-miner
     - tar -czvf ${LINUX_AMD64_TGZ} ./Tnn-miner
     - cp ./Tnn-miner ./wrappers/hiveos/tnn-miner/tnn-miner
-    - tar -czvf ${HIVEOS_AMD64_TGZ} ./wrappers/hiveos/tnn-miner
+    - tar -czvf ${HIVEOS_AMD64_TGZ} -C ./wrappers/hiveos/ ./wrappers/hiveos/tnn-miner
   after_script:
     - echo "LINUX_BUILD_JOB_ID=$CI_JOB_ID" >> linux-job.env
   artifacts:
     name: ${LINUX_AMD64_TGZ}
     paths:
       - ${LINUX_AMD64_TGZ}
+      - ${HIVEOS_AMD64_TGZ}
       # depending on your build setup it's most likely a good idea to cache outputs to reduce the build time
       # cache:
       #   paths:
-      #     - "*.o"
-    name: ${HIVEOS_AMD64_TGZ}
-    paths:
-      - ${HIVEOS_AMD64_TGZ}
     reports:
       dotenv: linux-job.env
 
