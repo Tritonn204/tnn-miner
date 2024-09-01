@@ -192,6 +192,25 @@ test-linux:
     - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./Tnn-miner --test-spectre --quiet
     - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./Tnn-miner --test-xelis --quiet
 
+test-windows:
+  rules:
+    - if: $CI_COMMIT_TAG && $TNN_BUILD_WIN == "true"                 # Run this job when a tag is created
+  extends:
+    - .windows_job
+  stage: test
+  needs:
+    - job: build-windows
+      artifacts: true
+      
+  script:
+    - $PSVersionTable.PSVersion
+    - .\scripts\prereqs.bat ci
+    - 7z.exe x ${WIN_AMD64_ZIP}
+    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args Tnn-miner --test-dero --quiet
+    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args Tnn-miner --test-spectre --quiet
+    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args Tnn-miner --test-xelis --quiet
+
+
 #upload:
 #  stage: upload
 #  image: curlimages/curl:latest
@@ -222,6 +241,7 @@ release_job:
   script:
     - ls -la
     - echo $LINUX_BUILD_JOB_ID
+    - echo $HIVEOS_BUILD_JOB_ID
     - echo $MACOS_BUILD_JOB_ID
     - echo $WIN_BUILD_JOB_ID
     #- |
