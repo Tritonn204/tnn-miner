@@ -23,6 +23,7 @@ variables:
   AMD64_TARGET_LEVEL: x86-64-v3
   PACKAGE_VERSION: "0.0.1"
   LINUX_AMD64_TGZ: "Tnn-miner-amd64-${PACKAGE_VERSION}.tar.gz"
+  HIVEOS_AMD64_TGZ: "Tnn-miner-amd64-hiveos-${PACKAGE_VERSION}.tar.gz"
   MACOS_ARM64_TGZ: "Tnn-miner-macos-arm64-${PACKAGE_VERSION}.tar.gz"
   WIN_AMD64_ZIP: "Tnn-miner-win64-${PACKAGE_VERSION}.zip"
   # https://docs.gitlab.com/ee/ci/runners/hosted_runners/macos.html#optimizing-homebrew
@@ -80,8 +81,10 @@ build-linux:
     - cmake -DTNN_VERSION=$PACKAGE_VERSION ..
     - make -j$(nproc)
     - cd ../
-    - mv ./build/Tnn-miner-${PACKAGE_VERSION} ./Tnn-miner-${PACKAGE_VERSION}
+    - mv ./build/Tnn-miner-${PACKAGE_VERSION} ./Tnn-miner
     - tar -czvf ${LINUX_AMD64_TGZ} ./Tnn-miner-${PACKAGE_VERSION}
+    - cp ./Tnn-miner ./wrappers/hive/tnn-miner/tnn-miner
+    - tar -czvf ${HIVEOS_AMD64_TGZ} ./wrappers/hive/tnn-miner
   after_script:
     - echo "LINUX_BUILD_JOB_ID=$CI_JOB_ID" >> linux-job.env
   artifacts:
@@ -211,6 +214,9 @@ release_job:
         - name: "${LINUX_AMD64_TGZ}"
           url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${LINUX_BUILD_JOB_ID}/artifacts/raw/${LINUX_AMD64_TGZ}"
           filepath: "/${LINUX_AMD64_TGZ}"
+        - name: "${HIVEOS_AMD64_TGZ}"
+          url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${LINUX_BUILD_JOB_ID}/artifacts/raw/${HIVEOS_AMD64_TGZ}"
+          filepath: "/${HIVEOS_AMD64_TGZ}"
         - name: "${WIN_AMD64_ZIP}"
           url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${WIN_BUILD_JOB_ID}/artifacts/raw/${WIN_AMD64_ZIP}"
           filepath: "/${WIN_AMD64_ZIP}"
