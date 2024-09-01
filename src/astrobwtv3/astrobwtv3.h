@@ -461,52 +461,52 @@ inline void initWorker(workerData &worker) {
   // printf("\n");
 }
 
-inline std::ostream& operator<<(std::ostream& os, const workerData& wd) {
-    // Print values for dynamically allocated byte arrays (assuming 32 bytes for demonstration)
-    auto printByteArray = [&os](const byte* arr, size_t size) {
-        for (size_t i = 0; i < size; ++i) {
-            os << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(arr[i]) << " ";
-        }
-        os << std::dec << '\n'; // Switch back to decimal for other prints
-    };
+// inline std::ostream& operator<<(std::ostream& os, const workerData& wd) {
+//     // Print values for dynamically allocated byte arrays (assuming 32 bytes for demonstration)
+//     auto printByteArray = [&os](const byte* arr, size_t size) {
+//         for (size_t i = 0; i < size; ++i) {
+//             os << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(arr[i]) << " ";
+//         }
+//         os << std::dec << '\n'; // Switch back to decimal for other prints
+//     };
 
-    os << "sHash: ";
-    printByteArray(wd.sHash, 32);
+//     os << "sHash: ";
+//     printByteArray(wd.sHash, 32);
     
-    os << "sha_key: ";
-    printByteArray(wd.sha_key, 32);
+//     os << "sha_key: ";
+//     printByteArray(wd.sha_key, 32);
     
-    os << "sha_key2: ";
-    printByteArray(wd.sha_key2, 32);
+//     os << "sha_key2: ";
+//     printByteArray(wd.sha_key2, 32);
     
-    // Assuming data_len is the length of sData you're interested in printing
-    os << "sData: ";
-    printByteArray(wd.sData, MAX_LENGTH + 64);
+//     // Assuming data_len is the length of sData you're interested in printing
+//     os << "sData: ";
+//     printByteArray(wd.sData, MAX_LENGTH + 64);
 
-    // For int arrays like bA, bB, C, and B, assuming lengths based on your constructor (example sizes)
-    auto printIntArray = [&os](const int* arr, size_t size) {
-        for (size_t i = 0; i < size; ++i) {
-            os << arr[i] << " ";
-        }
-        os << '\n';
-    };
+//     // For int arrays like bA, bB, C, and B, assuming lengths based on your constructor (example sizes)
+//     auto printIntArray = [&os](const int* arr, size_t size) {
+//         for (size_t i = 0; i < size; ++i) {
+//             os << arr[i] << " ";
+//         }
+//         os << '\n';
+//     };
 
-    // Example: Assuming sizes from your description
-    // os << "bA: ";
-    // printIntArray(wd.bA, 256); // Based on allocation in init
+//     // Example: Assuming sizes from your description
+//     // os << "bA: ";
+//     // printIntArray(wd.bA, 256); // Based on allocation in init
 
-    // os << "bB: ";
-    // printIntArray(wd.bB, 256*256); // Based on allocation in init
+//     // os << "bB: ";
+//     // printIntArray(wd.bB, 256*256); // Based on allocation in init
 
-    os << '\n';
+//     os << '\n';
 
-    // If you have other arrays or variables to print, follow the same pattern:
-    // 1. Use printByteArray for byte* with known sizes
-    // 2. Use printIntArray for int* with known sizes
-    // 3. Directly iterate over and print contents of fixed-size arrays or std::vector
+//     // If you have other arrays or variables to print, follow the same pattern:
+//     // 1. Use printByteArray for byte* with known sizes
+//     // 2. Use printIntArray for int* with known sizes
+//     // 3. Directly iterate over and print contents of fixed-size arrays or std::vector
 
-    return os;
-}
+//     return os;
+// }
 
 inline byte
 leftRotate8(byte n, unsigned d)

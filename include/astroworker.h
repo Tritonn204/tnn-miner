@@ -73,12 +73,6 @@ public:
 
   bool isSame = false;
 
-  int bA[256];
-  int bB[256*256];
-
-  byte sHash[32];
-  byte sha_key[32];
-  byte sha_key2[32];
   byte sData[ASTRO_SCRATCH_SIZE*DERO_BATCH];
 
   byte pos1;
@@ -112,6 +106,9 @@ public:
 
   std::vector<byte> opsA;
   std::vector<byte> opsB;
+
+  int bA[256];
+  int bB[256*256];
 
   friend std::ostream& operator<<(std::ostream& os, const workerData& wd);
 };

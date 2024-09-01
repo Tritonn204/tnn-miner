@@ -2174,7 +2174,8 @@ waitForJob:
         else {
           uint64_t eN = std::stoull(std::string(J.at("extraNonce").as_string().c_str()), NULL, 16);
           enLen = std::string(J.at("extraNonce").as_string()).size()/2;
-          n = ((tid - 1) % (256 * 256)) | ((*nonce) << 16) | (eN << 56);
+          int offset = (64 - enLen*8);
+          n = ((tid - 1) % (256 * 256)) | (((*nonce) << 16) & ((1ULL << offset)-1)) | (eN << offset);
         }
         memcpy(nonceBytes, (byte *)&n, 8);
 
