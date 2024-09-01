@@ -82,7 +82,7 @@ build-linux:
     - make -j$(nproc)
     - cd ../
     - mv ./build/Tnn-miner-${PACKAGE_VERSION} ./Tnn-miner
-    - tar -czvf ${LINUX_AMD64_TGZ} ./Tnn-miner-${PACKAGE_VERSION}
+    - tar -czvf ${LINUX_AMD64_TGZ} ./Tnn-miner
     - cp ./Tnn-miner ./wrappers/hive/tnn-miner/tnn-miner
     - tar -czvf ${HIVEOS_AMD64_TGZ} ./wrappers/hive/tnn-miner
   after_script:
@@ -111,10 +111,10 @@ build-macos:
     - cmake -DTNN_VERSION=$PACKAGE_VERSION ..
     - make -j$(nproc)
     - cd ../
-    - mv ./build/Tnn-miner-${PACKAGE_VERSION} ./Tnn-miner-${PACKAGE_VERSION}
+    - mv ./build/Tnn-miner-${PACKAGE_VERSION} ./Tnn-miner
     - ls -la ./
     - ls -la ./build/
-    - tar -czvf Tnn-miner-macos-arm64.tar.gz ./Tnn-miner-${PACKAGE_VERSION}
+    - tar -czvf Tnn-miner-macos-arm64.tar.gz ./Tnn-miner
   after_script:
     - pwd
     - ls -la ./
