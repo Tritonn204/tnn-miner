@@ -243,6 +243,7 @@ void dero_session(
         setcolor(BRIGHT_WHITE);
         break;
       }
+      boost::this_thread::yield();
     }
     submitThread = false;
   });
@@ -484,6 +485,7 @@ void xelis_session(
         setcolor(BRIGHT_WHITE);
         break;
       }
+      boost::this_thread::yield();
     }
     submitThread = false;
   });
@@ -742,6 +744,7 @@ void xatum_session(
         break;
       }
       //boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
+      boost::this_thread::yield();
     }
     submitThread = false;
   });
@@ -1136,6 +1139,7 @@ void xelis_stratum_session(
         break;
       }
       //boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
+      boost::this_thread::yield();
     }
     submitThread = false;
   });
@@ -1460,6 +1464,7 @@ void xelis_stratum_session_nossl(
         break;
       }
       //boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
+      boost::this_thread::yield();
     }
     submitThread = false;
   });
@@ -2042,7 +2047,7 @@ void spectre_stratum_session(
         setcolor(BRIGHT_WHITE);
         break;
       }
-      //boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
+      boost::this_thread::yield();
     }
     submitThread = false;
   });
@@ -2053,14 +2058,6 @@ void spectre_stratum_session(
     bool *B = isDev ? &submittingDev : &submitting;
     try
     {
-      if (
-        !isDev &&
-        SpectreStratum::lastShareSubmissionTime > 0 &&
-        std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count() - SpectreStratum::lastShareSubmissionTime > SpectreStratum::shareSubmitTimeout) {
-          rate30sec.clear();
-          rate30sec.push_back(0);
-        }
-
       if (
           SpectreStratum::lastReceivedJobTime > 0 &&
           std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count() - SpectreStratum::lastReceivedJobTime > SpectreStratum::jobTimeout)

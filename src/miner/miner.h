@@ -15,10 +15,19 @@
 #include <string>
 #include <num.h>
 
-#ifdef _WIN32
+#if defined(_WIN32)
 #include <windows.h>
+LPTSTR lpNxtPage;  // Address of the next page to ask for
+DWORD dwPages = 0; // Count of pages gotten so far
+DWORD dwPageSize;  // Page size on this computer
+
 HANDLE hInput;
 DWORD prev_mode;
+#else
+#include <sched.h>
+#define THREAD_PRIORITY_ABOVE_NORMAL -5
+#define THREAD_PRIORITY_HIGHEST -20
+#define THREAD_PRIORITY_TIME_CRITICAL -20
 #endif
 
 const int workerThreads = 2;
@@ -30,9 +39,6 @@ std::string workerNameFromWallet = "";
 
 bool useStratum = false;
 
-int miningAlgo = DERO_HASH;
-
-int reportInterval = 3;
 int threads = 0;
 int testOp = -1;
 int testLen = -1;

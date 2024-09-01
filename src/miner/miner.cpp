@@ -19,21 +19,6 @@
 #include "net.hpp"
 #include "astrobwtv3.h"
 
-#include <boost/program_options.hpp>
-#include <boost/asio.hpp>
-#include <boost/asio/ssl.hpp>
-#include <boost/asio/spawn.hpp>
-#include <boost/asio/ssl/error.hpp>
-#include <boost/asio/ip/host_name.hpp>
-#include <boost/json.hpp>
-
-#include <boost/thread.hpp>
-#include <boost/atomic.hpp>
-#include <boost/algorithm/string/replace.hpp>
-#include <boost/atomic.hpp>
-#include <boost/thread.hpp>
-#include <boost/tokenizer.hpp>
-
 #include <cstdlib>
 #include <functional>
 #include <iostream>
@@ -68,28 +53,20 @@
 
 #include <exception>
 
-#if defined(_WIN32)
-#include <Windows.h>
-#else
-#include <sched.h>
-#define THREAD_PRIORITY_ABOVE_NORMAL -5
-#define THREAD_PRIORITY_HIGHEST -20
-#define THREAD_PRIORITY_TIME_CRITICAL -20
-#endif
+#include "reporter.hpp"
+
+// INITIALIZE COMMON STUFF
+int miningAlgo = DERO_HASH;
+int reportCounter = 0;
+int reportInterval = 3;
+std::atomic<int64_t> counter = 0;
+std::atomic<int64_t> benchCounter = 0;
+boost::asio::io_context my_context;
+boost::asio::steady_timer update_timer = boost::asio::steady_timer(my_context);
+std::chrono::time_point<std::chrono::steady_clock> g_start_time = std::chrono::steady_clock::now();
+
 
 const auto processor_count = std::thread::hardware_concurrency();
-
-#if defined(_WIN32)
-LPTSTR lpNxtPage;  // Address of the next page to ask for
-DWORD dwPages = 0; // Count of pages gotten so far
-DWORD dwPageSize;  // Page size on this computer
-#endif
-
-
-boost::asio::io_context my_context;
-// Construct a timer without setting an expiry time.
-boost::asio::steady_timer update_timer(my_context);
-std::chrono::time_point g_start_time = std::chrono::steady_clock::now();
 
 /* Start definitions from tnn-common.hpp */
 int protocol = XELIS_SOLO;
@@ -111,7 +88,6 @@ int miniBlockCounter;
 int rejected;
 int accepted;
 
-int reportCounter = 0;
 
 //static int firstRejected;
 
@@ -163,10 +139,6 @@ boost::mutex reportMutex;
 uint16_t *lookup2D_global; // Storage for computed values of 2-byte chunks
 byte *lookup3D_global;     // Storage for deterministically computed values of 1-byte chunks
 
-std::atomic<int64_t> counter = 0;
-std::atomic<int> astroSync = 0;
-std::atomic<int64_t> benchCounter = 0;
-
 using byte = unsigned char;
 int bench_duration = -1;
 bool startBenchmark = false;
@@ -185,98 +157,6 @@ void openssl_log_callback(const SSL *ssl, int where, int ret)
 }
 
 //------------------------------------------------------------------------------
-
-int update_handler(const boost::system::error_code& error)
-{
-  if (error == boost::asio::error::operation_aborted) {
-    return 1;
-  }
-
-  // Set an expiry time relative to now.
-  update_timer.expires_after(std::chrono::seconds(1));
-
-  // Start an asynchronous wait.
-  update_timer.async_wait(update_handler);
-
-  if (!isConnected) {
-    return 1;
-  }
-
-  reportCounter++;
-
-  auto now = std::chrono::steady_clock::now();
-  //auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now - g_start_time).count();
-
-  auto daysUp = std::chrono::duration_cast<std::chrono::hours>(now - g_start_time).count() / 24;
-  auto hoursUp = std::chrono::duration_cast<std::chrono::hours>(now - g_start_time).count() % 24;
-  auto minutesUp = std::chrono::duration_cast<std::chrono::minutes>(now - g_start_time).count() % 60;
-  auto secondsUp = std::chrono::duration_cast<std::chrono::seconds>(now - g_start_time).count() % 60;
-
-  int64_t currentHashes = counter.load();
-  counter.store(0);
-
-  double ratio = 1.0 * 1;
-  if (rate30sec.size() <= (30 / 1))
-  {
-    rate30sec.push_back((int64_t)(currentHashes * ratio));
-  }
-  else
-  {
-    rate30sec.erase(rate30sec.begin());
-    rate30sec.push_back((int64_t)(currentHashes * ratio));
-  }
-
-  int64_t hashrate = 1.0 * std::accumulate(rate30sec.begin(), rate30sec.end(), 0LL) / (rate30sec.size() * 1);
-  hashrate = (hashrate * 1.0) / (double)1;
-
-  if (reportCounter >= reportInterval) {
-    std::string rateSuffix = " H/s";
-    double rate = (double)hashrate;
-    if (hashrate >= 1000000)
-    {
-      rate = (double)(hashrate / 1000000.0);
-      rateSuffix = " MH/s";
-    }
-    else if (hashrate >= 1000)
-    {
-      rate = (double)(hashrate / 1000.0);
-      rateSuffix = " KH/s";
-    }
-
-
-    setcolor(BRIGHT_WHITE);
-    std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine << versionString << " " << std::flush;
-    setcolor(CYAN);
-    std::cout << std::setw(2) << std::setprecision(3) << "HASHRATE " << rate << rateSuffix << " | " << std::flush;
-
-    std::string uptime = std::to_string(daysUp) + "d-" +
-                  std::to_string(hoursUp) + "h-" +
-                  std::to_string(minutesUp) + "m-" +
-                  std::to_string(secondsUp) + "s >> ";
-
-    double dPrint;
-
-    switch(miningAlgo) {
-      case DERO_HASH:
-        dPrint = difficulty;
-        break;
-      case XELIS_HASH:
-        dPrint = difficulty;
-        break;
-      case SPECTRE_X:
-        dPrint = doubleDiff;
-        break;
-    }
-
-    std::cout << std::setw(2) << "ACCEPTED " << accepted << std::setw(2) << " | REJECTED " << rejected
-              << std::setw(2) << " | DIFFICULTY " << dPrint << std::setw(2) << " | UPTIME " << uptime << std::flush;
-    setcolor(BRIGHT_WHITE); 
-    fflush(stdout);
-    reportCounter = 0;
-  }
-
-  return 0;
-}
 
 void initializeExterns() {
   numAstroFuncs = std::size(allAstroFuncs); //sizeof(allAstroFuncs)/sizeof(allAstroFuncs[0]);
