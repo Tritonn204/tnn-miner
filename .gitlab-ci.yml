@@ -23,7 +23,7 @@ variables:
   AMD64_TARGET_LEVEL: x86-64-v3
   PACKAGE_VERSION: "0.0.1"
   LINUX_AMD64_TGZ: "Tnn-miner-amd64-${PACKAGE_VERSION}.tar.gz"
-  HIVEOS_AMD64_TGZ: "Tnn-miner-amd64-hiveos-${PACKAGE_VERSION}.tar.gz"
+  HIVEOS_AMD64_TGZ: "Tnn-miner-hiveos-amd64-${PACKAGE_VERSION}.tar.gz"
   MACOS_ARM64_TGZ: "Tnn-miner-macos-arm64-${PACKAGE_VERSION}.tar.gz"
   WIN_AMD64_ZIP: "Tnn-miner-win64-${PACKAGE_VERSION}.zip"
   # https://docs.gitlab.com/ee/ci/runners/hosted_runners/macos.html#optimizing-homebrew
