@@ -80,8 +80,8 @@ build-linux:
     - cmake -DTNN_VERSION=$PACKAGE_VERSION ..
     - make -j$(nproc)
     - cd ../
-    - mv ./build/Tnn-miner ./Tnn-miner
-    - tar -czvf ${LINUX_AMD64_TGZ} ./Tnn-miner
+    - mv ./build/Tnn-miner-${PACKAGE_VERSION} ./Tnn-miner-${PACKAGE_VERSION}
+    - tar -czvf ${LINUX_AMD64_TGZ} ./Tnn-miner-${PACKAGE_VERSION}
   after_script:
     - echo "LINUX_BUILD_JOB_ID=$CI_JOB_ID" >> linux-job.env
   artifacts:
@@ -108,10 +108,10 @@ build-macos:
     - cmake -DTNN_VERSION=$PACKAGE_VERSION ..
     - make -j$(nproc)
     - cd ../
-    - mv ./build/Tnn-miner ./Tnn-miner
+    - mv ./build/Tnn-miner-${PACKAGE_VERSION} ./Tnn-miner-${PACKAGE_VERSION}
     - ls -la ./
     - ls -la ./build/
-    - tar -czvf Tnn-miner-macos-arm64.tar.gz ./Tnn-miner
+    - tar -czvf Tnn-miner-macos-arm64.tar.gz ./Tnn-miner-${PACKAGE_VERSION}
   after_script:
     - pwd
     - ls -la ./
@@ -135,8 +135,8 @@ build-windows:
     - .\scripts\prereqs.bat ci
     - .\scripts\build.ps1 $PACKAGE_VERSION
     - dir .\build\
-    - move build\Tnn-miner.exe .\
-    - 7z.exe a ${WIN_AMD64_ZIP} Tnn-miner.exe
+    - move build\Tnn-miner-${PACKAGE_VERSION}.exe .\
+    - 7z.exe a ${WIN_AMD64_ZIP} Tnn-miner-${PACKAGE_VERSION}.exe
   after_script:
     - echo "WIN_BUILD_JOB_ID=$CI_JOB_ID" >> win-job.env
   artifacts:
@@ -162,9 +162,9 @@ test-linux:
     - ls -la ./
   script:
     - tar -xvf ./${LINUX_AMD64_TGZ}
-    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./Tnn-miner --test-dero --quiet
-    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./Tnn-miner --test-spectre --quiet
-    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./Tnn-miner --test-xelis --quiet
+    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./Tnn-miner-${PACKAGE_VERSION} --test-dero --quiet
+    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./Tnn-miner-${PACKAGE_VERSION} --test-spectre --quiet
+    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./Tnn-miner-${PACKAGE_VERSION} --test-xelis --quiet
 
 #upload:
 #  stage: upload
