@@ -95,6 +95,9 @@ build-linux:
       # cache:
       #   paths:
       #     - "*.o"
+    name: ${HIVEOS_AMD64_TGZ}
+    paths:
+      - ${HIVEOS_AMD64_TGZ}
     reports:
       dotenv: linux-job.env
 
@@ -165,9 +168,9 @@ test-linux:
     - ls -la ./
   script:
     - tar -xvf ./${LINUX_AMD64_TGZ}
-    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./Tnn-miner-${PACKAGE_VERSION} --test-dero --quiet
-    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./Tnn-miner-${PACKAGE_VERSION} --test-spectre --quiet
-    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./Tnn-miner-${PACKAGE_VERSION} --test-xelis --quiet
+    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./Tnn-miner --test-dero --quiet
+    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./Tnn-miner --test-spectre --quiet
+    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./Tnn-miner --test-xelis --quiet
 
 #upload:
 #  stage: upload
