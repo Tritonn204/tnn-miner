@@ -196,10 +196,9 @@ endif()
 #cmake_print_variables(TNN_BOOST_LIBS)
 
 include_directories(
-  ${PROJECT_SOURCE_DIR}/include
-  ${PROJECT_SOURCE_DIR}/include/highwayhash
+  "${PROJECT_SOURCE_DIR}/include"
+  "${PROJECT_SOURCE_DIR}/include/highwayhash"
   "${PROJECT_SOURCE_DIR}/src"
-  "${PROJECT_SOURCE_DIR}/src/headers"
   "${PROJECT_SOURCE_DIR}/src/astrobwtv3/"
   "${PROJECT_SOURCE_DIR}/src/xelis-hash/"
   "${PROJECT_SOURCE_DIR}/src/spectrex/"
@@ -228,6 +227,8 @@ file(GLOB all_SRCS
   "${PROJECT_SOURCE_DIR}/src/net/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/miner/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/miner/*.c"
+  "${PROJECT_SOURCE_DIR}/src/modules/*.cpp"
+  "${PROJECT_SOURCE_DIR}/src/modules/*.c"
   "${PROJECT_SOURCE_DIR}/lib/ChaCha20-SIMD/*.c"
 )
 
