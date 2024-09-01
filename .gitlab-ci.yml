@@ -83,8 +83,8 @@ build-linux:
     - cd ../
     - mv ./build/Tnn-miner-${PACKAGE_VERSION} ./Tnn-miner
     - tar -czvf ${LINUX_AMD64_TGZ} ./Tnn-miner
-    - cp ./Tnn-miner ./wrappers/hive/tnn-miner/tnn-miner
-    - tar -czvf ${HIVEOS_AMD64_TGZ} ./wrappers/hive/tnn-miner
+    - cp ./Tnn-miner ./wrappers/hiveos/tnn-miner/tnn-miner
+    - tar -czvf ${HIVEOS_AMD64_TGZ} ./wrappers/hiveos/tnn-miner
   after_script:
     - echo "LINUX_BUILD_JOB_ID=$CI_JOB_ID" >> linux-job.env
   artifacts:
