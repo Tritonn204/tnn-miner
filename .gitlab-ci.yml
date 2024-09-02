@@ -243,8 +243,6 @@ release_job:
   rules:
     - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
   script:
-    - source hiveos-job.env
-    - mv ${WRAPPER_TEMP} ${HIVEOS_MMPOS_AMD64_TGZ}
     - ls -la
     - echo $LINUX_BUILD_JOB_ID
     - echo $HIVEOS_MMPOS_BUILD_JOB_ID
