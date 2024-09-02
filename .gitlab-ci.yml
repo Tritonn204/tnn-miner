@@ -108,7 +108,6 @@ build-hiveos-mmpos:
     - make -j$(nproc)
     - cd ../
     - mv ./build/Tnn-miner-${PACKAGE_VERSION} ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
-    - sed "s/^EXTERNAL_NAME=minername/EXTERNAL_NAME=tnn-miner/g" -i ./wrappers/hiveos+mmpos/tnn-miner/mmp-external.conf
     - sed "s/^EXTERNAL_VERSION=custom/EXTERNAL_VERSION=$PACKAGE_VERSION/g" -i ./wrappers/hiveos+mmpos/tnn-miner/mmp-external.conf
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/h-run.sh
