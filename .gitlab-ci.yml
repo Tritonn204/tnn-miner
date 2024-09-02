@@ -23,7 +23,7 @@ variables:
   AMD64_TARGET_LEVEL: x86-64-v3
   PACKAGE_VERSION: "0.0.1"
   LINUX_AMD64_TGZ: "Tnn-miner-amd64-${PACKAGE_VERSION}.tar.gz"
-  HIVEOS_AMD64_TGZ: "Tnn-miner-hiveos-amd64-${PACKAGE_VERSION}.tar.gz"
+  HIVEOS_MMPOS_AMD64_TGZ: "Tnn-miner-hiveos-mmpos-amd64-${PACKAGE_VERSION}.tar.gz"
   MACOS_ARM64_TGZ: "Tnn-miner-macos-arm64-${PACKAGE_VERSION}.tar.gz"
   WIN_AMD64_ZIP: "Tnn-miner-win64-${PACKAGE_VERSION}.zip"
   # https://docs.gitlab.com/ee/ci/runners/hosted_runners/macos.html#optimizing-homebrew
@@ -95,7 +95,7 @@ build-linux:
     reports:
       dotenv: linux-job.env
 
-build-hiveos:
+build-hiveos-mmpos:
   stage: build
   script:
     - apt update && apt install -y dos2unix
@@ -108,13 +108,13 @@ build-hiveos:
     - make -j$(nproc)
     - cd ../
     - mv ./build/Tnn-miner-${PACKAGE_VERSION} ./wrappers/hiveos/tnn-miner/tnn-miner
-    - tar -czvf ${HIVEOS_AMD64_TGZ} -C ./wrappers/hiveos/ tnn-miner
+    - tar -czvf ${HIVEOS_MMPOS_AMD64_TGZ} -C ./wrappers/hiveos/ tnn-miner
   after_script:
-    - echo "HIVEOS_BUILD_JOB_ID=$CI_JOB_ID" >> hiveos-job.env
+    - echo "HIVEOS_MMPOS_BUILD_JOB_ID=$CI_JOB_ID" >> hiveos-job.env
   artifacts:
-    name: ${HIVEOS_AMD64_TGZ}
+    name: ${HIVEOS_MMPOS_AMD64_TGZ}
     paths:
-      - ${HIVEOS_AMD64_TGZ}
+      - ${HIVEOS_MMPOS_AMD64_TGZ}
       # depending on your build setup it's most likely a good idea to cache outputs to reduce the build time
       # cache:
       #   paths:
@@ -233,7 +233,7 @@ release_job:
   needs:
     - job: build-linux
       artifacts: true
-    - job: build-hiveos
+    - job: build-hiveos-mmpos
       artifacts: true
     - job: build-windows
       artifacts: true
@@ -244,7 +244,7 @@ release_job:
   script:
     - ls -la
     - echo $LINUX_BUILD_JOB_ID
-    - echo $HIVEOS_BUILD_JOB_ID
+    - echo $HIVEOS_MMPOS_BUILD_JOB_ID
     - echo $MACOS_BUILD_JOB_ID
     - echo $WIN_BUILD_JOB_ID
     #- |
@@ -260,9 +260,9 @@ release_job:
         - name: "${LINUX_AMD64_TGZ}"
           url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${LINUX_BUILD_JOB_ID}/artifacts/raw/${LINUX_AMD64_TGZ}"
           filepath: "/${LINUX_AMD64_TGZ}"
-        - name: "${HIVEOS_AMD64_TGZ}"
-          url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${HIVEOS_BUILD_JOB_ID}/artifacts/raw/${HIVEOS_AMD64_TGZ}"
-          filepath: "/${HIVEOS_AMD64_TGZ}"
+        - name: "${HIVEOS_MMPOS_AMD64_TGZ}"
+          url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${HIVEOS_MMPOS_BUILD_JOB_ID}/artifacts/raw/${HIVEOS_MMPOS_AMD64_TGZ}"
+          filepath: "/${HIVEOS_MMPOS_AMD64_TGZ}"
         - name: "${WIN_AMD64_ZIP}"
           url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${WIN_BUILD_JOB_ID}/artifacts/raw/${WIN_AMD64_ZIP}"
           filepath: "/${WIN_AMD64_ZIP}"

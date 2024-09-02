@@ -55,15 +55,11 @@ rj=$(jq '.rejected' <<< "$DATA")
 uptime=$(jq '.uptime' <<< "$DATA")
 ver=$(jq '.version' <<< "$DATA")
 echo "$ver"
-algo=$CUSTOM_ALGO
+algo="SPECTREX"
 cpu_fan[0]=get_cpu_fans
 hs_units="hs"
 echo "HS[0] = ${hs[0]}"
 echo "cputemp=${cpu_temp[0]}"
-
-
-
-
 
 
 stats=$(jq -nc \
