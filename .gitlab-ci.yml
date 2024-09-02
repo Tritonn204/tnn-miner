@@ -23,7 +23,6 @@ variables:
   AMD64_TARGET_LEVEL: x86-64-v3
   PACKAGE_VERSION: "0.0.1"
   LINUX_AMD64_TGZ: "Tnn-miner-amd64-${PACKAGE_VERSION}.tar.gz"
-  HIVEOS_MMPOS_AMD64_TGZ: "tnn-miner-hiveos_mmpos_amd64_${PACKAGE_VERSION//-/.}.tar.gz"
   MACOS_ARM64_TGZ: "Tnn-miner-macos-arm64-${PACKAGE_VERSION}.tar.gz"
   WIN_AMD64_ZIP: "Tnn-miner-win64-${PACKAGE_VERSION}.zip"
   # https://docs.gitlab.com/ee/ci/runners/hosted_runners/macos.html#optimizing-homebrew
@@ -113,6 +112,8 @@ build-hiveos-mmpos:
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/h-run.sh
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/h-stats.sh
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/mmp-stats.sh
+    - export HIVEOS_MMPOS_AMD64_TGZ="tnn-miner-hiveos_mmpos_amd64_${PACKAGE_VERSION//-/.}.tar.gz"
+    - echo "HIVEOS_MMPOS_AMD64_TGZ=$HIVEOS_MMPOS_AMD64_TGZ" >> hiveos-job.env
     - tar -czvf ${HIVEOS_MMPOS_AMD64_TGZ} -C ./wrappers/hiveos+mmpos/ tnn-miner
   after_script:
     - echo "HIVEOS_MMPOS_BUILD_JOB_ID=$CI_JOB_ID" >> hiveos-job.env
@@ -248,10 +249,12 @@ release_job:
     - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
   script:
     - ls -la
+    - source hiveos-job.env
     - echo $LINUX_BUILD_JOB_ID
     - echo $HIVEOS_MMPOS_BUILD_JOB_ID
     - echo $MACOS_BUILD_JOB_ID
     - echo $WIN_BUILD_JOB_ID
+    - echo "HIVEOS_MMPOS_AMD64_TGZ=$HIVEOS_MMPOS_AMD64_TGZ" >> hiveos-job.env
     #- |
     #  release-cli create --name "Release $CI_COMMIT_TAG" --tag-name $CI_COMMIT_TAG \
     #    --assets-link "{\"name\":\"${LINUX_AMD64_BINARY}\",\"url\":\"${PACKAGE_REGISTRY_URL}/${LINUX_AMD64_BINARY}\"}"
