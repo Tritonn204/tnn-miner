@@ -107,8 +107,8 @@ build-hiveos-mmpos:
     - cmake -DTNN_VERSION=$PACKAGE_VERSION ..
     - make -j$(nproc)
     - cd ../
-    - mv ./build/Tnn-miner-${PACKAGE_VERSION} ./wrappers/hiveos/tnn-miner/tnn-miner
-    - tar -czvf ${HIVEOS_MMPOS_AMD64_TGZ} -C ./wrappers/hiveos/ tnn-miner
+    - mv ./build/Tnn-miner-${PACKAGE_VERSION} ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
+    - tar -czvf ${HIVEOS_MMPOS_AMD64_TGZ} -C ./wrappers/hiveos+mmpos/ tnn-miner
   after_script:
     - echo "HIVEOS_MMPOS_BUILD_JOB_ID=$CI_JOB_ID" >> hiveos-job.env
   artifacts:
