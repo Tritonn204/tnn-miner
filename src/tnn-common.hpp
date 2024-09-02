@@ -21,10 +21,12 @@
 
 #include <num.h>
 
+// Corresponding to the POW[] array in algos.hpp
 #define DERO_HASH 0
 #define XELIS_HASH 1
 #define SPECTRE_X 2
 
+// Each new blockchain has 10 reserved net protocol slots
 #define DERO_SOLO 0
 
 #define XELIS_SOLO 10
