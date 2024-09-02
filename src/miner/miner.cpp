@@ -54,6 +54,7 @@
 #include <exception>
 
 #include "reporter.hpp"
+#include "algos.hpp"
 
 // INITIALIZE COMMON STUFF
 int miningAlgo = DERO_HASH;
@@ -65,6 +66,8 @@ boost::asio::io_context my_context;
 boost::asio::steady_timer update_timer = boost::asio::steady_timer(my_context);
 std::chrono::time_point<std::chrono::steady_clock> g_start_time = std::chrono::steady_clock::now();
 
+Num oneLsh256 = Num(1) << 256;
+Num maxU256 = Num(2).pow(256) - 1;
 
 const auto processor_count = std::thread::hardware_concurrency();
 
@@ -101,9 +104,14 @@ int64_t difficultyDev;
 double doubleDiff;
 double doubleDiffDev;
 
+bool useLookupMine = false;
+
 std::vector<int64_t> rate5min;
 std::vector<int64_t> rate1min;
 std::vector<int64_t> rate30sec;
+
+std::string workerName = "default";
+std::string workerNameFromWallet = "";
 
 bool isConnected = false;
 bool devConnected = false;
@@ -190,9 +198,6 @@ int main(int argc, char **argv)
   // Check command line arguments.
   lookup2D_global = (uint16_t *)malloc_huge_pages(regOps_size * (256 * 256) * sizeof(uint16_t));
   lookup3D_global = (byte *)malloc_huge_pages(branchedOps_size * (256 * 256) * sizeof(byte));
-
-  oneLsh256 = Num(1) << 256;
-  maxU256 = Num(2).pow(256) - 1;
 
   // default values
   bool lockThreads = true;

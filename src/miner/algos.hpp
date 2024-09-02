@@ -38,3 +38,7 @@ inline bool CheckHash(unsigned char *hash, Num diff, int algo)
   if (littleEndian()) std::reverse(hash, hash+32);
   return (cmp);
 }
+
+void mineDero(int tid);
+void mineXelis(int tid);
+void mineSpectre(int tid);

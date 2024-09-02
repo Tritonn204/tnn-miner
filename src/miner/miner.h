@@ -34,8 +34,6 @@ const int workerThreads = 2;
 
 std::string symbol = nullArg;
 std::string port = nullArg;
-std::string workerName = "default";
-std::string workerNameFromWallet = "";
 
 bool useStratum = false;
 
@@ -44,7 +42,6 @@ int testOp = -1;
 int testLen = -1;
 int processPriority = 0;
 bool gpuMine = false;
-bool useLookupMine = false;
 bool broadcastStats = false;
 bool checkWallet = true;
 
@@ -88,11 +85,6 @@ std::unordered_map<std::string, int> coinSelector = {
   {"spr", SPECTRE_X},
   {"SPR", SPECTRE_X}
 };
-
-const char* devWorkerName = "tnn-dev";
-
-Num oneLsh256;      
-Num maxU256;                                                   
 
 void getWork(bool isDev, int algo);
 void sendWork();
