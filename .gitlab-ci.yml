@@ -108,6 +108,12 @@ build-hiveos-mmpos:
     - make -j$(nproc)
     - cd ../
     - mv ./build/Tnn-miner-${PACKAGE_VERSION} ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
+    - sed "s/^EXTERNAL_NAME=minername/EXTERNAL_NAME=tnn-miner/g" -i ./wrappers/hiveos+mmpos/tnn-miner/mmp-external.conf
+    - sed "s/^EXTERNAL_VERSION=custom/EXTERNAL_VERSION=$PACKAGE_VERSION/g" -i ./wrappers/hiveos+mmpos/tnn-miner/mmp-external.conf
+    - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
+    - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/h-run.sh
+    - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/h-stats.sh
+    - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/mmp-stats.sh
     - tar -czvf ${HIVEOS_MMPOS_AMD64_TGZ} -C ./wrappers/hiveos+mmpos/ tnn-miner
   after_script:
     - echo "HIVEOS_MMPOS_BUILD_JOB_ID=$CI_JOB_ID" >> hiveos-job.env
