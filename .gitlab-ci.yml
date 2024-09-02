@@ -84,6 +84,8 @@ build-linux:
     - cd ../
     - mv ./build/Tnn-miner-${PACKAGE_VERSION} ./Tnn-miner
     - tar -czvf ${LINUX_AMD64_TGZ} ./Tnn-miner
+    - export HIVEOS_MMPOS_AMD64_TGZ="tnn-miner-hiveos_mmpos_amd64_${PACKAGE_VERSION//-/.}.tar.gz"
+    - echo "HIVEOS_MMPOS_AMD64_TGZ=$HIVEOS_MMPOS_AMD64_TGZ" >> linux-job.env
   after_script:
     - echo "LINUX_BUILD_JOB_ID=$CI_JOB_ID" >> linux-job.env
   artifacts:
@@ -97,33 +99,23 @@ build-linux:
       dotenv: linux-job.env
 
 build-hiveos-mmpos:
-  stage: build
+  needs:
+    - build-linux
   script:
-    - apt update && apt install -y dos2unix
-    - dos2unix ./scripts/*.sh
-    - ./scripts/prereqs.sh
-    - export
-    - mkdir ./build
-    - cd ./build
-    - cmake -DTNN_VERSION=$PACKAGE_VERSION ..
-    - make -j$(nproc)
-    - cd ../
-    - mv ./build/Tnn-miner-${PACKAGE_VERSION} ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
+    - tar -xvf ${LINUX_AMD64_TGZ}
+    - mv ./Tnn-miner ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
     - sed "s/^EXTERNAL_VERSION=custom/EXTERNAL_VERSION=$PACKAGE_VERSION/g" -i ./wrappers/hiveos+mmpos/tnn-miner/mmp-external.conf
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/h-run.sh
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/h-stats.sh
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/mmp-stats.sh
-    - export HIVEOS_MMPOS_AMD64_TGZ="tnn-miner-hiveos_mmpos_amd64_${PACKAGE_VERSION//-/.}.tar.gz"
-    - echo "HIVEOS_MMPOS_AMD64_TGZ=$HIVEOS_MMPOS_AMD64_TGZ" >> hiveos-job.env
     - tar -czvf ${HIVEOS_MMPOS_AMD64_TGZ} -C ./wrappers/hiveos+mmpos/ tnn-miner
-    - mv ${HIVEOS_MMPOS_AMD64_TGZ} ${WRAPPER_TEMP}
   after_script:
     - echo "HIVEOS_MMPOS_BUILD_JOB_ID=$CI_JOB_ID" >> hiveos-job.env
   artifacts:
-    name: "wrapper"
+    name: ${HIVEOS_MMPOS_AMD64_TGZ}
     paths:
-      - ${WRAPPER_TEMP}
+      - ${HIVEOS_MMPOS_AMD64_TGZ}
       # depending on your build setup it's most likely a good idea to cache outputs to reduce the build time
       # cache:
       #   paths:
