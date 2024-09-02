@@ -42,3 +42,10 @@ inline bool CheckHash(unsigned char *hash, Num diff, int algo)
 void mineDero(int tid);
 void mineXelis(int tid);
 void mineSpectre(int tid);
+
+typedef void (*mineFunc)(int);
+const mineFunc POW[] = {
+  mineDero, // 0
+  mineXelis, 
+  mineSpectre
+};

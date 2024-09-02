@@ -620,47 +620,6 @@ fillBlanks:
 
   if (threads == 0)
   {
-    // if (gpuMine)
-    //   threads = 1;
-    // else
-    // {
-    //   while (true)
-    //   {
-    //     setcolor(CYAN);
-    //     printf("%s\n", threadPrompt);
-    //     fflush(stdout);
-    //     setcolor(BRIGHT_WHITE);
-
-    //     std::string cmdLine;
-    //     std::getline(std::cin, cmdLine);
-    //     if (cmdLine != "" && cmdLine.find_first_not_of(' ') != std::string::npos)
-    //     {
-    //       try
-    //       {
-    //         threads = std::stoi(cmdLine.c_str());
-    //         break;
-    //       }
-    //       catch (...)
-    //       {
-    //         printf("ERROR: invalid threads parameter... must be an integer\n");
-    //         continue;
-    //       }
-    //     }
-    //     else
-    //     {
-    //       setcolor(BRIGHT_YELLOW);
-    //       printf("Default value will be used: 1\n\n");
-    //       fflush(stdout);
-    //       setcolor(BRIGHT_WHITE);
-    //       threads = 1;
-    //       break;
-    //     }
-
-    //     if (threads == 0)
-    //       threads = 1;
-    //     break;
-    //   }
-    // }
     threads = processor_count;
   }
 
@@ -823,7 +782,7 @@ Mining:
     for (int i = 0; i < threads; i++)
     {
 
-      boost::thread t(mine, i + 1, miningAlgo);
+      boost::thread t(POW[miningAlgo], i + 1);
 
       if (lockThreads)
       {
@@ -892,116 +851,6 @@ void logSeconds(std::chrono::steady_clock::time_point start_time, int duration, 
     boost::this_thread::sleep_for(boost::chrono::milliseconds(250));
   }
 }
-
-/*
-void update(std::chrono::steady_clock::time_point start_time)
-{
-  auto beginning = start_time;
-  boost::this_thread::yield();
-
-startReporting:
-  while (true)
-  {
-    if (!isConnected)
-      break;
-
-    auto now = std::chrono::steady_clock::now();
-    auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count();
-
-    auto daysUp = std::chrono::duration_cast<std::chrono::hours>(now - beginning).count() / 24;
-    auto hoursUp = std::chrono::duration_cast<std::chrono::hours>(now - beginning).count() % 24;
-    auto minutesUp = std::chrono::duration_cast<std::chrono::minutes>(now - beginning).count() % 60;
-    auto secondsUp = std::chrono::duration_cast<std::chrono::seconds>(now - beginning).count() % 60;
-
-    if (milliseconds >= reportInterval * 1000)
-    {
-      std::scoped_lock<boost::mutex> lockGuard(mutex);
-      start_time = now;
-      int64_t currentHashes = counter.load();
-      counter.store(0);
-
-      // if (rate1min.size() <= 60 / reportInterval)
-      // {
-      //   rate1min.push_back(currentHashes);
-      // }
-      // else
-      // {
-      //   rate1min.erase(rate1min.begin());
-      //   rate1min.push_back(currentHashes);
-      // }
-
-      float ratio = (1000.0f / milliseconds) * reportInterval;
-      if (rate30sec.size() <= 30 / reportInterval)
-      {
-        rate30sec.push_back((int64_t)(currentHashes * ratio));
-      }
-      else
-      {
-        rate30sec.erase(rate30sec.begin());
-        rate30sec.push_back((int64_t)(currentHashes * ratio));
-      }
-
-      int64_t hashrate = 1.0 * std::accumulate(rate30sec.begin(), rate30sec.end(), 0LL) / (rate30sec.size() * reportInterval);
-
-      std::string rateSuffix = " H/s";
-      double rate = (double)hashrate;
-      if (hashrate >= 1000000)
-      {
-        rate = (double)(hashrate / 1000000.0);
-        rateSuffix = " MH/s";
-      }
-      else if (hashrate >= 1000)
-      {
-        rate = (double)(hashrate / 1000.0);
-        rateSuffix = " KH/s";
-      }
-
-      setcolor(BRIGHT_WHITE);
-      std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine << versionString << " ";
-      setcolor(CYAN);
-      std::cout << std::setw(2) << std::setprecision(3) << "HASHRATE " << rate << rateSuffix << " | " << std::flush;
-
-      std::string uptime = std::to_string(daysUp) + "d-" +
-                     std::to_string(hoursUp) + "h-" +
-                     std::to_string(minutesUp) + "m-" +
-                     std::to_string(secondsUp) + "s >> ";
-
-      double dPrint;
-
-      switch(miningAlgo) {
-        case DERO_HASH:
-          dPrint = difficulty;
-          break;
-        case XELIS_HASH:
-          dPrint = difficulty;
-          break;
-        case SPECTRE_X:
-          dPrint = doubleDiff;
-          break;
-      }
-
-      std::cout << std::setw(2) << "ACCEPTED " << accepted << std::setw(2) << " | REJECTED " << rejected
-                << std::setw(2) << " | DIFFICULTY " << dPrint << std::setw(2) << " | UPTIME " << uptime << std::flush;
-      setcolor(BRIGHT_WHITE);
-     //  mutex.unlock();
-    }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
-  }
-  while (true)
-  {
-    if (isConnected)
-    {
-      rate30sec.clear();
-      counter.store(0);
-      start_time = std::chrono::steady_clock::now();
-      beginning = start_time;
-      break;
-    }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(50));
-  }
-  goto startReporting;
-}
-*/
 
 void setAffinity(boost::thread::native_handle_type t, int core)
 {
@@ -1289,18 +1138,5 @@ void benchmark(int tid)
     }
     if (stopBenchmark)
       break;
-  }
-}
-
-void mine(int tid, int algo)
-{
-  switch (algo)
-  {
-  case DERO_HASH:
-    mineDero(tid);
-  case XELIS_HASH:
-    mineXelis(tid);
-  case SPECTRE_X:
-    mineSpectre(tid);
   }
 }
