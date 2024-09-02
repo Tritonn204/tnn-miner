@@ -72,9 +72,6 @@ namespace XelisStratum {
   static int jobTimeout = 90;
 }
 
-int handleXStratumPacket(boost::json::object packet, bool isDev);
-int handleXStratumResponse(boost::json::object packet, bool isDev);
-
 namespace SpectreStratum {
   using bJson = boost::json::object;
 
@@ -148,6 +145,3 @@ namespace SpectreStratum {
 
   static int jobTimeout = 30;
 }
-
-int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCache *cache, bool isDev);
-int handleSpectreStratumResponse(boost::json::object packet, bool isDev);

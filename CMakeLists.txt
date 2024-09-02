@@ -151,6 +151,8 @@ find_package(Threads REQUIRED)
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_NO_WARN_NEW_VERSIONS ON)
+
+if (NOT USE_CPM_BOOST)
 find_package(Boost 1.80 COMPONENTS
   chrono
   context
@@ -159,6 +161,7 @@ find_package(Boost 1.80 COMPONENTS
   atomic
   program_options
 )
+endif()
 
 if(Boost_FOUND AND NOT USE_CPM_BOOST)
   message("OS-provided Boost found")
@@ -218,26 +221,14 @@ include_directories(
   "${PROJECT_SOURCE_DIR}/lib"
 )
 
-file(GLOB all_SRCS
-  "${PROJECT_SOURCE_DIR}/include/*.h"
-  "${PROJECT_SOURCE_DIR}/include/*.hpp"
+file(GLOB_RECURSE all_SRCS
   "${PROJECT_SOURCE_DIR}/include/libkeccak/*.c"
   "${PROJECT_SOURCE_DIR}/src/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/*.c"
-  "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.cpp"
-  "${PROJECT_SOURCE_DIR}/src/astrobwtv3/*.c"
-  "${PROJECT_SOURCE_DIR}/src/xelis-hash/*.cpp"
-  "${PROJECT_SOURCE_DIR}/src/xelis-hash/*.c"
-  "${PROJECT_SOURCE_DIR}/src/spectrex/*.cpp"
-  "${PROJECT_SOURCE_DIR}/src/spectrex/*.c"
-  "${PROJECT_SOURCE_DIR}/src/broadcast/*.cpp"
-  "${PROJECT_SOURCE_DIR}/src/net/*.cpp"
-  "${PROJECT_SOURCE_DIR}/src/miner/*.cpp"
-  "${PROJECT_SOURCE_DIR}/src/miner/*.c"
-  "${PROJECT_SOURCE_DIR}/src/miner/coins/*.cpp"
-  "${PROJECT_SOURCE_DIR}/src/miner/coins/*.c"
   "${PROJECT_SOURCE_DIR}/lib/ChaCha20-SIMD/*.c"
 )
+
+list(FILTER all_SRCS EXCLUDE REGEX "${PROJECT_SOURCE_DIR}/src/xelis-hash/target/*")
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/lib/BLAKE3/c)
 
