@@ -19,6 +19,8 @@
 #include <boost/thread.hpp>
 #include <boost/tokenizer.hpp>
 
+#include <num.h>
+
 #define DERO_HASH 0
 #define XELIS_HASH 1
 #define SPECTRE_X 2
@@ -33,11 +35,19 @@
 #define SPECTRE_STRATUM 21
 
 static const char *nullArg = "NULL";
+static const char* devWorkerName = "tnn-dev";                                      
+
+extern std::string workerName;
+extern std::string workerNameFromWallet;
+extern bool useLookupMine;
 
 extern int protocol;
 
 extern std::string host;
 extern std::string wallet;
+
+extern Num oneLsh256;      
+extern Num maxU256;             
 
 extern int miningAlgo;
 

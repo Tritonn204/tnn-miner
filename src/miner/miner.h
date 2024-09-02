@@ -34,8 +34,6 @@ const int workerThreads = 2;
 
 std::string symbol = nullArg;
 std::string port = nullArg;
-std::string workerName = "default";
-std::string workerNameFromWallet = "";
 
 bool useStratum = false;
 
@@ -44,7 +42,6 @@ int testOp = -1;
 int testLen = -1;
 int processPriority = 0;
 bool gpuMine = false;
-bool useLookupMine = false;
 bool broadcastStats = false;
 bool checkWallet = true;
 
@@ -88,11 +85,6 @@ std::unordered_map<std::string, int> coinSelector = {
   {"spr", SPECTRE_X},
   {"SPR", SPECTRE_X}
 };
-
-const char* devWorkerName = "tnn-dev";
-
-Num oneLsh256;      
-Num maxU256;                                                   
 
 void getWork(bool isDev, int algo);
 void sendWork();
@@ -177,36 +169,6 @@ inline void printSupported()
   setcolor(BRIGHT_WHITE);
   printf("\n");
 #endif
-}
-
-inline Num ConvertDifficultyToBig(Num d, int algo)
-{
-  switch(algo) {
-    case DERO_HASH:
-      return oneLsh256 / d;
-    case XELIS_HASH:
-      return maxU256 / d;
-    case SPECTRE_X:
-      return oneLsh256 / (d+1);
-    default:
-      return 0;
-  }
-}
-
-inline bool CheckHash(unsigned char *hash, int64_t diff, int algo)
-{
-  if (littleEndian()) std::reverse(hash, hash+32);
-  bool cmp = Num(hexStr(hash, 32).c_str(), 16) <= ConvertDifficultyToBig(diff, algo);
-  if (littleEndian()) std::reverse(hash, hash+32);
-  return (cmp);
-}
-
-inline bool CheckHash(unsigned char *hash, Num diff, int algo)
-{
-  if (littleEndian()) std::reverse(hash, hash+32);
-  bool cmp = Num(hexStr(hash, 32).c_str(), 16) <= diff;
-  if (littleEndian()) std::reverse(hash, hash+32);
-  return (cmp);
 }
 
 void setPriorityClass(boost::thread::native_handle_type t, int priority);
