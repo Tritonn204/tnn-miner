@@ -24,6 +24,7 @@ variables:
   PACKAGE_VERSION: "0.0.1"
   LINUX_AMD64_TGZ: "Tnn-miner-amd64-${PACKAGE_VERSION}.tar.gz"
   MACOS_ARM64_TGZ: "Tnn-miner-macos-arm64-${PACKAGE_VERSION}.tar.gz"
+  WRAPPER_TEMP: "wrapper.tar.gz"
   WIN_AMD64_ZIP: "Tnn-miner-win64-${PACKAGE_VERSION}.zip"
   # https://docs.gitlab.com/ee/ci/runners/hosted_runners/macos.html#optimizing-homebrew
   HOMEBREW_NO_AUTO_UPDATE: 1
@@ -40,6 +41,7 @@ workflow:
         PACKAGE_VERSION: $CI_COMMIT_TAG
         LINUX_AMD64_TGZ: "Tnn-miner-amd64-${PACKAGE_VERSION}.tar.gz"
         MACOS_ARM64_TGZ: "Tnn-miner-macos-arm64-${PACKAGE_VERSION}.tar.gz"
+        WRAPPER_TEMP: "wrapper.tar.gz"
         WIN_AMD64_ZIP: "Tnn-miner-win64-${PACKAGE_VERSION}.zip"
 
 .macos_saas_runners:
@@ -113,15 +115,15 @@ build-hiveos-mmpos:
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/h-stats.sh
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/mmp-stats.sh
     - export HIVEOS_MMPOS_AMD64_TGZ="tnn-miner-hiveos_mmpos_amd64_${PACKAGE_VERSION//-/.}.tar.gz"
-    - echo $HIVEOS_MMPOS_AMD64_TGZ
     - echo "HIVEOS_MMPOS_AMD64_TGZ=$HIVEOS_MMPOS_AMD64_TGZ" >> hiveos-job.env
     - tar -czvf ${HIVEOS_MMPOS_AMD64_TGZ} -C ./wrappers/hiveos+mmpos/ tnn-miner
+    - mv ${HIVEOS_MMPOS_AMD64_TGZ} ${WRAPPER_TEMP}
   after_script:
     - echo "HIVEOS_MMPOS_BUILD_JOB_ID=$CI_JOB_ID" >> hiveos-job.env
   artifacts:
-    name: ${HIVEOS_MMPOS_AMD64_TGZ}
+    name: "wrapper"
     paths:
-      - ${HIVEOS_MMPOS_AMD64_TGZ}
+      - ${WRAPPER_TEMP}
       # depending on your build setup it's most likely a good idea to cache outputs to reduce the build time
       # cache:
       #   paths:
@@ -249,6 +251,8 @@ release_job:
   rules:
     - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
   script:
+    - source hiveos-job.env
+    - mv ${WRAPPER_TEMP} ${HIVEOS_MMPOS_AMD64_TGZ}
     - ls -la
     - echo $LINUX_BUILD_JOB_ID
     - echo $HIVEOS_MMPOS_BUILD_JOB_ID
