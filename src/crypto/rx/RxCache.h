@@ -24,8 +24,8 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_RX_CACHE_H
-#define XMRIG_RX_CACHE_H
+#ifndef TNN_RX_CACHE_H
+#define TNN_RX_CACHE_H
 
 
 #include <cstdint>
@@ -47,7 +47,7 @@ namespace xmrig
 class RxCache
 {
 public:
-    XMRIG_DISABLE_COPY_MOVE_DEFAULT(RxCache)
+    TNN_DISABLE_COPY_MOVE_DEFAULT(RxCache)
 
     RxCache(bool hugePages, uint32_t nodeId);
     RxCache(uint8_t *memory);
@@ -76,4 +76,4 @@ private:
 } /* namespace xmrig */
 
 
-#endif /* XMRIG_RX_CACHE_H */
+#endif /* TNN_RX_CACHE_H */

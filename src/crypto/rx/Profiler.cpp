@@ -29,7 +29,7 @@
 #include <algorithm>
 
 
-#ifdef XMRIG_FEATURE_PROFILING
+#ifdef TNN_FEATURE_PROFILING
 
 
 ProfileScopeData* ProfileScopeData::s_data[MAX_DATA_COUNT] = {};
@@ -100,4 +100,4 @@ NOINLINE void ProfileScopeData::Init()
 }
 
 
-#endif /* XMRIG_FEATURE_PROFILING */
+#endif /* TNN_FEATURE_PROFILING */

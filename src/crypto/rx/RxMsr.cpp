@@ -42,7 +42,7 @@ bool RxMsr::m_initialized   = false;
 static MsrItems items;
 
 
-#ifdef XMRIG_OS_WIN
+#ifdef TNN_OS_WIN
 static constexpr inline int32_t get_cpu(int32_t)        { return -1; }
 #else
 static constexpr inline int32_t get_cpu(int32_t cpu)    { return cpu; }

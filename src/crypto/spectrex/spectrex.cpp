@@ -1,5 +1,5 @@
 #include "spectrex.h"
-#include <lookupcompute.h>
+#include <astrobwtv3/lookupcompute.h>
 #include <openssl/evp.h>
 #include <openssl/sha.h>
 #include <hex.h>

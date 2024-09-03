@@ -22,8 +22,8 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_ARGON2_IMPL_H
-#define XMRIG_ARGON2_IMPL_H
+#ifndef TNN_ARGON2_IMPL_H
+#define TNN_ARGON2_IMPL_H
 
 
 namespace xmrig {
@@ -46,4 +46,4 @@ public:
 }} // namespace xmrig::argon2
 
 
-#endif /* XMRIG_ARGON2_IMPL_H */
+#endif /* TNN_ARGON2_IMPL_H */

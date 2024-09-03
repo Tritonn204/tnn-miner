@@ -60,7 +60,7 @@ namespace randomx {
 		void generateDatasetInitCode() {}
 
 		inline ProgramFunc *getProgramFunc() const {
-#			ifdef XMRIG_SECURE_JIT
+#			ifdef TNN_SECURE_JIT
 			enableExecution();
 #			endif
 

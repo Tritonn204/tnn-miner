@@ -59,7 +59,7 @@ namespace randomx {
 		void generateDatasetInitCode();
 
 		inline ProgramFunc *getProgramFunc() const {
-#			ifdef XMRIG_SECURE_JIT
+#			ifdef TNN_SECURE_JIT
 			enableExecution();
 #			endif
 
@@ -67,7 +67,7 @@ namespace randomx {
 		}
 
 		inline DatasetInitFunc *getDatasetInitFunc() const {
-# 			ifdef XMRIG_SECURE_JIT
+# 			ifdef TNN_SECURE_JIT
 			enableExecution();
 #			endif
 
@@ -92,7 +92,7 @@ namespace randomx {
 		int32_t prevCFROUND = -1;
 		int32_t prevFPOperation = -1;
 
-#		ifdef XMRIG_FIX_RYZEN
+#		ifdef TNN_FIX_RYZEN
 		std::pair<const void*, const void*> mainLoopBounds;
 #		endif
 

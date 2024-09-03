@@ -25,7 +25,7 @@
 #include "crypto/common/portable/mm_malloc.h"
 
 
-#ifdef XMRIG_FEATURE_HWLOC
+#ifdef TNN_FEATURE_HWLOC
 #   include "crypto/common/NUMAMemoryPool.h"
 #endif
 
@@ -103,7 +103,7 @@ xmrig::HugePagesInfo xmrig::VirtualMemory::hugePages() const
 }
 
 
-#ifndef XMRIG_FEATURE_HWLOC
+#ifndef TNN_FEATURE_HWLOC
 uint32_t xmrig::VirtualMemory::bindToNUMANode(int64_t)
 {
     return 0;
@@ -123,7 +123,7 @@ void xmrig::VirtualMemory::init(size_t poolSize, size_t hugePageSize)
         osInit(hugePageSize);
     }
 
-#   ifdef XMRIG_FEATURE_HWLOC
+#   ifdef TNN_FEATURE_HWLOC
     if (Cpu::info()->nodes() > 1) {
         pool = new NUMAMemoryPool(align(poolSize, Cpu::info()->nodes()), hugePageSize > 0);
     } else

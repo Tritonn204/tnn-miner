@@ -17,8 +17,8 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_RXMSR_H
-#define XMRIG_RXMSR_H
+#ifndef TNN_RXMSR_H
+#define TNN_RXMSR_H
 
 
 #include <vector>
@@ -51,4 +51,4 @@ private:
 } /* namespace xmrig */
 
 
-#endif /* XMRIG_RXMSR_H */
+#endif /* TNN_RXMSR_H */

@@ -24,8 +24,8 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_KP_HASH_H
-#define XMRIG_KP_HASH_H
+#ifndef TNN_KP_HASH_H
+#define TNN_KP_HASH_H
 
 
 #include <cstdint>
@@ -55,4 +55,4 @@ public:
 } // namespace xmrig
 
 
-#endif // XMRIG_KP_HASH_H
+#endif // TNN_KP_HASH_H

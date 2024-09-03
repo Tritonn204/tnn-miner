@@ -14,6 +14,7 @@
 #include <boost/json.hpp>
 
 #include <xatum.h>
+#include <xelis-hash/xelis-hash.hpp>
 
 namespace beast = boost::beast;         // from <boost/beast.hpp>
 namespace http = beast::http;           // from <boost/beast/http.hpp>

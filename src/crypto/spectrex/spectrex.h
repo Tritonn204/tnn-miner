@@ -1,7 +1,7 @@
 #pragma once
 
 #include <inttypes.h>
-#include <astrobwtv3.h>
+#include <astrobwtv3/astrobwtv3.h>
 #include <array>
 #include <num.h>
 

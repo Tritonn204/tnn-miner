@@ -27,7 +27,7 @@
 #include "crypto/randomx/aes_hash.hpp"
 
 
-#ifdef XMRIG_FEATURE_MSR
+#ifdef TNN_FEATURE_MSR
 #   include "crypto/rx/RxFix.h"
 #   include "crypto/rx/RxMsr.h"
 #endif
@@ -61,15 +61,15 @@ xmrig::HugePagesInfo xmrig::Rx::hugePages()
 }
 
 
-xmrig::RxDataset *xmrig::Rx::dataset(const Job &job, uint32_t nodeId)
-{
-    return d_ptr->queue.dataset(job, nodeId);
-}
+// xmrig::RxDataset *xmrig::Rx::dataset(const Job &job, uint32_t nodeId)
+// {
+//     return d_ptr->queue.dataset(job, nodeId);
+// }
 
 
 void xmrig::Rx::destroy()
 {
-#   ifdef XMRIG_FEATURE_MSR
+#   ifdef TNN_FEATURE_MSR
     RxMsr::destroy();
 #   endif
 
@@ -86,7 +86,7 @@ void xmrig::Rx::init(IRxListener *listener)
 
 
 #include "crypto/randomx/blake2/blake2.h"
-#if defined(XMRIG_FEATURE_AVX2)
+#if defined(TNN_FEATURE_AVX2)
 #include "crypto/randomx/blake2/avx2/blake2b.h"
 #endif
 
@@ -100,33 +100,33 @@ bool xmrig::Rx::init(const T &seed, const RxConfig &config, const CpuConfig &cpu
 {
     const auto f = seed.algorithm().family();
     if ((f != Algorithm::RANDOM_X)
-#       ifdef XMRIG_ALGO_CN_HEAVY
+#       ifdef TNN_ALGO_CN_HEAVY
         && (f != Algorithm::CN_HEAVY)
 #       endif
-#       ifdef XMRIG_ALGO_GHOSTRIDER
+#       ifdef TNN_ALGO_GHOSTRIDER
         && (f != Algorithm::GHOSTRIDER)
 #       endif
         ) {
-#       ifdef XMRIG_FEATURE_MSR
+#       ifdef TNN_FEATURE_MSR
         RxMsr::destroy();
 #       endif
 
         return true;
     }
 
-#   ifdef XMRIG_FEATURE_MSR
+#   ifdef TNN_FEATURE_MSR
     if (!RxMsr::isInitialized()) {
         RxMsr::init(config, cpu.threads().get(seed.algorithm()).data());
     }
 #   endif
 
-#   ifdef XMRIG_ALGO_CN_HEAVY
+#   ifdef TNN_ALGO_CN_HEAVY
     if (f == Algorithm::CN_HEAVY) {
         return true;
     }
 #   endif
 
-#   ifdef XMRIG_ALGO_GHOSTRIDER
+#   ifdef TNN_ALGO_GHOSTRIDER
     if (f == Algorithm::GHOSTRIDER) {
         return true;
     }
@@ -137,7 +137,7 @@ bool xmrig::Rx::init(const T &seed, const RxConfig &config, const CpuConfig &cpu
     randomx_set_optimized_dataset_init(config.initDatasetAVX2());
 
     if (!osInitialized) {
-#       ifdef XMRIG_FIX_RYZEN
+#       ifdef TNN_FIX_RYZEN
         RxFix::setupMainLoopExceptionFrame();
 #       endif
 
@@ -145,13 +145,13 @@ bool xmrig::Rx::init(const T &seed, const RxConfig &config, const CpuConfig &cpu
             SelectSoftAESImpl(cpu.threads().get(seed.algorithm()).count());
         }
 
-#       if defined(XMRIG_FEATURE_SSE4_1)
+#       if defined(TNN_FEATURE_SSE4_1)
         if (Cpu::info()->has(ICpuInfo::FLAG_SSE41)) {
             rx_blake2b_compress = rx_blake2b_compress_sse41;
         }
 #       endif
 
-#if     defined(XMRIG_FEATURE_AVX2)
+#if     defined(TNN_FEATURE_AVX2)
         if (Cpu::info()->has(ICpuInfo::FLAG_AVX2)) {
             rx_blake2b = blake2b_avx2;
         }
@@ -177,7 +177,7 @@ bool xmrig::Rx::isReady(const T &seed)
 }
 
 
-#ifdef XMRIG_FEATURE_MSR
+#ifdef TNN_FEATURE_MSR
 bool xmrig::Rx::isMSR()
 {
     return RxMsr::isEnabled();
@@ -190,8 +190,6 @@ namespace xmrig {
 
 template bool Rx::init(const RxSeed &seed, const RxConfig &config, const CpuConfig &cpu);
 template bool Rx::isReady(const RxSeed &seed);
-template bool Rx::init(const Job &seed, const RxConfig &config, const CpuConfig &cpu);
-template bool Rx::isReady(const Job &seed);
 
 
 } // namespace xmrig

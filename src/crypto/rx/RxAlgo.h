@@ -17,8 +17,8 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_RX_ALGO_H
-#define XMRIG_RX_ALGO_H
+#ifndef TNN_RX_ALGO_H
+#define TNN_RX_ALGO_H
 
 
 #include <cstddef>
@@ -59,4 +59,4 @@ public:
 } /* namespace xmrig */
 
 
-#endif /* XMRIG_RX_ALGO_H */
+#endif /* TNN_RX_ALGO_H */

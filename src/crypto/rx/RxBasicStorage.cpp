@@ -38,12 +38,12 @@ constexpr size_t oneMiB = 1024 * 1024;
 class RxBasicStoragePrivate
 {
 public:
-    XMRIG_DISABLE_COPY_MOVE(RxBasicStoragePrivate)
+    TNN_DISABLE_COPY_MOVE(RxBasicStoragePrivate)
 
     inline RxBasicStoragePrivate() = default;
     inline ~RxBasicStoragePrivate() { deleteDataset(); }
 
-    inline bool isReady(const Job &job) const   { return m_ready && m_seed == job; }
+    // inline bool isReady(const Job &job) const   { return m_ready && m_seed == job; }
     inline RxDataset *dataset() const           { return m_dataset; }
     inline void deleteDataset()                 { delete m_dataset; m_dataset = nullptr; }
 
@@ -153,14 +153,14 @@ xmrig::HugePagesInfo xmrig::RxBasicStorage::hugePages() const
 }
 
 
-xmrig::RxDataset *xmrig::RxBasicStorage::dataset(const Job &job, uint32_t) const
-{
-    if (!d_ptr->isReady(job)) {
-        return nullptr;
-    }
+// xmrig::RxDataset *xmrig::RxBasicStorage::dataset(const Job &job, uint32_t) const
+// {
+//     if (!d_ptr->isReady(job)) {
+//         return nullptr;
+//     }
 
-    return d_ptr->dataset();
-}
+//     return d_ptr->dataset();
+// }
 
 
 void xmrig::RxBasicStorage::init(const RxSeed &seed, uint32_t threads, bool hugePages, bool oneGbPages, RxConfig::Mode mode, int priority)

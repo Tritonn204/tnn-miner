@@ -16,8 +16,8 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_PROFILER_H
-#define XMRIG_PROFILER_H
+#ifndef TNN_PROFILER_H
+#define TNN_PROFILER_H
 
 
 #ifndef FORCE_INLINE
@@ -33,7 +33,7 @@
 #endif
 
 
-#ifdef XMRIG_FEATURE_PROFILING
+#ifdef TNN_FEATURE_PROFILING
 
 
 #include <cstdint>
@@ -112,9 +112,9 @@ private:
 #define PROFILE_SCOPE(x) static thread_local ProfileScopeData x##_data{#x}; ProfileScope x(x##_data);
 
 
-#else /* XMRIG_FEATURE_PROFILING */
+#else /* TNN_FEATURE_PROFILING */
 #define PROFILE_SCOPE(x)
-#endif /* XMRIG_FEATURE_PROFILING */
+#endif /* TNN_FEATURE_PROFILING */
 
 
 #include "crypto/randomx/blake2/blake2.h"
@@ -130,4 +130,4 @@ struct rx_blake2b_wrapper
 };
 
 
-#endif /* XMRIG_PROFILER_H */
+#endif /* TNN_PROFILER_H */

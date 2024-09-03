@@ -23,8 +23,8 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_CRYPTONIGHT_X86_VAES_H
-#define XMRIG_CRYPTONIGHT_X86_VAES_H
+#ifndef TNN_CRYPTONIGHT_X86_VAES_H
+#define TNN_CRYPTONIGHT_X86_VAES_H
 
 
 #include "crypto/cn/CnAlgo.h"
@@ -45,4 +45,4 @@ void cn_implode_scratchpad_vaes_double(cryptonight_ctx* ctx1, cryptonight_ctx* c
 } // xmrig
 
 
-#endif /* XMRIG_CRYPTONIGHT_X86_VAES_H */
+#endif /* TNN_CRYPTONIGHT_X86_VAES_H */

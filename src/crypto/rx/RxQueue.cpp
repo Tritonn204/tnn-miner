@@ -27,7 +27,7 @@
 #include "crypto/rx/RxBasicStorage.h"
 
 
-#ifdef XMRIG_FEATURE_HWLOC
+#ifdef TNN_FEATURE_HWLOC
 #   include "crypto/rx/RxNUMAStorage.h"
 #endif
 
@@ -54,16 +54,16 @@ xmrig::RxQueue::~RxQueue()
 }
 
 
-xmrig::RxDataset *xmrig::RxQueue::dataset(const Job &job, uint32_t nodeId)
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
+// xmrig::RxDataset *xmrig::RxQueue::dataset(const Job &job, uint32_t nodeId)
+// {
+//     std::lock_guard<std::mutex> lock(m_mutex);
 
-    if (isReadyUnsafe(job)) {
-        return m_storage->dataset(job, nodeId);
-    }
+//     if (isReadyUnsafe(job)) {
+//         return m_storage->dataset(job, nodeId);
+//     }
 
-    return nullptr;
-}
+//     return nullptr;
+// }
 
 
 xmrig::HugePagesInfo xmrig::RxQueue::hugePages()
@@ -88,7 +88,7 @@ void xmrig::RxQueue::enqueue(const RxSeed &seed, const std::vector<uint32_t> &no
     std::unique_lock<std::mutex> lock(m_mutex);
 
     if (!m_storage) {
-#       ifdef XMRIG_FEATURE_HWLOC
+#       ifdef TNN_FEATURE_HWLOC
         if (!nodeset.empty()) {
             m_storage = new RxNUMAStorage(nodeset);
         }
@@ -168,16 +168,16 @@ void xmrig::RxQueue::onReady()
     const bool ready = m_listener && m_state == STATE_IDLE;
     lock.unlock();
 
-    if (ready) {
-        m_listener->onDatasetReady();
-    }
+    // if (ready) {
+    //     m_listener->onDatasetReady();
+    // }
 }
 
 
 namespace xmrig {
 
 
-template bool RxQueue::isReady(const Job &);
+// template bool RxQueue::isReady(const Job &);
 template bool RxQueue::isReady(const RxSeed &);
 
 

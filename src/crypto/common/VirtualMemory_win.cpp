@@ -17,6 +17,7 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifdef __WIN32__
 
 #include <winsock2.h>
 #include <windows.h>
@@ -29,7 +30,7 @@
 #include "crypto/common/portable/mm_malloc.h"
 
 
-#ifdef XMRIG_SECURE_JIT
+#ifdef TNN_SECURE_JIT
 #   define SECURE_PAGE_EXECUTE_READWRITE PAGE_READWRITE
 #else
 #   define SECURE_PAGE_EXECUTE_READWRITE PAGE_EXECUTE_READWRITE
@@ -264,3 +265,5 @@ void xmrig::VirtualMemory::freeLargePagesMemory()
 {
     freeLargePagesMemory(m_scratchpad, m_size);
 }
+
+#endif

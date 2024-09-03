@@ -218,7 +218,7 @@ void xmrig::RxDataset::allocate(bool hugePages, bool oneGbPages)
 
     m_dataset = randomx_create_dataset(m_memory->raw());
 
-#   ifdef XMRIG_OS_LINUX
+#   ifdef TNN_OS_LINUX
     if (oneGbPages && !isOneGbPages()) {
         LOG_ERR(CLEAR "%s" RED_BOLD_S "failed to allocate RandomX dataset using 1GB pages", Tags::randomx());
     }

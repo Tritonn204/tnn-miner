@@ -17,8 +17,8 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_RX_BASICSTORAGE_H
-#define XMRIG_RX_BASICSTORAGE_H
+#ifndef TNN_RX_BASICSTORAGE_H
+#define TNN_RX_BASICSTORAGE_H
 
 
 #include "backend/common/interfaces/IRxStorage.h"
@@ -34,7 +34,7 @@ class RxBasicStoragePrivate;
 class RxBasicStorage : public IRxStorage
 {
 public:
-    XMRIG_DISABLE_COPY_MOVE(RxBasicStorage);
+    TNN_DISABLE_COPY_MOVE(RxBasicStorage);
 
     RxBasicStorage();
     ~RxBasicStorage() override;
@@ -53,4 +53,4 @@ private:
 } /* namespace xmrig */
 
 
-#endif /* XMRIG_RX_BASICSTORAGE_H */
+#endif /* TNN_RX_BASICSTORAGE_H */
