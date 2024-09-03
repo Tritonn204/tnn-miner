@@ -17,8 +17,8 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_RXFIX_H
-#define XMRIG_RXFIX_H
+#ifndef TNN_RXFIX_H
+#define TNN_RXFIX_H
 
 
 #include <utility>
@@ -39,4 +39,4 @@ public:
 } /* namespace xmrig */
 
 
-#endif /* XMRIG_RXFIX_H */
+#endif /* TNN_RXFIX_H */

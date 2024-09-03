@@ -120,7 +120,7 @@ void JitCompilerA64::generateProgram(Program& program, ProgramConfiguration& con
 	if (!allocatedSize) {
 		allocate(CodeSize);
 	}
-#ifdef XMRIG_SECURE_JIT
+#ifdef TNN_SECURE_JIT
 	else {
 		enableWriting();
 	}
@@ -168,7 +168,7 @@ void JitCompilerA64::generateProgram(Program& program, ProgramConfiguration& con
 	codePos = ((uint8_t*)randomx_program_aarch64_update_spMix1) - ((uint8_t*)randomx_program_aarch64);
 	emit32(ARMV8A::EOR | 10 | (IntRegMap[config.readReg0] << 5) | (IntRegMap[config.readReg1] << 16), code, codePos);
 
-#	ifndef XMRIG_OS_APPLE
+#	ifndef TNN_OS_APPLE
 	xmrig::VirtualMemory::flushInstructionCache(reinterpret_cast<char*>(code + MainLoopBegin), codePos - MainLoopBegin);
 #	endif
 }
@@ -178,7 +178,7 @@ void JitCompilerA64::generateProgramLight(Program& program, ProgramConfiguration
 	if (!allocatedSize) {
 		allocate(CodeSize);
 	}
-#ifdef XMRIG_SECURE_JIT
+#ifdef TNN_SECURE_JIT
 	else {
 		enableWriting();
 	}
@@ -232,7 +232,7 @@ void JitCompilerA64::generateProgramLight(Program& program, ProgramConfiguration
 	emit32(ARMV8A::ADD_IMM_LO | 2 | (2 << 5) | (imm_lo << 10), code, codePos);
 	emit32(ARMV8A::ADD_IMM_HI | 2 | (2 << 5) | (imm_hi << 10), code, codePos);
 
-#	ifndef XMRIG_OS_APPLE
+#	ifndef TNN_OS_APPLE
 	xmrig::VirtualMemory::flushInstructionCache(reinterpret_cast<char*>(code + MainLoopBegin), codePos - MainLoopBegin);
 #	endif
 }
@@ -243,7 +243,7 @@ void JitCompilerA64::generateSuperscalarHash(SuperscalarProgram(&programs)[N])
 	if (!allocatedSize) {
 		allocate(CodeSize + CalcDatasetItemSize());
 	}
-#ifdef XMRIG_SECURE_JIT
+#ifdef TNN_SECURE_JIT
 	else {
 		enableWriting();
 	}
@@ -359,7 +359,7 @@ void JitCompilerA64::generateSuperscalarHash(SuperscalarProgram(&programs)[N])
 	memcpy(code + codePos, p1, p2 - p1);
 	codePos += p2 - p1;
 
-#	ifndef XMRIG_OS_APPLE
+#	ifndef TNN_OS_APPLE
 	xmrig::VirtualMemory::flushInstructionCache(reinterpret_cast<char*>(code + CodeSize), codePos - MainLoopBegin);
 #	endif
 }
@@ -368,7 +368,7 @@ template void JitCompilerA64::generateSuperscalarHash(SuperscalarProgram(&progra
 
 DatasetInitFunc* JitCompilerA64::getDatasetInitFunc() const
 {
-#	ifdef XMRIG_SECURE_JIT
+#	ifdef TNN_SECURE_JIT
 	enableExecution();
 #	endif
 
@@ -398,7 +398,7 @@ void JitCompilerA64::allocate(size_t size)
 
 	memcpy(code, reinterpret_cast<const void *>(randomx_program_aarch64), CodeSize);
 
-#	ifndef XMRIG_OS_APPLE
+#	ifndef TNN_OS_APPLE
 	xmrig::VirtualMemory::flushInstructionCache(reinterpret_cast<char*>(code), CodeSize);
 #	endif
 }

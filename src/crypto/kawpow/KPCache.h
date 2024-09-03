@@ -16,8 +16,8 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_KP_CACHE_H
-#define XMRIG_KP_CACHE_H
+#ifndef TNN_KP_CACHE_H
+#define TNN_KP_CACHE_H
 
 
 #include "base/tools/Object.h"
@@ -39,7 +39,7 @@ public:
     static constexpr size_t l1_cache_num_items = l1_cache_size / sizeof(uint32_t);
     static constexpr uint32_t num_dataset_parents = 512;
 
-    XMRIG_DISABLE_COPY_MOVE(KPCache)
+    TNN_DISABLE_COPY_MOVE(KPCache)
 
     KPCache();
     ~KPCache();
@@ -71,4 +71,4 @@ private:
 } /* namespace xmrig */
 
 
-#endif /* XMRIG_KP_CACHE_H */
+#endif /* TNN_KP_CACHE_H */

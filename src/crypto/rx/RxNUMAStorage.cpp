@@ -74,7 +74,7 @@ static inline void printDatasetReady(uint32_t nodeId, uint64_t ts)
 class RxNUMAStoragePrivate
 {
 public:
-    XMRIG_DISABLE_COPY_MOVE_DEFAULT(RxNUMAStoragePrivate)
+    TNN_DISABLE_COPY_MOVE_DEFAULT(RxNUMAStoragePrivate)
 
     inline explicit RxNUMAStoragePrivate(const std::vector<uint32_t> &nodeset) :
         m_nodeset(nodeset)
@@ -93,7 +93,7 @@ public:
     }
 
     inline bool isAllocated() const                     { return m_allocated; }
-    inline bool isReady(const Job &job) const           { return m_ready && m_seed == job; }
+    // inline bool isReady(const Job &job) const           { return m_ready && m_seed == job; }
     inline RxDataset *dataset(uint32_t nodeId) const    { return m_datasets.count(nodeId) ? m_datasets.at(nodeId) : m_datasets.at(m_nodeset.front()); }
 
 
@@ -362,9 +362,9 @@ xmrig::HugePagesInfo xmrig::RxNUMAStorage::hugePages() const
 
 xmrig::RxDataset *xmrig::RxNUMAStorage::dataset(const Job &job, uint32_t nodeId) const
 {
-    if (!d_ptr->isReady(job)) {
-        return nullptr;
-    }
+    // if (!d_ptr->isReady(job)) {
+    //     return nullptr;
+    // }
 
     return d_ptr->dataset(nodeId);
 }

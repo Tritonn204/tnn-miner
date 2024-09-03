@@ -104,7 +104,7 @@ namespace randomx {
 	void initCacheCompile(randomx_cache* cache, const void* key, size_t keySize) {
 		initCache(cache, key, keySize);
 
-#		ifdef XMRIG_SECURE_JIT
+#		ifdef TNN_SECURE_JIT
 		cache->jit->enableWriting();
 #		endif
 
@@ -112,7 +112,7 @@ namespace randomx {
 		cache->jit->generateDatasetInitCode();
 		cache->datasetInit  = cache->jit->getDatasetInitFunc();
 
-#		ifdef XMRIG_SECURE_JIT
+#		ifdef TNN_SECURE_JIT
 		cache->jit->enableExecution();
 #		endif
 	}

@@ -16,8 +16,8 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_GR_HASH_H
-#define XMRIG_GR_HASH_H
+#ifndef TNN_GR_HASH_H
+#define TNN_GR_HASH_H
 
 
 #include <cstddef>
@@ -49,4 +49,4 @@ void hash_octa(const uint8_t* data, size_t size, uint8_t* output, cryptonight_ct
 
 } // namespace xmrig
 
-#endif // XMRIG_GR_HASH_H
+#endif // TNN_GR_HASH_H

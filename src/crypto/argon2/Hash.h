@@ -22,8 +22,8 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_ARGON2_HASH_H
-#define XMRIG_ARGON2_HASH_H
+#ifndef TNN_ARGON2_HASH_H
+#define TNN_ARGON2_HASH_H
 
 
 #include "3rdparty/argon2.h"
@@ -52,4 +52,4 @@ inline void single_hash(const uint8_t *__restrict__ input, size_t size, uint8_t 
 }} // namespace xmrig::argon2
 
 
-#endif /* XMRIG_ARGON2_HASH_H */
+#endif /* TNN_ARGON2_HASH_H */

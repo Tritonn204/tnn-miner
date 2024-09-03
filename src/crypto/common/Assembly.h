@@ -16,8 +16,8 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_ASSEMBLY_H
-#define XMRIG_ASSEMBLY_H
+#ifndef TNN_ASSEMBLY_H
+#define TNN_ASSEMBLY_H
 
 
 #include "3rdparty/rapidjson/fwd.h"
@@ -67,4 +67,4 @@ private:
 } /* namespace xmrig */
 
 
-#endif /* XMRIG_ASSEMBLY_H */
+#endif /* TNN_ASSEMBLY_H */

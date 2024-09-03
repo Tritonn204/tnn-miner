@@ -16,8 +16,8 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_HUGEPAGESINFO_H
-#define XMRIG_HUGEPAGESINFO_H
+#ifndef TNN_HUGEPAGESINFO_H
+#define TNN_HUGEPAGESINFO_H
 
 
 #include <cstdint>
@@ -58,4 +58,4 @@ public:
 } /* namespace xmrig */
 
 
-#endif /* XMRIG_HUGEPAGESINFO_H */
+#endif /* TNN_HUGEPAGESINFO_H */

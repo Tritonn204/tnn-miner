@@ -22,8 +22,8 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_CL_H
-#define XMRIG_CL_H
+#ifndef TNN_CL_H
+#define TNN_CL_H
 
 
 #if defined(__APPLE__)
@@ -33,4 +33,4 @@
 #endif
 
 
-#endif /* XMRIG_CL_H */
+#endif /* TNN_CL_H */

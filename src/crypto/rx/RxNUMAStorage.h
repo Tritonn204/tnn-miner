@@ -17,8 +17,8 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_RX_NUMASTORAGE_H
-#define XMRIG_RX_NUMASTORAGE_H
+#ifndef TNN_RX_NUMASTORAGE_H
+#define TNN_RX_NUMASTORAGE_H
 
 
 #include "backend/common/interfaces/IRxStorage.h"
@@ -37,7 +37,7 @@ class RxNUMAStoragePrivate;
 class RxNUMAStorage : public IRxStorage
 {
 public:
-    XMRIG_DISABLE_COPY_MOVE(RxNUMAStorage);
+    TNN_DISABLE_COPY_MOVE(RxNUMAStorage);
 
     RxNUMAStorage(const std::vector<uint32_t> &nodeset);
     ~RxNUMAStorage() override;
@@ -56,4 +56,4 @@ private:
 } /* namespace xmrig */
 
 
-#endif /* XMRIG_RX_NUMASTORAGE_H */
+#endif /* TNN_RX_NUMASTORAGE_H */

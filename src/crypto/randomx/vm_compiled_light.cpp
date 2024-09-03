@@ -39,7 +39,7 @@ namespace randomx {
 		cachePtr = cache;
 		mem.memory = cache->memory;
 
-#		ifdef XMRIG_SECURE_JIT
+#		ifdef TNN_SECURE_JIT
 		compiler.enableWriting();
 #		endif
 
@@ -51,7 +51,7 @@ namespace randomx {
 		VmBase<softAes>::generateProgram(seed);
 		randomx_vm::initialize();
 
-#		ifdef XMRIG_SECURE_JIT
+#		ifdef TNN_SECURE_JIT
 		compiler.enableWriting();
 #		endif
 

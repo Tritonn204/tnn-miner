@@ -25,8 +25,8 @@
 // All functions return the number of output bytes or -1 on error. If the
 // output buffer is too small, the result will silently be truncated.
 
-#ifndef XMRIG_BASE32_H
-#define XMRIG_BASE32_H
+#ifndef TNN_BASE32_H
+#define TNN_BASE32_H
 
 
 #include <stdint.h>
@@ -65,4 +65,4 @@ int base32_encode(const uint8_t *data, int length, uint8_t *result, int bufSize)
 }
 
 
-#endif /* XMRIG_BASE32_H */
+#endif /* TNN_BASE32_H */

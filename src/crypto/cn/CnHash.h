@@ -17,8 +17,8 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_CN_HASH_H
-#define XMRIG_CN_HASH_H
+#ifndef TNN_CN_HASH_H
+#define TNN_CN_HASH_H
 
 
 #include <cstddef>
@@ -75,4 +75,4 @@ private:
 } /* namespace xmrig */
 
 
-#endif /* XMRIG_CN_HASH_H */
+#endif /* TNN_CN_HASH_H */

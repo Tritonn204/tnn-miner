@@ -18,8 +18,8 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_RX_QUEUE_H
-#define XMRIG_RX_QUEUE_H
+#ifndef TNN_RX_QUEUE_H
+#define TNN_RX_QUEUE_H
 
 
 #include "base/kernel/interfaces/IAsyncListener.h"
@@ -69,13 +69,13 @@ public:
 class RxQueue : public IAsyncListener
 {
 public:
-    XMRIG_DISABLE_COPY_MOVE(RxQueue);
+    TNN_DISABLE_COPY_MOVE(RxQueue);
 
     RxQueue(IRxListener *listener);
     ~RxQueue() override;
 
     HugePagesInfo hugePages();
-    RxDataset *dataset(const Job &job, uint32_t nodeId);
+    // RxDataset *dataset(const Job &job, uint32_t nodeId);
     template<typename T> bool isReady(const T &seed);
     void enqueue(const RxSeed &seed, const std::vector<uint32_t> &nodeset, uint32_t threads, bool hugePages, bool oneGbPages, RxConfig::Mode mode, int priority);
 
@@ -108,4 +108,4 @@ private:
 } /* namespace xmrig */
 
 
-#endif /* XMRIG_RX_QUEUE_H */
+#endif /* TNN_RX_QUEUE_H */

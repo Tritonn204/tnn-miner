@@ -23,8 +23,8 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_CRYPTONIGHT_X86_H
-#define XMRIG_CRYPTONIGHT_X86_H
+#ifndef TNN_CRYPTONIGHT_X86_H
+#define TNN_CRYPTONIGHT_X86_H
 
 
 #ifdef __GNUC__
@@ -43,7 +43,7 @@
 #include "crypto/cn/soft_aes.h"
 
 
-#ifdef XMRIG_VAES
+#ifdef TNN_VAES
 #   include "crypto/cn/CryptoNight_x86_vaes.h"
 #endif
 
@@ -108,7 +108,6 @@ static inline __m128i sl_xor(__m128i tmp1)
 
 
 template<uint8_t rcon>
-__attribute__ ((target("aes")))
 static inline void aes_genkey_sub(__m128i* xout0, __m128i* xout2)
 {
     __m128i xout1 = _mm_aeskeygenassist_si128(*xout2, rcon);
@@ -137,7 +136,6 @@ static inline void soft_aes_genkey_sub(__m128i* xout0, __m128i* xout2)
 
 
 template<bool SOFT_AES>
-__attribute__ ((target("aes")))
 static inline void aes_genkey(const __m128i* memory, __m128i* k0, __m128i* k1, __m128i* k2, __m128i* k3, __m128i* k4, __m128i* k5, __m128i* k6, __m128i* k7, __m128i* k8, __m128i* k9)
 {
     __m128i xout0 = _mm_load_si128(memory);
@@ -235,7 +233,6 @@ template<bool SOFT_AES>
 void aes_round(__m128i key, __m128i* x0, __m128i* x1, __m128i* x2, __m128i* x3, __m128i* x4, __m128i* x5, __m128i* x6, __m128i* x7);
 
 template<>
-__attribute__ ((target("aes")))
 NOINLINE void aes_round<true>(__m128i key, __m128i* x0, __m128i* x1, __m128i* x2, __m128i* x3, __m128i* x4, __m128i* x5, __m128i* x6, __m128i* x7)
 {
     *x0 = soft_aesenc((uint32_t*)x0, key, (const uint32_t*)saes_table);
@@ -249,7 +246,6 @@ NOINLINE void aes_round<true>(__m128i key, __m128i* x0, __m128i* x1, __m128i* x2
 }
 
 template<>
-__attribute__ ((target("aes")))
 FORCEINLINE void aes_round<false>(__m128i key, __m128i* x0, __m128i* x1, __m128i* x2, __m128i* x3, __m128i* x4, __m128i* x5, __m128i* x6, __m128i* x7)
 {
     *x0 = _mm_aesenc_si128(*x0, key);
@@ -294,12 +290,11 @@ inline constexpr uint64_t interleaved_index<0>(uint64_t k)
 
 
 template<Algorithm::Id ALGO, bool SOFT_AES, int interleave>
-__attribute__ ((target("aes")))
 static NOINLINE void cn_explode_scratchpad(cryptonight_ctx *ctx)
 {
     constexpr CnAlgo<ALGO> props;
 
-#   ifdef XMRIG_VAES
+#   ifdef TNN_VAES
     if (!SOFT_AES && !props.isHeavy() && cn_vaes_enabled) {
         cn_explode_scratchpad_vaes(ctx, props.memory(), props.half_mem());
         return;
@@ -409,12 +404,11 @@ static NOINLINE void cn_explode_scratchpad(cryptonight_ctx *ctx)
 
 
 template<Algorithm::Id ALGO, bool SOFT_AES, int interleave>
-__attribute__ ((target("aes")))
 static NOINLINE void cn_implode_scratchpad(cryptonight_ctx *ctx)
 {
     constexpr CnAlgo<ALGO> props;
 
-#   ifdef XMRIG_VAES
+#   ifdef TNN_VAES
     if (!SOFT_AES && !props.isHeavy() && cn_vaes_enabled) {
         cn_implode_scratchpad_vaes(ctx, props.memory(), props.half_mem());
         return;
@@ -640,16 +634,15 @@ static inline void cryptonight_conceal_tweak(__m128i& cx, __m128& conc_var)
     cx = _mm_xor_si128(cx, _mm_cvttps_epi32(nc));
 }
 
-#ifdef XMRIG_FEATURE_ASM
+#ifdef TNN_FEATURE_ASM
 template<Algorithm::Id ALGO>
 static void cryptonight_single_hash_gr_sse41(const uint8_t* __restrict__ input, size_t size, uint8_t* __restrict__ output, cryptonight_ctx** __restrict__ ctx, uint64_t height);
 #endif
 
 template<Algorithm::Id ALGO, bool SOFT_AES, int interleave>
-__attribute__ ((target("aes")))
 inline void cryptonight_single_hash(const uint8_t *__restrict__ input, size_t size, uint8_t *__restrict__ output, cryptonight_ctx **__restrict__ ctx, uint64_t height)
 {
-#   ifdef XMRIG_FEATURE_ASM
+#   ifdef TNN_FEATURE_ASM
     if (!SOFT_AES) {
         switch (ALGO) {
         case Algorithm::CN_GR_0:
@@ -674,7 +667,7 @@ inline void cryptonight_single_hash(const uint8_t *__restrict__ input, size_t si
     constexpr size_t MASK        = props.mask();
     constexpr Algorithm::Id BASE = props.base();
 
-#   ifdef XMRIG_ALGO_CN_HEAVY
+#   ifdef TNN_ALGO_CN_HEAVY
     constexpr bool IS_CN_HEAVY_TUBE = ALGO == Algorithm::CN_HEAVY_TUBE;
 #   else
     constexpr bool IS_CN_HEAVY_TUBE = false;
@@ -695,7 +688,7 @@ inline void cryptonight_single_hash(const uint8_t *__restrict__ input, size_t si
     uint64_t *h0 = reinterpret_cast<uint64_t*>(ctx[0]->state);
     uint8_t *l0   = ctx[0]->memory;
 
-#   ifdef XMRIG_FEATURE_ASM
+#   ifdef TNN_FEATURE_ASM
     if (SOFT_AES && props.isR()) {
         if (!ctx[0]->generated_code_data.match(ALGO, height)) {
             V4_Instruction code[256];
@@ -808,14 +801,14 @@ inline void cryptonight_single_hash(const uint8_t *__restrict__ input, size_t si
         ah0 ^= ch;
         idx0 = al0;
 
-#       ifdef XMRIG_ALGO_CN_HEAVY
+#       ifdef TNN_ALGO_CN_HEAVY
         if (props.isHeavy()) {
             int64_t n = ((int64_t*)&l0[interleaved_index<interleave>(idx0 & MASK)])[0];
             int64_t d = ((int32_t*)&l0[interleaved_index<interleave>(idx0 & MASK)])[2];
 
             int64_t d5;
 
-#           if defined(_MSC_VER) || (defined(__GNUC__) && (__GNUC__ == 8)) || !defined(XMRIG_64_BIT)
+#           if defined(_MSC_VER) || (defined(__GNUC__) && (__GNUC__ == 8)) || !defined(TNN_64_BIT)
             d5 = d | 5;
 #           else
             // Workaround for stupid GCC which converts to 32 bit before doing "| 5" and then converts back to 64 bit
@@ -841,7 +834,7 @@ inline void cryptonight_single_hash(const uint8_t *__restrict__ input, size_t si
         bx0 = cx;
     }
 
-#   ifdef XMRIG_FEATURE_ASM
+#   ifdef TNN_FEATURE_ASM
     }
 #   endif
 
@@ -854,7 +847,7 @@ inline void cryptonight_single_hash(const uint8_t *__restrict__ input, size_t si
 } /* namespace xmrig */
 
 
-#ifdef XMRIG_FEATURE_ASM
+#ifdef TNN_FEATURE_ASM
 extern "C" void cnv1_single_mainloop_asm(cryptonight_ctx * *ctx);
 extern "C" void cnv1_double_mainloop_asm(cryptonight_ctx **ctx);
 extern "C" void cnv1_quad_mainloop_asm(cryptonight_ctx **ctx);
@@ -989,7 +982,7 @@ inline void cryptonight_single_hash_asm(const uint8_t *__restrict__ input, size_
             cn_half_mainloop_bulldozer_asm(ctx);
         }
     }
-#   ifdef XMRIG_ALGO_CN_PICO
+#   ifdef TNN_ALGO_CN_PICO
     else if (ALGO == Algorithm::CN_PICO_0) {
         if (ASM == Assembly::INTEL) {
             cn_trtl_mainloop_ivybridge_asm(ctx);
@@ -1038,7 +1031,7 @@ inline void cryptonight_single_hash_asm(const uint8_t *__restrict__ input, size_
             cn_double_mainloop_bulldozer_asm(ctx);
         }
     }
-#   ifdef XMRIG_ALGO_CN_FEMTO
+#   ifdef TNN_ALGO_CN_FEMTO
     else if (ALGO == Algorithm::CN_UPX2) {
         cn_upx2_mainloop_asm(ctx);
     }
@@ -1074,7 +1067,7 @@ inline void cryptonight_double_hash_asm(const uint8_t *__restrict__ input, size_
         ctx[1]->first_half = true;
     }
 
-#   ifdef XMRIG_VAES
+#   ifdef TNN_VAES
     if (!props.isHeavy() && cn_vaes_enabled) {
         cn_explode_scratchpad_vaes_double(ctx[0], ctx[1], props.memory(), props.half_mem());
     }
@@ -1091,7 +1084,7 @@ inline void cryptonight_double_hash_asm(const uint8_t *__restrict__ input, size_
     else if (ALGO == Algorithm::CN_HALF) {
         cn_half_double_mainloop_sandybridge_asm(ctx);
     }
-#   ifdef XMRIG_ALGO_CN_PICO
+#   ifdef TNN_ALGO_CN_PICO
     else if (ALGO == Algorithm::CN_PICO_0) {
         cn_trtl_double_mainloop_sandybridge_asm(ctx);
     }
@@ -1099,7 +1092,7 @@ inline void cryptonight_double_hash_asm(const uint8_t *__restrict__ input, size_
         cn_tlo_double_mainloop_sandybridge_asm(ctx);
     }
 #   endif
-#   ifdef XMRIG_ALGO_CN_FEMTO
+#   ifdef TNN_ALGO_CN_FEMTO
     else if (ALGO == Algorithm::CN_UPX2) {
         if (Cpu::info()->arch() == ICpuInfo::ARCH_ZEN3) {
             cnv2_upx_double_mainloop_zen3_asm(ctx);
@@ -1122,7 +1115,7 @@ inline void cryptonight_double_hash_asm(const uint8_t *__restrict__ input, size_
         ctx[0]->generated_code(ctx);
     }
 
-#   ifdef XMRIG_VAES
+#   ifdef TNN_VAES
     if (!props.isHeavy() && cn_vaes_enabled) {
         cn_implode_scratchpad_vaes_double(ctx[0], ctx[1], props.memory(), props.half_mem());
     }
@@ -1148,7 +1141,7 @@ inline void cryptonight_double_hash_asm(const uint8_t *__restrict__ input, size_
 namespace xmrig {
 
 
-#ifdef XMRIG_FEATURE_ASM
+#ifdef TNN_FEATURE_ASM
 template<Algorithm::Id ALGO>
 static NOINLINE void cryptonight_single_hash_gr_sse41(const uint8_t* __restrict__ input, size_t size, uint8_t* __restrict__ output, cryptonight_ctx** __restrict__ ctx, uint64_t height)
 {
@@ -1202,7 +1195,7 @@ static NOINLINE void cryptonight_double_hash_gr_sse41(const uint8_t *__restrict_
         ctx[1]->first_half = true;
     }
 
-#   ifdef XMRIG_VAES
+#   ifdef TNN_VAES
     if (!props.isHeavy() && cn_vaes_enabled) {
         cn_explode_scratchpad_vaes_double(ctx[0], ctx[1], props.memory(), props.half_mem());
     }
@@ -1228,7 +1221,7 @@ static NOINLINE void cryptonight_double_hash_gr_sse41(const uint8_t *__restrict_
     if (ALGO == Algorithm::CN_GR_4) cn_gr4_double_mainloop_asm(ctx);
     if (ALGO == Algorithm::CN_GR_5) cn_gr5_double_mainloop_asm(ctx);
 
-#   ifdef XMRIG_VAES
+#   ifdef TNN_VAES
     if (!props.isHeavy() && cn_vaes_enabled) {
         cn_implode_scratchpad_vaes_double(ctx[0], ctx[1], props.memory(), props.half_mem());
     }
@@ -1251,7 +1244,7 @@ static NOINLINE void cryptonight_double_hash_gr_sse41(const uint8_t *__restrict_
 template<Algorithm::Id ALGO, bool SOFT_AES>
 inline void cryptonight_double_hash(const uint8_t *__restrict__ input, size_t size, uint8_t *__restrict__ output, cryptonight_ctx **__restrict__ ctx, uint64_t height)
 {
-#   ifdef XMRIG_FEATURE_ASM
+#   ifdef TNN_FEATURE_ASM
     if (!SOFT_AES) {
         switch (ALGO) {
         case Algorithm::CN_GR_0:
@@ -1276,7 +1269,7 @@ inline void cryptonight_double_hash(const uint8_t *__restrict__ input, size_t si
     constexpr size_t MASK        = props.mask();
     constexpr Algorithm::Id BASE = props.base();
 
-#   ifdef XMRIG_ALGO_CN_HEAVY
+#   ifdef TNN_ALGO_CN_HEAVY
     constexpr bool IS_CN_HEAVY_TUBE = ALGO == Algorithm::CN_HEAVY_TUBE;
 #   else
     constexpr bool IS_CN_HEAVY_TUBE = false;
@@ -1308,7 +1301,7 @@ inline void cryptonight_double_hash(const uint8_t *__restrict__ input, size_t si
         ctx[1]->first_half = true;
     }
 
-#   ifdef XMRIG_VAES
+#   ifdef TNN_VAES
     if (!SOFT_AES && !props.isHeavy() && cn_vaes_enabled) {
         cn_explode_scratchpad_vaes_double(ctx[0], ctx[1], props.memory(), props.half_mem());
     }
@@ -1429,7 +1422,7 @@ inline void cryptonight_double_hash(const uint8_t *__restrict__ input, size_t si
         ah0 ^= ch;
         idx0 = al0;
 
-#       ifdef XMRIG_ALGO_CN_HEAVY
+#       ifdef TNN_ALGO_CN_HEAVY
         if (props.isHeavy()) {
             int64_t n = ((int64_t*)&l0[idx0 & MASK])[0];
             int32_t d = ((int32_t*)&l0[idx0 & MASK])[2];
@@ -1487,7 +1480,7 @@ inline void cryptonight_double_hash(const uint8_t *__restrict__ input, size_t si
         ah1 ^= ch;
         idx1 = al1;
 
-#       ifdef XMRIG_ALGO_CN_HEAVY
+#       ifdef TNN_ALGO_CN_HEAVY
         if (props.isHeavy()) {
             int64_t n = ((int64_t*)&l1[idx1 & MASK])[0];
             int32_t d = ((int32_t*)&l1[idx1 & MASK])[2];
@@ -1512,7 +1505,7 @@ inline void cryptonight_double_hash(const uint8_t *__restrict__ input, size_t si
         bx10 = cx1;
     }
 
-#   ifdef XMRIG_VAES
+#   ifdef TNN_VAES
     if (!SOFT_AES && !props.isHeavy() && cn_vaes_enabled) {
         cn_implode_scratchpad_vaes_double(ctx[0], ctx[1], props.memory(), props.half_mem());
     }
@@ -1531,7 +1524,7 @@ inline void cryptonight_double_hash(const uint8_t *__restrict__ input, size_t si
 }
 
 
-#ifdef XMRIG_FEATURE_ASM
+#ifdef TNN_FEATURE_ASM
 template<Algorithm::Id ALGO>
 static NOINLINE void cryptonight_quad_hash_gr_sse41(const uint8_t* __restrict__ input, size_t size, uint8_t* __restrict__ output, cryptonight_ctx** __restrict__ ctx, uint64_t height)
 {
@@ -1555,7 +1548,7 @@ static NOINLINE void cryptonight_quad_hash_gr_sse41(const uint8_t* __restrict__ 
         ctx[3]->first_half = true;
     }
 
-#   ifdef XMRIG_VAES
+#   ifdef TNN_VAES
     if (!props.isHeavy() && cn_vaes_enabled) {
         cn_explode_scratchpad_vaes_double(ctx[0], ctx[1], props.memory(), props.half_mem());
         cn_explode_scratchpad_vaes_double(ctx[2], ctx[3], props.memory(), props.half_mem());
@@ -1583,7 +1576,7 @@ static NOINLINE void cryptonight_quad_hash_gr_sse41(const uint8_t* __restrict__ 
     if (ALGO == Algorithm::CN_GR_4) cn_gr4_quad_mainloop_asm(ctx);
     if (ALGO == Algorithm::CN_GR_5) cn_gr5_quad_mainloop_asm(ctx);
 
-#   ifdef XMRIG_VAES
+#   ifdef TNN_VAES
     if (!props.isHeavy() && cn_vaes_enabled) {
         cn_implode_scratchpad_vaes_double(ctx[0], ctx[1], props.memory(), props.half_mem());
         cn_implode_scratchpad_vaes_double(ctx[2], ctx[3], props.memory(), props.half_mem());
@@ -1730,7 +1723,7 @@ inline void cryptonight_triple_hash(const uint8_t *__restrict__ input, size_t si
     constexpr size_t MASK        = props.mask();
     constexpr Algorithm::Id BASE = props.base();
 
-#   ifdef XMRIG_ALGO_CN_HEAVY
+#   ifdef TNN_ALGO_CN_HEAVY
     constexpr bool IS_CN_HEAVY_TUBE = ALGO == Algorithm::CN_HEAVY_TUBE;
     constexpr bool IS_CN_HEAVY_XHV  = ALGO == Algorithm::CN_HEAVY_XHV;
 #   else
@@ -1803,7 +1796,7 @@ inline void cryptonight_triple_hash(const uint8_t *__restrict__ input, size_t si
 template<Algorithm::Id ALGO, bool SOFT_AES>
 inline void cryptonight_quad_hash(const uint8_t *__restrict__ input, size_t size, uint8_t *__restrict__ output, cryptonight_ctx **__restrict__ ctx, uint64_t height)
 {
-#   ifdef XMRIG_FEATURE_ASM
+#   ifdef TNN_FEATURE_ASM
     if (!SOFT_AES) {
         switch (ALGO) {
         case Algorithm::CN_GR_0:
@@ -1828,7 +1821,7 @@ inline void cryptonight_quad_hash(const uint8_t *__restrict__ input, size_t size
     constexpr size_t MASK        = props.mask();
     constexpr Algorithm::Id BASE = props.base();
 
-#   ifdef XMRIG_ALGO_CN_HEAVY
+#   ifdef TNN_ALGO_CN_HEAVY
     constexpr bool IS_CN_HEAVY_TUBE = ALGO == Algorithm::CN_HEAVY_TUBE;
     constexpr bool IS_CN_HEAVY_XHV  = ALGO == Algorithm::CN_HEAVY_XHV;
 #   else
@@ -1848,7 +1841,7 @@ inline void cryptonight_quad_hash(const uint8_t *__restrict__ input, size_t size
         }
     }
 
-#   ifdef XMRIG_VAES
+#   ifdef TNN_VAES
     if (!SOFT_AES && !props.isHeavy() && cn_vaes_enabled) {
         cn_explode_scratchpad_vaes_double(ctx[0], ctx[1], props.memory(), props.half_mem());
         cn_explode_scratchpad_vaes_double(ctx[2], ctx[3], props.memory(), props.half_mem());
@@ -1911,7 +1904,7 @@ inline void cryptonight_quad_hash(const uint8_t *__restrict__ input, size_t size
         CN_STEP4(3, ax3, bx30, bx31, cx3, l3, mc3, ptr3, idx3);
     }
 
-#   ifdef XMRIG_VAES
+#   ifdef TNN_VAES
     if (!SOFT_AES && !props.isHeavy() && cn_vaes_enabled) {
         cn_implode_scratchpad_vaes_double(ctx[0], ctx[1], props.memory(), props.half_mem());
         cn_implode_scratchpad_vaes_double(ctx[2], ctx[3], props.memory(), props.half_mem());
@@ -1939,7 +1932,7 @@ inline void cryptonight_penta_hash(const uint8_t *__restrict__ input, size_t siz
     constexpr size_t MASK        = props.mask();
     constexpr Algorithm::Id BASE = props.base();
 
-#   ifdef XMRIG_ALGO_CN_HEAVY
+#   ifdef TNN_ALGO_CN_HEAVY
     constexpr bool IS_CN_HEAVY_TUBE = ALGO == Algorithm::CN_HEAVY_TUBE;
     constexpr bool IS_CN_HEAVY_XHV  = ALGO == Algorithm::CN_HEAVY_XHV;
 #   else
@@ -2028,4 +2021,4 @@ inline void cryptonight_penta_hash(const uint8_t *__restrict__ input, size_t siz
 } /* namespace xmrig */
 
 
-#endif /* XMRIG_CRYPTONIGHT_X86_H */
+#endif /* TNN_CRYPTONIGHT_X86_H */

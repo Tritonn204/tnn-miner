@@ -44,7 +44,7 @@ const char *RxConfig::kWrmsr                    = "wrmsr";
 const char *RxConfig::kScratchpadPrefetchMode   = "scratchpad_prefetch_mode";
 const char *RxConfig::kCacheQoS                 = "cache_qos";
 
-#ifdef XMRIG_FEATURE_HWLOC
+#ifdef TNN_FEATURE_HWLOC
 const char *RxConfig::kNUMA                     = "numa";
 #endif
 
@@ -52,7 +52,7 @@ const char *RxConfig::kNUMA                     = "numa";
 static const std::array<const char *, RxConfig::ModeMax> modeNames = { "auto", "fast", "light" };
 
 
-#ifdef XMRIG_FEATURE_MSR
+#ifdef TNN_FEATURE_MSR
 constexpr size_t kMsrArraySize = 7;
 
 static const std::array<MsrItems, kMsrArraySize> msrPresets = {
@@ -85,17 +85,17 @@ bool xmrig::RxConfig::read(const rapidjson::Value &value)
         m_mode            = readMode(Json::getValue(value, kMode));
         m_rdmsr           = Json::getBool(value, kRdmsr, m_rdmsr);
 
-#       ifdef XMRIG_FEATURE_MSR
+#       ifdef TNN_FEATURE_MSR
         readMSR(Json::getValue(value, kWrmsr));
 #       endif
 
         m_cacheQoS = Json::getBool(value, kCacheQoS, m_cacheQoS);
 
-#       ifdef XMRIG_OS_LINUX
+#       ifdef TNN_OS_LINUX
         m_oneGbPages = Json::getBool(value, kOneGbPages, m_oneGbPages);
 #       endif
 
-#       ifdef XMRIG_FEATURE_HWLOC
+#       ifdef TNN_FEATURE_HWLOC
         if (m_mode == LightMode) {
             m_numa = false;
 
@@ -141,7 +141,7 @@ rapidjson::Value xmrig::RxConfig::toJSON(rapidjson::Document &doc) const
     obj.AddMember(StringRef(kOneGbPages),   m_oneGbPages, allocator);
     obj.AddMember(StringRef(kRdmsr),        m_rdmsr, allocator);
 
-#   ifdef XMRIG_FEATURE_MSR
+#   ifdef TNN_FEATURE_MSR
     if (!m_msrPreset.empty()) {
         Value wrmsr(kArrayType);
         wrmsr.Reserve(m_msrPreset.size(), allocator);
@@ -161,7 +161,7 @@ rapidjson::Value xmrig::RxConfig::toJSON(rapidjson::Document &doc) const
 
     obj.AddMember(StringRef(kCacheQoS), m_cacheQoS, allocator);
 
-#   ifdef XMRIG_FEATURE_HWLOC
+#   ifdef TNN_FEATURE_HWLOC
     if (!m_nodeset.empty()) {
         Value numa(kArrayType);
 
@@ -182,7 +182,7 @@ rapidjson::Value xmrig::RxConfig::toJSON(rapidjson::Document &doc) const
 }
 
 
-#ifdef XMRIG_FEATURE_HWLOC
+#ifdef TNN_FEATURE_HWLOC
 std::vector<uint32_t> xmrig::RxConfig::nodeset() const
 {
     if (!m_nodeset.empty()) {
@@ -214,7 +214,7 @@ uint32_t xmrig::RxConfig::threads(uint32_t limit) const
 }
 
 
-#ifdef XMRIG_FEATURE_MSR
+#ifdef TNN_FEATURE_MSR
 const char *xmrig::RxConfig::msrPresetName() const
 {
     return modNames[msrMod()];

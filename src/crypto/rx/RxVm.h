@@ -17,8 +17,8 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_RX_VM_H
-#define XMRIG_RX_VM_H
+#ifndef TNN_RX_VM_H
+#define TNN_RX_VM_H
 
 
 #include <cstdint>
@@ -46,4 +46,4 @@ public:
 } /* namespace xmrig */
 
 
-#endif /* XMRIG_RX_VM_H */
+#endif /* TNN_RX_VM_H */

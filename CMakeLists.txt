@@ -42,6 +42,49 @@ project(
 )
 set(PROJECT_VERSION ${INTERNAL_TNN_VERSION})
 
+list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
+
+# XMRig Options
+option(WITH_HWLOC           "Enable hwloc support" ON)
+option(WITH_CN_LITE         "Enable CryptoNight-Lite algorithms family" ON)
+option(WITH_CN_HEAVY        "Enable CryptoNight-Heavy algorithms family" ON)
+option(WITH_CN_PICO         "Enable CryptoNight-Pico algorithm" ON)
+option(WITH_CN_FEMTO        "Enable CryptoNight-UPX2 algorithm" ON)
+option(WITH_ASTROBWTV3      "Enable AstroBWTv3 algorithms family" ON)
+option(WITH_XELISHASH       "Enable XelisHash algorithms family" ON)
+option(WITH_RANDOMX         "Enable RandomX algorithms family" ON)
+option(WITH_ARGON2          "Enable Argon2 algorithms family" ON)
+option(WITH_KAWPOW          "Enable KawPow algorithms family" ON)
+option(WITH_GHOSTRIDER      "Enable GhostRider algorithm" ON)
+# option(WITH_EMBEDDED_CONFIG "Enable internal embedded JSON config" OFF)
+# option(WITH_OPENCL          "Enable OpenCL backend" ON)
+set(WITH_OPENCL_VERSION 200 CACHE STRING "Target OpenCL version")
+set_property(CACHE WITH_OPENCL_VERSION PROPERTY STRINGS 120 200 210 220)
+# option(WITH_CUDA            "Enable CUDA backend" ON)
+# option(WITH_NVML            "Enable NVML (NVIDIA Management Library) support (only if CUDA backend enabled)" ON)
+# option(WITH_ADL             "Enable ADL (AMD Display Library) or sysfs support (only if OpenCL backend enabled)" ON)
+# option(WITH_STRICT_CACHE    "Enable strict checks for OpenCL cache" ON)
+option(WITH_INTERLEAVE_DEBUG_LOG "Enable debug log for threads interleave" OFF)
+option(WITH_PROFILING       "Enable profiling for developers" OFF)
+option(WITH_SSE4_1          "Enable SSE 4.1 for Blake2" ON)
+option(WITH_AVX2            "Enable AVX2 for Blake2" ON)
+option(WITH_VAES            "Enable VAES instructions for Cryptonight" ON)
+# option(WITH_BENCHMARK       "Enable builtin RandomX benchmark and stress test" ON)
+option(WITH_SECURE_JIT      "Enable secure access to JIT memory" OFF)
+option(WITH_DMI             "Enable DMI/SMBIOS reader" ON)
+
+option(BUILD_STATIC         "Build static binary" ON)
+option(ARM_V8               "Force ARMv8 (64 bit) architecture, use with caution if automatic detection fails, but you sure it may work" OFF)
+option(ARM_V7               "Force ARMv7 (32 bit) architecture, use with caution if automatic detection fails, but you sure it may work" OFF)
+option(HWLOC_DEBUG          "Enable hwloc debug helpers and log" OFF)
+# End of XMRig options
+
+include (CheckIncludeFile)
+include (cmake/cpu.cmake)
+include (cmake/os.cmake)
+include (src/base/base.cmake)
+include (src/backend/backend.cmake)
+
 cmake_print_variables($ENV{GITLAB_CI})
 cmake_print_variables(INTERNAL_TNN_VERSION)
 cmake_print_variables(CMAKE_SYSTEM_PROCESSOR)
@@ -76,7 +119,7 @@ elseif($ENV{GITLAB_CI} MATCHES "true")
   endif()
 else()
   set(TARGET_ARCH "amd64")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=x86-64-v3 -m64")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=x86-64-v3 -maes -m64")
 endif()
 
 set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} ${DO_STATIC} -DTNN_VERSION=${INTERNAL_TNN_VERSION}")
@@ -215,20 +258,68 @@ include_directories(
   "${PROJECT_SOURCE_DIR}/src/xatum/"
   "${PROJECT_SOURCE_DIR}/src/stratum/"
   "${PROJECT_SOURCE_DIR}/src/net/"
-  "${PROJECT_SOURCE_DIR}/src/miner/"
+  "${PROJECT_SOURCE_DIR}/src/crypto/"
   "${TNN_BOOST_INCLUDES}"
   "${PROJECT_SOURCE_DIR}/src/broadcast/"
   "${PROJECT_SOURCE_DIR}/lib"
 )
 
-file(GLOB_RECURSE all_SRCS
+file(GLOB_RECURSE SOURCES_CORE
   "${PROJECT_SOURCE_DIR}/include/libkeccak/*.c"
-  "${PROJECT_SOURCE_DIR}/src/*.cpp"
-  "${PROJECT_SOURCE_DIR}/src/*.c"
+  "${PROJECT_SOURCE_DIR}/src/core/*.cpp"
+  "${PROJECT_SOURCE_DIR}/src/core/*.c"
+  "${PROJECT_SOURCE_DIR}/src/net/*.cpp"
+  "${PROJECT_SOURCE_DIR}/src/net/*.c"
+  "${PROJECT_SOURCE_DIR}/src/broadcast/*.cpp"
   "${PROJECT_SOURCE_DIR}/lib/ChaCha20-SIMD/*.c"
 )
+include_directories(${UV_INCLUDE_DIR})
 
-list(FILTER all_SRCS EXCLUDE REGEX "${PROJECT_SOURCE_DIR}/src/xelis-hash/target/*")
+add_definitions(-DTNN_MINER_PROJECT -DTNN_JSON_SINGLE_LINE_ARRAY)
+add_definitions(-D__STDC_FORMAT_MACROS -DUNICODE -D_FILE_OFFSET_BITS=64)
+
+find_package(UV REQUIRED)
+
+include(cmake/astrobwtv3.cmake)
+include(cmake/xelis-hash.cmake)
+include(cmake/randomx.cmake)
+
+if (WITH_VAES)
+  add_definitions(-DTNN_VAES)
+  set(HEADERS_CRYPTO "${HEADERS_CRYPTO}" ${PROJECT_SOURCE_DIR}/src/crypto/cn/CryptoNight_x86_vaes.h)
+  set(SOURCES_CRYPTO "${SOURCES_CRYPTO}" ${PROJECT_SOURCE_DIR}/src/crypto/cn/CryptoNight_x86_vaes.cpp)
+  if (CMAKE_C_COMPILER_ID MATCHES GNU OR CMAKE_C_COMPILER_ID MATCHES Clang)
+    set_source_files_properties(${PROJECT_SOURCE_DIR}/src/crypto/cn/CryptoNight_x86_vaes.cpp PROPERTIES COMPILE_FLAGS "-Ofast -fno-tree-vectorize -mavx2 -mvaes")
+  endif()
+endif()
+
+if (WITH_HWLOC)
+    add_definitions(-DTNN_FEATURE_HWLOC)
+    list(APPEND HEADERS_CRYPTO
+        ${PROJECT_SOURCE_DIR}/src/crypto/common/NUMAMemoryPool.h
+        )
+
+    list(APPEND SOURCES_CRYPTO
+        ${PROJECT_SOURCE_DIR}/src/crypto/common/NUMAMemoryPool.cpp
+        ${PROJECT_SOURCE_DIR}/src/crypto/common/VirtualMemory_hwloc.cpp
+        )
+endif()
+
+if (WITH_CN_LITE)
+    add_definitions(/DTNN_ALGO_CN_LITE)
+endif()
+
+if (WITH_CN_HEAVY)
+    add_definitions(/DTNN_ALGO_CN_HEAVY)
+endif()
+
+if (WITH_CN_PICO)
+    add_definitions(/DTNN_ALGO_CN_PICO)
+endif()
+
+if (WITH_CN_FEMTO)
+    add_definitions(/DTNN_ALGO_CN_FEMTO)
+endif()
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/lib/BLAKE3/c)
 
@@ -258,12 +349,12 @@ if(USE_ASTRO_SPSA)
   include_directories(${SPSA_LIB_DIR})
 endif()
 
-# Remove aarch files from all_SRCS
+# Remove aarch files from SOURCES_CORE
 #if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" AND NOT CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
-#  list(FILTER all_SRCS EXCLUDE REGEX ".*/.*/*aarch64*")
+#  list(FILTER SOURCES_CORE EXCLUDE REGEX ".*/.*/*aarch64*")
 #endif()
 
-add_executable(${PROJECT_NAME}-${PROJECT_VERSION} ${all_SRCS})
+add_executable(${PROJECT_NAME}-${PROJECT_VERSION} ${SOURCES_CORE} ${SOURCES_CRYPTO} ${HEADERS_CRYPTO})
 
 if(WIN32)
   target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} mingw32 wsock32 ws2_32 winpthread)
@@ -277,4 +368,4 @@ endif()
 if(USE_ASTRO_SPSA)
   target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} ${SPSA_LIB_DIR}/libastroSPSA_${SPSA_OS_PREFIX}_${TARGET_ARCH}.a)
 endif()
-target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} -flto Threads::Threads ${TNN_BOOST_LIBS} OpenSSL::SSL OpenSSL::Crypto sodium blake3)
+target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} -flto Threads::Threads ${UV_LIBRARIES} ${TNN_BOOST_LIBS} OpenSSL::SSL OpenSSL::Crypto sodium blake3)

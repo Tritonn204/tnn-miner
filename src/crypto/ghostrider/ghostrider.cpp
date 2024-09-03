@@ -46,7 +46,7 @@
 #include <atomic>
 #include <uv.h>
 
-#ifdef XMRIG_FEATURE_HWLOC
+#ifdef TNN_FEATURE_HWLOC
 #   include "base/kernel/Platform.h"
 #   include <hwloc.h>
 
@@ -55,7 +55,7 @@
 #   endif
 #endif
 
-#if defined(XMRIG_ARM)
+#if defined(TNN_ARM)
 #   include "crypto/cn/sse2neon.h"
 #elif defined(__GNUC__)
 #   include <x86intrin.h>
@@ -155,7 +155,7 @@ namespace ghostrider
 {
 
 
-#ifdef XMRIG_FEATURE_HWLOC
+#ifdef TNN_FEATURE_HWLOC
 
 
 static struct AlgoTune
@@ -168,7 +168,7 @@ static struct AlgoTune
 
 struct HelperThread
 {
-    XMRIG_DISABLE_COPY_MOVE_DEFAULT(HelperThread)
+    TNN_DISABLE_COPY_MOVE_DEFAULT(HelperThread)
 
     HelperThread(hwloc_bitmap_t cpu_set, int priority, bool is8MB) : m_cpuSet(cpu_set), m_priority(priority), m_is8MB(is8MB)
     {
@@ -199,7 +199,7 @@ struct HelperThread
 
     struct TaskBase
     {
-        XMRIG_DISABLE_COPY_MOVE(TaskBase)
+        TNN_DISABLE_COPY_MOVE(TaskBase)
 
         TaskBase()          = default;
         virtual ~TaskBase() = default;
@@ -286,7 +286,7 @@ struct HelperThread
 
 void benchmark()
 {
-#ifndef XMRIG_ARM
+#ifndef TNN_ARM
     static std::atomic<int> done{ 0 };
     if (done.exchange(1)) {
         return;
@@ -478,7 +478,7 @@ static inline bool findByType(hwloc_obj_t obj, hwloc_obj_type_t type, func lambd
 
 HelperThread* create_helper_thread(int64_t cpu_index, int priority, const std::vector<int64_t>& affinities)
 {
-#ifndef XMRIG_ARM
+#ifndef TNN_ARM
     hwloc_bitmap_t helper_cpu_set = hwloc_bitmap_alloc();
     hwloc_bitmap_t main_threads_set = hwloc_bitmap_alloc();
 
@@ -781,7 +781,7 @@ void hash_octa(const uint8_t* data, size_t size, uint8_t* output, cryptonight_ct
 }
 
 
-#else // XMRIG_FEATURE_HWLOC
+#else // TNN_FEATURE_HWLOC
 
 
 void benchmark() {}
@@ -807,7 +807,7 @@ void hash_octa(const uint8_t* data, size_t size, uint8_t* output, cryptonight_ct
     uint32_t cn_indices[6];
     select_indices(cn_indices, seed);
 
-#ifdef XMRIG_ARM
+#ifdef TNN_ARM
     uint32_t step[6] = { 1, 1, 1, 1, 1, 1 };
 #else
     uint32_t step[6] = { 4, 4, 1, 2, 4, 4 };
@@ -872,7 +872,7 @@ void hash_octa(const uint8_t* data, size_t size, uint8_t* output, cryptonight_ct
 }
 
 
-#endif // XMRIG_FEATURE_HWLOC
+#endif // TNN_FEATURE_HWLOC
 
 
 } // namespace ghostrider

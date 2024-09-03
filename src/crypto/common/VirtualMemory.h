@@ -17,8 +17,8 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_VIRTUALMEMORY_H
-#define XMRIG_VIRTUALMEMORY_H
+#ifndef TNN_VIRTUALMEMORY_H
+#define TNN_VIRTUALMEMORY_H
 
 
 #include "base/tools/Object.h"
@@ -37,7 +37,7 @@ namespace xmrig {
 class VirtualMemory
 {
 public:
-    XMRIG_DISABLE_COPY_MOVE_DEFAULT(VirtualMemory)
+    TNN_DISABLE_COPY_MOVE_DEFAULT(VirtualMemory)
 
     constexpr static size_t kDefaultHugePageSize    = 2U * 1024U * 1024U;
     constexpr static size_t kOneGiB                 = 1024U * 1024U * 1024U;
@@ -103,4 +103,4 @@ private:
 
 
 
-#endif /* XMRIG_VIRTUALMEMORY_H */
+#endif /* TNN_VIRTUALMEMORY_H */

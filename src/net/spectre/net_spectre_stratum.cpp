@@ -14,7 +14,7 @@
 #include <boost/json.hpp>
 
 #include <stratum.h>
-#include <spectrex.h>
+#include <spectrex/spectrex.h>
 
 namespace beast = boost::beast;         // from <boost/beast.hpp>
 namespace http = beast::http;           // from <boost/beast/http.hpp>

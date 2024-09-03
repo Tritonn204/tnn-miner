@@ -22,11 +22,11 @@
  *   along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef XMRIG_MM_MALLOC_PORTABLE_H
-#define XMRIG_MM_MALLOC_PORTABLE_H
+#ifndef TNN_MM_MALLOC_PORTABLE_H
+#define TNN_MM_MALLOC_PORTABLE_H
 
 
-#if defined(XMRIG_ARM) && !defined(__clang__)
+#if defined(TNN_ARM) && !defined(__clang__)
 #include <stdlib.h>
 
 
@@ -68,4 +68,4 @@ static __inline__ void __attribute__((__always_inline__)) _mm_free(void *__p)
 #endif
 
 
-#endif /* XMRIG_MM_MALLOC_PORTABLE_H */
+#endif /* TNN_MM_MALLOC_PORTABLE_H */
