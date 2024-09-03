@@ -1109,7 +1109,7 @@ void benchmark(int tid)
     boost::json::value myJob;
     {
       std::scoped_lock<boost::mutex> lockGuard(mutex);
-      boost::json::value myJob = job;
+      myJob = job;
       localJobCounter = jobCounter;
     }
     byte *b2 = new byte[MINIBLOCK_SIZE];

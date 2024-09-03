@@ -298,9 +298,8 @@ void wolfSame(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2
   _mm256_storeu_si256((__m256i*)&out[pos1], data);
 }
 
-#endif
-
 __attribute__((target("default")))
+#endif
 void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker)
 {
 	uint32_t Opcode = CodeLUT[op];
