@@ -7,3 +7,6 @@
 #include <xelis-hash/xelis-hash.hpp>
 
 #include <spectrex/spectrex.h>
+
+#include <randomx/randomx.h>
+#include <randomx/tests/randomx_test.h>

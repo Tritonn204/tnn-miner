@@ -63,8 +63,8 @@ static const char *DERO = R"(
     @          @   .     @@@@@@@@@@@     .   @          @       
     @          @    ..     @@@@@@@     ..    @          @       
     @          @@        .@@@@@@@@@.        @@          @       
-    @              @@     @@@@@@@@@     @@              @       
-    @                  @@ @@@@@@@@@ @@                  @       
+    @              @@    @@@@@@@@@@@    @@              @       
+    @                  @@@@@@@@@@@@@@@                  @       
        @                    @@@@@                    @@         
            @@                                    @              
                @@                           @@                  
@@ -169,6 +169,11 @@ inline po::options_description get_prog_opts()
     ("test-xelis", "Run the xelis-hash tests from the official source code")
   ;
 
+  po::options_description randomX("RandomX", col_width);
+  randomX.add_options()
+    ("test-randomx", "Run Tevador's reference RandomX tests")
+  ;
+
   po::options_description advanced("Advanced", col_width);
   advanced.add_options()
     ("tune-warmup", po::value<int>()->default_value(1), "Number of seconds to warmup the CPU before starting the AstroBWTv3 tuning")
@@ -187,6 +192,7 @@ inline po::options_description get_prog_opts()
   general.add(dero);
   general.add(spectre);
   general.add(xelis);
+  general.add(randomX);
   general.add(advanced);
   general.add(debug);
   return general;

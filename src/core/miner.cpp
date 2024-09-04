@@ -293,6 +293,12 @@ int main(int argc, char **argv)
     return rc;
   }
 
+  if (vm.count("test-randomx"))
+  {
+    RandomXTest();
+    return 0;
+  }
+
   if (vm.count("xelis-bench"))
   {
     boost::thread t(xelis_benchmark_cpu_hash_v2);
