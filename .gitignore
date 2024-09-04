@@ -49,6 +49,6 @@
 # Misc
 **.txt
 # Blake3
-!/lib/BLAKE3/c/CMakeLists.txt
+!/extern/BLAKE3/c/CMakeLists.txt
 # SPSA
 !/src/astrobwtv3/CMakeLists.txt
