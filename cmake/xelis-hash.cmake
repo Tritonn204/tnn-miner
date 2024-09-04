@@ -3,6 +3,9 @@ if (WITH_XELISHASH)
 
     message(STATUS "Building with XelisHash support")
 
+    set(WITH_BLAKE3 ON)
+    set(WITH_CHACHA ON)
+
     file(GLOB_RECURSE xelisHeaders
       src/crypto/xelis-hash/*.h
     )
