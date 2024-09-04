@@ -27,10 +27,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 #include <new>
-#include "crypto/randomx/allocator.hpp"
-#include "crypto/randomx/intrin_portable.h"
-#include "crypto/randomx/virtual_memory.hpp"
-#include "crypto/randomx/common.hpp"
+#include "allocator.hpp"
+#include "intrin_portable.h"
+#include "virtual_memory.h"
+#include "common.hpp"
 
 namespace randomx {
 
@@ -43,14 +43,17 @@ namespace randomx {
 	}
 
 	template<size_t alignment>
-	void AlignedAllocator<alignment>::freeMemory(void* ptr, size_t) {
+	void AlignedAllocator<alignment>::freeMemory(void* ptr, size_t count) {
 		rx_aligned_free(ptr);
 	}
 
 	template struct AlignedAllocator<CacheLineSize>;
 
 	void* LargePageAllocator::allocMemory(size_t count) {
-		return allocLargePagesMemory(count);
+		void *mem = allocLargePagesMemory(count);
+		if (mem == nullptr)
+			throw std::bad_alloc();
+		return mem;
 	}
 
 	void LargePageAllocator::freeMemory(void* ptr, size_t count) {

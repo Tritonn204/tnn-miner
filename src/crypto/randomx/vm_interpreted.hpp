@@ -31,40 +31,45 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <new>
 #include <vector>
 #include "common.hpp"
-#include "crypto/randomx/virtual_machine.hpp"
-#include "crypto/randomx/bytecode_machine.hpp"
-#include "crypto/randomx/intrin_portable.h"
-#include "crypto/randomx/allocator.hpp"
+#include "virtual_machine.hpp"
+#include "bytecode_machine.hpp"
+#include "intrin_portable.h"
+#include "allocator.hpp"
 
 namespace randomx {
 
-	template<int softAes>
-	class InterpretedVm : public VmBase<softAes>, public BytecodeMachine {
+	template<class Allocator, bool softAes>
+	class InterpretedVm : public VmBase<Allocator, softAes>, public BytecodeMachine {
 	public:
-		using VmBase<softAes>::mem;
-		using VmBase<softAes>::scratchpad;
-		using VmBase<softAes>::program;
-		using VmBase<softAes>::config;
-		using VmBase<softAes>::reg;
-		using VmBase<softAes>::datasetPtr;
-		using VmBase<softAes>::datasetOffset;
-
-		void* operator new(size_t, void* ptr) { return ptr; }
-		void operator delete(void*) {}
-
+		using VmBase<Allocator, softAes>::mem;
+		using VmBase<Allocator, softAes>::scratchpad;
+		using VmBase<Allocator, softAes>::program;
+		using VmBase<Allocator, softAes>::config;
+		using VmBase<Allocator, softAes>::reg;
+		using VmBase<Allocator, softAes>::datasetPtr;
+		using VmBase<Allocator, softAes>::datasetOffset;
+		void* operator new(size_t size) {
+			void* ptr = AlignedAllocator<CacheLineSize>::allocMemory(size);
+			if (ptr == nullptr)
+				throw std::bad_alloc();
+			return ptr;
+		}
+		void operator delete(void* ptr) {
+			AlignedAllocator<CacheLineSize>::freeMemory(ptr, sizeof(InterpretedVm));
+		}
 		void run(void* seed) override;
 		void setDataset(randomx_dataset* dataset) override;
-
 	protected:
 		virtual void datasetRead(uint64_t blockNumber, int_reg_t(&r)[RegistersCount]);
 		virtual void datasetPrefetch(uint64_t blockNumber);
-
 	private:
 		void execute();
 
-		InstructionByteCode bytecode[RANDOMX_PROGRAM_MAX_SIZE];
+		InstructionByteCode bytecode[RANDOMX_PROGRAM_SIZE];
 	};
 
-	using InterpretedVmDefault = InterpretedVm<1>;
-	using InterpretedVmHardAes = InterpretedVm<0>;
+	using InterpretedVmDefault = InterpretedVm<AlignedAllocator<CacheLineSize>, true>;
+	using InterpretedVmHardAes = InterpretedVm<AlignedAllocator<CacheLineSize>, false>;
+	using InterpretedVmLargePage = InterpretedVm<LargePageAllocator, true>;
+	using InterpretedVmLargePageHardAes = InterpretedVm<LargePageAllocator, false>;
 }

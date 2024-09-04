@@ -1,7 +1,5 @@
 /*
-Copyright (c) 2018-2020, tevador    <tevador@gmail.com>
-Copyright (c) 2019-2020, SChernykh  <https://github.com/SChernykh>
-Copyright (c) 2019-2020, XMRig      <https://github.com/xmrig>, <support@xmrig.com>
+Copyright (c) 2018-2019, tevador <tevador@gmail.com>
 
 All rights reserved.
 
@@ -28,38 +26,45 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include "crypto/randomx/vm_compiled_light.hpp"
-#include "crypto/randomx/common.hpp"
+#include "vm_compiled_light.hpp"
+#include "common.hpp"
 #include <stdexcept>
 
 namespace randomx {
 
-	template<int softAes>
-	void CompiledLightVm<softAes>::setCache(randomx_cache* cache) {
+	template<class Allocator, bool softAes, bool secureJit>
+	void CompiledLightVm<Allocator, softAes, secureJit>::setCache(randomx_cache* cache) {
 		cachePtr = cache;
 		mem.memory = cache->memory;
-
-#		ifdef TNN_SECURE_JIT
-		compiler.enableWriting();
-#		endif
-
-		compiler.generateSuperscalarHash(cache->programs);
+		if (secureJit) {
+			compiler.enableWriting();
+		}
+		compiler.generateSuperscalarHash(cache->programs, cache->reciprocalCache);
+		if (secureJit) {
+			compiler.enableExecution();
+		}
 	}
 
-	template<int softAes>
-	void CompiledLightVm<softAes>::run(void* seed) {
-		VmBase<softAes>::generateProgram(seed);
+	template<class Allocator, bool softAes, bool secureJit>
+	void CompiledLightVm<Allocator, softAes, secureJit>::run(void* seed) {
+		VmBase<Allocator, softAes>::generateProgram(seed);
 		randomx_vm::initialize();
-
-#		ifdef TNN_SECURE_JIT
-		compiler.enableWriting();
-#		endif
-
+		if (secureJit) {
+			compiler.enableWriting();
+		}
 		compiler.generateProgramLight(program, config, datasetOffset);
-
-		CompiledVm<softAes>::execute();
+		if (secureJit) {
+			compiler.enableExecution();
+		}
+		CompiledVm<Allocator, softAes, secureJit>::execute();
 	}
 
-	template class CompiledLightVm<false>;
-	template class CompiledLightVm<true>;
+	template class CompiledLightVm<AlignedAllocator<CacheLineSize>, false, false>;
+	template class CompiledLightVm<AlignedAllocator<CacheLineSize>, true, false>;
+	template class CompiledLightVm<LargePageAllocator, false, false>;
+	template class CompiledLightVm<LargePageAllocator, true, false>;
+	template class CompiledLightVm<AlignedAllocator<CacheLineSize>, false, true>;
+	template class CompiledLightVm<AlignedAllocator<CacheLineSize>, true, true>;
+	template class CompiledLightVm<LargePageAllocator, false, true>;
+	template class CompiledLightVm<LargePageAllocator, true, true>;
 }

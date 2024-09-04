@@ -24,6 +24,12 @@ else()
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-deprecated")
 endif()
 
+set(CMAKE_COLOR_DIAGNOSTICS ON)
+# force C colored diagnostic output
+set(CFLAGS "${CFLAGS} -fdiagnostics-color=always")
+# force C++ colored diagnostic output
+set(CXXFLAGS "${CXXFLAGS} -fdiagnostics-color=always")
+
 # This looks weird, but we prefer the -D variable over the ENV var
 string(TIMESTAMP VERSION_DEF "%Y.%m.%d.%H-dev")
 set(INTERNAL_TNN_VERSION ${VERSION_DEF})
@@ -45,17 +51,16 @@ set(PROJECT_VERSION ${INTERNAL_TNN_VERSION})
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
 # XMRig Options
-option(WITH_HWLOC           "Enable hwloc support" ON)
-option(WITH_CN_LITE         "Enable CryptoNight-Lite algorithms family" ON)
-option(WITH_CN_HEAVY        "Enable CryptoNight-Heavy algorithms family" ON)
-option(WITH_CN_PICO         "Enable CryptoNight-Pico algorithm" ON)
-option(WITH_CN_FEMTO        "Enable CryptoNight-UPX2 algorithm" ON)
+# option(WITH_CN_LITE         "Enable CryptoNight-Lite algorithms family" ON)
+# option(WITH_CN_HEAVY        "Enable CryptoNight-Heavy algorithms family" ON)
+# option(WITH_CN_PICO         "Enable CryptoNight-Pico algorithm" ON)
+# option(WITH_CN_FEMTO        "Enable CryptoNight-UPX2 algorithm" ON)
 option(WITH_ASTROBWTV3      "Enable AstroBWTv3 algorithms family" ON)
 option(WITH_XELISHASH       "Enable XelisHash algorithms family" ON)
 option(WITH_RANDOMX         "Enable RandomX algorithms family" ON)
-option(WITH_ARGON2          "Enable Argon2 algorithms family" ON)
-option(WITH_KAWPOW          "Enable KawPow algorithms family" ON)
-option(WITH_GHOSTRIDER      "Enable GhostRider algorithm" ON)
+# option(WITH_ARGON2          "Enable Argon2 algorithms family" ON)
+# option(WITH_KAWPOW          "Enable KawPow algorithms family" ON)
+# option(WITH_GHOSTRIDER      "Enable GhostRider algorithm" ON)
 # option(WITH_EMBEDDED_CONFIG "Enable internal embedded JSON config" OFF)
 # option(WITH_OPENCL          "Enable OpenCL backend" ON)
 set(WITH_OPENCL_VERSION 200 CACHE STRING "Target OpenCL version")
@@ -68,7 +73,6 @@ option(WITH_INTERLEAVE_DEBUG_LOG "Enable debug log for threads interleave" OFF)
 option(WITH_PROFILING       "Enable profiling for developers" OFF)
 option(WITH_SSE4_1          "Enable SSE 4.1 for Blake2" ON)
 option(WITH_AVX2            "Enable AVX2 for Blake2" ON)
-option(WITH_VAES            "Enable VAES instructions for Cryptonight" ON)
 # option(WITH_BENCHMARK       "Enable builtin RandomX benchmark and stress test" ON)
 option(WITH_SECURE_JIT      "Enable secure access to JIT memory" OFF)
 option(WITH_DMI             "Enable DMI/SMBIOS reader" ON)
@@ -76,14 +80,11 @@ option(WITH_DMI             "Enable DMI/SMBIOS reader" ON)
 option(BUILD_STATIC         "Build static binary" ON)
 option(ARM_V8               "Force ARMv8 (64 bit) architecture, use with caution if automatic detection fails, but you sure it may work" OFF)
 option(ARM_V7               "Force ARMv7 (32 bit) architecture, use with caution if automatic detection fails, but you sure it may work" OFF)
-option(HWLOC_DEBUG          "Enable hwloc debug helpers and log" OFF)
 # End of XMRig options
 
 include (CheckIncludeFile)
 include (cmake/cpu.cmake)
 include (cmake/os.cmake)
-include (src/base/base.cmake)
-include (src/backend/backend.cmake)
 
 cmake_print_variables($ENV{GITLAB_CI})
 cmake_print_variables(INTERNAL_TNN_VERSION)
@@ -273,38 +274,13 @@ file(GLOB_RECURSE SOURCES_CORE
   "${PROJECT_SOURCE_DIR}/src/broadcast/*.cpp"
   "${PROJECT_SOURCE_DIR}/lib/ChaCha20-SIMD/*.c"
 )
-include_directories(${UV_INCLUDE_DIR})
 
 add_definitions(-DTNN_MINER_PROJECT -DTNN_JSON_SINGLE_LINE_ARRAY)
 add_definitions(-D__STDC_FORMAT_MACROS -DUNICODE -D_FILE_OFFSET_BITS=64)
 
-find_package(UV REQUIRED)
-
 include(cmake/astrobwtv3.cmake)
 include(cmake/xelis-hash.cmake)
 include(cmake/randomx.cmake)
-
-if (WITH_VAES)
-  add_definitions(-DTNN_VAES)
-  set(HEADERS_CRYPTO "${HEADERS_CRYPTO}" ${PROJECT_SOURCE_DIR}/src/crypto/cn/CryptoNight_x86_vaes.h)
-  set(SOURCES_CRYPTO "${SOURCES_CRYPTO}" ${PROJECT_SOURCE_DIR}/src/crypto/cn/CryptoNight_x86_vaes.cpp)
-  if (CMAKE_C_COMPILER_ID MATCHES GNU OR CMAKE_C_COMPILER_ID MATCHES Clang)
-    set_source_files_properties(${PROJECT_SOURCE_DIR}/src/crypto/cn/CryptoNight_x86_vaes.cpp PROPERTIES COMPILE_FLAGS "-Ofast -fno-tree-vectorize -mavx2 -mvaes")
-  endif()
-endif()
-
-if (WITH_HWLOC)
-    add_definitions(-DTNN_FEATURE_HWLOC)
-    list(APPEND HEADERS_CRYPTO
-        ${PROJECT_SOURCE_DIR}/src/crypto/common/NUMAMemoryPool.h
-        )
-
-    list(APPEND SOURCES_CRYPTO
-        ${PROJECT_SOURCE_DIR}/src/crypto/common/NUMAMemoryPool.cpp
-        ${PROJECT_SOURCE_DIR}/src/crypto/common/VirtualMemory_hwloc.cpp
-        )
-endif()
-
 if (WITH_CN_LITE)
     add_definitions(/DTNN_ALGO_CN_LITE)
 endif()
@@ -368,4 +344,4 @@ endif()
 if(USE_ASTRO_SPSA)
   target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} ${SPSA_LIB_DIR}/libastroSPSA_${SPSA_OS_PREFIX}_${TARGET_ARCH}.a)
 endif()
-target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} -flto Threads::Threads ${UV_LIBRARIES} ${TNN_BOOST_LIBS} OpenSSL::SSL OpenSSL::Crypto sodium blake3)
+target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} -flto Threads::Threads ${TNN_BOOST_LIBS} OpenSSL::SSL OpenSSL::Crypto sodium blake3)

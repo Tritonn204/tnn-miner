@@ -36,16 +36,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <string.h>
 #include <stdio.h>
 
-#include "crypto/randomx/blake2/blake2.h"
-#include "crypto/randomx/blake2/blake2-impl.h"
+#include "blake2.h"
+#include "blake2-impl.h"
 
-const uint64_t blake2b_IV[8] = {
+static const uint64_t blake2b_IV[8] = {
 	UINT64_C(0x6a09e667f3bcc908), UINT64_C(0xbb67ae8584caa73b),
 	UINT64_C(0x3c6ef372fe94f82b), UINT64_C(0xa54ff53a5f1d36f1),
 	UINT64_C(0x510e527fade682d1), UINT64_C(0x9b05688c2b3e6c1f),
 	UINT64_C(0x1f83d9abfb41bd6b), UINT64_C(0x5be0cd19137e2179) };
 
-static const uint8_t blake2b_sigma[12][16] = {
+static const unsigned int blake2b_sigma[12][16] = {
 	{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
 	{14, 10, 4, 8, 9, 15, 13, 6, 1, 12, 0, 2, 11, 7, 5, 3},
 	{11, 8, 12, 0, 5, 2, 15, 13, 10, 14, 3, 6, 7, 1, 9, 4},
@@ -87,7 +87,7 @@ static FORCE_INLINE void blake2b_init0(blake2b_state *S) {
 	memcpy(S->h, blake2b_IV, sizeof(S->h));
 }
 
-int rx_blake2b_init_param(blake2b_state *S, const blake2b_param *P) {
+int blake2b_init_param(blake2b_state *S, const blake2b_param *P) {
 	const unsigned char *p = (const unsigned char *)P;
 	unsigned int i;
 
@@ -105,7 +105,7 @@ int rx_blake2b_init_param(blake2b_state *S, const blake2b_param *P) {
 }
 
 /* Sequential blake2b initialization */
-int rx_blake2b_init(blake2b_state *S, size_t outlen) {
+int blake2b_init(blake2b_state *S, size_t outlen) {
 	blake2b_param P;
 
 	if (S == NULL) {
@@ -130,10 +130,10 @@ int rx_blake2b_init(blake2b_state *S, size_t outlen) {
 	memset(P.salt, 0, sizeof(P.salt));
 	memset(P.personal, 0, sizeof(P.personal));
 
-	return rx_blake2b_init_param(S, &P);
+	return blake2b_init_param(S, &P);
 }
 
-int rx_blake2b_init_key(blake2b_state *S, size_t outlen, const void *key, size_t keylen) {
+int blake2b_init_key(blake2b_state *S, size_t outlen, const void *key, size_t keylen) {
 	blake2b_param P;
 
 	if (S == NULL) {
@@ -163,7 +163,7 @@ int rx_blake2b_init_key(blake2b_state *S, size_t outlen, const void *key, size_t
 	memset(P.salt, 0, sizeof(P.salt));
 	memset(P.personal, 0, sizeof(P.personal));
 
-	if (rx_blake2b_init_param(S, &P) < 0) {
+	if (blake2b_init_param(S, &P) < 0) {
 		blake2b_invalidate_state(S);
 		return -1;
 	}
@@ -172,14 +172,14 @@ int rx_blake2b_init_key(blake2b_state *S, size_t outlen, const void *key, size_t
 		uint8_t block[BLAKE2B_BLOCKBYTES];
 		memset(block, 0, BLAKE2B_BLOCKBYTES);
 		memcpy(block, key, keylen);
-        rx_blake2b_update(S, block, BLAKE2B_BLOCKBYTES);
+		blake2b_update(S, block, BLAKE2B_BLOCKBYTES);
 		/* Burn the key from stack */
 		//clear_internal_memory(block, BLAKE2B_BLOCKBYTES);
 	}
 	return 0;
 }
 
-void rx_blake2b_compress_integer(blake2b_state *S, const uint8_t *block) {
+static void blake2b_compress(blake2b_state *S, const uint8_t *block) {
 	uint64_t m[16];
 	uint64_t v[16];
 	unsigned int i, r;
@@ -237,7 +237,7 @@ void rx_blake2b_compress_integer(blake2b_state *S, const uint8_t *block) {
 #undef ROUND
 }
 
-int rx_blake2b_update(blake2b_state *S, const void *in, size_t inlen) {
+int blake2b_update(blake2b_state *S, const void *in, size_t inlen) {
 	const uint8_t *pin = (const uint8_t *)in;
 
 	if (inlen == 0) {
@@ -260,14 +260,14 @@ int rx_blake2b_update(blake2b_state *S, const void *in, size_t inlen) {
 		size_t fill = BLAKE2B_BLOCKBYTES - left;
 		memcpy(&S->buf[left], pin, fill);
 		blake2b_increment_counter(S, BLAKE2B_BLOCKBYTES);
-		rx_blake2b_compress(S, S->buf);
+		blake2b_compress(S, S->buf);
 		S->buflen = 0;
 		inlen -= fill;
 		pin += fill;
 		/* Avoid buffer copies when possible */
 		while (inlen > BLAKE2B_BLOCKBYTES) {
 			blake2b_increment_counter(S, BLAKE2B_BLOCKBYTES);
-			rx_blake2b_compress(S, pin);
+			blake2b_compress(S, pin);
 			inlen -= BLAKE2B_BLOCKBYTES;
 			pin += BLAKE2B_BLOCKBYTES;
 		}
@@ -277,7 +277,7 @@ int rx_blake2b_update(blake2b_state *S, const void *in, size_t inlen) {
 	return 0;
 }
 
-int rx_blake2b_final(blake2b_state *S, void *out, size_t outlen) {
+int blake2b_final(blake2b_state *S, void *out, size_t outlen) {
 	uint8_t buffer[BLAKE2B_OUTBYTES] = { 0 };
 	unsigned int i;
 
@@ -294,7 +294,7 @@ int rx_blake2b_final(blake2b_state *S, void *out, size_t outlen) {
 	blake2b_increment_counter(S, S->buflen);
 	blake2b_set_lastblock(S);
 	memset(&S->buf[S->buflen], 0, BLAKE2B_BLOCKBYTES - S->buflen); /* Padding */
-	rx_blake2b_compress(S, S->buf);
+	blake2b_compress(S, S->buf);
 
 	for (i = 0; i < 8; ++i) { /* Output full hash to temp buffer */
 		store64(buffer + sizeof(S->h[i]) * i, S->h[i]);
@@ -307,7 +307,8 @@ int rx_blake2b_final(blake2b_state *S, void *out, size_t outlen) {
 	return 0;
 }
 
-int rx_blake2b_default(void *out, size_t outlen, const void *in, size_t inlen) {
+int blake2b(void *out, size_t outlen, const void *in, size_t inlen,
+	const void *key, size_t keylen) {
 	blake2b_state S;
 	int ret = -1;
 
@@ -320,14 +321,25 @@ int rx_blake2b_default(void *out, size_t outlen, const void *in, size_t inlen) {
 		goto fail;
 	}
 
-	if (rx_blake2b_init(&S, outlen) < 0) {
+	if ((NULL == key && keylen > 0) || keylen > BLAKE2B_KEYBYTES) {
 		goto fail;
 	}
 
-	if (rx_blake2b_update(&S, in, inlen) < 0) {
+	if (keylen > 0) {
+		if (blake2b_init_key(&S, outlen, key, keylen) < 0) {
+			goto fail;
+		}
+	}
+	else {
+		if (blake2b_init(&S, outlen) < 0) {
+			goto fail;
+		}
+	}
+
+	if (blake2b_update(&S, in, inlen) < 0) {
 		goto fail;
 	}
-	ret = rx_blake2b_final(&S, out, outlen);
+	ret = blake2b_final(&S, out, outlen);
 
 fail:
 	//clear_internal_memory(&S, sizeof(S));
@@ -335,7 +347,7 @@ fail:
 }
 
 /* Argon2 Team - Begin Code */
-int rxa2_blake2b_long(void *pout, size_t outlen, const void *in, size_t inlen) {
+int blake2b_long(void *pout, size_t outlen, const void *in, size_t inlen) {
 	uint8_t *out = (uint8_t *)pout;
 	blake2b_state blake_state;
 	uint8_t outlen_bytes[sizeof(uint32_t)] = { 0 };
@@ -349,42 +361,43 @@ int rxa2_blake2b_long(void *pout, size_t outlen, const void *in, size_t inlen) {
 	store32(outlen_bytes, (uint32_t)outlen);
 
 #define TRY(statement)                                                         \
-	do {                                                                       \
-		ret = statement;                                                       \
-		if (ret < 0) {                                                         \
-			goto fail;                                                         \
-		}                                                                      \
-	} while ((void)0, 0)
+    do {                                                                       \
+        ret = statement;                                                       \
+        if (ret < 0) {                                                         \
+            goto fail;                                                         \
+        }                                                                      \
+    } while ((void)0, 0)
 
 	if (outlen <= BLAKE2B_OUTBYTES) {
-		TRY(rx_blake2b_init(&blake_state, outlen));
-		TRY(rx_blake2b_update(&blake_state, outlen_bytes, sizeof(outlen_bytes)));
-		TRY(rx_blake2b_update(&blake_state, in, inlen));
-		TRY(rx_blake2b_final(&blake_state, out, outlen));
+		TRY(blake2b_init(&blake_state, outlen));
+		TRY(blake2b_update(&blake_state, outlen_bytes, sizeof(outlen_bytes)));
+		TRY(blake2b_update(&blake_state, in, inlen));
+		TRY(blake2b_final(&blake_state, out, outlen));
 	}
 	else {
 		uint32_t toproduce;
 		uint8_t out_buffer[BLAKE2B_OUTBYTES];
 		uint8_t in_buffer[BLAKE2B_OUTBYTES];
-		TRY(rx_blake2b_init(&blake_state, BLAKE2B_OUTBYTES));
-		TRY(rx_blake2b_update(&blake_state, outlen_bytes, sizeof(outlen_bytes)));
-		TRY(rx_blake2b_update(&blake_state, in, inlen));
-		TRY(rx_blake2b_final(&blake_state, out_buffer, BLAKE2B_OUTBYTES));
+		TRY(blake2b_init(&blake_state, BLAKE2B_OUTBYTES));
+		TRY(blake2b_update(&blake_state, outlen_bytes, sizeof(outlen_bytes)));
+		TRY(blake2b_update(&blake_state, in, inlen));
+		TRY(blake2b_final(&blake_state, out_buffer, BLAKE2B_OUTBYTES));
 		memcpy(out, out_buffer, BLAKE2B_OUTBYTES / 2);
 		out += BLAKE2B_OUTBYTES / 2;
 		toproduce = (uint32_t)outlen - BLAKE2B_OUTBYTES / 2;
 
 		while (toproduce > BLAKE2B_OUTBYTES) {
 			memcpy(in_buffer, out_buffer, BLAKE2B_OUTBYTES);
-			TRY(rx_blake2b(out_buffer, BLAKE2B_OUTBYTES, in_buffer,
-				BLAKE2B_OUTBYTES));
+			TRY(blake2b(out_buffer, BLAKE2B_OUTBYTES, in_buffer,
+				BLAKE2B_OUTBYTES, NULL, 0));
 			memcpy(out, out_buffer, BLAKE2B_OUTBYTES / 2);
 			out += BLAKE2B_OUTBYTES / 2;
 			toproduce -= BLAKE2B_OUTBYTES / 2;
 		}
 
 		memcpy(in_buffer, out_buffer, BLAKE2B_OUTBYTES);
-		TRY(rx_blake2b(out_buffer, toproduce, in_buffer, BLAKE2B_OUTBYTES));
+		TRY(blake2b(out_buffer, toproduce, in_buffer, BLAKE2B_OUTBYTES, NULL,
+			0));
 		memcpy(out, out_buffer, toproduce);
 	}
 fail:

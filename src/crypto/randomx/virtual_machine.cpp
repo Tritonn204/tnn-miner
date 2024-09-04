@@ -29,14 +29,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <cstring>
 #include <iomanip>
 #include <stdexcept>
-#include "crypto/randomx/virtual_machine.hpp"
-#include "crypto/randomx/aes_hash.hpp"
-#include "crypto/randomx/allocator.hpp"
-#include "crypto/randomx/blake2/blake2.h"
-#include "crypto/randomx/common.hpp"
-#include "crypto/randomx/intrin_portable.h"
-#include "crypto/randomx/soft_aes.h"
-#include "crypto/rx/Profiler.h"
+#include "virtual_machine.hpp"
+#include "common.hpp"
+#include "aes_hash.hpp"
+#include "blake2/blake2.h"
+#include "intrin_portable.h"
+#include "allocator.hpp"
 
 randomx_vm::~randomx_vm() {
 
@@ -80,7 +78,7 @@ void randomx_vm::initialize() {
 	store64(&reg.a[2].hi, randomx::getSmallPositiveFloatBits(program.getEntropy(5)));
 	store64(&reg.a[3].lo, randomx::getSmallPositiveFloatBits(program.getEntropy(6)));
 	store64(&reg.a[3].hi, randomx::getSmallPositiveFloatBits(program.getEntropy(7)));
-	mem.ma = program.getEntropy(8) & CacheLineAlignMask;
+	mem.ma = program.getEntropy(8) & randomx::CacheLineAlignMask;
 	mem.mx = program.getEntropy(10);
 	auto addressRegisters = program.getEntropy(12);
 	config.readReg0 = 0 + (addressRegisters & 1);
@@ -90,55 +88,56 @@ void randomx_vm::initialize() {
 	config.readReg2 = 4 + (addressRegisters & 1);
 	addressRegisters >>= 1;
 	config.readReg3 = 6 + (addressRegisters & 1);
-	datasetOffset = (program.getEntropy(13) % (DatasetExtraItems + 1)) * randomx::CacheLineSize;
+	datasetOffset = (program.getEntropy(13) % (randomx::DatasetExtraItems + 1)) * randomx::CacheLineSize;
 	store64(&config.eMask[0], randomx::getFloatMask(program.getEntropy(14)));
 	store64(&config.eMask[1], randomx::getFloatMask(program.getEntropy(15)));
 }
 
 namespace randomx {
 
-	template<int softAes>
-	VmBase<softAes>::~VmBase() {
+	alignas(16) volatile static rx_vec_i128 aesDummy;
+
+	template<class Allocator, bool softAes>
+	VmBase<Allocator, softAes>::~VmBase() {
+		Allocator::freeMemory(scratchpad, ScratchpadSize);
 	}
 
-	template<int softAes>
-	void VmBase<softAes>::setScratchpad(uint8_t *scratchpad) {
-		if (datasetPtr == nullptr) {
+	template<class Allocator, bool softAes>
+	void VmBase<Allocator, softAes>::allocate() {
+		if (datasetPtr == nullptr)
 			throw std::invalid_argument("Cache/Dataset not set");
+		if (!softAes) { //if hardware AES is not supported, it's better to fail now than to return a ticking bomb
+			rx_vec_i128 tmp = rx_load_vec_i128((const rx_vec_i128*)&aesDummy);
+			tmp = rx_aesenc_vec_i128(tmp, tmp);
+			rx_store_vec_i128((rx_vec_i128*)&aesDummy, tmp);
 		}
-
-		this->scratchpad = scratchpad;
+		scratchpad = (uint8_t*)Allocator::allocMemory(ScratchpadSize);
 	}
 
-	template<int softAes>
-	void VmBase<softAes>::getFinalResult(void* out) {
+	template<class Allocator, bool softAes>
+	void VmBase<Allocator, softAes>::getFinalResult(void* out, size_t outSize) {
 		hashAes1Rx4<softAes>(scratchpad, ScratchpadSize, &reg.a);
-		rx_blake2b_wrapper::run(out, RANDOMX_HASH_SIZE, &reg, sizeof(RegisterFile));
+		blake2b(out, outSize, &reg, sizeof(RegisterFile), nullptr, 0);
 	}
 
-	template<int softAes>
-	void VmBase<softAes>::hashAndFill(void* out, uint64_t (&fill_state)[8]) {
-		if (!softAes) {
-			hashAndFillAes1Rx4<0, 2>(scratchpad, ScratchpadSize, &reg.a, fill_state);
-		}
-		else {
-			(*GetSoftAESImpl())(scratchpad, ScratchpadSize, &reg.a, fill_state);
-		}
-
-		rx_blake2b_wrapper::run(out, RANDOMX_HASH_SIZE, &reg, sizeof(RegisterFile));
+	template<class Allocator, bool softAes>
+	void VmBase<Allocator, softAes>::hashAndFill(void* out, size_t outSize, uint64_t *fill_state) {
+		hashAndFillAes1Rx4<softAes>((void*) getScratchpad(), ScratchpadSize, &reg.a, fill_state);
+		blake2b(out, outSize, &reg, sizeof(RegisterFile), nullptr, 0);
 	}
 
-	template<int softAes>
-	void VmBase<softAes>::initScratchpad(void* seed) {
+	template<class Allocator, bool softAes>
+	void VmBase<Allocator, softAes>::initScratchpad(void* seed) {
 		fillAes1Rx4<softAes>(seed, ScratchpadSize, scratchpad);
 	}
 
-	template<int softAes>
-	void VmBase<softAes>::generateProgram(void* seed) {
-		PROFILE_SCOPE(RandomX_generate_program);
-		fillAes4Rx4<softAes>(seed, 128 + RandomX_CurrentConfig.ProgramSize * 8, &program);
+	template<class Allocator, bool softAes>
+	void VmBase<Allocator, softAes>::generateProgram(void* seed) {
+		fillAes4Rx4<softAes>(seed, sizeof(program), &program);
 	}
 
-	template class VmBase<false>;
-	template class VmBase<true>;
+	template class VmBase<AlignedAllocator<CacheLineSize>, false>;
+	template class VmBase<AlignedAllocator<CacheLineSize>, true>;
+	template class VmBase<LargePageAllocator, false>;
+	template class VmBase<LargePageAllocator, true>;
 }

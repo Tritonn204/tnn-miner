@@ -46,6 +46,8 @@ echo Untarring OpenSSL
 tar -xf c:\packages\openssl-330.tar -C c:\
 echo Untarring Sodium
 tar -xf c:\packages\libsodium-1020.tar -C c:\
+echo Untarring HWLoc
+tar -xf c:\packages\hwloc-2111.tar -C c:\
 
 echo Copying from c:\clang64 to c:\mingw64
 xcopy c:\clang64 c:\mingw64\ /E /H /Y /Q

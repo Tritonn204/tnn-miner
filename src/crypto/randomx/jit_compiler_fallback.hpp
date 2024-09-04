@@ -1,7 +1,5 @@
 /*
-Copyright (c) 2018-2020, tevador    <tevador@gmail.com>
-Copyright (c) 2019-2020, SChernykh  <https://github.com/SChernykh>
-Copyright (c) 2019-2020, XMRig      <https://github.com/xmrig>, <support@xmrig.com>
+Copyright (c) 2018-2019, tevador <tevador@gmail.com>
 
 All rights reserved.
 
@@ -33,28 +31,27 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <cstdint>
 #include <vector>
 #include <stdexcept>
-#include "crypto/randomx/common.hpp"
+#include "common.hpp"
 
 namespace randomx {
 
 	class Program;
-	class ProgramConfiguration;
+	struct ProgramConfiguration;
 	class SuperscalarProgram;
 
 	class JitCompilerFallback {
 	public:
-		explicit JitCompilerFallback(bool, bool) {
+		JitCompilerFallback() {
 			throw std::runtime_error("JIT compilation is not supported on this platform");
 		}
-		void prepare() {}
-		void generateProgram(Program&, ProgramConfiguration&, uint32_t) {
+		void generateProgram(Program&, ProgramConfiguration&) {
 
 		}
 		void generateProgramLight(Program&, ProgramConfiguration&, uint32_t) {
 
 		}
 		template<size_t N>
-		void generateSuperscalarHash(SuperscalarProgram(&programs)[N]) {
+		void generateSuperscalarHash(SuperscalarProgram(&programs)[N], std::vector<uint64_t> &) {
 
 		}
 		void generateDatasetInitCode() {
@@ -74,5 +71,6 @@ namespace randomx {
 		}
 		void enableWriting() {}
 		void enableExecution() {}
+		void enableAll() {}
 	};
 }
