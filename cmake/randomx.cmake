@@ -3,7 +3,7 @@ if (WITH_RANDOMX)
 
     message(STATUS "Building with RandomX support")
 
-    file(GLOB_RECURSE randomx_sources
+    file(GLOB randomx_sources
       src/crypto/randomx/aes_hash.cpp
       src/crypto/randomx/argon2_ref.c
       src/crypto/randomx/argon2_ssse3.c
@@ -27,9 +27,10 @@ if (WITH_RANDOMX)
       src/crypto/randomx/reciprocal.c
       src/crypto/randomx/virtual_machine.cpp
       src/crypto/randomx/vm_compiled_light.cpp
-      src/crypto/randomx/blake2/blake2b.c
       src/crypto/randomx/jit_compiler_x86_static.S
     )
+
+    set (WITH_BLAKE2 ON)
 
     if(NOT ARCH_ID)
       # allow cross compiling

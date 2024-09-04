@@ -263,6 +263,7 @@ include_directories(
   "${TNN_BOOST_INCLUDES}"
   "${PROJECT_SOURCE_DIR}/src/broadcast/"
   "${PROJECT_SOURCE_DIR}/lib"
+  "${PROJECT_SOURCE_DIR}/extern"
 )
 
 file(GLOB_RECURSE SOURCES_CORE
@@ -272,32 +273,7 @@ file(GLOB_RECURSE SOURCES_CORE
   "${PROJECT_SOURCE_DIR}/src/net/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/net/*.c"
   "${PROJECT_SOURCE_DIR}/src/broadcast/*.cpp"
-  "${PROJECT_SOURCE_DIR}/lib/ChaCha20-SIMD/*.c"
 )
-
-add_definitions(-DTNN_MINER_PROJECT -DTNN_JSON_SINGLE_LINE_ARRAY)
-add_definitions(-D__STDC_FORMAT_MACROS -DUNICODE -D_FILE_OFFSET_BITS=64)
-
-include(cmake/astrobwtv3.cmake)
-include(cmake/xelis-hash.cmake)
-include(cmake/randomx.cmake)
-if (WITH_CN_LITE)
-    add_definitions(/DTNN_ALGO_CN_LITE)
-endif()
-
-if (WITH_CN_HEAVY)
-    add_definitions(/DTNN_ALGO_CN_HEAVY)
-endif()
-
-if (WITH_CN_PICO)
-    add_definitions(/DTNN_ALGO_CN_PICO)
-endif()
-
-if (WITH_CN_FEMTO)
-    add_definitions(/DTNN_ALGO_CN_FEMTO)
-endif()
-
-add_subdirectory(${PROJECT_SOURCE_DIR}/lib/BLAKE3/c)
 
 # AstroSPSA only works on x64 Linux at the moment
 if(USE_ASTRO_SPSA)
@@ -325,6 +301,17 @@ if(USE_ASTRO_SPSA)
   include_directories(${SPSA_LIB_DIR})
 endif()
 
+include(cmake/astrobwtv3.cmake)
+include(cmake/xelis-hash.cmake)
+include(cmake/randomx.cmake)
+include(cmake/blake2.cmake)
+include(cmake/chacha20.cmake)
+
+if (WITH_BLAKE3)
+  add_subdirectory(${PROJECT_SOURCE_DIR}/extern/BLAKE3/c)
+  set(BLAKE3_LIBRARIES blake3)
+endif()
+
 # Remove aarch files from SOURCES_CORE
 #if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" AND NOT CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
 #  list(FILTER SOURCES_CORE EXCLUDE REGEX ".*/.*/*aarch64*")
@@ -344,4 +331,4 @@ endif()
 if(USE_ASTRO_SPSA)
   target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} ${SPSA_LIB_DIR}/libastroSPSA_${SPSA_OS_PREFIX}_${TARGET_ARCH}.a)
 endif()
-target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} -flto Threads::Threads ${TNN_BOOST_LIBS} OpenSSL::SSL OpenSSL::Crypto sodium blake3)
+target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} -flto Threads::Threads ${TNN_BOOST_LIBS} OpenSSL::SSL OpenSSL::Crypto sodium ${BLAKE3_LIBRARIES})
