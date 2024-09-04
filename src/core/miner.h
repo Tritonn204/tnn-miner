@@ -177,7 +177,7 @@ void setPriorityClass(boost::thread::native_handle_type t, int priority);
 
 void setPriority(boost::thread::native_handle_type t, int priority);
 
-void setAffinity(boost::thread::native_handle_type t, int core);
+void setAffinity(boost::thread::native_handle_type t, uint64_t core);
 
 void update(std::chrono::steady_clock::time_point startTime);
 

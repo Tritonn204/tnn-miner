@@ -671,7 +671,7 @@ Benchmarking:
     if (lockThreads)
     {
 #if defined(_WIN32)
-      setAffinity(t.native_handle(), 1 << (i % n));
+      setAffinity(t.native_handle(), 1LL << (i % n));
 #else
       setAffinity(t.native_handle(), (i % n));
 #endif
@@ -846,16 +846,39 @@ void logSeconds(std::chrono::steady_clock::time_point start_time, int duration, 
   }
 }
 
-void setAffinity(boost::thread::native_handle_type t, int core)
+#if defined(_WIN32)
+DWORD_PTR SetThreadAffinityWithGroups(HANDLE threadHandle, DWORD_PTR coreIndex) {
+    DWORD numGroups = GetActiveProcessorGroupCount();
+    DWORD numProcessorsInGroup = GetMaximumProcessorCount(0); // Assume uniform group sizes
+
+    // Calculate group and processor within the group
+    DWORD group = static_cast<DWORD>(coreIndex / numProcessorsInGroup);
+    DWORD processorInGroup = static_cast<DWORD>(coreIndex % numProcessorsInGroup);
+
+    if (group < numGroups) {
+        GROUP_AFFINITY groupAffinity = {};
+        groupAffinity.Group = static_cast<WORD>(group);
+        groupAffinity.Mask = static_cast<KAFFINITY>(1ULL << processorInGroup);
+
+        GROUP_AFFINITY previousGroupAffinity;
+        if (!SetThreadGroupAffinity(threadHandle, &groupAffinity, &previousGroupAffinity)) {
+            return 0; // Fail case, return 0 like SetThreadAffinityMask
+        }
+
+        // Return the previous affinity mask for compatibility with your code
+        return previousGroupAffinity.Mask;
+    }
+
+    return 0; // If out of bounds
+};
+#endif
+
+void setAffinity(boost::thread::native_handle_type t, uint64_t core)
 {
 #if defined(_WIN32)
-
   HANDLE threadHandle = t;
-
-  // Affinity on Windows makes hashing slower atm
-  // Set the CPU affinity mask to the first processor (core 0)
-  DWORD_PTR affinityMask = core; // Set to the first processor
-  DWORD_PTR previousAffinityMask = SetThreadAffinityMask(threadHandle, affinityMask);
+  DWORD_PTR affinityMask = core;
+  DWORD_PTR previousAffinityMask = SetThreadAffinityWithGroups(threadHandle, affinityMask);
   if (previousAffinityMask == 0)
   {
     DWORD error = GetLastError();
