@@ -4,15 +4,22 @@ if (WITH_ASTROBWTV3)
     message(STATUS "Building with AstroBWTv3 support")
 
     file(GLOB_RECURSE astroHeaders
-      "src/crypto/astrobwtv3/*.h"
-      "src/crypto/spectrex/*.h"
+      src/crypto/astrobwtv3/*.h
+      src/crypto/spectrex/*.h
     )
 
     file(GLOB_RECURSE astroSources
-      "src/crypto/astrobwtv3/*.cpp"
-      "src/crypto/astrobwtv3/*.c"
-      "src/crypto/spectrex/*.cpp"
-      "src/crypto/spectrex/*.c"
+      src/crypto/astrobwtv3/*.cpp
+      src/crypto/astrobwtv3/*.c
+      src/crypto/spectrex/*.cpp
+      src/crypto/spectrex/*.c
+      src/net/dero/*.cpp
+      src/net/spectre/*.cpp
+    )
+    
+    list(APPEND astroSources
+      src/coins/mine_dero.cpp
+      src/coins/mine_spectre.cpp
     )
 
     list(APPEND HEADERS_CRYPTO

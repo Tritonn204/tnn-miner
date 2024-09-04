@@ -268,13 +268,15 @@ include_directories(
 
 file(GLOB_RECURSE SOURCES_CORE
   "${PROJECT_SOURCE_DIR}/include/libkeccak/*.c"
-  "${PROJECT_SOURCE_DIR}/src/coins/*.cpp"
-  "${PROJECT_SOURCE_DIR}/src/coins/*.c"
   "${PROJECT_SOURCE_DIR}/src/core/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/core/*.c"
+  "${PROJECT_SOURCE_DIR}/src/broadcast/*.cpp"
+  "${PROJECT_SOURCE_DIR}/src/coins/dummy_miners.cpp"
+)
+
+file(GLOB SOURCES_NET
   "${PROJECT_SOURCE_DIR}/src/net/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/net/*.c"
-  "${PROJECT_SOURCE_DIR}/src/broadcast/*.cpp"
 )
 
 # AstroSPSA only works on x64 Linux at the moment
@@ -319,7 +321,7 @@ endif()
 #  list(FILTER SOURCES_CORE EXCLUDE REGEX ".*/.*/*aarch64*")
 #endif()
 
-add_executable(${PROJECT_NAME}-${PROJECT_VERSION} ${SOURCES_CORE} ${SOURCES_CRYPTO} ${HEADERS_CRYPTO})
+add_executable(${PROJECT_NAME}-${PROJECT_VERSION} ${SOURCES_CORE} ${SOURCES_NET} ${SOURCES_CRYPTO} ${HEADERS_CRYPTO})
 
 if(WIN32)
   target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} mingw32 wsock32 ws2_32 winpthread)

@@ -114,6 +114,7 @@ bool beQuiet = false;
 /* End definitions from tnn-common.hpp */
 
 /* Start definitions from astrobwtv3.h */
+#if defined(TNN_ASTROBWTV3)
 AstroFunc allAstroFuncs[] = {
   {"branch", branchComputeCPU},
   {"lookup", lookupCompute},
@@ -125,6 +126,7 @@ AstroFunc allAstroFuncs[] = {
 #endif
 };
 size_t numAstroFuncs;
+#endif
 /* End definitions from astrobwtv3.h */
 
 // #include <cuda_runtime.h>
@@ -160,9 +162,11 @@ void openssl_log_callback(const SSL *ssl, int where, int ret)
 
 //------------------------------------------------------------------------------
 
+#if defined(TNN_ASTROBWTV3)
 void initializeExterns() {
   numAstroFuncs = std::size(allAstroFuncs); //sizeof(allAstroFuncs)/sizeof(allAstroFuncs[0]);
 }
+#endif
 
 void onExit() {
   setcolor(BRIGHT_WHITE);
@@ -187,11 +191,15 @@ int main(int argc, char **argv)
   setvbuf(stdout, buf, _IOFBF, 65536);
   srand(time(NULL)); // Placing higher here to ensure the effect cascades through the entire program
 
+  #if defined(TNN_ASTROBWTV3)
   initWolfLUT();
   initializeExterns();
+  #endif
+
   // Check command line arguments.
   lookup2D_global = (uint16_t *)malloc_huge_pages(regOps_size * (256 * 256) * sizeof(uint16_t));
   lookup3D_global = (byte *)malloc_huge_pages(branchedOps_size * (256 * 256) * sizeof(byte));
+
 
   // default values
   bool lockThreads = true;
@@ -253,18 +261,42 @@ int main(int argc, char **argv)
 
   if (vm.count("dero"))
   {
+    #if defined(TNN_ASTROBWTV3)
     symbol = "DERO";
+    #else
+    setcolor(RED);
+    printf(unsupported_astro);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
   }
 
   if (vm.count("xelis"))
   {
+    #if defined(TNN_XELISHASH)
     symbol = "XEL";
+    #else
+    setcolor(RED);
+    printf(unsupported_xelishash);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
   }
 
   if (vm.count("spectre"))
   {
+    #if defined(TNN_ASTROBWTV3)
     symbol = "SPR";
     protocol = SPECTRE_STRATUM;
+    #else
+    setcolor(RED);
+    printf(unsupported_astro);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
   }
 
   if (vm.count("xatum"))
@@ -284,33 +316,72 @@ int main(int argc, char **argv)
 
   if (vm.count("test-spectre"))
   {
+    #if defined(TNN_ASTROBWTV3)
     return SpectreX::test();
+    #else
+    setcolor(RED);
+    printf(unsupported_astro);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
   }
 
   if (vm.count("test-xelis"))
   {
+    #if defined(TNN_XELISHASH)
     int rc = xelis_runTests_v2();
     return rc;
+    #else
+    setcolor(RED);
+    printf(unsupported_xelishash);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
   }
 
   if (vm.count("test-randomx"))
   {
+    #if defined(TNN_RANDOMX)
     RandomXTest();
     return 0;
+    #else
+    setcolor(RED);
+    printf(unsupported_randomx);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
   }
 
   if (vm.count("xelis-bench"))
   {
+    #if defined(TNN_XELISHASH)
     boost::thread t(xelis_benchmark_cpu_hash_v2);
     setPriority(t.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
     t.join();
     return 0;
+    #else
+    setcolor(RED);
+    printf(unsupported_xelishash);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
   }
 
   if (vm.count("sabench"))
   {
+    #if defined(TNN_ASTROBWTV3)
     runDivsufsortBenchmark();
     return 0;
+    #else
+    setcolor(RED);
+    printf(unsupported_astro);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    #endif
   }
 
   if (vm.count("daemon-address"))
@@ -470,6 +541,7 @@ int main(int argc, char **argv)
   // Ensure we capture *all* of the other options before we start using goto
   if (vm.count("test-dero"))
   {
+    #if defined(TNN_ASTROBWTV3)
     // temporary for optimization fishing:
     mapZeroes();
     // end of temporary section
@@ -479,6 +551,13 @@ int main(int argc, char **argv)
       rc = 1;
     }
     return rc;
+    #else 
+    setcolor(RED);
+    printf(unsupported_astro);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
   }
   if (vm.count("dero-benchmark"))
   {
@@ -488,7 +567,6 @@ int main(int argc, char **argv)
       printf("ERROR: Invalid benchmark arguments. Use -h for assistance\n");
       return 1;
     }
-    goto Benchmarking;
   }
 
 fillBlanks:
@@ -628,6 +706,8 @@ fillBlanks:
   #endif
 
   setcolor(BRIGHT_YELLOW);
+
+  #ifdef TNN_ASTROBWTV3
   if (miningAlgo == DERO_HASH || miningAlgo == SPECTRE_X) {
     if (vm.count("no-tune")) {
       std::string noTune = vm["no-tune"].as<std::string>();
@@ -640,95 +720,96 @@ fillBlanks:
   }
   fflush(stdout);
   setcolor(BRIGHT_WHITE);
+  #endif
 
   printf("\n");
 }
 
   goto Mining;
 
-Benchmarking:
-{
-  if (threads <= 0)
-  {
-    threads = 1;
-  }
+// Benchmarking:
+// {
+//   if (threads <= 0)
+//   {
+//     threads = 1;
+//   }
 
-  unsigned int n = std::thread::hardware_concurrency();
-  int winMask = 0;
-  for (int i = 0; i < n - 1; i++)
-  {
-    winMask += 1 << i;
-  }
+//   unsigned int n = std::thread::hardware_concurrency();
+//   int winMask = 0;
+//   for (int i = 0; i < n - 1; i++)
+//   {
+//     winMask += 1 << i;
+//   }
 
-  host = defaultHost[miningAlgo];
-  port = devPort[miningAlgo];
-  wallet = devSelection[miningAlgo];
+//   host = defaultHost[miningAlgo];
+//   port = devPort[miningAlgo];
+//   wallet = devSelection[miningAlgo];
 
-  boost::thread GETWORK(getWork, false, miningAlgo);
-  // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+//   boost::thread GETWORK(getWork, false, miningAlgo);
+//   // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
-  winMask = std::max(1, winMask);
+//   winMask = std::max(1, winMask);
 
-  // Create worker threads and set CPU affinity
-  for (int i = 0; i < threads; i++)
-  {
-    boost::thread t(benchmark, i + 1);
+//   // Create worker threads and set CPU affinity
+//   for (int i = 0; i < threads; i++)
+//   {
+//     boost::thread t(benchmark, i + 1);
 
-    if (lockThreads)
-    {
-      setAffinity(t.native_handle(), (i % n));
-    }
+//     if (lockThreads)
+//     {
+//       setAffinity(t.native_handle(), (i % n));
+//     }
 
-    // setPriority(t.native_handle(), THREAD_PRIORITY_HIGHEST);
+//     // setPriority(t.native_handle(), THREAD_PRIORITY_HIGHEST);
 
-   //  mutex.lock();
-    std::cout << "(Benchmark) Worker " << i + 1 << " created" << std::endl;
-   //  mutex.unlock();
-  }
+//    //  mutex.lock();
+//     std::cout << "(Benchmark) Worker " << i + 1 << " created" << std::endl;
+//    //  mutex.unlock();
+//   }
 
-  while (!isConnected)
-  {
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
-  }
-  auto start_time = std::chrono::steady_clock::now();
-  startBenchmark = true;
+//   while (!isConnected)
+//   {
+//     boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+//   }
+//   auto start_time = std::chrono::steady_clock::now();
+//   startBenchmark = true;
 
-  boost::thread t2(logSeconds, start_time, bench_duration, &stopBenchmark);
-  setPriority(t2.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+//   boost::thread t2(logSeconds, start_time, bench_duration, &stopBenchmark);
+//   setPriority(t2.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
-  while (true)
-  {
-    auto now = std::chrono::steady_clock::now();
-    auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count();
-    if (milliseconds >= bench_duration * 1000)
-    {
-      stopBenchmark = true;
-      break;
-    }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(50));
-  }
+//   while (true)
+//   {
+//     auto now = std::chrono::steady_clock::now();
+//     auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count();
+//     if (milliseconds >= bench_duration * 1000)
+//     {
+//       stopBenchmark = true;
+//       break;
+//     }
+//     boost::this_thread::sleep_for(boost::chrono::milliseconds(50));
+//   }
 
-  auto now = std::chrono::steady_clock::now();
-  auto seconds = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
-  int64_t hashrate = counter / bench_duration;
-  std::cout << "Mined for " << seconds << " seconds, average rate of " << std::flush;
+//   auto now = std::chrono::steady_clock::now();
+//   auto seconds = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
+//   int64_t hashrate = counter / bench_duration;
+//   std::cout << "Mined for " << seconds << " seconds, average rate of " << std::flush;
 
-  std::string rateSuffix = " H/s";
-  double rate = (double)hashrate;
-  if (hashrate >= 1000000)
-  {
-    rate = (double)(hashrate / 1000000.0);
-    rateSuffix = " MH/s";
-  }
-  else if (hashrate >= 1000)
-  {
-    rate = (double)(hashrate / 1000.0);
-    rateSuffix = " KH/s";
-  }
-  std::cout << std::setprecision(3) << rate << rateSuffix << std::endl;
-  boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
-  return 0;
-}
+//   std::string rateSuffix = " H/s";
+//   double rate = (double)hashrate;
+//   if (hashrate >= 1000000)
+//   {
+//     rate = (double)(hashrate / 1000000.0);
+//     rateSuffix = " MH/s";
+//   }
+//   else if (hashrate >= 1000)
+//   {
+//     rate = (double)(hashrate / 1000.0);
+//     rateSuffix = " KH/s";
+//   }
+//   std::cout << std::setprecision(3) << rate << rateSuffix << std::endl;
+//   boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+//   return 0;
+// }
 
 Mining:
 {
@@ -1089,76 +1170,4 @@ connectionAttempt:
   boost::this_thread::sleep_for(boost::chrono::milliseconds(10000));
   ioc.reset();
   goto connectionAttempt;
-}
-
-void benchmark(int tid)
-{
-
-  byte work[MINIBLOCK_SIZE];
-
-  std::random_device rd;
-  std::mt19937 gen(rd());
-  std::uniform_int_distribution<uint8_t> dist(0, 255);
-  std::array<uint8_t, 48> buf;
-  std::generate(buf.begin(), buf.end(), [&dist, &gen]()
-                { return dist(gen); });
-  std::memcpy(work, buf.data(), buf.size());
-
-  boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
-
-  int64_t localJobCounter;
-
-  int32_t i = 0;
-
-  byte powHash[32];
-  // byte powHash2[32];
-  workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
-  initWorker(*worker);
-  lookupGen(*worker, lookup2D_global, lookup3D_global);
-
-  while (!isConnected)
-  {
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
-  }
-
-  while (!startBenchmark)
-  {
-  }
-
-  work[MINIBLOCK_SIZE - 1] = (byte)tid;
-  while (true)
-  {
-    boost::json::value myJob;
-    {
-      std::scoped_lock<boost::mutex> lockGuard(mutex);
-      boost::json::value myJob = job;
-      localJobCounter = jobCounter;
-    }
-    byte *b2 = new byte[MINIBLOCK_SIZE];
-    hexstrToBytes(std::string(myJob.at("blockhashing_blob").as_string()), b2);
-    memcpy(work, b2, MINIBLOCK_SIZE);
-    delete[] b2;
-
-    while (localJobCounter == jobCounter)
-    {
-      i++;
-      // double which = (double)(rand() % 10000);
-      // bool devMine = (devConnected && which < devFee * 100.0);
-      std::memcpy(&work[MINIBLOCK_SIZE - 5], &i, sizeof(i));
-      // swap endianness
-      if (littleEndian())
-      {
-        std::swap(work[MINIBLOCK_SIZE - 5], work[MINIBLOCK_SIZE - 2]);
-        std::swap(work[MINIBLOCK_SIZE - 4], work[MINIBLOCK_SIZE - 3]);
-      }
-      AstroBWTv3(work, MINIBLOCK_SIZE, powHash, *worker, useLookupMine);
-
-      counter.fetch_add(1);
-      benchCounter.fetch_add(1);
-      if (stopBenchmark)
-        break;
-    }
-    if (stopBenchmark)
-      break;
-  }
 }

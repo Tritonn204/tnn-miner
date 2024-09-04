@@ -154,9 +154,12 @@ inline void do_session(
   bool use_ssl = (hostProto.find("ssl") != std::string::npos);
   switch (algo)
   {
+  #ifdef TNN_ASTROBWTV3
   case DERO_HASH:
     dero_session(hostProto, host, port, wallet, worker, ioc, ctx, yield, isDev);
     break;
+  #endif
+  #ifdef TNN_XELISHASH
   case XELIS_HASH:
   {
     switch (protocol)
@@ -179,8 +182,11 @@ inline void do_session(
     }
     break;
   }
+  #endif
+  #ifdef TNN_ASTROBWTV3
   case SPECTRE_X:
     spectre_stratum_session(hostProto, host, port, wallet, worker, ioc, ctx, yield, isDev);
     break;
+  #endif
   }
 }
