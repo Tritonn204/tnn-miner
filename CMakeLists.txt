@@ -268,6 +268,8 @@ include_directories(
 
 file(GLOB_RECURSE SOURCES_CORE
   "${PROJECT_SOURCE_DIR}/include/libkeccak/*.c"
+  "${PROJECT_SOURCE_DIR}/src/coins/*.cpp"
+  "${PROJECT_SOURCE_DIR}/src/coins/*.c"
   "${PROJECT_SOURCE_DIR}/src/core/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/core/*.c"
   "${PROJECT_SOURCE_DIR}/src/net/*.cpp"
