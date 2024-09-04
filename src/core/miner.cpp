@@ -849,10 +849,10 @@ void logSeconds(std::chrono::steady_clock::time_point start_time, int duration, 
 #if defined(_WIN32)
 DWORD_PTR SetThreadAffinityWithGroups(HANDLE threadHandle, DWORD_PTR coreIndex) {
     DWORD numGroups = GetActiveProcessorGroupCount();
-    DWORD numProcessorsInGroup = GetMaximumProcessorCount(0); // Assume uniform group sizes
 
     // Calculate group and processor within the group
-    DWORD group = static_cast<DWORD>(coreIndex / numProcessorsInGroup);
+    DWORD group = static_cast<DWORD>(coreIndex / 64);
+    DWORD numProcessorsInGroup = GetMaximumProcessorCount(group);
     DWORD processorInGroup = static_cast<DWORD>(coreIndex % numProcessorsInGroup);
 
     if (group < numGroups) {
@@ -870,7 +870,7 @@ DWORD_PTR SetThreadAffinityWithGroups(HANDLE threadHandle, DWORD_PTR coreIndex) 
     }
 
     return 0; // If out of bounds
-};
+}
 #endif
 
 void setAffinity(boost::thread::native_handle_type t, uint64_t core)
