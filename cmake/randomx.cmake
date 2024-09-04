@@ -153,9 +153,17 @@ if (WITH_RANDOMX)
       add_flag("-march=${RVARCH}")
     endif()
 
+    list(APPEND randomx_sources
+      src/crypto/randomx/tests/randomx_test.cpp
+    )
+
+    set_property(SOURCE src/crypto/randomx/tests/randomx_test.cpp PROPERTY POSITION_INDEPENDENT_CODE ON)
+    set_property(SOURCE src/crypto/randomx/tests/randomx_test.cpp PROPERTY CXX_STANDARD 11)
+
     list(APPEND SOURCES_CRYPTO
       ${randomx_sources}
     )
+
 else()
     remove_definitions(/DTNN_ALGO_RANDOMX)
 endif()
