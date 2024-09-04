@@ -114,7 +114,7 @@ void print_reversed_words(const uint64_t *state, int num_words)
 {
   for (int i = 0; i < num_words; ++i)
   {
-    printf("%016lx ", state[i]);
+    printf("%016llx ", state[i]);
   }
   printf("\n");
 }

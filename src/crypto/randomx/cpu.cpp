@@ -72,5 +72,4 @@ namespace randomx {
 #endif
 		//TODO POWER8 AES
 	}
-
 }
