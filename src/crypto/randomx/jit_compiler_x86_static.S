@@ -38,14 +38,10 @@
 #endif
 
 .global DECL(randomx_prefetch_scratchpad)
-.global DECL(randomx_prefetch_scratchpad_bmi2)
 .global DECL(randomx_prefetch_scratchpad_end)
 .global DECL(randomx_program_prologue)
-.global DECL(randomx_program_prologue_first_load)
-.global DECL(randomx_program_imul_rcp_store)
 .global DECL(randomx_program_loop_begin)
 .global DECL(randomx_program_loop_load)
-.global DECL(randomx_program_loop_load_xop)
 .global DECL(randomx_program_start)
 .global DECL(randomx_program_read_dataset)
 .global DECL(randomx_program_read_dataset_sshash_init)
@@ -53,11 +49,6 @@
 .global DECL(randomx_program_loop_store)
 .global DECL(randomx_program_loop_end)
 .global DECL(randomx_dataset_init)
-.global DECL(randomx_dataset_init_avx2_prologue)
-.global DECL(randomx_dataset_init_avx2_loop_end)
-.global DECL(randomx_dataset_init_avx2_epilogue)
-.global DECL(randomx_dataset_init_avx2_ssh_load)
-.global DECL(randomx_dataset_init_avx2_ssh_prefetch)
 .global DECL(randomx_program_epilogue)
 .global DECL(randomx_sshash_load)
 .global DECL(randomx_sshash_prefetch)
@@ -66,9 +57,13 @@
 .global DECL(randomx_program_end)
 .global DECL(randomx_reciprocal_fast)
 
-#define RANDOMX_SCRATCHPAD_MASK      2097088
-#define RANDOMX_DATASET_BASE_MASK    2147483584
-#define RANDOMX_CACHE_MASK           4194303
+#include "configuration.h"
+
+#define RANDOMX_SCRATCHPAD_MASK      (RANDOMX_SCRATCHPAD_L3-64)
+#define RANDOMX_DATASET_BASE_MASK    (RANDOMX_DATASET_BASE_SIZE-64)
+#define RANDOMX_CACHE_MASK           (RANDOMX_ARGON_MEMORY*16-1)
+#define RANDOMX_ALIGN                4096
+#define SUPERSCALAR_OFFSET           ((((RANDOMX_ALIGN + 32 * RANDOMX_PROGRAM_SIZE) - 1) / (RANDOMX_ALIGN) + 1) * (RANDOMX_ALIGN))
 
 #define db .byte
 
@@ -77,13 +72,6 @@ DECL(randomx_prefetch_scratchpad):
 	and eax, RANDOMX_SCRATCHPAD_MASK
 	prefetcht0 [rsi+rax]
 	ror rdx, 32
-	and edx, RANDOMX_SCRATCHPAD_MASK
-	prefetcht0 [rsi+rdx]
-
-DECL(randomx_prefetch_scratchpad_bmi2):
-	rorx rdx, rax, 32
-	and eax, RANDOMX_SCRATCHPAD_MASK
-	prefetcht0 [rsi+rax]
 	and edx, RANDOMX_SCRATCHPAD_MASK
 	prefetcht0 [rsi+rdx]
 
@@ -99,39 +87,22 @@ DECL(randomx_program_prologue):
 	movapd xmm13, xmmword ptr [mantissaMask+rip]
 	movapd xmm14, xmmword ptr [exp240+rip]
 	movapd xmm15, xmmword ptr [scaleMask+rip]
-
-DECL(randomx_program_prologue_first_load):
 	mov rdx, rax
 	and eax, RANDOMX_SCRATCHPAD_MASK
 	ror rdx, 32
 	and edx, RANDOMX_SCRATCHPAD_MASK
-	sub rsp, 40
-	mov dword ptr [rsp], 0x9FC0
-	mov dword ptr [rsp+4], 0xBFC0
-	mov dword ptr [rsp+8], 0xDFC0
-	mov dword ptr [rsp+12], 0xFFC0
-	mov dword ptr [rsp+32], -1
-	nop
-	nop
-	nop
-	jmp DECL(randomx_program_imul_rcp_store)
+	jmp rx_program_loop_begin
 
 .balign 64
 	#include "asm/program_xmm_constants.inc"
 
-DECL(randomx_program_imul_rcp_store):
-	#include "asm/program_imul_rcp_store.inc"
-	jmp DECL(randomx_program_loop_begin)
-
 .balign 64
 DECL(randomx_program_loop_begin):
+rx_program_loop_begin:
 	nop
 
 DECL(randomx_program_loop_load):
 	#include "asm/program_loop_load.inc"
-
-DECL(randomx_program_loop_load_xop):
-	#include "asm/program_loop_load_xop.inc"
 
 DECL(randomx_program_start):
 	nop
@@ -153,6 +124,7 @@ DECL(randomx_program_loop_end):
 
 .balign 64
 DECL(randomx_dataset_init):
+rx_dataset_init:
 	push rbx
 	push rbp
 	push r12
@@ -176,8 +148,7 @@ init_block_loop:
 	prefetchw byte ptr [rsi]
 	mov rbx, rbp
 	.byte 232 ;# 0xE8 = call
-	;# .set CALL_LOC,
-	.int 32768 - (call_offset - DECL(randomx_dataset_init))
+	.int SUPERSCALAR_OFFSET - (call_offset - rx_dataset_init)
 call_offset:
 	mov qword ptr [rsi+0], r8
 	mov qword ptr [rsi+8], r9
@@ -203,97 +174,6 @@ call_offset:
 	pop rbp
 	pop rbx
 	ret
-
-.balign 64
-DECL(randomx_dataset_init_avx2_prologue):
-	#include "asm/program_sshash_avx2_save_registers.inc"
-
-#if defined(WINABI)
-	mov rdi, qword ptr [rcx] ;# cache->memory
-	mov rsi, rdx ;# dataset
-	mov rbp, r8  ;# block index
-	push r9      ;# max. block index
-#else
-	mov rdi, qword ptr [rdi] ;# cache->memory
-	;# dataset in rsi
-	mov rbp, rdx  ;# block index
-	push rcx      ;# max. block index
-#endif
-	sub rsp, 40
-
-	jmp randomx_dataset_init_avx2_prologue_loop_begin
-	#include "asm/program_sshash_avx2_constants.inc"
-
-.balign 64
-randomx_dataset_init_avx2_prologue_loop_begin:
-	#include "asm/program_sshash_avx2_loop_begin.inc"
-
-	;# init integer registers (lane 0)
-	lea r8, [rbp+1]
-	imul r8, qword ptr [r0_avx2_mul+rip]
-	mov r9, qword ptr [r1_avx2_add+rip]
-	xor r9, r8
-	mov r10, qword ptr [r2_avx2_add+rip]
-	xor r10, r8
-	mov r11, qword ptr [r3_avx2_add+rip]
-	xor r11, r8
-	mov r12, qword ptr [r4_avx2_add+rip]
-	xor r12, r8
-	mov r13, qword ptr [r5_avx2_add+rip]
-	xor r13, r8
-	mov r14, qword ptr [r6_avx2_add+rip]
-	xor r14, r8
-	mov r15, qword ptr [r7_avx2_add+rip]
-	xor r15, r8
-
-	;# init AVX registers (lanes 1-4)
-	mov qword ptr [rsp+32], rbp
-	vbroadcastsd ymm0, qword ptr [rsp+32]
-	vpaddq ymm0, ymm0, ymmword ptr [r0_avx2_increments+rip]
-
-	;# ymm0 *= r0_avx2_mul
-	vbroadcastsd ymm1, qword ptr [r0_avx2_mul+rip]
-	vpsrlq ymm8, ymm0, 32
-	vpsrlq ymm9, ymm1, 32
-	vpmuludq ymm10, ymm0, ymm1
-	vpmuludq ymm11, ymm9, ymm0
-	vpmuludq ymm0, ymm8, ymm1
-	vpsllq ymm11, ymm11, 32
-	vpsllq ymm0, ymm0, 32
-	vpaddq ymm10, ymm10, ymm11
-	vpaddq ymm0, ymm10, ymm0
-
-	vbroadcastsd ymm1, qword ptr [r1_avx2_add+rip]
-	vpxor ymm1, ymm0, ymm1
-	vbroadcastsd ymm2, qword ptr [r2_avx2_add+rip]
-	vpxor ymm2, ymm0, ymm2
-	vbroadcastsd ymm3, qword ptr [r3_avx2_add+rip]
-	vpxor ymm3, ymm0, ymm3
-	vbroadcastsd ymm4, qword ptr [r4_avx2_add+rip]
-	vpxor ymm4, ymm0, ymm4
-	vbroadcastsd ymm5, qword ptr [r5_avx2_add+rip]
-	vpxor ymm5, ymm0, ymm5
-	vbroadcastsd ymm6, qword ptr [r6_avx2_add+rip]
-	vpxor ymm6, ymm0, ymm6
-	vbroadcastsd ymm7, qword ptr [r7_avx2_add+rip]
-	vpxor ymm7, ymm0, ymm7
-
-	vbroadcastsd ymm15, qword ptr [mul_hi_avx2_data+rip] ;# carry_bit (bit 32)
-	vpsllq ymm14, ymm15, 31                              ;# sign64 (bit 63)
-
-	;# generated SuperscalarHash code goes here
-
-DECL(randomx_dataset_init_avx2_loop_end):
-	#include "asm/program_sshash_avx2_loop_end.inc"
-
-DECL(randomx_dataset_init_avx2_epilogue):
-	#include "asm/program_sshash_avx2_epilogue.inc"
-
-DECL(randomx_dataset_init_avx2_ssh_load):
-	#include "asm/program_sshash_avx2_ssh_load.inc"
-
-DECL(randomx_dataset_init_avx2_ssh_prefetch):
-	#include "asm/program_sshash_avx2_ssh_prefetch.inc"
 
 .balign 64
 DECL(randomx_program_epilogue):
@@ -333,13 +213,14 @@ DECL(randomx_sshash_init):
 	xor r14, r8
 	mov r15, qword ptr [r7_add+rip]
 	xor r15, r8
-	jmp DECL(randomx_program_end)
+	jmp rx_program_end
 
 .balign 64
 	#include "asm/program_sshash_constants.inc"
 
 .balign 64
 DECL(randomx_program_end):
+rx_program_end:
 	nop
 
 DECL(randomx_reciprocal_fast):
@@ -347,7 +228,3 @@ DECL(randomx_reciprocal_fast):
 	mov rcx, rdi
 #endif
 	#include "asm/randomx_reciprocal.inc"
-
-#if defined(__linux__) && defined(__ELF__)
-.section .note.GNU-stack,"",%progbits
-#endif

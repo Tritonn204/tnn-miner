@@ -31,60 +31,71 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <cstdint>
 #include <iostream>
 #include <climits>
-#include "crypto/randomx/blake2/endian.h"
-#include "crypto/randomx/configuration.h"
-#include "crypto/randomx/randomx.h"
+#include "blake2/endian.h"
+#include "configuration.h"
+#include "randomx.h"
 
 namespace randomx {
 
-	//static_assert(RANDOMX_ARGON_MEMORY > 0, "RANDOMX_ARGON_MEMORY must be greater than 0.");
-	//static_assert((RANDOMX_ARGON_MEMORY & (RANDOMX_ARGON_MEMORY - 1)) == 0, "RANDOMX_ARGON_MEMORY must be a power of 2.");
-	//static_assert(RANDOMX_DATASET_BASE_SIZE >= 64, "RANDOMX_DATASET_BASE_SIZE must be at least 64.");
-	//static_assert((RANDOMX_DATASET_BASE_SIZE & (RANDOMX_DATASET_BASE_SIZE - 1)) == 0, "RANDOMX_DATASET_BASE_SIZE must be a power of 2.");
-	//static_assert(RANDOMX_DATASET_BASE_SIZE <= 4294967296ULL, "RANDOMX_DATASET_BASE_SIZE must not exceed 4294967296.");
-	//static_assert(RANDOMX_DATASET_EXTRA_SIZE % 64 == 0, "RANDOMX_DATASET_EXTRA_SIZE must be divisible by 64.");
-	//static_assert((uint64_t)RANDOMX_DATASET_BASE_SIZE + RANDOMX_DATASET_EXTRA_SIZE <= 17179869184, "Dataset size must not exceed 16 GiB.");
-	//static_assert(RANDOMX_PROGRAM_SIZE > 0, "RANDOMX_PROGRAM_SIZE must be greater than 0");
-	//static_assert(RANDOMX_PROGRAM_ITERATIONS > 0, "RANDOMX_PROGRAM_ITERATIONS must be greater than 0");
-	//static_assert(RANDOMX_PROGRAM_COUNT > 0, "RANDOMX_PROGRAM_COUNT must be greater than 0");
-	//static_assert((RANDOMX_SCRATCHPAD_L3 & (RANDOMX_SCRATCHPAD_L3 - 1)) == 0, "RANDOMX_SCRATCHPAD_L3 must be a power of 2.");
-	//static_assert(RANDOMX_SCRATCHPAD_L3 >= RANDOMX_SCRATCHPAD_L2, "RANDOMX_SCRATCHPAD_L3 must be greater than or equal to RANDOMX_SCRATCHPAD_L2.");
-	//static_assert((RANDOMX_SCRATCHPAD_L2 & (RANDOMX_SCRATCHPAD_L2 - 1)) == 0, "RANDOMX_SCRATCHPAD_L2 must be a power of 2.");
-	//static_assert(RANDOMX_SCRATCHPAD_L2 >= RANDOMX_SCRATCHPAD_L1, "RANDOMX_SCRATCHPAD_L2 must be greater than or equal to RANDOMX_SCRATCHPAD_L1.");
-	//static_assert(RANDOMX_SCRATCHPAD_L1 >= 64, "RANDOMX_SCRATCHPAD_L1 must be at least 64.");
-	//static_assert((RANDOMX_SCRATCHPAD_L1 & (RANDOMX_SCRATCHPAD_L1 - 1)) == 0, "RANDOMX_SCRATCHPAD_L1 must be a power of 2.");
-	//static_assert(RANDOMX_CACHE_ACCESSES > 1, "RANDOMX_CACHE_ACCESSES must be greater than 1");
-	//static_assert(RANDOMX_SUPERSCALAR_LATENCY > 0, "RANDOMX_SUPERSCALAR_LATENCY must be greater than 0");
-	//static_assert(RANDOMX_JUMP_BITS > 0, "RANDOMX_JUMP_BITS must be greater than 0.");
-	//static_assert(RANDOMX_JUMP_OFFSET >= 0, "RANDOMX_JUMP_OFFSET must be greater than or equal to 0.");
-	//static_assert(RANDOMX_JUMP_BITS + RANDOMX_JUMP_OFFSET <= 16, "RANDOMX_JUMP_BITS + RANDOMX_JUMP_OFFSET must not exceed 16.");
+	static_assert(RANDOMX_ARGON_MEMORY >= 8, "RANDOMX_ARGON_MEMORY must be at least 8.");
+	static_assert(RANDOMX_ARGON_MEMORY <= 2097152, "RANDOMX_ARGON_MEMORY must not exceed 2097152.");
+	static_assert((RANDOMX_ARGON_MEMORY & (RANDOMX_ARGON_MEMORY - 1)) == 0, "RANDOMX_ARGON_MEMORY must be a power of 2.");
+	static_assert(RANDOMX_ARGON_ITERATIONS > 0 && RANDOMX_ARGON_ITERATIONS < UINT32_MAX, "RANDOMX_ARGON_ITERATIONS must be a positive 32-bit integer.");
+	static_assert(RANDOMX_ARGON_LANES > 0 && RANDOMX_ARGON_LANES <= 16777215, "RANDOMX_ARGON_LANES out of range");
+	static_assert(RANDOMX_DATASET_BASE_SIZE >= 64, "RANDOMX_DATASET_BASE_SIZE must be at least 64.");
+	static_assert((RANDOMX_DATASET_BASE_SIZE & (RANDOMX_DATASET_BASE_SIZE - 1)) == 0, "RANDOMX_DATASET_BASE_SIZE must be a power of 2.");
+	static_assert(RANDOMX_DATASET_BASE_SIZE <= 4294967296ULL, "RANDOMX_DATASET_BASE_SIZE must not exceed 4294967296.");
+	static_assert(RANDOMX_DATASET_EXTRA_SIZE % 64 == 0, "RANDOMX_DATASET_EXTRA_SIZE must be divisible by 64.");
+	static_assert((uint64_t)RANDOMX_DATASET_BASE_SIZE + RANDOMX_DATASET_EXTRA_SIZE <= 17179869184, "Dataset size must not exceed 16 GiB.");
+	static_assert(RANDOMX_PROGRAM_SIZE > 0, "RANDOMX_PROGRAM_SIZE must be greater than 0");
+	static_assert(RANDOMX_PROGRAM_SIZE <= 32768, "RANDOMX_PROGRAM_SIZE must not exceed 32768");
+	static_assert(RANDOMX_PROGRAM_ITERATIONS > 0, "RANDOMX_PROGRAM_ITERATIONS must be greater than 0");
+	static_assert(RANDOMX_PROGRAM_COUNT > 0, "RANDOMX_PROGRAM_COUNT must be greater than 0");
+	static_assert((RANDOMX_SCRATCHPAD_L3 & (RANDOMX_SCRATCHPAD_L3 - 1)) == 0, "RANDOMX_SCRATCHPAD_L3 must be a power of 2.");
+	static_assert(RANDOMX_SCRATCHPAD_L3 >= RANDOMX_SCRATCHPAD_L2, "RANDOMX_SCRATCHPAD_L3 must be greater than or equal to RANDOMX_SCRATCHPAD_L2.");
+	static_assert((RANDOMX_SCRATCHPAD_L2 & (RANDOMX_SCRATCHPAD_L2 - 1)) == 0, "RANDOMX_SCRATCHPAD_L2 must be a power of 2.");
+	static_assert(RANDOMX_SCRATCHPAD_L2 >= RANDOMX_SCRATCHPAD_L1, "RANDOMX_SCRATCHPAD_L2 must be greater than or equal to RANDOMX_SCRATCHPAD_L1.");
+	static_assert(RANDOMX_SCRATCHPAD_L1 >= 64, "RANDOMX_SCRATCHPAD_L1 must be at least 64.");
+	static_assert((RANDOMX_SCRATCHPAD_L1 & (RANDOMX_SCRATCHPAD_L1 - 1)) == 0, "RANDOMX_SCRATCHPAD_L1 must be a power of 2.");
+	static_assert(RANDOMX_CACHE_ACCESSES > 1, "RANDOMX_CACHE_ACCESSES must be greater than 1");
+	static_assert(RANDOMX_SUPERSCALAR_LATENCY > 0, "RANDOMX_SUPERSCALAR_LATENCY must be greater than 0");
+	static_assert(RANDOMX_SUPERSCALAR_LATENCY <= 10000, "RANDOMX_SUPERSCALAR_LATENCY must not exceed 10000");
+	static_assert(RANDOMX_JUMP_BITS > 0, "RANDOMX_JUMP_BITS must be greater than 0.");
+	static_assert(RANDOMX_JUMP_OFFSET >= 0, "RANDOMX_JUMP_OFFSET must be greater than or equal to 0.");
+	static_assert(RANDOMX_JUMP_BITS + RANDOMX_JUMP_OFFSET <= 16, "RANDOMX_JUMP_BITS + RANDOMX_JUMP_OFFSET must not exceed 16.");
 
-	/*constexpr int wtSum = RANDOMX_FREQ_IADD_RS + RANDOMX_FREQ_IADD_M + RANDOMX_FREQ_ISUB_R + \
+	constexpr int wtSum = RANDOMX_FREQ_IADD_RS + RANDOMX_FREQ_IADD_M + RANDOMX_FREQ_ISUB_R + \
 		RANDOMX_FREQ_ISUB_M + RANDOMX_FREQ_IMUL_R + RANDOMX_FREQ_IMUL_M + RANDOMX_FREQ_IMULH_R + \
 		RANDOMX_FREQ_IMULH_M + RANDOMX_FREQ_ISMULH_R + RANDOMX_FREQ_ISMULH_M + RANDOMX_FREQ_IMUL_RCP + \
 		RANDOMX_FREQ_INEG_R + RANDOMX_FREQ_IXOR_R + RANDOMX_FREQ_IXOR_M + RANDOMX_FREQ_IROR_R + RANDOMX_FREQ_IROL_R + RANDOMX_FREQ_ISWAP_R + \
 		RANDOMX_FREQ_FSWAP_R + RANDOMX_FREQ_FADD_R + RANDOMX_FREQ_FADD_M + RANDOMX_FREQ_FSUB_R + RANDOMX_FREQ_FSUB_M + \
 		RANDOMX_FREQ_FSCAL_R + RANDOMX_FREQ_FMUL_R + RANDOMX_FREQ_FDIV_M + RANDOMX_FREQ_FSQRT_R + RANDOMX_FREQ_CBRANCH + \
-		RANDOMX_FREQ_CFROUND + RANDOMX_FREQ_ISTORE + RANDOMX_FREQ_NOP;*/
+		RANDOMX_FREQ_CFROUND + RANDOMX_FREQ_ISTORE + RANDOMX_FREQ_NOP;
 
-	//static_assert(wtSum == 256,	"Sum of instruction frequencies must be 256.");
+	static_assert(wtSum == 256,	"Sum of instruction frequencies must be 256.");
 
 
 	constexpr uint32_t ArgonBlockSize = 1024;
-	constexpr int SuperscalarMaxSize = 3 * RANDOMX_SUPERSCALAR_MAX_LATENCY + 2;
+	constexpr int ArgonSaltSize = sizeof("" RANDOMX_ARGON_SALT) - 1;
+	static_assert(ArgonSaltSize >= 8, "RANDOMX_ARGON_SALT must be at least 8 characters long");
+	constexpr int SuperscalarMaxSize = 3 * RANDOMX_SUPERSCALAR_LATENCY + 2;
 	constexpr size_t CacheLineSize = RANDOMX_DATASET_ITEM_SIZE;
-	#define ScratchpadSize RandomX_CurrentConfig.ScratchpadL3_Size
-	#define CacheLineAlignMask RandomX_ConfigurationBase::CacheLineAlignMask_Calculated
-	#define DatasetExtraItems RandomX_ConfigurationBase::DatasetExtraItems_Calculated
+	constexpr int ScratchpadSize = RANDOMX_SCRATCHPAD_L3;
+	constexpr uint32_t CacheLineAlignMask = (RANDOMX_DATASET_BASE_SIZE - 1) & ~(CacheLineSize - 1);
+	constexpr uint32_t CacheSize = RANDOMX_ARGON_MEMORY * ArgonBlockSize;
+	constexpr uint64_t DatasetSize = RANDOMX_DATASET_BASE_SIZE + RANDOMX_DATASET_EXTRA_SIZE;
+	constexpr uint32_t DatasetExtraItems = RANDOMX_DATASET_EXTRA_SIZE / RANDOMX_DATASET_ITEM_SIZE;
+	constexpr uint32_t ConditionMask = ((1 << RANDOMX_JUMP_BITS) - 1);
+	constexpr int ConditionOffset = RANDOMX_JUMP_OFFSET;
 	constexpr int StoreL3Condition = 14;
 
 	//Prevent some unsafe configurations.
 #ifndef RANDOMX_UNSAFE
-	//static_assert((uint64_t)ArgonBlockSize * RANDOMX_CACHE_ACCESSES * RANDOMX_ARGON_MEMORY + 33554432 >= (uint64_t)RANDOMX_DATASET_BASE_SIZE + RANDOMX_DATASET_EXTRA_SIZE, "Unsafe configuration: Memory-time tradeoffs");
-	//static_assert((128 + RANDOMX_PROGRAM_SIZE * RANDOMX_FREQ_ISTORE / 256) * (RANDOMX_PROGRAM_COUNT * RANDOMX_PROGRAM_ITERATIONS) >= RANDOMX_SCRATCHPAD_L3, "Unsafe configuration: Insufficient Scratchpad writes");
-	//static_assert(RANDOMX_PROGRAM_COUNT > 1, "Unsafe configuration: Program filtering strategies");
-	//static_assert(RANDOMX_PROGRAM_SIZE >= 64, "Unsafe configuration: Low program entropy");
-	//static_assert(RANDOMX_PROGRAM_ITERATIONS >= 400, "Unsafe configuration: High compilation overhead");
+	static_assert((uint64_t)ArgonBlockSize * RANDOMX_CACHE_ACCESSES * RANDOMX_ARGON_MEMORY + 33554432 >= (uint64_t)RANDOMX_DATASET_BASE_SIZE + RANDOMX_DATASET_EXTRA_SIZE, "Unsafe configuration: Memory-time tradeoffs");
+	static_assert((128 + RANDOMX_PROGRAM_SIZE * RANDOMX_FREQ_ISTORE / 256) * (RANDOMX_PROGRAM_COUNT * RANDOMX_PROGRAM_ITERATIONS) >= RANDOMX_SCRATCHPAD_L3, "Unsafe configuration: Insufficient Scratchpad writes");
+	static_assert(RANDOMX_PROGRAM_COUNT > 1, "Unsafe configuration: Program filtering strategies");
+	static_assert(RANDOMX_PROGRAM_SIZE >= 64, "Unsafe configuration: Low program entropy");
+	static_assert(RANDOMX_PROGRAM_ITERATIONS >= 400, "Unsafe configuration: High compilation overhead");
 #endif
 
 #ifdef TRACE
@@ -103,14 +114,21 @@ namespace randomx {
 #endif
 #endif
 
-#if defined(TNN_FEATURE_ASM) && (defined(_M_X64) || defined(__x86_64__))
+#if defined(_M_X64) || defined(__x86_64__)
 	#define RANDOMX_HAVE_COMPILER 1
+	#define RANDOMX_COMPILER_X86
 	class JitCompilerX86;
 	using JitCompiler = JitCompilerX86;
 #elif defined(__aarch64__)
 	#define RANDOMX_HAVE_COMPILER 1
+	#define RANDOMX_COMPILER_A64
 	class JitCompilerA64;
 	using JitCompiler = JitCompilerA64;
+#elif defined(__riscv) && __riscv_xlen == 64
+	#define RANDOMX_HAVE_COMPILER 1
+	#define RANDOMX_COMPILER_RV64
+	class JitCompilerRV64;
+	using JitCompiler = JitCompilerRV64;
 #else
 	#define RANDOMX_HAVE_COMPILER 0
 	class JitCompilerFallback;
@@ -126,9 +144,15 @@ namespace randomx {
 		double hi;
 	};
 
-	#define AddressMask RandomX_CurrentConfig.AddressMask_Calculated
-	#define ScratchpadL3Mask RandomX_CurrentConfig.ScratchpadL3Mask_Calculated
-	#define ScratchpadL3Mask64 RandomX_CurrentConfig.ScratchpadL3Mask64_Calculated
+	constexpr uint32_t ScratchpadL1 = RANDOMX_SCRATCHPAD_L1 / sizeof(int_reg_t);
+	constexpr uint32_t ScratchpadL2 = RANDOMX_SCRATCHPAD_L2 / sizeof(int_reg_t);
+	constexpr uint32_t ScratchpadL3 = RANDOMX_SCRATCHPAD_L3 / sizeof(int_reg_t);
+	constexpr int ScratchpadL1Mask = (ScratchpadL1 - 1) * 8;
+	constexpr int ScratchpadL2Mask = (ScratchpadL2 - 1) * 8;
+	constexpr int ScratchpadL1Mask16 = (ScratchpadL1 / 2 - 1) * 16;
+	constexpr int ScratchpadL2Mask16 = (ScratchpadL2 / 2 - 1) * 16;
+	constexpr int ScratchpadL3Mask = (ScratchpadL3 - 1) * 8;
+	constexpr int ScratchpadL3Mask64 = (ScratchpadL3 / 8 - 1) * 64;
 	constexpr int RegistersCount = 8;
 	constexpr int RegisterCountFlt = RegistersCount / 2;
 	constexpr int RegisterNeedsDisplacement = 5; //x86 r13 register
@@ -164,5 +188,7 @@ namespace randomx {
 	typedef void(ProgramFunc)(RegisterFile&, MemoryRegisters&, uint8_t* /* scratchpad */, uint64_t);
 	typedef void(DatasetInitFunc)(randomx_cache* cache, uint8_t* dataset, uint32_t startBlock, uint32_t endBlock);
 
+	typedef void(DatasetDeallocFunc)(randomx_dataset*);
+	typedef void(CacheDeallocFunc)(randomx_cache*);
 	typedef void(CacheInitializeFunc)(randomx_cache*, const void*, size_t);
 }

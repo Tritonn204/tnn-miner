@@ -84,23 +84,29 @@ extern "C" {
 		1 / !!(sizeof(blake2b_param) == sizeof(uint64_t) * CHAR_BIT)
 	};
 
+	//randomx namespace
+#define blake2b_init        randomx_blake2b_init
+#define blake2b_init_key    randomx_blake2b_init_key
+#define blake2b_init_param  randomx_blake2b_init_param
+#define blake2b_update      randomx_blake2b_update
+#define blake2b_final       randomx_blake2b_final
+#define blake2b             randomx_blake2b
+#define blake2b_long        randomx_blake2b_long
+
 	/* Streaming API */
-    int rx_blake2b_init(blake2b_state *S, size_t outlen);
-    int rx_blake2b_init_key(blake2b_state *S, size_t outlen, const void *key, size_t keylen);
-    int rx_blake2b_init_param(blake2b_state *S, const blake2b_param *P);
-    int rx_blake2b_update(blake2b_state *S, const void *in, size_t inlen);
-    int rx_blake2b_final(blake2b_state *S, void *out, size_t outlen);
+	int blake2b_init(blake2b_state *S, size_t outlen);
+	int blake2b_init_key(blake2b_state *S, size_t outlen, const void *key,
+		size_t keylen);
+	int blake2b_init_param(blake2b_state *S, const blake2b_param *P);
+	int blake2b_update(blake2b_state *S, const void *in, size_t inlen);
+	int blake2b_final(blake2b_state *S, void *out, size_t outlen);
 
 	/* Simple API */
-    void rx_blake2b_compress_integer(blake2b_state * S, const uint8_t * block);
-    void rx_blake2b_compress_sse41(blake2b_state * S, const uint8_t * block);
-    int rx_blake2b_default(void* out, size_t outlen, const void* in, size_t inlen);
-
-    extern void (*rx_blake2b_compress)(blake2b_state * S, const uint8_t * block);
-    extern int (*rx_blake2b)(void* out, size_t outlen, const void* in, size_t inlen);
+	int blake2b(void *out, size_t outlen, const void *in, size_t inlen,
+		const void *key, size_t keylen);
 
 	/* Argon2 Team - Begin Code */
-	int rxa2_blake2b_long(void *out, size_t outlen, const void *in, size_t inlen);
+	int blake2b_long(void *out, size_t outlen, const void *in, size_t inlen);
 	/* Argon2 Team - End Code */
 
 #if defined(__cplusplus)

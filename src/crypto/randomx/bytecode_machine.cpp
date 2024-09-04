@@ -26,8 +26,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include "crypto/randomx/bytecode_machine.hpp"
-#include "crypto/randomx/reciprocal.h"
+#include "bytecode_machine.hpp"
+#include "reciprocal.h"
 
 namespace randomx {
 
@@ -79,9 +79,9 @@ namespace randomx {
 	}
 
 	void BytecodeMachine::compileInstruction(RANDOMX_GEN_ARGS) {
-		uint32_t opcode = instr.opcode;
+		int opcode = instr.opcode;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_IADD_RS) {
+		if (opcode < ceil_IADD_RS) {
 			auto dst = instr.dst % RegistersCount;
 			auto src = instr.src % RegistersCount;
 			ibc.type = InstructionType::IADD_RS;
@@ -99,9 +99,8 @@ namespace randomx {
 			registerUsage[dst] = i;
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_IADD_RS;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_IADD_M) {
+		if (opcode < ceil_IADD_M) {
 			auto dst = instr.dst % RegistersCount;
 			auto src = instr.src % RegistersCount;
 			ibc.type = InstructionType::IADD_M;
@@ -109,7 +108,7 @@ namespace randomx {
 			ibc.imm = signExtend2sCompl(instr.getImm32());
 			if (src != dst) {
 				ibc.isrc = &nreg->r[src];
-				ibc.memMask = AddressMask[instr.getModMem()];
+				ibc.memMask = (instr.getModMem() ? ScratchpadL1Mask : ScratchpadL2Mask);
 			}
 			else {
 				ibc.isrc = &zero;
@@ -118,9 +117,8 @@ namespace randomx {
 			registerUsage[dst] = i;
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_IADD_M;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_ISUB_R) {
+		if (opcode < ceil_ISUB_R) {
 			auto dst = instr.dst % RegistersCount;
 			auto src = instr.src % RegistersCount;
 			ibc.type = InstructionType::ISUB_R;
@@ -135,9 +133,8 @@ namespace randomx {
 			registerUsage[dst] = i;
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_ISUB_R;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_ISUB_M) {
+		if (opcode < ceil_ISUB_M) {
 			auto dst = instr.dst % RegistersCount;
 			auto src = instr.src % RegistersCount;
 			ibc.type = InstructionType::ISUB_M;
@@ -145,7 +142,7 @@ namespace randomx {
 			ibc.imm = signExtend2sCompl(instr.getImm32());
 			if (src != dst) {
 				ibc.isrc = &nreg->r[src];
-				ibc.memMask = AddressMask[instr.getModMem()];
+				ibc.memMask = (instr.getModMem() ? ScratchpadL1Mask : ScratchpadL2Mask);
 			}
 			else {
 				ibc.isrc = &zero;
@@ -154,9 +151,8 @@ namespace randomx {
 			registerUsage[dst] = i;
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_ISUB_M;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_IMUL_R) {
+		if (opcode < ceil_IMUL_R) {
 			auto dst = instr.dst % RegistersCount;
 			auto src = instr.src % RegistersCount;
 			ibc.type = InstructionType::IMUL_R;
@@ -171,9 +167,8 @@ namespace randomx {
 			registerUsage[dst] = i;
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_IMUL_R;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_IMUL_M) {
+		if (opcode < ceil_IMUL_M) {
 			auto dst = instr.dst % RegistersCount;
 			auto src = instr.src % RegistersCount;
 			ibc.type = InstructionType::IMUL_M;
@@ -181,7 +176,7 @@ namespace randomx {
 			ibc.imm = signExtend2sCompl(instr.getImm32());
 			if (src != dst) {
 				ibc.isrc = &nreg->r[src];
-				ibc.memMask = AddressMask[instr.getModMem()];
+				ibc.memMask = (instr.getModMem() ? ScratchpadL1Mask : ScratchpadL2Mask);
 			}
 			else {
 				ibc.isrc = &zero;
@@ -190,9 +185,8 @@ namespace randomx {
 			registerUsage[dst] = i;
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_IMUL_M;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_IMULH_R) {
+		if (opcode < ceil_IMULH_R) {
 			auto dst = instr.dst % RegistersCount;
 			auto src = instr.src % RegistersCount;
 			ibc.type = InstructionType::IMULH_R;
@@ -201,9 +195,8 @@ namespace randomx {
 			registerUsage[dst] = i;
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_IMULH_R;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_IMULH_M) {
+		if (opcode < ceil_IMULH_M) {
 			auto dst = instr.dst % RegistersCount;
 			auto src = instr.src % RegistersCount;
 			ibc.type = InstructionType::IMULH_M;
@@ -211,7 +204,7 @@ namespace randomx {
 			ibc.imm = signExtend2sCompl(instr.getImm32());
 			if (src != dst) {
 				ibc.isrc = &nreg->r[src];
-				ibc.memMask = AddressMask[instr.getModMem()];
+				ibc.memMask = (instr.getModMem() ? ScratchpadL1Mask : ScratchpadL2Mask);
 			}
 			else {
 				ibc.isrc = &zero;
@@ -220,9 +213,8 @@ namespace randomx {
 			registerUsage[dst] = i;
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_IMULH_M;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_ISMULH_R) {
+		if (opcode < ceil_ISMULH_R) {
 			auto dst = instr.dst % RegistersCount;
 			auto src = instr.src % RegistersCount;
 			ibc.type = InstructionType::ISMULH_R;
@@ -231,9 +223,8 @@ namespace randomx {
 			registerUsage[dst] = i;
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_ISMULH_R;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_ISMULH_M) {
+		if (opcode < ceil_ISMULH_M) {
 			auto dst = instr.dst % RegistersCount;
 			auto src = instr.src % RegistersCount;
 			ibc.type = InstructionType::ISMULH_M;
@@ -241,7 +232,7 @@ namespace randomx {
 			ibc.imm = signExtend2sCompl(instr.getImm32());
 			if (src != dst) {
 				ibc.isrc = &nreg->r[src];
-				ibc.memMask = AddressMask[instr.getModMem()];
+				ibc.memMask = (instr.getModMem() ? ScratchpadL1Mask : ScratchpadL2Mask);
 			}
 			else {
 				ibc.isrc = &zero;
@@ -250,10 +241,9 @@ namespace randomx {
 			registerUsage[dst] = i;
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_ISMULH_M;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_IMUL_RCP) {
-			uint64_t divisor = instr.getImm32();
+		if (opcode < ceil_IMUL_RCP) {
+			const uint32_t divisor = instr.getImm32();
 			if (!isZeroOrPowerOf2(divisor)) {
 				auto dst = instr.dst % RegistersCount;
 				ibc.type = InstructionType::IMUL_R;
@@ -267,18 +257,16 @@ namespace randomx {
 			}
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_IMUL_RCP;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_INEG_R) {
+		if (opcode < ceil_INEG_R) {
 			auto dst = instr.dst % RegistersCount;
 			ibc.type = InstructionType::INEG_R;
 			ibc.idst = &nreg->r[dst];
 			registerUsage[dst] = i;
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_INEG_R;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_IXOR_R) {
+		if (opcode < ceil_IXOR_R) {
 			auto dst = instr.dst % RegistersCount;
 			auto src = instr.src % RegistersCount;
 			ibc.type = InstructionType::IXOR_R;
@@ -293,9 +281,8 @@ namespace randomx {
 			registerUsage[dst] = i;
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_IXOR_R;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_IXOR_M) {
+		if (opcode < ceil_IXOR_M) {
 			auto dst = instr.dst % RegistersCount;
 			auto src = instr.src % RegistersCount;
 			ibc.type = InstructionType::IXOR_M;
@@ -303,7 +290,7 @@ namespace randomx {
 			ibc.imm = signExtend2sCompl(instr.getImm32());
 			if (src != dst) {
 				ibc.isrc = &nreg->r[src];
-				ibc.memMask = AddressMask[instr.getModMem()];
+				ibc.memMask = (instr.getModMem() ? ScratchpadL1Mask : ScratchpadL2Mask);
 			}
 			else {
 				ibc.isrc = &zero;
@@ -312,9 +299,8 @@ namespace randomx {
 			registerUsage[dst] = i;
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_IXOR_M;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_IROR_R) {
+		if (opcode < ceil_IROR_R) {
 			auto dst = instr.dst % RegistersCount;
 			auto src = instr.src % RegistersCount;
 			ibc.type = InstructionType::IROR_R;
@@ -329,9 +315,8 @@ namespace randomx {
 			registerUsage[dst] = i;
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_IROR_R;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_IROL_R) {
+		if (opcode < ceil_IROL_R) {
 			auto dst = instr.dst % RegistersCount;
 			auto src = instr.src % RegistersCount;
 			ibc.type = InstructionType::IROL_R;
@@ -346,9 +331,8 @@ namespace randomx {
 			registerUsage[dst] = i;
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_IROL_R;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_ISWAP_R) {
+		if (opcode < ceil_ISWAP_R) {
 			auto dst = instr.dst % RegistersCount;
 			auto src = instr.src % RegistersCount;
 			if (src != dst) {
@@ -363,9 +347,8 @@ namespace randomx {
 			}
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_ISWAP_R;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_FSWAP_R) {
+		if (opcode < ceil_FSWAP_R) {
 			auto dst = instr.dst % RegistersCount;
 			ibc.type = InstructionType::FSWAP_R;
 			if (dst < RegisterCountFlt)
@@ -374,9 +357,8 @@ namespace randomx {
 				ibc.fdst = &nreg->e[dst - RegisterCountFlt];
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_FSWAP_R;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_FADD_R) {
+		if (opcode < ceil_FADD_R) {
 			auto dst = instr.dst % RegisterCountFlt;
 			auto src = instr.src % RegisterCountFlt;
 			ibc.type = InstructionType::FADD_R;
@@ -384,21 +366,19 @@ namespace randomx {
 			ibc.fsrc = &nreg->a[src];
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_FADD_R;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_FADD_M) {
+		if (opcode < ceil_FADD_M) {
 			auto dst = instr.dst % RegisterCountFlt;
 			auto src = instr.src % RegistersCount;
 			ibc.type = InstructionType::FADD_M;
 			ibc.fdst = &nreg->f[dst];
 			ibc.isrc = &nreg->r[src];
-			ibc.memMask = AddressMask[instr.getModMem()];
+			ibc.memMask = (instr.getModMem() ? ScratchpadL1Mask : ScratchpadL2Mask);
 			ibc.imm = signExtend2sCompl(instr.getImm32());
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_FADD_M;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_FSUB_R) {
+		if (opcode < ceil_FSUB_R) {
 			auto dst = instr.dst % RegisterCountFlt;
 			auto src = instr.src % RegisterCountFlt;
 			ibc.type = InstructionType::FSUB_R;
@@ -406,29 +386,26 @@ namespace randomx {
 			ibc.fsrc = &nreg->a[src];
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_FSUB_R;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_FSUB_M) {
+		if (opcode < ceil_FSUB_M) {
 			auto dst = instr.dst % RegisterCountFlt;
 			auto src = instr.src % RegistersCount;
 			ibc.type = InstructionType::FSUB_M;
 			ibc.fdst = &nreg->f[dst];
 			ibc.isrc = &nreg->r[src];
-			ibc.memMask = AddressMask[instr.getModMem()];
+			ibc.memMask = (instr.getModMem() ? ScratchpadL1Mask : ScratchpadL2Mask);
 			ibc.imm = signExtend2sCompl(instr.getImm32());
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_FSUB_M;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_FSCAL_R) {
+		if (opcode < ceil_FSCAL_R) {
 			auto dst = instr.dst % RegisterCountFlt;
 			ibc.fdst = &nreg->f[dst];
 			ibc.type = InstructionType::FSCAL_R;
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_FSCAL_R;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_FMUL_R) {
+		if (opcode < ceil_FMUL_R) {
 			auto dst = instr.dst % RegisterCountFlt;
 			auto src = instr.src % RegisterCountFlt;
 			ibc.type = InstructionType::FMUL_R;
@@ -436,56 +413,52 @@ namespace randomx {
 			ibc.fsrc = &nreg->a[src];
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_FMUL_R;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_FDIV_M) {
+		if (opcode < ceil_FDIV_M) {
 			auto dst = instr.dst % RegisterCountFlt;
 			auto src = instr.src % RegistersCount;
 			ibc.type = InstructionType::FDIV_M;
 			ibc.fdst = &nreg->e[dst];
 			ibc.isrc = &nreg->r[src];
-			ibc.memMask = AddressMask[instr.getModMem()];
+			ibc.memMask = (instr.getModMem() ? ScratchpadL1Mask : ScratchpadL2Mask);
 			ibc.imm = signExtend2sCompl(instr.getImm32());
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_FDIV_M;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_FSQRT_R) {
+		if (opcode < ceil_FSQRT_R) {
 			auto dst = instr.dst % RegisterCountFlt;
 			ibc.type = InstructionType::FSQRT_R;
 			ibc.fdst = &nreg->e[dst];
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_FSQRT_R;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_CBRANCH) {
+		if (opcode < ceil_CBRANCH) {
 			ibc.type = InstructionType::CBRANCH;
 			//jump condition
 			int creg = instr.dst % RegistersCount;
 			ibc.idst = &nreg->r[creg];
 			ibc.target = registerUsage[creg];
-			const int shift = instr.getModCond();
-			ibc.imm = signExtend2sCompl(instr.getImm32()) | ((1ULL << RandomX_ConfigurationBase::JumpOffset) << shift);
-			ibc.imm &= ~((1ULL << (RandomX_ConfigurationBase::JumpOffset - 1)) << shift);
-			ibc.memMask = RandomX_ConfigurationBase::ConditionMask_Calculated << shift;
+			int shift = instr.getModCond() + ConditionOffset;
+			ibc.imm = signExtend2sCompl(instr.getImm32()) | (1ULL << shift);
+			if (ConditionOffset > 0 || shift > 0) //clear the bit below the condition mask - this limits the number of successive jumps to 2
+				ibc.imm &= ~(1ULL << (shift - 1));
+			ibc.memMask = ConditionMask << shift;
 			//mark all registers as used
 			for (unsigned j = 0; j < RegistersCount; ++j) {
 				registerUsage[j] = i;
 			}
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_CBRANCH;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_CFROUND) {
+		if (opcode < ceil_CFROUND) {
 			auto src = instr.src % RegistersCount;
 			ibc.isrc = &nreg->r[src];
 			ibc.type = InstructionType::CFROUND;
 			ibc.imm = instr.getImm32() & 63;
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_CFROUND;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_ISTORE) {
+		if (opcode < ceil_ISTORE) {
 			auto dst = instr.dst % RegistersCount;
 			auto src = instr.src % RegistersCount;
 			ibc.type = InstructionType::ISTORE;
@@ -493,14 +466,13 @@ namespace randomx {
 			ibc.isrc = &nreg->r[src];
 			ibc.imm = signExtend2sCompl(instr.getImm32());
 			if (instr.getModCond() < StoreL3Condition)
-				ibc.memMask = AddressMask[instr.getModMem()];
+				ibc.memMask = (instr.getModMem() ? ScratchpadL1Mask : ScratchpadL2Mask);
 			else
 				ibc.memMask = ScratchpadL3Mask;
 			return;
 		}
-		opcode -= RandomX_CurrentConfig.RANDOMX_FREQ_ISTORE;
 
-		if (opcode < RandomX_CurrentConfig.RANDOMX_FREQ_NOP) {
+		if (opcode < ceil_NOP) {
 			ibc.type = InstructionType::NOP;
 			return;
 		}

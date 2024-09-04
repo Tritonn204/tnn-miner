@@ -29,12 +29,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #pragma once
 
 #include <cstdint>
+#include <iostream>
 #include <type_traits>
-#include "crypto/randomx/blake2/endian.h"
+#include "blake2/endian.h"
 
 namespace randomx {
 
 	class Instruction;
+
+	typedef void(Instruction::*InstructionFormatter)(std::ostream&) const;
 
 	enum class InstructionType : uint16_t {
 		IADD_RS = 0,
@@ -77,13 +80,20 @@ namespace randomx {
 		void setImm32(uint32_t val) {
 			return store32(&imm32, val);
 		}
-		uint32_t getModMem() const {
-			return mod & 3; //bits 0-1
+		const char* getName() const {
+			return names[opcode];
 		}
-		uint32_t getModShift() const {
-			return (mod >> 2) & 3; //bits 2-3
+		friend std::ostream& operator<<(std::ostream& os, const Instruction& i) {
+			i.print(os);
+			return os;
 		}
-		uint32_t getModCond() const {
+		int getModMem() const {
+			return mod % 4; //bits 0-1
+		}
+		int getModShift() const {
+			return (mod >> 2) % 4; //bits 2-3
+		}
+		int getModCond() const {
 			return mod >> 4; //bits 4-7
 		}
 		void setMod(uint8_t val) {
@@ -95,6 +105,43 @@ namespace randomx {
 		uint8_t src;
 		uint8_t mod;
 		uint32_t imm32;
+	private:
+		void print(std::ostream&) const;
+		static const char* names[256];
+		static InstructionFormatter engine[256];
+		void genAddressReg(std::ostream& os, int) const;
+		void genAddressImm(std::ostream& os) const;
+		void genAddressRegDst(std::ostream&, int) const;
+		void h_IADD_RS(std::ostream&) const;
+		void h_IADD_M(std::ostream&) const;
+		void h_ISUB_R(std::ostream&) const;
+		void h_ISUB_M(std::ostream&) const;
+		void h_IMUL_R(std::ostream&) const;
+		void h_IMUL_M(std::ostream&) const;
+		void h_IMULH_R(std::ostream&) const;
+		void h_IMULH_M(std::ostream&) const;
+		void h_ISMULH_R(std::ostream&) const;
+		void h_ISMULH_M(std::ostream&) const;
+		void h_IMUL_RCP(std::ostream&) const;
+		void h_INEG_R(std::ostream&) const;
+		void h_IXOR_R(std::ostream&) const;
+		void h_IXOR_M(std::ostream&) const;
+		void h_IROR_R(std::ostream&) const;
+		void h_IROL_R(std::ostream&) const;
+		void h_ISWAP_R(std::ostream&) const;
+		void h_FSWAP_R(std::ostream&) const;
+		void h_FADD_R(std::ostream&) const;
+		void h_FADD_M(std::ostream&) const;
+		void h_FSUB_R(std::ostream&) const;
+		void h_FSUB_M(std::ostream&) const;
+		void h_FSCAL_R(std::ostream&) const;
+		void h_FMUL_R(std::ostream&) const;
+		void h_FDIV_M(std::ostream&) const;
+		void h_FSQRT_R(std::ostream&) const;
+		void h_CBRANCH(std::ostream&) const;
+		void h_CFROUND(std::ostream&) const;
+		void h_ISTORE(std::ostream&) const;
+		void h_NOP(std::ostream&) const;
 	};
 
 	static_assert(sizeof(Instruction) == 8, "Invalid size of struct randomx::Instruction");

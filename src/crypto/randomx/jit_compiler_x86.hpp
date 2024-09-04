@@ -1,7 +1,5 @@
 /*
-Copyright (c) 2018-2020, tevador    <tevador@gmail.com>
-Copyright (c) 2019-2020, SChernykh  <https://github.com/SChernykh>
-Copyright (c) 2019-2020, XMRig      <https://github.com/xmrig>, <support@xmrig.com>
+Copyright (c) 2018-2019, tevador <tevador@gmail.com>
 
 All rights reserved.
 
@@ -33,7 +31,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <cstdint>
 #include <cstring>
 #include <vector>
-#include "crypto/randomx/common.hpp"
+#include "common.hpp"
 
 namespace randomx {
 
@@ -43,143 +41,102 @@ namespace randomx {
 	class JitCompilerX86;
 	class Instruction;
 
-	typedef void(*InstructionGeneratorX86)(JitCompilerX86*, const Instruction&);
-
-	constexpr uint32_t CodeSize = 64 * 1024;
+	typedef void(JitCompilerX86::*InstructionGeneratorX86)(Instruction&, int);
 
 	class JitCompilerX86 {
 	public:
-		explicit JitCompilerX86(bool hugePagesEnable, bool optimizedInitDatasetEnable);
+		JitCompilerX86();
 		~JitCompilerX86();
-		void prepare();
-		void generateProgram(Program&, ProgramConfiguration&, uint32_t);
+		void generateProgram(Program&, ProgramConfiguration&);
 		void generateProgramLight(Program&, ProgramConfiguration&, uint32_t);
 		template<size_t N>
-		void generateSuperscalarHash(SuperscalarProgram (&programs)[N]);
+		void generateSuperscalarHash(SuperscalarProgram (&programs)[N], std::vector<uint64_t> &);
 		void generateDatasetInitCode();
-
-		inline ProgramFunc *getProgramFunc() const {
-#			ifdef TNN_SECURE_JIT
-			enableExecution();
-#			endif
-
-			return reinterpret_cast<ProgramFunc*>(code);
+		ProgramFunc* getProgramFunc() {
+			return (ProgramFunc*)code;
 		}
-
-		inline DatasetInitFunc *getDatasetInitFunc() const {
-# 			ifdef TNN_SECURE_JIT
-			enableExecution();
-#			endif
-
+		DatasetInitFunc* getDatasetInitFunc() {
 			return (DatasetInitFunc*)code;
 		}
-
 		uint8_t* getCode() {
 			return code;
 		}
 		size_t getCodeSize();
-		void enableWriting() const;
-		void enableExecution() const;
-
-		alignas(64) static InstructionGeneratorX86 engine[256];
-
+		void enableWriting();
+		void enableExecution();
+		void enableAll();
 	private:
-		int registerUsage[RegistersCount] = {};
-		uint8_t* code = nullptr;
-		uint32_t codePos = 0;
-		uint32_t codePosFirst = 0;
-		uint32_t vm_flags = 0;
-		int32_t prevCFROUND = -1;
-		int32_t prevFPOperation = -1;
-
-#		ifdef TNN_FIX_RYZEN
-		std::pair<const void*, const void*> mainLoopBounds;
-#		endif
-
-		bool BranchesWithin32B = false;
-		bool hasAVX;
-		bool hasAVX2;
-		bool initDatasetAVX2;
-		bool hasXOP;
-
-		uint8_t* allocatedCode = nullptr;
-		size_t allocatedSize = 0;
-
-		uint8_t* imul_rcp_storage = nullptr;
-		uint32_t imul_rcp_storage_used = 0;
+		static InstructionGeneratorX86 engine[256];
+		std::vector<int32_t> instructionOffsets;
+		int registerUsage[RegistersCount];
+		uint8_t* code;
+		int32_t codePos;
 
 		void generateProgramPrologue(Program&, ProgramConfiguration&);
 		void generateProgramEpilogue(Program&, ProgramConfiguration&);
-		template<bool rax>
-		static void genAddressReg(const Instruction&, const uint32_t src, uint8_t* code, uint32_t& codePos);
-		static void genAddressRegDst(const Instruction&, uint8_t* code, uint32_t& codePos);
-		static void genAddressImm(const Instruction&, uint8_t* code, uint32_t& codePos);
-		static uint32_t genSIB(int scale, int index, int base) { return (scale << 6) | (index << 3) | base; }
+		void genAddressReg(Instruction&, bool);
+		void genAddressRegDst(Instruction&);
+		void genAddressImm(Instruction&);
+		void genSIB(int scale, int index, int base);
 
-		template<bool AVX2>
-		void generateSuperscalarCode(Instruction& inst, uint8_t* code, uint32_t& codePos);
+		void generateCode(Instruction&, int);
+		void generateSuperscalarCode(Instruction &, std::vector<uint64_t> &);
 
-		static void emitByte(uint8_t val, uint8_t* code, uint32_t& codePos) {
+		void emitByte(uint8_t val) {
 			code[codePos] = val;
-			++codePos;
+			codePos++;
 		}
 
-		static void emit32(uint32_t val, uint8_t* code, uint32_t& codePos) {
+		void emit32(uint32_t val) {
 			memcpy(code + codePos, &val, sizeof val);
 			codePos += sizeof val;
 		}
 
-		static void emit64(uint64_t val, uint8_t* code, uint32_t& codePos) {
+		void emit64(uint64_t val) {
 			memcpy(code + codePos, &val, sizeof val);
 			codePos += sizeof val;
 		}
 
 		template<size_t N>
-		static void emit(const uint8_t (&src)[N], uint8_t* code, uint32_t& codePos) {
-			emit(src, N, code, codePos);
+		void emit(const uint8_t (&src)[N]) {
+			emit(src, N);
 		}
 
-		static void emit(const uint8_t* src, size_t count, uint8_t* code, uint32_t& codePos) {
+		void emit(const uint8_t* src, size_t count) {
 			memcpy(code + codePos, src, count);
 			codePos += count;
 		}
 
-	public:
-		void h_IADD_RS(const Instruction&);
-		void h_IADD_M(const Instruction&);
-		void h_ISUB_R(const Instruction&);
-		void h_ISUB_M(const Instruction&);
-		void h_IMUL_R(const Instruction&);
-		void h_IMUL_M(const Instruction&);
-		void h_IMULH_R(const Instruction&);
-		void h_IMULH_R_BMI2(const Instruction&);
-		void h_IMULH_M(const Instruction&);
-		void h_IMULH_M_BMI2(const Instruction&);
-		void h_ISMULH_R(const Instruction&);
-		void h_ISMULH_M(const Instruction&);
-		void h_IMUL_RCP(const Instruction&);
-		void h_INEG_R(const Instruction&);
-		void h_IXOR_R(const Instruction&);
-		void h_IXOR_M(const Instruction&);
-		void h_IROR_R(const Instruction&);
-		void h_IROL_R(const Instruction&);
-		void h_ISWAP_R(const Instruction&);
-		void h_FSWAP_R(const Instruction&);
-		void h_FADD_R(const Instruction&);
-		void h_FADD_M(const Instruction&);
-		void h_FSUB_R(const Instruction&);
-		void h_FSUB_M(const Instruction&);
-		void h_FSCAL_R(const Instruction&);
-		void h_FMUL_R(const Instruction&);
-		void h_FDIV_M(const Instruction&);
-		void h_FSQRT_R(const Instruction&);
-
-		template<bool jccErratum>
-		void h_CBRANCH(const Instruction&);
-
-		void h_CFROUND(const Instruction&);
-		void h_CFROUND_BMI2(const Instruction&);
-		void h_ISTORE(const Instruction&);
-		void h_NOP(const Instruction&);
+		void h_IADD_RS(Instruction&, int);
+		void h_IADD_M(Instruction&, int);
+		void h_ISUB_R(Instruction&, int);
+		void h_ISUB_M(Instruction&, int);
+		void h_IMUL_R(Instruction&, int);
+		void h_IMUL_M(Instruction&, int);
+		void h_IMULH_R(Instruction&, int);
+		void h_IMULH_M(Instruction&, int);
+		void h_ISMULH_R(Instruction&, int);
+		void h_ISMULH_M(Instruction&, int);
+		void h_IMUL_RCP(Instruction&, int);
+		void h_INEG_R(Instruction&, int);
+		void h_IXOR_R(Instruction&, int);
+		void h_IXOR_M(Instruction&, int);
+		void h_IROR_R(Instruction&, int);
+		void h_IROL_R(Instruction&, int);
+		void h_ISWAP_R(Instruction&, int);
+		void h_FSWAP_R(Instruction&, int);
+		void h_FADD_R(Instruction&, int);
+		void h_FADD_M(Instruction&, int);
+		void h_FSUB_R(Instruction&, int);
+		void h_FSUB_M(Instruction&, int);
+		void h_FSCAL_R(Instruction&, int);
+		void h_FMUL_R(Instruction&, int);
+		void h_FDIV_M(Instruction&, int);
+		void h_FSQRT_R(Instruction&, int);
+		void h_CBRANCH(Instruction&, int);
+		void h_CFROUND(Instruction&, int);
+		void h_ISTORE(Instruction&, int);
+		void h_NOP(Instruction&, int);
 	};
+
 }

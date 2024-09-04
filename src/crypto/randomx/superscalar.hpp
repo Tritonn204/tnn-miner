@@ -30,8 +30,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <cstdint>
 #include <vector>
-#include "crypto/randomx/superscalar_program.hpp"
-#include "crypto/randomx/blake2_generator.hpp"
+#include "superscalar_program.hpp"
+#include "blake2_generator.hpp"
 
 namespace randomx {
 	                                              //                  Intel Ivy Bridge reference
@@ -56,5 +56,5 @@ namespace randomx {
 	};
 
 	void generateSuperscalar(SuperscalarProgram& prog, Blake2Generator& gen);
-	void executeSuperscalar(uint64_t(&r)[8], SuperscalarProgram& prog);
+	void executeSuperscalar(uint64_t(&r)[8], SuperscalarProgram& prog, std::vector<uint64_t> *reciprocals = nullptr);
 }

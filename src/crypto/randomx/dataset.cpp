@@ -1,7 +1,5 @@
 /*
-Copyright (c) 2018-2020, tevador    <tevador@gmail.com>
-Copyright (c) 2019-2020, SChernykh  <https://github.com/SChernykh>
-Copyright (c) 2019-2020, XMRig      <https://github.com/xmrig>, <support@xmrig.com>
+Copyright (c) 2018-2019, tevador <tevador@gmail.com>
 
 All rights reserved.
 
@@ -40,81 +38,113 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <cstring>
 #include <limits>
 #include <cstring>
+#include <cassert>
 
-#include "crypto/randomx/common.hpp"
-#include "crypto/randomx/dataset.hpp"
-#include "crypto/randomx/virtual_memory.hpp"
-#include "crypto/randomx/superscalar.hpp"
-#include "crypto/randomx/blake2_generator.hpp"
-#include "crypto/randomx/reciprocal.h"
-#include "crypto/randomx/blake2/endian.h"
-#include "crypto/randomx/jit_compiler.hpp"
-#include "crypto/randomx/intrin_portable.h"
+#include "common.hpp"
+#include "dataset.hpp"
+#include "virtual_memory.h"
+#include "superscalar.hpp"
+#include "blake2_generator.hpp"
+#include "reciprocal.h"
+#include "blake2/endian.h"
+#include "argon2.h"
+#include "argon2_core.h"
+#include "jit_compiler.hpp"
+#include "intrin_portable.h"
 
-#include "3rdparty/argon2/include/argon2.h"
-#include "3rdparty/argon2/lib/core.h"
-
-//static_assert(RANDOMX_ARGON_MEMORY % (RANDOMX_ARGON_LANES * ARGON2_SYNC_POINTS) == 0, "RANDOMX_ARGON_MEMORY - invalid value");
-static_assert(ARGON2_BLOCK_SIZE == randomx::ArgonBlockSize, "Unexpected value of ARGON2_BLOCK_SIZE");
+static_assert(RANDOMX_ARGON_MEMORY % (RANDOMX_ARGON_LANES * ARGON2_SYNC_POINTS) == 0, "RANDOMX_ARGON_MEMORY - invalid value");
+static_assert(ARGON2_BLOCK_SIZE == randomx::ArgonBlockSize, "Unpexpected value of ARGON2_BLOCK_SIZE");
 
 namespace randomx {
 
 	template<class Allocator>
 	void deallocCache(randomx_cache* cache) {
-		if (cache->memory != nullptr) {
-			Allocator::freeMemory(cache->memory, RANDOMX_CACHE_MAX_SIZE);
-		}
-
-		delete cache->jit;
+		if (cache->memory != nullptr)
+			Allocator::freeMemory(cache->memory, CacheSize);
+		if (cache->jit != nullptr)
+			delete cache->jit;
 	}
 
 	template void deallocCache<DefaultAllocator>(randomx_cache* cache);
 	template void deallocCache<LargePageAllocator>(randomx_cache* cache);
 
 	void initCache(randomx_cache* cache, const void* key, size_t keySize) {
+		uint32_t memory_blocks, segment_length;
+		argon2_instance_t instance;
 		argon2_context context;
 
 		context.out = nullptr;
 		context.outlen = 0;
 		context.pwd = CONST_CAST(uint8_t *)key;
 		context.pwdlen = (uint32_t)keySize;
-		context.salt = CONST_CAST(uint8_t *)RandomX_CurrentConfig.ArgonSalt;
-		context.saltlen = (uint32_t)strlen(RandomX_CurrentConfig.ArgonSalt);
-		context.secret = nullptr;
+		context.salt = CONST_CAST(uint8_t *)RANDOMX_ARGON_SALT;
+		context.saltlen = (uint32_t)randomx::ArgonSaltSize;
+		context.secret = NULL;
 		context.secretlen = 0;
-		context.ad = nullptr;
+		context.ad = NULL;
 		context.adlen = 0;
-		context.t_cost = RandomX_CurrentConfig.ArgonIterations;
-		context.m_cost = RandomX_CurrentConfig.ArgonMemory;
-		context.lanes = RandomX_CurrentConfig.ArgonLanes;
+		context.t_cost = RANDOMX_ARGON_ITERATIONS;
+		context.m_cost = RANDOMX_ARGON_MEMORY;
+		context.lanes = RANDOMX_ARGON_LANES;
 		context.threads = 1;
-		context.allocate_cbk = nullptr;
-		context.free_cbk = nullptr;
+		context.allocate_cbk = NULL;
+		context.free_cbk = NULL;
 		context.flags = ARGON2_DEFAULT_FLAGS;
 		context.version = ARGON2_VERSION_NUMBER;
 
-		argon2_ctx_mem(&context, Argon2_d, cache->memory, RandomX_CurrentConfig.ArgonMemory * 1024);
+		int inputsValid = randomx_argon2_validate_inputs(&context);
+		assert(inputsValid == ARGON2_OK);
 
+		/* 2. Align memory size */
+		/* Minimum memory_blocks = 8L blocks, where L is the number of lanes */
+		memory_blocks = context.m_cost;
+
+		segment_length = memory_blocks / (context.lanes * ARGON2_SYNC_POINTS);
+
+		instance.version = context.version;
+		instance.memory = NULL;
+		instance.passes = context.t_cost;
+		instance.memory_blocks = memory_blocks;
+		instance.segment_length = segment_length;
+		instance.lane_length = segment_length * ARGON2_SYNC_POINTS;
+		instance.lanes = context.lanes;
+		instance.threads = context.threads;
+		instance.type = Argon2_d;
+		instance.memory = (block*)cache->memory;
+		instance.impl = cache->argonImpl;
+
+		if (instance.threads > instance.lanes) {
+			instance.threads = instance.lanes;
+		}
+
+		/* 3. Initialization: Hashing inputs, allocating memory, filling first
+		 * blocks
+		 */
+		randomx_argon2_initialize(&instance, &context);
+
+		randomx_argon2_fill_memory_blocks(&instance);
+
+		cache->reciprocalCache.clear();
 		randomx::Blake2Generator gen(key, keySize);
-		for (uint32_t i = 0; i < RandomX_CurrentConfig.CacheAccesses; ++i) {
+		for (int i = 0; i < RANDOMX_CACHE_ACCESSES; ++i) {
 			randomx::generateSuperscalar(cache->programs[i], gen);
+			for (unsigned j = 0; j < cache->programs[i].getSize(); ++j) {
+				auto& instr = cache->programs[i](j);
+				if ((SuperscalarInstructionType)instr.opcode == SuperscalarInstructionType::IMUL_RCP) {
+					auto rcp = randomx_reciprocal(instr.getImm32());
+					instr.setImm32(cache->reciprocalCache.size());
+					cache->reciprocalCache.push_back(rcp);
+				}
+			}
 		}
 	}
 
 	void initCacheCompile(randomx_cache* cache, const void* key, size_t keySize) {
 		initCache(cache, key, keySize);
-
-#		ifdef TNN_SECURE_JIT
 		cache->jit->enableWriting();
-#		endif
-
-		cache->jit->generateSuperscalarHash(cache->programs);
+		cache->jit->generateSuperscalarHash(cache->programs, cache->reciprocalCache);
 		cache->jit->generateDatasetInitCode();
-		cache->datasetInit  = cache->jit->getDatasetInitFunc();
-
-#		ifdef TNN_SECURE_JIT
 		cache->jit->enableExecution();
-#		endif
 	}
 
 	constexpr uint64_t superscalarMul0 = 6364136223846793005ULL;
@@ -127,7 +157,7 @@ namespace randomx {
 	constexpr uint64_t superscalarAdd7 = 9549104520008361294ULL;
 
 	static inline uint8_t* getMixBlock(uint64_t registerValue, uint8_t *memory) {
-		const uint32_t mask = (RandomX_CurrentConfig.ArgonMemory * randomx::ArgonBlockSize) / CacheLineSize - 1;
+		constexpr uint32_t mask = CacheSize / CacheLineSize - 1;
 		return memory + (registerValue & mask) * CacheLineSize;
 	}
 
@@ -143,12 +173,12 @@ namespace randomx {
 		rl[5] = rl[0] ^ superscalarAdd5;
 		rl[6] = rl[0] ^ superscalarAdd6;
 		rl[7] = rl[0] ^ superscalarAdd7;
-		for (unsigned i = 0; i < RandomX_CurrentConfig.CacheAccesses; ++i) {
+		for (unsigned i = 0; i < RANDOMX_CACHE_ACCESSES; ++i) {
 			mixBlock = getMixBlock(registerValue, cache->memory);
 			rx_prefetch_nta(mixBlock);
 			SuperscalarProgram& prog = cache->programs[i];
 
-			executeSuperscalar(rl, prog);
+			executeSuperscalar(rl, prog, &cache->reciprocalCache);
 
 			for (unsigned q = 0; q < 8; ++q)
 				rl[q] ^= load64_native(mixBlock + 8 * q);

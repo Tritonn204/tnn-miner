@@ -29,39 +29,34 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #pragma once
 
 #include <cstdint>
-#include "crypto/randomx/common.hpp"
-#include "crypto/randomx/program.hpp"
+#include "common.hpp"
+#include "program.hpp"
 
 /* Global namespace for C binding */
-class randomx_vm
-{
+class randomx_vm {
 public:
 	virtual ~randomx_vm() = 0;
-	virtual void setScratchpad(uint8_t *scratchpad) = 0;
-	virtual void getFinalResult(void* out) = 0;
-	virtual void hashAndFill(void* out, uint64_t (&fill_state)[8]) = 0;
+	virtual void allocate() = 0;
+	virtual void getFinalResult(void* out, size_t outSize) = 0;
+	virtual void hashAndFill(void* out, size_t outSize, uint64_t *fill_state) = 0;
 	virtual void setDataset(randomx_dataset* dataset) { }
 	virtual void setCache(randomx_cache* cache) { }
 	virtual void initScratchpad(void* seed) = 0;
 	virtual void run(void* seed) = 0;
 	void resetRoundingMode();
-
-	void setFlags(uint32_t flags) { vm_flags = flags; }
-	uint32_t getFlags() const { return vm_flags; }
-
 	randomx::RegisterFile *getRegisterFile() {
 		return &reg;
 	}
-
 	const void* getScratchpad() {
 		return scratchpad;
 	}
-
 	const randomx::Program& getProgram()
 	{
 		return program;
 	}
-
+	const uint8_t* getMemory() const {
+		return mem.memory;
+	}
 protected:
 	void initialize();
 	alignas(64) randomx::Program program;
@@ -74,21 +69,21 @@ protected:
 		randomx_dataset* datasetPtr;
 	};
 	uint64_t datasetOffset;
-	uint32_t vm_flags;
+public:
+	std::string cacheKey;
+	alignas(16) uint64_t tempHash[8]; //8 64-bit values used to store intermediate data
 };
 
 namespace randomx {
 
-	template<int softAes>
-	class VmBase : public randomx_vm
-	{
+	template<class Allocator, bool softAes>
+	class VmBase : public randomx_vm {
 	public:
 		~VmBase() override;
-		void setScratchpad(uint8_t *scratchpad) override;
+		void allocate() override;
 		void initScratchpad(void* seed) override;
-		void getFinalResult(void* out) override;
-		void hashAndFill(void* out, uint64_t (&fill_state)[8]) override;
-
+		void getFinalResult(void* out, size_t outSize) override;
+		void hashAndFill(void* out, size_t outSize, uint64_t *fill_state) override;
 	protected:
 		void generateProgram(void* seed);
 	};

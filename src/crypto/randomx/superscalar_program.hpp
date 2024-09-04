@@ -29,8 +29,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #pragma once
 
 #include <cstdint>
-#include "crypto/randomx/instruction.hpp"
-#include "crypto/randomx/common.hpp"
+#include "instruction.hpp"
+#include "common.hpp"
 
 namespace randomx {
 
@@ -39,13 +39,17 @@ namespace randomx {
 		Instruction& operator()(int pc) {
 			return programBuffer[pc];
 		}
-		uint32_t getSize() const {
+		friend std::ostream& operator<<(std::ostream& os, const SuperscalarProgram& p) {
+			p.print(os);
+			return os;
+		}
+		uint32_t getSize() {
 			return size;
 		}
 		void setSize(uint32_t val) {
 			size = val;
 		}
-		int getAddressRegister() const {
+		int getAddressRegister() {
 			return addrReg;
 		}
 		void setAddressRegister(int val) {
@@ -68,6 +72,13 @@ namespace randomx {
 		int mulCount;
 		int cpuLatencies[8];
 		int asicLatencies[8];
+	private:
+		void print(std::ostream& os) const {
+			for (unsigned i = 0; i < size; ++i) {
+				auto instr = programBuffer[i];
+				os << instr;
+			}
+		}
 	};
 
 }

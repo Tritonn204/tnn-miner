@@ -28,9 +28,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <cfenv>
 #include <cmath>
-#include "crypto/randomx/common.hpp"
-#include "crypto/randomx/intrin_portable.h"
-#include "crypto/randomx/blake2/endian.h"
+#include "common.hpp"
+#include "intrin_portable.h"
+#include "blake2/endian.h"
 
 #if defined(__SIZEOF_INT128__)
 	typedef unsigned __int128 uint128_t;
@@ -51,14 +51,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	#include <intrin.h>
 	#include <stdlib.h>
 
-	uint64_t rotl64(uint64_t x, unsigned int c) {
+	uint64_t rotl(uint64_t x, unsigned int c) {
 		return _rotl64(x, c);
 	}
-	uint64_t rotr64(uint64_t x, unsigned int c) {
+	uint64_t rotr(uint64_t x, unsigned int c) {
 		return _rotr64(x, c);
 	}
-	#define HAVE_ROTL64
-	#define HAVE_ROTR64
+	#define HAVE_ROTL
+	#define HAVE_ROTR
 
 	#if EVAL_DEFINE(__MACHINEARM64_X64(1))
 		uint64_t mulh(uint64_t a, uint64_t b) {
@@ -82,18 +82,24 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	#define HAVE_SETROUNDMODE_IMPL
 #endif
 
-#ifndef HAVE_ROTR64
-	uint64_t rotr64(uint64_t a, unsigned int b) {
-		return (a >> b) | (a << (-b & 63));
+#ifndef HAVE_SETROUNDMODE_IMPL
+	static void setRoundMode_(uint32_t mode) {
+		fesetround(mode);
 	}
-	#define HAVE_ROTR64
 #endif
 
-#ifndef HAVE_ROTL64
-	uint64_t rotl64(uint64_t a, unsigned int b) {
+#ifndef HAVE_ROTR
+	uint64_t rotr(uint64_t a, unsigned int b) {
+		return (a >> b) | (a << (-b & 63));
+	}
+	#define HAVE_ROTR
+#endif
+
+#ifndef HAVE_ROTL
+	uint64_t rotl(uint64_t a, unsigned int b) {
 		return (a << b) | (a >> (-b & 63));
 	}
-	#define HAVE_ROTL64
+	#define HAVE_ROTL
 #endif
 
 #ifndef HAVE_MULH
@@ -127,12 +133,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #ifdef RANDOMX_DEFAULT_FENV
 
-#	ifndef HAVE_SETROUNDMODE_IMPL
-	static void setRoundMode_(uint32_t mode) {
-		fesetround(mode);
-	}
-#	endif
-
 void rx_reset_float_state() {
 	setRoundMode_(FE_TONEAREST);
 	rx_set_double_precision(); //set precision to 53 bits if needed by the platform
@@ -157,11 +157,26 @@ void rx_set_rounding_mode(uint32_t mode) {
 	}
 }
 
+uint32_t rx_get_rounding_mode() {
+	switch (fegetround()) {
+	case FE_DOWNWARD:
+		return RoundDown;
+	case FE_UPWARD:
+		return RoundUp;
+	case FE_TOWARDZERO:
+		return RoundToZero;
+	case FE_TONEAREST:
+		return RoundToNearest;
+	default:
+		UNREACHABLE;
+	}
+}
+
 #endif
 
 #ifdef RANDOMX_USE_X87
 
-#ifdef _M_IX86
+#if defined(_MSC_VER) && defined(_M_IX86)
 
 void rx_set_double_precision() {
 	_control87(_PC_53, _MCW_PC);

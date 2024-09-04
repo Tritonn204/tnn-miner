@@ -29,24 +29,15 @@ IFDEF RAX
 _RANDOMX_JITX86_STATIC SEGMENT PAGE READ EXECUTE
 
 PUBLIC randomx_prefetch_scratchpad
-PUBLIC randomx_prefetch_scratchpad_bmi2
 PUBLIC randomx_prefetch_scratchpad_end
 PUBLIC randomx_program_prologue
-PUBLIC randomx_program_prologue_first_load
-PUBLIC randomx_program_imul_rcp_store
 PUBLIC randomx_program_loop_begin
 PUBLIC randomx_program_loop_load
-PUBLIC randomx_program_loop_load_xop
 PUBLIC randomx_program_start
 PUBLIC randomx_program_read_dataset
 PUBLIC randomx_program_read_dataset_sshash_init
 PUBLIC randomx_program_read_dataset_sshash_fin
 PUBLIC randomx_dataset_init
-PUBLIC randomx_dataset_init_avx2_prologue
-PUBLIC randomx_dataset_init_avx2_loop_end
-PUBLIC randomx_dataset_init_avx2_epilogue
-PUBLIC randomx_dataset_init_avx2_ssh_load
-PUBLIC randomx_dataset_init_avx2_ssh_prefetch
 PUBLIC randomx_program_loop_store
 PUBLIC randomx_program_loop_end
 PUBLIC randomx_program_epilogue
@@ -57,9 +48,13 @@ PUBLIC randomx_sshash_init
 PUBLIC randomx_program_end
 PUBLIC randomx_reciprocal_fast
 
-RANDOMX_SCRATCHPAD_MASK     EQU 2097088
-RANDOMX_DATASET_BASE_MASK   EQU 2147483584
-RANDOMX_CACHE_MASK          EQU 4194303
+include asm/configuration.asm
+
+RANDOMX_SCRATCHPAD_MASK     EQU (RANDOMX_SCRATCHPAD_L3-64)
+RANDOMX_DATASET_BASE_MASK   EQU (RANDOMX_DATASET_BASE_SIZE-64)
+RANDOMX_CACHE_MASK          EQU (RANDOMX_ARGON_MEMORY*16-1)
+RANDOMX_ALIGN               EQU 4096
+SUPERSCALAR_OFFSET          EQU ((((RANDOMX_ALIGN + 32 * RANDOMX_PROGRAM_SIZE) - 1) / (RANDOMX_ALIGN) + 1) * (RANDOMX_ALIGN))
 
 randomx_prefetch_scratchpad PROC
 	mov rdx, rax
@@ -70,14 +65,6 @@ randomx_prefetch_scratchpad PROC
 	prefetcht0 [rsi+rdx]
 randomx_prefetch_scratchpad ENDP
 
-randomx_prefetch_scratchpad_bmi2 PROC
-	rorx rdx, rax, 32
-	and eax, RANDOMX_SCRATCHPAD_MASK
-	prefetcht0 [rsi+rax]
-	and edx, RANDOMX_SCRATCHPAD_MASK
-	prefetcht0 [rsi+rdx]
-randomx_prefetch_scratchpad_bmi2 ENDP
-
 randomx_prefetch_scratchpad_end PROC
 randomx_prefetch_scratchpad_end ENDP
 
@@ -87,45 +74,25 @@ randomx_program_prologue PROC
 	movapd xmm13, xmmword ptr [mantissaMask]
 	movapd xmm14, xmmword ptr [exp240]
 	movapd xmm15, xmmword ptr [scaleMask]
-randomx_program_prologue ENDP
-
-randomx_program_prologue_first_load PROC
 	mov rdx, rax
 	and eax, RANDOMX_SCRATCHPAD_MASK
 	ror rdx, 32
 	and edx, RANDOMX_SCRATCHPAD_MASK
-	sub rsp, 40
-	mov dword ptr [rsp], 9FC0h
-	mov dword ptr [rsp+4], 0BFC0h
-	mov dword ptr [rsp+8], 0DFC0h
-	mov dword ptr [rsp+12], 0FFC0h
-	mov dword ptr [rsp+32], -1
-	nop
-	nop
-	nop
-	jmp randomx_program_imul_rcp_store
-randomx_program_prologue_first_load ENDP
+	jmp rx_program_loop_begin
+randomx_program_prologue ENDP
 
 ALIGN 64
 	include asm/program_xmm_constants.inc
 
-randomx_program_imul_rcp_store PROC
-	include asm/program_imul_rcp_store.inc
-	jmp randomx_program_loop_begin
-randomx_program_imul_rcp_store ENDP
-
 ALIGN 64
 randomx_program_loop_begin PROC
+rx_program_loop_begin::
 	nop
 randomx_program_loop_begin ENDP
 
 randomx_program_loop_load PROC
 	include asm/program_loop_load.inc
 randomx_program_loop_load ENDP
-
-randomx_program_loop_load_xop PROC
-	include asm/program_loop_load_xop.inc
-randomx_program_loop_load_xop ENDP
 
 randomx_program_start PROC
 	nop
@@ -169,7 +136,7 @@ init_block_loop:
 	prefetchw byte ptr [rsi]
 	mov rbx, rbp
 	db 232 ;# 0xE8 = call
-	dd 32768 - distance
+	dd SUPERSCALAR_OFFSET - distance
 	distance equ $ - offset randomx_dataset_init
 	mov qword ptr [rsi+0], r8
 	mov qword ptr [rsi+8], r9
@@ -196,94 +163,6 @@ init_block_loop:
 randomx_dataset_init ENDP
 
 ALIGN 64
-randomx_dataset_init_avx2_prologue PROC
-	include asm/program_sshash_avx2_save_registers.inc
-
-	mov rdi, qword ptr [rcx]		;# cache->memory
-	mov rsi, rdx					;# dataset
-	mov rbp, r8						;# block index
-	push r9							;# max. block index
-	sub rsp, 40
-
-	jmp loop_begin
-	include asm/program_sshash_avx2_constants.inc
-
-ALIGN 64
-loop_begin:
-	include asm/program_sshash_avx2_loop_begin.inc
-
-	;# init integer registers (lane 0)
-	lea r8, [rbp+1]
-	imul r8, qword ptr [r0_avx2_mul]
-	mov r9, qword ptr [r1_avx2_add]
-	xor r9, r8
-	mov r10, qword ptr [r2_avx2_add]
-	xor r10, r8
-	mov r11, qword ptr [r3_avx2_add]
-	xor r11, r8
-	mov r12, qword ptr [r4_avx2_add]
-	xor r12, r8
-	mov r13, qword ptr [r5_avx2_add]
-	xor r13, r8
-	mov r14, qword ptr [r6_avx2_add]
-	xor r14, r8
-	mov r15, qword ptr [r7_avx2_add]
-	xor r15, r8
-
-	;# init AVX registers (lanes 1-4)
-	mov qword ptr [rsp+32], rbp
-	vbroadcastsd ymm0, qword ptr [rsp+32]
-	vpaddq ymm0, ymm0, ymmword ptr [r0_avx2_increments]
-
-	;# ymm0 *= r0_avx2_mul
-	vbroadcastsd ymm1, qword ptr [r0_avx2_mul]
-	vpsrlq ymm8, ymm0, 32
-	vpsrlq ymm9, ymm1, 32
-	vpmuludq ymm10, ymm0, ymm1
-	vpmuludq ymm11, ymm9, ymm0
-	vpmuludq ymm0, ymm8, ymm1
-	vpsllq ymm11, ymm11, 32
-	vpsllq ymm0, ymm0, 32
-	vpaddq ymm10, ymm10, ymm11
-	vpaddq ymm0, ymm10, ymm0
-
-	vbroadcastsd ymm1, qword ptr [r1_avx2_add]
-	vpxor ymm1, ymm0, ymm1
-	vbroadcastsd ymm2, qword ptr [r2_avx2_add]
-	vpxor ymm2, ymm0, ymm2
-	vbroadcastsd ymm3, qword ptr [r3_avx2_add]
-	vpxor ymm3, ymm0, ymm3
-	vbroadcastsd ymm4, qword ptr [r4_avx2_add]
-	vpxor ymm4, ymm0, ymm4
-	vbroadcastsd ymm5, qword ptr [r5_avx2_add]
-	vpxor ymm5, ymm0, ymm5
-	vbroadcastsd ymm6, qword ptr [r6_avx2_add]
-	vpxor ymm6, ymm0, ymm6
-	vbroadcastsd ymm7, qword ptr [r7_avx2_add]
-	vpxor ymm7, ymm0, ymm7
-
-	vbroadcastsd ymm15, qword ptr [mul_hi_avx2_data] ;# carry_bit (bit 32)
-	vpsllq ymm14, ymm15, 31                          ;# sign64 (bit 63)
-randomx_dataset_init_avx2_prologue ENDP
-
-	;# generated SuperscalarHash code goes here
-
-randomx_dataset_init_avx2_loop_end PROC
-	include asm/program_sshash_avx2_loop_end.inc
-randomx_dataset_init_avx2_loop_end ENDP
-
-randomx_dataset_init_avx2_epilogue PROC
-	include asm/program_sshash_avx2_epilogue.inc
-randomx_dataset_init_avx2_epilogue ENDP
-
-randomx_dataset_init_avx2_ssh_load PROC
-	include asm/program_sshash_avx2_ssh_load.inc
-randomx_dataset_init_avx2_ssh_load ENDP
-
-randomx_dataset_init_avx2_ssh_prefetch PROC
-	include asm/program_sshash_avx2_ssh_prefetch.inc
-randomx_dataset_init_avx2_ssh_prefetch ENDP
-
 randomx_program_epilogue PROC
 	include asm/program_epilogue_store.inc
 	include asm/program_epilogue_win64.inc
@@ -321,7 +200,7 @@ randomx_sshash_init PROC
 	xor r14, r8
 	mov r15, qword ptr [r7_add]
 	xor r15, r8
-	jmp randomx_program_end
+	jmp rx_program_end
 randomx_sshash_init ENDP
 
 ALIGN 64
@@ -329,6 +208,7 @@ ALIGN 64
 
 ALIGN 64
 randomx_program_end PROC
+rx_program_end::
 	nop
 randomx_program_end ENDP
 

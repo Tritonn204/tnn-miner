@@ -28,10 +28,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #pragma once
 
-#include "crypto/randomx/common.hpp"
-#include "crypto/randomx/intrin_portable.h"
-#include "crypto/randomx/instruction.hpp"
-#include "crypto/randomx/program.hpp"
+#include "common.hpp"
+#include "intrin_portable.h"
+#include "instruction.hpp"
+#include "program.hpp"
 
 namespace randomx {
 
@@ -64,6 +64,40 @@ namespace randomx {
 		uint32_t memMask;
 	};
 
+#define OPCODE_CEIL_DECLARE(curr, prev) constexpr int ceil_ ## curr = ceil_ ## prev + RANDOMX_FREQ_ ## curr;
+	constexpr int ceil_NULL = 0;
+	OPCODE_CEIL_DECLARE(IADD_RS, NULL);
+	OPCODE_CEIL_DECLARE(IADD_M, IADD_RS);
+	OPCODE_CEIL_DECLARE(ISUB_R, IADD_M);
+	OPCODE_CEIL_DECLARE(ISUB_M, ISUB_R);
+	OPCODE_CEIL_DECLARE(IMUL_R, ISUB_M);
+	OPCODE_CEIL_DECLARE(IMUL_M, IMUL_R);
+	OPCODE_CEIL_DECLARE(IMULH_R, IMUL_M);
+	OPCODE_CEIL_DECLARE(IMULH_M, IMULH_R);
+	OPCODE_CEIL_DECLARE(ISMULH_R, IMULH_M);
+	OPCODE_CEIL_DECLARE(ISMULH_M, ISMULH_R);
+	OPCODE_CEIL_DECLARE(IMUL_RCP, ISMULH_M);
+	OPCODE_CEIL_DECLARE(INEG_R, IMUL_RCP);
+	OPCODE_CEIL_DECLARE(IXOR_R, INEG_R);
+	OPCODE_CEIL_DECLARE(IXOR_M, IXOR_R);
+	OPCODE_CEIL_DECLARE(IROR_R, IXOR_M);
+	OPCODE_CEIL_DECLARE(IROL_R, IROR_R);
+	OPCODE_CEIL_DECLARE(ISWAP_R, IROL_R);
+	OPCODE_CEIL_DECLARE(FSWAP_R, ISWAP_R);
+	OPCODE_CEIL_DECLARE(FADD_R, FSWAP_R);
+	OPCODE_CEIL_DECLARE(FADD_M, FADD_R);
+	OPCODE_CEIL_DECLARE(FSUB_R, FADD_M);
+	OPCODE_CEIL_DECLARE(FSUB_M, FSUB_R);
+	OPCODE_CEIL_DECLARE(FSCAL_R, FSUB_M);
+	OPCODE_CEIL_DECLARE(FMUL_R, FSCAL_R);
+	OPCODE_CEIL_DECLARE(FDIV_M, FMUL_R);
+	OPCODE_CEIL_DECLARE(FSQRT_R, FDIV_M);
+	OPCODE_CEIL_DECLARE(CBRANCH, FSQRT_R);
+	OPCODE_CEIL_DECLARE(CFROUND, CBRANCH);
+	OPCODE_CEIL_DECLARE(ISTORE, CFROUND);
+	OPCODE_CEIL_DECLARE(NOP, ISTORE);
+#undef OPCODE_CEIL_DECLARE
+
 #define RANDOMX_EXE_ARGS InstructionByteCode& ibc, int& pc, uint8_t* scratchpad, ProgramConfiguration& config
 #define RANDOMX_GEN_ARGS Instruction& instr, int i, InstructionByteCode& ibc
 
@@ -80,17 +114,17 @@ namespace randomx {
 			nreg = &regFile;
 		}
 
-		void compileProgram(Program& program, InstructionByteCode* bytecode, NativeRegisterFile& regFile) {
+		void compileProgram(Program& program, InstructionByteCode bytecode[RANDOMX_PROGRAM_SIZE], NativeRegisterFile& regFile) {
 			beginCompilation(regFile);
-			for (unsigned i = 0; i < RandomX_CurrentConfig.ProgramSize; ++i) {
+			for (unsigned i = 0; i < RANDOMX_PROGRAM_SIZE; ++i) {
 				auto& instr = program(i);
 				auto& ibc = bytecode[i];
 				compileInstruction(instr, i, ibc);
 			}
 		}
 
-		static void executeBytecode(InstructionByteCode* bytecode, uint8_t* scratchpad, ProgramConfiguration& config) {
-			for (int pc = 0; pc < static_cast<int>(RandomX_CurrentConfig.ProgramSize); ++pc) {
+		static void executeBytecode(InstructionByteCode bytecode[RANDOMX_PROGRAM_SIZE], uint8_t* scratchpad, ProgramConfiguration& config) {
+			for (int pc = 0; pc < RANDOMX_PROGRAM_SIZE; ++pc) {
 				auto& ibc = bytecode[pc];
 				executeInstruction(ibc, pc, scratchpad, config);
 			}
@@ -161,11 +195,11 @@ namespace randomx {
 		}
 
 		static void exe_IROR_R(RANDOMX_EXE_ARGS) {
-			*ibc.idst = rotr64(*ibc.idst, *ibc.isrc & 63);
+			*ibc.idst = rotr(*ibc.idst, *ibc.isrc & 63);
 		}
 
 		static void exe_IROL_R(RANDOMX_EXE_ARGS) {
-			*ibc.idst = rotl64(*ibc.idst, *ibc.isrc & 63);
+			*ibc.idst = rotl(*ibc.idst, *ibc.isrc & 63);
 		}
 
 		static void exe_ISWAP_R(RANDOMX_EXE_ARGS) {
@@ -225,7 +259,7 @@ namespace randomx {
 		}
 
 		static void exe_CFROUND(RANDOMX_EXE_ARGS) {
-			rx_set_rounding_mode(rotr64(*ibc.isrc, static_cast<uint32_t>(ibc.imm)) % 4);
+			rx_set_rounding_mode(rotr(*ibc.isrc, ibc.imm) % 4);
 		}
 
 		static void exe_ISTORE(RANDOMX_EXE_ARGS) {
@@ -240,17 +274,10 @@ namespace randomx {
 			return x;
 		}
 
-		void cleanup() {
-			for (unsigned i = 0; i < RegistersCount; ++i) {
-				registerUsage[i] = -1;
-			}
-			nreg = nullptr;
-		}
-
 	private:
 		static const int_reg_t zero;
-		int registerUsage[RegistersCount] = {};
-		NativeRegisterFile* nreg = nullptr;
+		int registerUsage[RegistersCount];
+		NativeRegisterFile* nreg;
 
 		static void* getScratchpadAddress(InstructionByteCode& ibc, uint8_t* scratchpad) {
 			uint32_t addr = (*ibc.isrc + ibc.imm) & ibc.memMask;
