@@ -670,11 +670,7 @@ Benchmarking:
 
     if (lockThreads)
     {
-#if defined(_WIN32)
-      setAffinity(t.native_handle(), 1LL << (i % n));
-#else
       setAffinity(t.native_handle(), (i % n));
-#endif
     }
 
     // setPriority(t.native_handle(), THREAD_PRIORITY_HIGHEST);
@@ -847,29 +843,32 @@ void logSeconds(std::chrono::steady_clock::time_point start_time, int duration, 
 }
 
 #if defined(_WIN32)
-DWORD_PTR SetThreadAffinityWithGroups(HANDLE threadHandle, DWORD_PTR coreIndex) {
-    DWORD numGroups = GetActiveProcessorGroupCount();
+DWORD_PTR SetThreadAffinityWithGroups(HANDLE threadHandle, DWORD_PTR coreIndex)
+{
+  DWORD numGroups = GetActiveProcessorGroupCount();
 
-    // Calculate group and processor within the group
-    DWORD group = static_cast<DWORD>(coreIndex / 64);
-    DWORD numProcessorsInGroup = GetMaximumProcessorCount(group);
-    DWORD processorInGroup = static_cast<DWORD>(coreIndex % numProcessorsInGroup);
+  // Calculate group and processor within the group
+  DWORD group = static_cast<DWORD>(coreIndex / 64);
+  DWORD numProcessorsInGroup = GetMaximumProcessorCount(group);
+  DWORD processorInGroup = static_cast<DWORD>(coreIndex % numProcessorsInGroup);
 
-    if (group < numGroups) {
-        GROUP_AFFINITY groupAffinity = {};
-        groupAffinity.Group = static_cast<WORD>(group);
-        groupAffinity.Mask = static_cast<KAFFINITY>(1ULL << processorInGroup);
+  if (group < numGroups)
+  {
+    GROUP_AFFINITY groupAffinity = {};
+    groupAffinity.Group = static_cast<WORD>(group);
+    groupAffinity.Mask = static_cast<KAFFINITY>(1ULL << processorInGroup);
 
-        GROUP_AFFINITY previousGroupAffinity;
-        if (!SetThreadGroupAffinity(threadHandle, &groupAffinity, &previousGroupAffinity)) {
-            return 0; // Fail case, return 0 like SetThreadAffinityMask
-        }
-
-        // Return the previous affinity mask for compatibility with your code
-        return previousGroupAffinity.Mask;
+    GROUP_AFFINITY previousGroupAffinity;
+    if (!SetThreadGroupAffinity(threadHandle, &groupAffinity, &previousGroupAffinity))
+    {
+      return 0; // Fail case, return 0 like SetThreadAffinityMask
     }
 
-    return 0; // If out of bounds
+    // Return the previous affinity mask for compatibility with your code
+    return previousGroupAffinity.Mask;
+  }
+
+  return 0; // If out of bounds
 }
 #endif
 
