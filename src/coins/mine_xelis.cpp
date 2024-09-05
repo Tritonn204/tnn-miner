@@ -2,7 +2,7 @@
 #include <xelis-hash/xelis-hash.hpp>
 #include <hugepages.h>
 #include <base64.hpp>
-#include <stratum.h>
+#include <stratum/stratum.h>
 
 void mineXelis_v1(int tid)
 {

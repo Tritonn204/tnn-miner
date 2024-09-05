@@ -49,8 +49,6 @@ extern boost::mutex wsMutex;
 
 tcp::endpoint resolve_host(boost::mutex &wsMutex, net::io_context &ioc, net::yield_context yield, std::string host, std::string port);
 
-extern void do_session(std::string hostProto, std::string host, std::string const &port, std::string const &wallet, std::string const &worker, int algo, net::io_context &ioc, ssl::context &ctx, net::yield_context yield, bool isDev);
-
 inline void setForDisconnected(bool *connectedPtr, bool *submitPtr, bool *abortPtr, bool *dataReadyPtr, boost::condition_variable *cvPtr) {
   if (connectedPtr != nullptr) *connectedPtr = false;
   if (submitPtr != nullptr)    *submitPtr = false;
@@ -187,6 +185,17 @@ inline void do_session(
   case SPECTRE_X:
     spectre_stratum_session(hostProto, host, port, wallet, worker, ioc, ctx, yield, isDev);
     break;
+  #endif
+  #ifdef TNN_RANDOMX
+  case RANDOM_X:
+  {
+    if(use_ssl) {
+      randomx_stratum_session(hostProto, host, port, wallet, worker, ioc, ctx, yield, isDev);
+    } else {
+      randomx_stratum_session_nossl(hostProto, host, port, wallet, worker, ioc, ctx, yield, isDev);
+    }
+    break;
+  }
   #endif
   }
 }

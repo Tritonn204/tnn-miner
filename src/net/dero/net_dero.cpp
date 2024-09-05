@@ -1,5 +1,5 @@
-#include "net.hpp"
-#include "hex.h"
+#include "../net.hpp"
+#include <hex.h>
 
 #include <boost/beast/core.hpp>
 #include <boost/beast/ssl.hpp>

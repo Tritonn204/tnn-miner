@@ -10,3 +10,8 @@ void mineSpectre(int tid){}
 #ifndef TNN_XELISHASH
 void mineXelis(int tid){}
 #endif
+
+// RandomX coins
+#ifndef TNN_RANDOMX
+void mineRandomX(int tid){}
+#endif

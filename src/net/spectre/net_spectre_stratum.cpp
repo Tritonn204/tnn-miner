@@ -1,5 +1,5 @@
-#include "net.hpp"
-#include "hex.h"
+#include "../net.hpp"
+#include <hex.h>
 
 #include <boost/beast/core.hpp>
 #include <boost/beast/ssl.hpp>
@@ -13,7 +13,7 @@
 #include <boost/asio/ip/host_name.hpp>
 #include <boost/json.hpp>
 
-#include <stratum.h>
+#include <stratum/stratum.h>
 #include <spectrex/spectrex.h>
 
 namespace beast = boost::beast;         // from <boost/beast.hpp>

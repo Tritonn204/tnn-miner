@@ -39,6 +39,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define RANDOMX_EXPORT
 #endif
 
+#define RANDOMX_BLOB_SIZE 76
+#define RANDOMX_TEMPLATE_SIZE 352
+
 typedef enum {
   RANDOMX_FLAG_DEFAULT = 0,
   RANDOMX_FLAG_LARGE_PAGES = 1,
@@ -55,6 +58,13 @@ typedef struct randomx_dataset randomx_dataset;
 typedef struct randomx_cache randomx_cache;
 typedef struct randomx_vm randomx_vm;
 
+extern randomx_flags rxFlags;
+
+extern randomx_dataset* rxDataset;
+extern randomx_cache* rxCache;
+
+extern randomx_dataset* rxDataset_dev;
+extern randomx_cache* rxCache_dev;
 
 #if defined(__cplusplus)
 

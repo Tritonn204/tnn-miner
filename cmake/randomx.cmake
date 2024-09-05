@@ -27,7 +27,9 @@ if (WITH_RANDOMX)
       src/crypto/randomx/reciprocal.c
       src/crypto/randomx/virtual_machine.cpp
       src/crypto/randomx/vm_compiled_light.cpp
-      src/crypto/randomx/jit_compiler_x86_static.S
+      src/crypto/randomx/blake2/blake2b.c
+      src/coins/mine_randomx.cpp
+      src/net/rx0/*.cpp
     )
 
     set (WITH_BLAKE2 ON)
@@ -69,22 +71,49 @@ if (WITH_RANDOMX)
     # x86-64
     if ((CMAKE_SIZEOF_VOID_P EQUAL 8) AND (ARCH_ID STREQUAL "x86_64" OR ARCH_ID STREQUAL "x86-64" OR ARCH_ID STREQUAL "amd64"))
       list(APPEND randomx_sources
-      src/crypto/randomx/jit_compiler_x86.cpp)
+        src/crypto/randomx/jit_compiler_x86.cpp)
 
-      set_property(SOURCE src/crypto/randomx/jit_compiler_x86_static.S PROPERTY LANGUAGE C)
-      set_property(SOURCE src/crypto/randomx/jit_compiler_x86_static.S PROPERTY XCODE_EXPLICIT_FILE_TYPE sourcecode.asm)
+      if(MSVC)
+        enable_language(ASM_MASM)
+        list(APPEND randomx_sources src/crypto/randomx/jit_compiler_x86_static.asm)
 
-      check_c_compiler_flag(-mssse3 HAVE_SSSE3)
-      if(HAVE_SSSE3)
-        set_source_files_properties(src/crypto/randomx/argon2_ssse3.c COMPILE_FLAGS -mssse3)
-      endif()
+        set_property(SOURCE src/crypto/randomx/jit_compiler_x86_static.asm PROPERTY LANGUAGE ASM_MASM)
 
-      check_c_compiler_flag(-mavx2 HAVE_AVX2)
-      if(HAVE_AVX2)
-        set_source_files_properties(src/argon2_avx2.c COMPILE_FLAGS -mavx2)
+        set_source_files_properties(src/crypto/randomx/argon2_avx2.c COMPILE_FLAGS /arch:AVX2)
+
+        set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} /DRELWITHDEBINFO")
+        set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /DRELWITHDEBINFO")
+
+        add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/src/crypto/randomx/asm/configuration.asm
+          COMMAND powershell -ExecutionPolicy Bypass -File h2inc.ps1 ..\\src\\configuration.h > ..\\src\\asm\\configuration.asm SET ERRORLEVEL = 0
+          COMMENT "Generating configuration.asm at ${CMAKE_CURRENT_SOURCE_DIR}"
+          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/vcxproj)
+        add_custom_target(generate-asm
+          DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/crypto/randomx/asm/configuration.asm)
+      else()
+        list(APPEND randomx_sources src/crypto/randomx/jit_compiler_x86_static.S)
+
+        # cheat because cmake and ccache hate each other
+        set_property(SOURCE src/crypto/randomx/jit_compiler_x86_static.S PROPERTY LANGUAGE C)
+        set_property(SOURCE src/crypto/randomx/jit_compiler_x86_static.S PROPERTY XCODE_EXPLICIT_FILE_TYPE sourcecode.asm)
+
+        if(ARCH STREQUAL "native")
+          add_flag("-march=native")
+        else()
+          # default build has hardware AES enabled (software AES can be selected at runtime)
+          add_flag("-maes")
+          check_c_compiler_flag(-mssse3 HAVE_SSSE3)
+          if(HAVE_SSSE3)
+            set_source_files_properties(src/crypto/randomx/argon2_ssse3.c COMPILE_FLAGS -mssse3)
+          endif()
+          check_c_compiler_flag(-mavx2 HAVE_AVX2)
+          if(HAVE_AVX2)
+            set_source_files_properties(src/crypto/randomx/argon2_avx2.c COMPILE_FLAGS -mavx2)
+          endif()
+        endif()
       endif()
     endif()
-    
+
     # PowerPC
     if(ARCH_ID STREQUAL "ppc64" OR ARCH_ID STREQUAL "ppc64le")
       if(ARCH STREQUAL "native")
@@ -96,11 +125,11 @@ if (WITH_RANDOMX)
     # ARMv8
     if(ARM_ID STREQUAL "aarch64" OR ARM_ID STREQUAL "arm64" OR ARM_ID STREQUAL "armv8-a")
       list(APPEND randomx_sources
-        src/jit_compiler_a64_static.S
-        src/jit_compiler_a64.cpp)
+        src/crypto/randomx/jit_compiler_a64_static.S
+        src/crypto/randomx/jit_compiler_a64.cpp)
       # cheat because cmake and ccache hate each other
-      set_property(SOURCE src/jit_compiler_a64_static.S PROPERTY LANGUAGE C)
-      set_property(SOURCE src/jit_compiler_a64_static.S PROPERTY XCODE_EXPLICIT_FILE_TYPE sourcecode.asm)
+      set_property(SOURCE src/crypto/randomx/jit_compiler_a64_static.S PROPERTY LANGUAGE C)
+      set_property(SOURCE src/crypto/randomx/jit_compiler_a64_static.S PROPERTY XCODE_EXPLICIT_FILE_TYPE sourcecode.asm)
 
       # not sure if this check is needed
       include(CheckIncludeFile)
@@ -120,11 +149,11 @@ if (WITH_RANDOMX)
     # RISC-V
     if(ARCH_ID STREQUAL "riscv64")
       list(APPEND randomx_sources
-        src/jit_compiler_rv64_static.S
-        src/jit_compiler_rv64.cpp)
+        src/crypto/randomx/jit_compiler_rv64_static.S
+        src/crypto/randomx/jit_compiler_rv64.cpp)
       # cheat because cmake and ccache hate each other
-      set_property(SOURCE src/jit_compiler_rv64_static.S PROPERTY LANGUAGE C)
-      set_property(SOURCE src/jit_compiler_rv64_static.S PROPERTY XCODE_EXPLICIT_FILE_TYPE sourcecode.asm)
+      set_property(SOURCE src/crypto/randomx/jit_compiler_rv64_static.S PROPERTY LANGUAGE C)
+      set_property(SOURCE src/crypto/randomx/jit_compiler_rv64_static.S PROPERTY XCODE_EXPLICIT_FILE_TYPE sourcecode.asm)
 
       # default build uses the RV64GC baseline
       set(RVARCH "rv64gc")
@@ -135,7 +164,7 @@ if (WITH_RANDOMX)
         try_run(RANDOMX_ZBA_RUN_FAIL
             RANDOMX_ZBA_COMPILE_OK
             ${CMAKE_CURRENT_BINARY_DIR}/
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/tests/riscv64_zba.s
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/crypto/randomx/tests/riscv64_zba.s
             COMPILE_DEFINITIONS "-march=rv64gc_zba")
         if (RANDOMX_ZBA_COMPILE_OK AND NOT RANDOMX_ZBA_RUN_FAIL)
           set(RVARCH "${RVARCH}_zba")
@@ -143,7 +172,7 @@ if (WITH_RANDOMX)
         try_run(RANDOMX_ZBB_RUN_FAIL
             RANDOMX_ZBB_COMPILE_OK
             ${CMAKE_CURRENT_BINARY_DIR}/
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/tests/riscv64_zbb.s
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/crypto/randomx/tests/riscv64_zbb.s
             COMPILE_DEFINITIONS "-march=rv64gc_zbb")
         if (RANDOMX_ZBB_COMPILE_OK AND NOT RANDOMX_ZBB_RUN_FAIL)
           set(RVARCH "${RVARCH}_zbb")
@@ -151,6 +180,14 @@ if (WITH_RANDOMX)
       endif()
 
       add_flag("-march=${RVARCH}")
+    endif()
+
+    set(RANDOMX_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/src" CACHE STRING "RandomX Include path")
+
+    add_library(randomx ${randomx_sources})
+
+    if(TARGET generate-asm)
+      add_dependencies(randomx generate-asm)
     endif()
 
     list(APPEND randomx_sources
@@ -168,3 +205,4 @@ else()
     remove_definitions(/DTNN_ALGO_RANDOMX)
 endif()
 unset(WITH_RANDOMX CACHE)
+unset(ARCH_ID CACHE)

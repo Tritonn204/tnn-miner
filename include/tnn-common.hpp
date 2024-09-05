@@ -21,20 +21,7 @@
 
 #include <num.h>
 
-// Corresponding to the POW[] array in algos.hpp
-#define DERO_HASH 0
-#define XELIS_HASH 1
-#define SPECTRE_X 2
-
-// Each new blockchain has 10 reserved net protocol slots
-#define DERO_SOLO 0
-
-#define XELIS_SOLO 10
-#define XELIS_XATUM 11
-#define XELIS_STRATUM 12
-
-#define SPECTRE_SOLO 20
-#define SPECTRE_STRATUM 21
+#include "algo_definitions.h"
 
 static const char *nullArg = "NULL";
 static const char* devWorkerName = "tnn-dev";                                      

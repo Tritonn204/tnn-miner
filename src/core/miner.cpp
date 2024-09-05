@@ -43,7 +43,7 @@
 
 #include <bit>
 #include <broadcastServer.hpp>
-#include <stratum.h>
+#include <stratum/stratum.h>
 
 #include <exception>
 
@@ -299,20 +299,25 @@ int main(int argc, char **argv)
     #endif
   }
 
-  if (vm.count("xatum"))
+  if (vm.count("randomx"))
   {
-    protocol = XELIS_XATUM;
+    fflush(stdout);
+    #if defined(TNN_RANDOMX)
+    symbol = "XMR";
+    protocol = RANDOMX_STRATUM; // Solo minin unsupported for now, so default to stratum instead
+    #else
+    setcolor(RED);
+    printf(unsupported_randomx);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
   }
 
-  if (vm.count("stratum"))
-  {
-    useStratum = true;
-  }
+  protocol = vm.count("xatum") ? XELIS_XATUM : protocol;
 
-  if (vm.count("testnet"))
-  {
-    devSelection = testDevWallet;
-  }
+  useStratum |= vm.count("stratum");
+  devSelection = vm.count("testnet") ? testDevWallet : devSelection;
 
   if (vm.count("test-spectre"))
   {
@@ -693,6 +698,9 @@ fillBlanks:
       case SPECTRE_X:
         protocol = SPECTRE_STRATUM;
         break;
+      case RANDOM_X:
+        protocol = RANDOMX_STRATUM;
+        break;
     }
   }
 
@@ -838,13 +846,16 @@ Mining:
   // setPriority(DEVWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
   unsigned int n = std::thread::hardware_concurrency();
-  int winMask = 0;
-  for (int i = 0; i < n - 1; i++)
-  {
-    winMask += 1 << i;
-  }
 
-  winMask = std::max(1, winMask);
+  #ifdef TNN_RANDOMX
+
+  if (miningAlgo == RANDOM_X) {
+    rx_hugePages = vm.count("rx-hugepages");
+    randomx_set_flags(true);
+    fflush(stdout);
+    randomx_init_intern(n);
+  }
+  #endif
 
   // Create worker threads and set CPU affinity
  //  mutex.lock();
@@ -863,11 +874,7 @@ Mining:
 
       if (lockThreads)
       {
-#if defined(_WIN32)
-        setAffinity(t.native_handle(), 1 << (i % n));
-#else
         setAffinity(t.native_handle(), i);
-#endif
       }
       // if (threads == 1 || (n > 2 && i <= n - 2))
       // setPriority(t.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
@@ -1062,6 +1069,14 @@ connectionAttempt:
           HOST = host;
           WORKER = devWorkerName;
           PORT = port;
+          break;
+        }
+        case RANDOM_X:
+        {
+          DAEMONPROTO = defaultHost[RANDOM_X];
+          HOST = host;
+          WORKER = devWorkerName;
+          PORT = devPort[RANDOM_X];
           break;
         }
       }

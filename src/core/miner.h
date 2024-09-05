@@ -56,25 +56,29 @@ int cudaMemDenominator = 750; //Kilobytes per worker in VRAM
 std::string defaultHost[] = {
   "dero-node-sk.mysrv.cloud",
   "127.0.0.1",
-  "127.0.0.1"
+  "127.0.0.1",
+  "monerohash.com"
 };
 
 std::string devPort[] = {
   "10300",
   "8080",
-  "5555"
+  "5555",
+  "2222"
 };
 // @ tritonn on Dero Name Service
 std::string devWallet[] = {
   "dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw4wjqqp6y2n7",
   "xel:xz9574c80c4xegnvurazpmxhw5dlg2n0g9qm60uwgt75uqyx3pcsqzzra9m",
-  "spectre:qr5l7q4s6mrfs9r7n0l090nhxrjdkxwacyxgk8lt2wt57ka6xr0ucvr0cmgnf"
+  "spectre:qr5l7q4s6mrfs9r7n0l090nhxrjdkxwacyxgk8lt2wt57ka6xr0ucvr0cmgnf",
+  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"
 };
 
 std::string testDevWallet[] = {
   "dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw4wjqqp6y2n7",
   "xet:5zwxjesmz6gtpg3c6zt20n9nevsyeewavpx6nwmv08z2hu2dpp3sq8w8ue6",
-  "spectredev:qqhh8ul66g7t6aj5ggzl473cpan25tv6yjm0cl4hffprgtqfvmyaq8q28m4z8"
+  "spectredev:qqhh8ul66g7t6aj5ggzl473cpan25tv6yjm0cl4hffprgtqfvmyaq8q28m4z8",
+  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"
 };
 
 std::string *devSelection = devWallet;
@@ -85,7 +89,13 @@ std::unordered_map<std::string, int> coinSelector = {
   {"xel", XELIS_HASH},
   {"XEL", XELIS_HASH},
   {"spr", SPECTRE_X},
-  {"SPR", SPECTRE_X}
+  {"SPR", SPECTRE_X},
+  {"xmr", RANDOM_X},
+  {"XMR", RANDOM_X},
+  {"sal", RANDOM_X},
+  {"SAL", RANDOM_X},
+  {"zeph", RANDOM_X},
+  {"ZEPH", RANDOM_X}
 };
 
 void getWork(bool isDev, int algo);
@@ -154,20 +164,20 @@ inline void printSupported()
   setcolor(BRIGHT_WHITE);
   printf("Supported CPU Intrinsics\n\n");
   setcolor(CYAN);
-  pSupport("SSE", __builtin_cpu_supports("sse"));
-  pSupport("SSE2", __builtin_cpu_supports("sse2"));
-  pSupport("SSE3", __builtin_cpu_supports("sse3"));
-  pSupport("SSE4.1", __builtin_cpu_supports("sse4.1"));
-  pSupport("SSE4.2", __builtin_cpu_supports("sse4.2"));
-  pSupport("AES", __builtin_cpu_supports("aes"));
-  pSupport("AVX", __builtin_cpu_supports("avx"));
-  pSupport("AVX2", __builtin_cpu_supports("avx2"));
-  pSupport("AVX512", __builtin_cpu_supports("avx512f"));
+  pSupport(" SSE", __builtin_cpu_supports("sse"));
+  pSupport(" SSE2", __builtin_cpu_supports("sse2"));
+  pSupport(" SSE3", __builtin_cpu_supports("sse3"));
+  pSupport(" SSE4.1", __builtin_cpu_supports("sse4.1"));
+  pSupport(" SSE4.2", __builtin_cpu_supports("sse4.2"));
+  pSupport(" AES", __builtin_cpu_supports("aes"));
+  pSupport(" AVX", __builtin_cpu_supports("avx"));
+  pSupport(" AVX2", __builtin_cpu_supports("avx2"));
+  pSupport(" AVX512", __builtin_cpu_supports("avx512f"));
   bool sha = false;
   #if defined(__SHA__)
   sha = true;
   #endif
-  pSupport("SHA", sha);
+  pSupport(" SHA", sha);
   setcolor(BRIGHT_WHITE);
   printf("\n");
 #endif

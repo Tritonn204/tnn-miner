@@ -3,7 +3,7 @@
 #include <astrobwtv3/lookupcompute.h>
 #include <spectrex/spectrex.h>
 #include <hugepages.h>
-#include <stratum.h>
+#include <stratum/stratum.h>
 
 void mineSpectre(int tid)
 {

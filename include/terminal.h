@@ -134,6 +134,7 @@ inline po::options_description get_prog_opts()
     ("dero", "Will mine Dero")
     ("xelis", "Will mine Xelis")
     ("spectre", "Will mine Spectre")
+    ("randomx", "For mining RandomX coins")
     ("stratum", "Required for mining to Stratum pools")
     ("broadcast", "Creates an http server to query miner stats")
     ("testnet", "Adjusts in-house parameters to mine on testnets")
@@ -171,6 +172,7 @@ inline po::options_description get_prog_opts()
 
   po::options_description randomX("RandomX", col_width);
   randomX.add_options()
+    ("rx-hugepages", "Use huge pages for RandomX")
     ("test-randomx", "Run Tevador's reference RandomX tests")
   ;
 

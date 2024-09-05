@@ -82,6 +82,9 @@ int update_handler(const boost::system::error_code& error)
       case SPECTRE_X:
         dPrint = doubleDiff;
         break;
+      case RANDOM_X:
+        dPrint = difficulty;
+        break;
     }
 
     std::cout << std::setw(2) << "ACCEPTED " << accepted << std::setw(2) << " | REJECTED " << rejected
