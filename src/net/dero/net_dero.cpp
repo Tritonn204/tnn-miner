@@ -21,7 +21,6 @@ namespace ssl = boost::asio::ssl;       // from <boost/asio/ssl.hpp>
 using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
 
 void dero_session(
-    std::string hostProto,
     std::string host,
     std::string const &port,
     std::string const &wallet,
@@ -164,8 +163,8 @@ void dero_session(
         workData = boost::json::parse(workInfo.str(), jsonEc);
         if (!jsonEc)
         {
-          if ((isDev ? (workData.at("height") != devHeight) : (workData.at("height") != ourHeight)))
-          {
+          // if ((isDev ? (workData.at("height") != devHeight) : (workData.at("height") != ourHeight)))
+          // {
             // mutex.lock();
             if (isDev)
               devJob = workData;
@@ -187,11 +186,11 @@ void dero_session(
               //miniBlockCounter = (*J).at("miniblocks");
               //rejected = (*J).at("rejected");
               //hashrate = (*J).at("difficultyuint64");
-              ourHeight = (*J).at("height").as_int64();
-              difficulty = (*J).at("difficultyuint64").as_int64();
+              ourHeight = (*J).at("height").to_number<int64_t>();
+              difficulty = (*J).at("difficultyuint64").to_number<int64_t>();
               // printf("NEW JOB RECEIVED | Height: %d | Difficulty %" PRIu64 "\n", ourHeight, difficulty);
-              accepted = (*J).at("miniblocks").as_int64();
-              rejected = (*J).at("rejected").as_int64();
+              accepted = (*J).at("miniblocks").to_number<int64_t>();
+              rejected = (*J).at("rejected").to_number<int64_t>();
               if (!isConnected)
               {
                 // mutex.lock();
@@ -210,9 +209,9 @@ void dero_session(
             }
             else
             {
-              difficultyDev = (*J).at("difficultyuint64").as_int64();
+              difficultyDev = (*J).at("difficultyuint64").to_number<int64_t>();
               devBlob = (*J).at("blockhashing_blob").as_string();
-              devHeight = (*J).at("height").as_int64();
+              devHeight = (*J).at("height").to_number<int64_t>();
               if (!devConnected)
               {
                 // mutex.lock();
@@ -225,7 +224,7 @@ void dero_session(
               devConnected = devConnected || true;
               jobCounter++;
             }
-          }
+          // }
         }
       }
       else

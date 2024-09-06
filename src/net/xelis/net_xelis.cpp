@@ -23,7 +23,6 @@ namespace ssl = boost::asio::ssl;       // from <boost/asio/ssl.hpp>
 using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
 
 void xelis_session(
-    std::string hostProto,
     std::string host,
     std::string const &port,
     std::string const &wallet,
@@ -80,40 +79,6 @@ void xelis_session(
 
   bool submitThread = false;
   bool abort = false;
-
-  // boost::thread([&](){
-  //   submitThread = true;
-  //   while(true) {
-  //     if (abort) {
-  //       break;
-  //     }
-  //     try {
-  //       bool *B = isDev ? &submittingDev : &submitting;
-  //       if (*B)
-  //       {
-  //         bool err = false;
-  //         boost::json::object *S = &share;
-  //         if (isDev)
-  //           S = &devShare;
-
-  //         std::string msg = boost::json::serialize((*S)) + "\n";
-  //         // std::cout << "sending in: " << msg << std::endl;
-  //         beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(1));
-  //         ws.write(boost::asio::buffer(msg));
-  //         (*B) = false;
-  //         if (err) break;
-  //       }
-  //     } catch (const std::exception &e) {
-  //       setcolor(RED);
-  //       printf("\nSubmit thread error: %s\n", e.what());
-  //       setcolor(BRIGHT_WHITE);
-  //       break;
-  //     }
-  //     boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
-  //   }
-  //   submitThread = false;
-  // });
-
 
   boost::thread([&](){
     submitThread = true;
@@ -200,7 +165,7 @@ void xelis_session(
             //  workData = response;
             }
 
-            if ((isDev ? (workData.at("height").as_int64() != devHeight) : (workData.at("height").as_int64() != ourHeight)))
+            if ((isDev ? (workData.at("height").to_number<int64_t>() != devHeight) : (workData.at("height").to_number<int64_t>() != ourHeight)))
             {
               if (isDev)
                 devJob = workData;

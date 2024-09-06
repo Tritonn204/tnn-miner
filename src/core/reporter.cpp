@@ -82,13 +82,13 @@ int update_handler(const boost::system::error_code& error)
       case SPECTRE_X:
         dPrint = doubleDiff;
         break;
-      case RANDOM_X:
+      case RX0:
         dPrint = difficulty;
         break;
     }
 
     std::cout << std::setw(2) << "ACCEPTED " << accepted << std::setw(2) << " | REJECTED " << rejected
-              << std::setw(2) << " | DIFFICULTY " << dPrint << std::setw(2) << " | UPTIME " << uptime << std::flush;
+              << std::setw(2) << " | DIFFICULTY " << std::setw(6) << std::setfill(' ') << dPrint << std::setw(2) << " | UPTIME " << uptime << std::flush;
     setcolor(BRIGHT_WHITE); 
     fflush(stdout);
     reportCounter = 0;

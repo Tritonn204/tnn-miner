@@ -36,6 +36,7 @@ const int workerThreads = 2;
 
 std::string symbol = nullArg;
 std::string port = nullArg;
+std::string password = "x";
 
 bool useStratum = false;
 
@@ -90,12 +91,13 @@ std::unordered_map<std::string, int> coinSelector = {
   {"XEL", XELIS_HASH},
   {"spr", SPECTRE_X},
   {"SPR", SPECTRE_X},
-  {"xmr", RANDOM_X},
-  {"XMR", RANDOM_X},
-  {"sal", RANDOM_X},
-  {"SAL", RANDOM_X},
-  {"zeph", RANDOM_X},
-  {"ZEPH", RANDOM_X}
+  {"rx0", RX0},
+  {"xmr", RX0},
+  {"XMR", RX0},
+  {"sal", RX0},
+  {"SAL", RX0},
+  {"zeph", RX0},
+  {"ZEPH", RX0}
 };
 
 void getWork(bool isDev, int algo);

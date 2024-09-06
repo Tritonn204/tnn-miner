@@ -47,7 +47,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
     if (Xatum::stale_msg.compare(data.at("msg").as_string()) == 0)
       rejected++;
 
-    int msgLevel = data.at("lvl").as_int64();
+    int msgLevel = data.at("lvl").to_number<int64_t>();
     if (msgLevel < Xatum::logLevel)
       return 0;
 
@@ -114,7 +114,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
       fflush(stdout);
       setcolor(BRIGHT_WHITE);
     }
-    *diff = data.at("diff").as_uint64();
+    *diff = data.at("diff").to_number<uint64_t>();
 
     (*J).as_object().emplace("miner_work", (*B).c_str());
 
@@ -179,7 +179,6 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
 }
 
 void xatum_session(
-    std::string hostProto,
     std::string host,
     std::string const &port,
     std::string const &wallet,

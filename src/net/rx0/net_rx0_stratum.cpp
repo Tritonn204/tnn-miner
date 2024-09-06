@@ -30,7 +30,7 @@ bool randomx_ready_dev = false;
 
 uint64_t diff_numerator = boost_swap_impl::stoull("0x100000001", nullptr, 16);
 
-uint64_t rx_targetToDifficulty(const char* target) {
+static uint64_t rx_targetToDifficulty(const char* target) {
   uint32_t targetInt = boost_swap_impl::stoul(target, nullptr, 16);
   targetInt = __builtin_bswap32(targetInt);
   uint64_t diff = diff_numerator / targetInt;
@@ -39,34 +39,12 @@ uint64_t rx_targetToDifficulty(const char* target) {
   return diff;
 }
 
-void updateVM(boost::json::object &newJob, bool isDev) {
-  std::string &refKey = isDev ? randomx_cacheKey_dev : randomx_cacheKey;
-
-  if (std::string(newJob.at("seed_hash").as_string().c_str()).compare(refKey) != 0) {
-    randomx_cache *refCache = isDev ? rxCache_dev : rxCache;
-    randomx_dataset *refDataset = isDev ? rxDataset_dev : rxDataset;
-
-    bool &status = isDev ? randomx_ready_dev : randomx_ready;
-    status = false;
-
-    unsigned char *newSeed = (unsigned char *)malloc(32);
-    hexstrToBytes(newJob.at("seed_hash").as_string().c_str(), newSeed);
-
-    if (!isDev)
-      randomx_update_data(refCache, refDataset, newSeed, 32, std::thread::hardware_concurrency());
-
-    delete[] newSeed;
-
-    refKey = newJob.at("seed_hash").as_string().c_str();
-    status = true;
-  }
-}
-
 int handleRandomXStratumPacket(boost::json::object packet, bool isDev)
 {
   std::string M = packet["method"].as_string().c_str();
-  if (M.compare(RandomXStratum::s_job) == 0)
+  if (M.compare(rx0Stratum::s_job) == 0)
   {
+    std::scoped_lock<boost::mutex> lockGuard(mutex);
     if (!packet["error"].is_null()) return 1;
 
     boost::json::object newJob = packet["params"].as_object();
@@ -77,7 +55,7 @@ int handleRandomXStratumPacket(boost::json::object packet, bool isDev)
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
 
-    RandomXStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    rx0Stratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
     boost::json::value *JV = isDev ? &devJob : &job;
 
@@ -96,11 +74,11 @@ int handleRandomXStratumPacket(boost::json::object packet, bool isDev)
     (*h)++;
     jobCounter++;
   }
-  else if (M.compare(RandomXStratum::s_print) == 0)
+  else if (M.compare(rx0Stratum::s_print) == 0)
   {
 
-    int lLevel = packet.at("params").as_array()[0].as_int64();
-    if (lLevel != RandomXStratum::STRATUM_DEBUG)
+    int lLevel = packet.at("params").as_array()[0].to_number<int64_t>();
+    if (lLevel != rx0Stratum::STRATUM_DEBUG)
     {
       int res = 0;
       printf("\n");
@@ -112,23 +90,23 @@ int handleRandomXStratumPacket(boost::json::object packet, bool isDev)
 
       switch (lLevel)
       {
-      case RandomXStratum::STRATUM_INFO:
+      case rx0Stratum::STRATUM_INFO:
         if (!isDev)
           setcolor(BRIGHT_WHITE);
         printf("Stratum INFO: ");
         break;
-      case RandomXStratum::STRATUM_WARN:
+      case rx0Stratum::STRATUM_WARN:
         if (!isDev)
           setcolor(BRIGHT_YELLOW);
         printf("Stratum WARNING: ");
         break;
-      case RandomXStratum::STRATUM_ERROR:
+      case rx0Stratum::STRATUM_ERROR:
         if (!isDev)
           setcolor(RED);
         printf("Stratum ERROR: ");
         res = -1;
         break;
-      case RandomXStratum::STRATUM_DEBUG:
+      case rx0Stratum::STRATUM_DEBUG:
         break;
       }
       printf("%s\n", packet.at("params").as_array()[1].as_string().c_str());
@@ -146,18 +124,27 @@ int handleRandomXStratumResponse(boost::json::object packet, bool isDev)
 {
   // if (!isDev) {
   // if (!packet.contains("id")) return 0;
-  int64_t id = packet["id"].as_int64();
-
+  int64_t id = packet["id"].to_number<int64_t>();
   switch (id)
   {
-  case RandomXStratum::loginID:
+  case rx0Stratum::loginID:
   {
+    std::scoped_lock<boost::mutex> lockGuard(mutex);
     boost::json::value *JV = isDev ? &devJob : &job;
 
-    if (!packet["error"].is_null()) return 1;
+    if (!packet["error"].is_null()) {
+      setcolor(RED);
+      printf("Stratum Error: %s\n", packet["error"].as_object()["message"].as_string().c_str());
+      fflush(stdout);
+      setcolor(BRIGHT_WHITE);
+      return 1;
+    }
 
     boost::json::object res = packet["result"].as_object();
     boost::json::object newJob = res["job"].as_object();
+
+    std::string &l_ID = isDev ? randomx_login_dev : randomx_login;
+    l_ID = res.at("id").as_string().c_str();
 
     (*JV) = newJob;
     
@@ -190,7 +177,7 @@ int handleRandomXStratumResponse(boost::json::object packet, bool isDev)
     *C = true;
   }
   break;
-  case RandomXStratum::submitID:
+  case rx0Stratum::submitID:
   {
     printf("\n");
     if (isDev)
@@ -201,7 +188,7 @@ int handleRandomXStratumResponse(boost::json::object packet, bool isDev)
     if (!packet["result"].is_null() && packet.at("result").get_bool())
     {
       accepted++;
-      std::cout << "Stratum: share accepted" << std::endl;
+      std::cout << "Stratum share accepted" << std::endl;
       fflush(stdout);
       setcolor(BRIGHT_WHITE);
     }
@@ -210,7 +197,7 @@ int handleRandomXStratumResponse(boost::json::object packet, bool isDev)
       rejected++;
       if (!isDev)
         setcolor(RED);
-      std::cout << "Stratum: share rejected: " << packet.at("error").get_object()["message"].get_string() << std::endl;
+      std::cout << "Stratum share rejected: " << packet.at("error").get_object()["message"].get_string().c_str() << std::endl;
       fflush(stdout);
       setcolor(BRIGHT_WHITE);
     }
@@ -220,8 +207,7 @@ int handleRandomXStratumResponse(boost::json::object packet, bool isDev)
   return 0;
 }
 
-void randomx_stratum_session(
-    std::string hostProto,
+void rx0_stratum_session(
     std::string host,
     std::string const &port,
     std::string const &wallet,
@@ -540,8 +526,7 @@ void randomx_stratum_session(
   // }
 }
 
-void randomx_stratum_session_nossl(
-    std::string hostProto,
+void rx0_stratum_session_nossl(
     std::string host,
     std::string const &port,
     std::string const &wallet,
@@ -571,11 +556,12 @@ void randomx_stratum_session_nossl(
   if (ec)
     return fail(ec, "connect");
 
-  boost::json::object packet = RandomXStratum::stratumCall;
-  packet.at("id") = RandomXStratum::login.id;
-  packet.at("method") = RandomXStratum::login.method;
+  boost::json::object packet = rx0Stratum::stratumCall;
+  packet.at("id") = rx0Stratum::login.id;
+  packet.at("method") = rx0Stratum::login.method;
 
   std::string userAgent = "tnn-miner/" + std::string(versionString);
+
 
   boost::json::object loginParams = {
     {"login", wallet},
@@ -603,7 +589,7 @@ void randomx_stratum_session_nossl(
   beast::flat_buffer buffer;
   std::stringstream workInfo;
 
-  RandomXStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+  rx0Stratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
   bool submitThread = false;
   bool abort = false;
@@ -622,7 +608,7 @@ void randomx_stratum_session_nossl(
 
         boost::system::error_code ec;
         std::string msg = boost::json::serialize((*S)) + "\n";
-        // std::cout << "sending in: " << msg << std::endl;
+        std::cout << "sending in: " << msg << std::endl;
         beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(1));
         boost::asio::async_write(stream, boost::asio::buffer(msg), [&](const boost::system::error_code& error, std::size_t bytes_transferred) {
           if (error) {
@@ -656,8 +642,8 @@ void randomx_stratum_session_nossl(
     try
     {
       if (
-          RandomXStratum::lastReceivedJobTime > 0 &&
-          std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count() - RandomXStratum::lastReceivedJobTime > RandomXStratum::jobTimeout)
+          rx0Stratum::lastReceivedJobTime > 0 &&
+          std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count() - rx0Stratum::lastReceivedJobTime > rx0Stratum::jobTimeout)
       {
         setcolor(RED);
         printf("timeout\n");
@@ -706,7 +692,7 @@ void randomx_stratum_session_nossl(
         // Consume the data from the buffer after processing it
         response.consume(trans);
 
-        // std::cout << data << std::endl;
+        std::cout << data << std::endl;
         fflush(stdout);
 
         std::stringstream jsonStream(data);
@@ -724,10 +710,10 @@ void randomx_stratum_session_nossl(
             boost::json::object sRPC = boost::json::parse(packet).as_object();
             if (sRPC.contains("method"))
             {
-              if (std::string(sRPC.at("method").as_string().c_str()).compare(RandomXStratum::s_ping) == 0)
+              if (std::string(sRPC.at("method").as_string().c_str()).compare(rx0Stratum::s_ping) == 0)
               {
                 boost::json::object pong({{"id", sRPC.at("id").get_uint64()},
-                                          {"method", RandomXStratum::pong.method}});
+                                          {"method", rx0Stratum::pong.method}});
                 std::string pongPacket = std::string(boost::json::serialize(pong).c_str()) + "\n";
                 trans = boost::asio::async_write(
                     stream,

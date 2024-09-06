@@ -119,7 +119,7 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
   else if (M.compare(XelisStratum::s_print) == 0)
   {
 
-    int lLevel = packet.at("params").as_array()[0].as_int64();
+    int lLevel = packet.at("params").as_array()[0].to_number<int64_t>();
     if (lLevel != XelisStratum::STRATUM_DEBUG)
     {
       int res = 0;
@@ -166,7 +166,7 @@ int handleXStratumResponse(boost::json::object packet, bool isDev)
 {
   // if (!isDev) {
   // if (!packet.contains("id")) return 0;
-  int64_t id = packet["id"].as_int64();
+  int64_t id = packet["id"].to_number<int64_t>();
 
   switch (id)
   {
@@ -227,7 +227,6 @@ int handleXStratumResponse(boost::json::object packet, bool isDev)
 }
 
 void xelis_stratum_session(
-    std::string hostProto,
     std::string host,
     std::string const &port,
     std::string const &wallet,
@@ -569,7 +568,6 @@ void xelis_stratum_session(
 }
 
 void xelis_stratum_session_nossl(
-    std::string hostProto,
     std::string host,
     std::string const &port,
     std::string const &wallet,

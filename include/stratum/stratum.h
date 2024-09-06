@@ -5,7 +5,7 @@
 
 using byte = unsigned char;
 
-namespace RandomXStratum {
+namespace rx0Stratum {
   using bJson = boost::json::object;
 
   const byte STRATUM_DEBUG = 3;

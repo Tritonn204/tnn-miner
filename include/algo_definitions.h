@@ -4,7 +4,7 @@
 #define DERO_HASH 0
 #define XELIS_HASH 1
 #define SPECTRE_X 2
-#define RANDOM_X 3
+#define RX0 3
 
 // Each new blockchain has 10 reserved net protocol slots
 #define DERO_SOLO 0
@@ -16,5 +16,5 @@
 #define SPECTRE_SOLO 20
 #define SPECTRE_STRATUM 21
 
-#define RANDOMX_SOLO 30
-#define RANDOMX_STRATUM 31
+#define RX0_SOLO 30
+#define RX0_STRATUM 31

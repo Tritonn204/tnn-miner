@@ -144,7 +144,7 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
   else if (M.compare(SpectreStratum::s_print) == 0)
   {
 
-    int lLevel = packet.at("params").as_array()[0].as_int64();
+    int lLevel = packet.at("params").as_array()[0].to_number<int64_t>();
     if (lLevel != SpectreStratum::STRATUM_DEBUG)
     {
       int res = 0;
@@ -192,7 +192,7 @@ int handleSpectreStratumResponse(boost::json::object packet, bool isDev)
 {
   // if (!isDev) {
   // if (!packet.contains("id")) return 0;
-  int64_t id = packet["id"].as_int64();
+  int64_t id = packet["id"].to_number<int64_t>();
   // std::cout << "Stratum packet: " << boost::json::serialize(packet).c_str() << std::endl;
 
   switch (id)
@@ -254,7 +254,6 @@ int handleSpectreStratumResponse(boost::json::object packet, bool isDev)
 }
 
 void spectre_stratum_session(
-    std::string hostProto,
     std::string host,
     std::string const &port,
     std::string const &wallet,

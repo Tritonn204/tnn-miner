@@ -17,7 +17,6 @@ namespace ssl = boost::asio::ssl;       // from <boost/asio/ssl.hpp>
 // Session definitions
 // DERO
 void dero_session(
-    std::string hostProto,
     std::string host,
     std::string const &port,
     std::string const &wallet,
@@ -29,7 +28,6 @@ void dero_session(
 
 // XEL
 void xelis_session(
-    std::string hostProto,
     std::string host,
     std::string const &port,
     std::string const &wallet,
@@ -39,7 +37,6 @@ void xelis_session(
     bool isDev);
 
 void xelis_stratum_session(
-    std::string hostProto,
     std::string host,
     std::string const &port,
     std::string const &wallet,
@@ -50,7 +47,6 @@ void xelis_stratum_session(
     bool isDev);
 
 void xelis_stratum_session_nossl(
-    std::string hostProto,
     std::string host,
     std::string const &port,
     std::string const &wallet,
@@ -61,7 +57,6 @@ void xelis_stratum_session_nossl(
     bool isDev);
 
 void xatum_session(
-    std::string hostProto,
     std::string host,
     std::string const &port,
     std::string const &wallet,
@@ -73,7 +68,6 @@ void xatum_session(
 
 // SPR
 void spectre_stratum_session(
-    std::string hostProto,
     std::string host,
     std::string const &port,
     std::string const &wallet,
@@ -84,8 +78,13 @@ void spectre_stratum_session(
     bool isDev);
 
 // RANDOMX FAMILY
-void randomx_stratum_session(
-    std::string hostProto,
+void rx0_session(
+    std::string host,
+    std::string const &port,
+    std::string const &wallet,
+    bool isDev);
+
+void rx0_stratum_session(
     std::string host,
     std::string const &port,
     std::string const &wallet,
@@ -95,8 +94,7 @@ void randomx_stratum_session(
     net::yield_context yield,
     bool isDev);
 
-void randomx_stratum_session_nossl(
-    std::string hostProto,
+void rx0_stratum_session_nossl(
     std::string host,
     std::string const &port,
     std::string const &wallet,

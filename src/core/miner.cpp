@@ -68,7 +68,7 @@ const auto processor_count = std::thread::hardware_concurrency();
 /* Start definitions from tnn-common.hpp */
 int protocol = XELIS_SOLO;
 
-std::string daemonProto = "";
+std::string daemonType = "";
 std::string host = "NULL";
 std::string wallet = "NULL";
 
@@ -303,8 +303,8 @@ int main(int argc, char **argv)
   {
     fflush(stdout);
     #if defined(TNN_RANDOMX)
-    symbol = "XMR";
-    protocol = RANDOMX_STRATUM; // Solo minin unsupported for now, so default to stratum instead
+    symbol = "rx0";
+    protocol = RX0_SOLO; // Solo minin unsupported for now, so default to stratum instead
     #else
     setcolor(RED);
     printf(unsupported_randomx);
@@ -350,6 +350,7 @@ int main(int argc, char **argv)
   {
     #if defined(TNN_RANDOMX)
     RandomXTest();
+    rxRPCTest();
     return 0;
     #else
     setcolor(RED);
@@ -407,18 +408,18 @@ int main(int argc, char **argv)
       catch (...)
       {
         // protocol:host
-        daemonProto = tokens[0];
+        daemonType = tokens[0];
         host = tokens[1];
       }
     } else if(tokens.size() == 3) {
-      daemonProto = tokens[0];  // wss, stratum+tcp, stratum+ssl, et al
+      daemonType = tokens[0];  // wss, stratum+tcp, stratum+ssl, et al
       host = tokens[1];
       port = tokens[2];
     }
     boost::replace_all(host, "/", "");
-    if (daemonProto.size() > 0) {
-      if (daemonProto.find("stratum") != std::string::npos) useStratum = true;
-      if (daemonProto.find("xatum") != std::string::npos) protocol = XELIS_XATUM;
+    if (daemonType.size() > 0) {
+      if (daemonType.find("stratum") != std::string::npos) useStratum = true;
+      if (daemonType.find("xatum") != std::string::npos) protocol = XELIS_XATUM;
     }
   }
 
@@ -445,6 +446,11 @@ int main(int argc, char **argv)
       symbol = "SPR";
       protocol = SPECTRE_STRATUM;
     }
+    if(wallet.find("ZEPHYR", 0) != std::string::npos) {
+      symbol = "ZEPH";
+      protocol = RX0_SOLO;
+    }
+
     boost::char_separator<char> sep(".");
     boost::tokenizer<boost::char_separator<char>> tok(wallet, sep);
     std::vector<std::string> tokens;
@@ -670,18 +676,18 @@ fillBlanks:
           catch (...)
           {
             // protocol:host
-            daemonProto = tokens[0];
+            daemonType = tokens[0];
             host = tokens[1];
           }
         } else if(tokens.size() == 3) {
-          daemonProto = tokens[0];  // wss, stratum+tcp, stratum+ssl, et al
+          daemonType = tokens[0];  // wss, stratum+tcp, stratum+ssl, et al
           host = tokens[1];
           port = tokens[2];
         }
         boost::replace_all(host, "/", "");
-        if (daemonProto.size() > 0) {
-          if (daemonProto.find("stratum") != std::string::npos) useStratum = true;
-          if (daemonProto.find("xatum") != std::string::npos) protocol = XELIS_XATUM;
+        if (daemonType.size() > 0) {
+          if (daemonType.find("stratum") != std::string::npos) useStratum = true;
+          if (daemonType.find("xatum") != std::string::npos) protocol = XELIS_XATUM;
         }
       }
     }
@@ -698,8 +704,8 @@ fillBlanks:
       case SPECTRE_X:
         protocol = SPECTRE_STRATUM;
         break;
-      case RANDOM_X:
-        protocol = RANDOMX_STRATUM;
+      case RX0:
+        protocol = RX0_STRATUM;
         break;
     }
   }
@@ -849,7 +855,7 @@ Mining:
 
   #ifdef TNN_RANDOMX
 
-  if (miningAlgo == RANDOM_X) {
+  if (miningAlgo == RX0) {
     rx_hugePages = vm.count("rx-hugepages");
     randomx_set_flags(true);
     fflush(stdout);
@@ -1044,12 +1050,15 @@ connectionAttempt:
     bool err = false;
     if (isDev)
     {
-      std::string DAEMONPROTO, HOST, WORKER, PORT;
+      std::string DAEMONTYPE, HOST, WORKER, PORT;
+      int DAEMONPROTOCOL;
+
       switch (algo)
       {
         case DERO_HASH:
         {
-          DAEMONPROTO = "";
+          DAEMONTYPE = "";
+          DAEMONPROTOCOL = protocol;
           HOST = defaultHost[DERO_HASH];
           WORKER = devWorkerName;
           PORT = devPort[DERO_HASH];
@@ -1057,7 +1066,8 @@ connectionAttempt:
         }
         case XELIS_HASH:
         {
-          DAEMONPROTO = daemonProto;
+          DAEMONTYPE = daemonType;
+          DAEMONPROTOCOL = protocol;
           HOST = host;
           WORKER = devWorkerName;
           PORT = port;
@@ -1065,22 +1075,24 @@ connectionAttempt:
         }
         case SPECTRE_X:
         {
-          DAEMONPROTO = daemonProto;
+          DAEMONTYPE = daemonType;
+          DAEMONPROTOCOL = protocol;
           HOST = host;
           WORKER = devWorkerName;
           PORT = port;
           break;
         }
-        case RANDOM_X:
+        case RX0:
         {
-          DAEMONPROTO = defaultHost[RANDOM_X];
-          HOST = host;
+          DAEMONTYPE = "";
+          DAEMONPROTOCOL = RX0_STRATUM;
+          HOST = defaultHost[RX0];
           WORKER = devWorkerName;
-          PORT = devPort[RANDOM_X];
+          PORT = devPort[RX0];
           break;
         }
       }
-      boost::asio::spawn(ioc, std::bind(&do_session, DAEMONPROTO, HOST, PORT, devSelection[algo], WORKER, algo, std::ref(ioc), std::ref(ctx), std::placeholders::_1, true),
+      boost::asio::spawn(ioc, std::bind(&do_session, DAEMONTYPE, DAEMONPROTOCOL, HOST, PORT, devSelection[algo], WORKER, algo, std::ref(ioc), std::ref(ctx), std::placeholders::_1, true),
                          // on completion, spawn will call this function
                          [&](std::exception_ptr ex)
                          {
@@ -1092,7 +1104,7 @@ connectionAttempt:
                          });
     }
     else
-      boost::asio::spawn(ioc, std::bind(&do_session, daemonProto, host, port, wallet, workerName, algo, std::ref(ioc), std::ref(ctx), std::placeholders::_1, false),
+      boost::asio::spawn(ioc, std::bind(&do_session, daemonType, protocol, host, port, wallet, workerName, algo, std::ref(ioc), std::ref(ctx), std::placeholders::_1, false),
                          // on completion, spawn will call this function
                          [&](std::exception_ptr ex)
                          {

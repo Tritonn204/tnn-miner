@@ -28,7 +28,7 @@ if (WITH_RANDOMX)
       src/crypto/randomx/virtual_machine.cpp
       src/crypto/randomx/vm_compiled_light.cpp
       src/crypto/randomx/blake2/blake2b.c
-      src/coins/mine_randomx.cpp
+      src/coins/mine_rx0.cpp
       src/net/rx0/*.cpp
     )
 
