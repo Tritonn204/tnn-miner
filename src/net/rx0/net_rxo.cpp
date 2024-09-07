@@ -53,7 +53,7 @@ void updateVM(boost::json::object &newJob, bool isDev) {
     unsigned char *newSeed = (unsigned char *)malloc(32);
     hexstrToBytes(newJob.at("seed_hash").as_string().c_str(), newSeed);
 
-    printf("%s | seedHash\n%s | seedBuffer\n", newJob.at("seed_hash").as_string().c_str(), hexStr(newSeed, 32).c_str());
+    // printf("%s | seedHash\n%s | seedBuffer\n", newJob.at("seed_hash").as_string().c_str(), hexStr(newSeed, 32).c_str());
 
     randomx_update_data(refCache, refDataset, newSeed, 32, std::thread::hardware_concurrency());
 
@@ -100,7 +100,7 @@ void rx0_session(
   bool submitThread = false;
   bool abort = false;
 
-  auto rx0_getTemplate = [&](){
+  auto rx0_getTemplate = [&]() -> int {
     auto res = daemon.Post("/json_rpc", gbtReq, jsonType);
     if (res && res->status == 200)
     {
@@ -108,7 +108,9 @@ void rx0_session(
       boost::json::object resJson = boost::json::parse(response).as_object();
       boost::json::object newJob = resJson.at("result").as_object();
 
-      if (chainHeight != newJob.at("height").to_number<uint64_t>())
+      if ((isDev ? devJob : job).as_object()["template"].is_null() ||
+        std::string(newJob.at("blocktemplate_blob").as_string().c_str()).compare(
+        (isDev ? devJob : job).at("template").as_string().c_str()) != 0)
       {
         chainHeight = newJob.at("height").to_number<uint64_t>();
         boost::json::value &J = isDev ? devJob : job;
@@ -121,6 +123,7 @@ void rx0_session(
         //           << std::flush;
 
         std::string tString = (const char *)tmp.data();
+        if (!isDev) difficulty = newJob.at("difficulty").to_number<uint64_t>();
 
         J = {
             {"blob", newJob.at("blockhashing_blob").as_string().c_str()},
@@ -144,8 +147,8 @@ void rx0_session(
           printf("Mining at: %s to wallet %s\n", host.c_str(), wallet.c_str());
           fflush(stdout);
           setcolor(CYAN);
-          printf("Dev fee: %.2f", devFee);
-          std::cout << "%" << std::endl;
+          printf("Dev fee: %.2f%% of your total hashrate\n", devFee);
+  
           fflush(stdout);
           setcolor(BRIGHT_WHITE);
         }
@@ -161,10 +164,12 @@ void rx0_session(
       updateVM(newJob, isDev);
 
       *C = true;
+      return 0;
     }
     else
     {
       fail("get_block_template", (res ? std::to_string(res->status).c_str() : "No response"));
+      return 1;
     }
   };
 
@@ -182,7 +187,7 @@ void rx0_session(
           S = &devShare;
 
         std::string msg = boost::json::serialize((*S)) + "\n";
-        std::cout << "sending in: " << msg << std::endl;
+        // std::cout << "sending in: " << msg << std::endl;
         auto res = daemon.Post("/json_rpc", msg, jsonType);
         if (res && res->status == 200)
         {
@@ -195,7 +200,16 @@ void rx0_session(
 
             rejected++;
           } else {
-            std::cout << boost::json::serialize(result) << std::endl << std::flush;
+            // std::cout << boost::json::serialize(result) << std::endl << std::flush;
+            setcolor(isDev ? CYAN : BRIGHT_YELLOW);
+            printf("\n");
+            if (isDev) printf("DEV | ");
+            printf("Block accepted!\n");
+            fflush(stdout);
+            setcolor(BRIGHT_WHITE);
+            accepted++;
+
+            boost::this_thread::sleep_for(boost::chrono::milliseconds(10));
             rx0_getTemplate();
           }
         } else {
@@ -219,9 +233,21 @@ void rx0_session(
 
   for (;;)
   {
+    bool *C = isDev ? &devConnected : &isConnected;
+    bool *B = isDev ? &submittingDev : &submitting;
     try
     {
-      rx0_getTemplate();
+      if (rx0_getTemplate()) {
+        setForDisconnected(C, B, &abort, &data_ready, &cv);
+
+        for (;;)
+        {
+          if (!submitThread)
+            break;
+          boost::this_thread::yield();
+        }       
+        return;
+      }
       boost::this_thread::sleep_for(boost::chrono::seconds(5));
     }
     catch (const std::exception &e)
@@ -229,17 +255,19 @@ void rx0_session(
       bool *C = isDev ? &devConnected : &isConnected;
       printf("exception\n");
       fflush(stdout);
+      setForDisconnected(C, B, &abort, &data_ready, &cv);
 
-      // for (;;)
-      // {
-      //   if (!submitThread)
-      //     break;
-      //   boost::this_thread::yield();
-      // }
+      for (;;)
+      {
+        if (!submitThread)
+          break;
+        boost::this_thread::yield();
+      }
       setcolor(RED);
       std::cerr << e.what() << std::endl;
       fflush(stdout);
       setcolor(BRIGHT_WHITE);
+      return;
     }
     boost::this_thread::yield();
   }

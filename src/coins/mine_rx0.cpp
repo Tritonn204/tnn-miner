@@ -272,6 +272,8 @@ waitForJob:
       int userLen = std::string(myJob.at("blob").as_string().c_str()).size() / 2;
       int devLen = std::string(myJobDev.at("blob").as_string().c_str()).size() / 2;
 
+      Num cmpTarget = rx0_calcTarget(devMine ? myJobDev : myJob);
+
       while (localJobCounter == jobCounter)
       {
         which = (double)(rand() % 10000);
@@ -280,8 +282,6 @@ waitForJob:
         uint32_t &nonce = devMine ? devNonce : userNonce;
 
         // printf("Difficulty: %" PRIx64 "\n", DIFF);
-
-        Num cmpTarget = rx0_calcTarget(devMine ? myJobDev : myJob);
 
         nonce ++;
 
@@ -300,15 +300,16 @@ waitForJob:
         counter.fetch_add(1);
         submit = devMine ? !submittingDev : !submitting;
 
-        std::vector<char> tmp;
-        cmpTarget.print(tmp, 16);
+        // std::vector<char> tmp;
+        // cmpTarget.print(tmp, 16);
 
         std::reverse(powHash, powHash + 32);
         if (Num(hexStr(powHash, 32).c_str(), 16) < cmpTarget)
         {
+          std::reverse(powHash, powHash + 32);
           // std::cout << hexStr(powHash, 32).c_str() << "\n" << &tmp[0] << "\n" << std::endl << std::flush;
-          std::cout << hexStr(powHash, 32).c_str() << " | hash\n" << std::flush;
-          std::cout << hexStr(WORK, devMine ? devLen : userLen).c_str() << " | blob\n" << std::flush;
+          // std::cout << hexStr(powHash, 32).c_str() << " | hash\n" << std::flush;
+          // std::cout << hexStr(WORK, devMine ? devLen : userLen).c_str() << " | blob\n" << std::flush;
           if (!submit) {
             for(;;) {
               submit = (devMine && devConnected) ? !submittingDev : !submitting;
@@ -328,6 +329,7 @@ waitForJob:
             std::cout << "\n(DEV) Thread " << tid << " found a dev share\n" << std::flush;
             setcolor(BRIGHT_WHITE);
 
+            N = __builtin_bswap32(N);
             devShare = {
               {"method", rx0Stratum::submit.method.c_str()},
               {"id", rx0Stratum::submit.id},
@@ -366,7 +368,7 @@ waitForJob:
               }
               case RX0_STRATUM:
               {
-                // N = __builtin_bswap32(N);
+                N = __builtin_bswap32(N);
                 share = {
                   {"method", rx0Stratum::submit.method.c_str()},
                   {"id", rx0Stratum::submit.id},

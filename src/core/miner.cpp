@@ -494,7 +494,7 @@ int main(int argc, char **argv)
         setcolor(RED);
         printf("ERROR: dev fee must be at least %.2f", minFee);
         fflush(stdout);
-        std::cout << "%" << std::endl;
+
         setcolor(BRIGHT_WHITE);
         boost::this_thread::sleep_for(boost::chrono::seconds(1));
         return 1;

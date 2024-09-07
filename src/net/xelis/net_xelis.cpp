@@ -194,8 +194,8 @@ void xelis_session(
                   printf("Mining at: %s/getwork/%s/%s\n", host.c_str(), wallet.c_str(), worker.c_str());
                   fflush(stdout);
                   setcolor(CYAN);
-                  printf("Dev fee: %.2f", devFee);
-                  std::cout << "%" << std::endl;
+                  printf("Dev fee: %.2f%% of your total hashrate\n", devFee);
+          
                   fflush(stdout);
                   setcolor(BRIGHT_WHITE);
                   // mutex.unlock();

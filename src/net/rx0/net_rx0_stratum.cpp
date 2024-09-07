@@ -158,8 +158,8 @@ int handleRandomXStratumResponse(boost::json::object packet, bool isDev)
         printf("Mining at: %s to wallet %s\n", host.c_str(), wallet.c_str());
         fflush(stdout);
         setcolor(CYAN);
-        printf("Dev fee: %.2f", devFee);
-        std::cout << "%" << std::endl;
+        printf("Dev fee: %.2f%% of your total hashrate\n", devFee);
+
         fflush(stdout);
         setcolor(BRIGHT_WHITE);
       }
@@ -608,7 +608,7 @@ void rx0_stratum_session_nossl(
 
         boost::system::error_code ec;
         std::string msg = boost::json::serialize((*S)) + "\n";
-        std::cout << "sending in: " << msg << std::endl;
+        // std::cout << "sending in: " << msg << std::endl;
         beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(1));
         boost::asio::async_write(stream, boost::asio::buffer(msg), [&](const boost::system::error_code& error, std::size_t bytes_transferred) {
           if (error) {
@@ -692,7 +692,7 @@ void rx0_stratum_session_nossl(
         // Consume the data from the buffer after processing it
         response.consume(trans);
 
-        std::cout << data << std::endl;
+        // std::cout << data << std::endl;
         fflush(stdout);
 
         std::stringstream jsonStream(data);
