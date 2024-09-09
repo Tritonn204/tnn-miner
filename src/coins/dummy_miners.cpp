@@ -13,5 +13,15 @@ void mineXelis(int tid){}
 
 // RandomX coins
 #ifndef TNN_RANDOMX
-void mineRandomX(int tid){}
+void mineRx0(int tid){}
+#endif
+
+// Verus 
+#ifndef TNN_VERUSHASH
+void mineVerus(int tid){}
+#endif
+
+// Astrix
+#ifndef TNN_ASTRIXHASH
+void mineAstrix(int tid){}
 #endif

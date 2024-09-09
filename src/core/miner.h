@@ -56,30 +56,70 @@ int cudaMemDenominator = 750; //Kilobytes per worker in VRAM
 
 std::string defaultHost[] = {
   "dero-node-sk.mysrv.cloud",
+  "127.0.0.1", // xel
   "127.0.0.1",
-  "127.0.0.1",
-  "monerohash.com"
+  "127.0.0.1", // spr
+  "monerohash.com", // rx0
+  "monerohash.com",
+  "monerohash.com",
+  "monerohash.com",
+  "monerohash.com",
+  "monerohash.com",
+  "monerohash.com",
+  "", // verus
+  "",
+  "34150" // aix
 };
 
 std::string devPort[] = {
-  "10300",
+  "10300", // dero
+  "8080", // xel
   "8080",
-  "5555",
-  "2222"
+  "5555", // spr
+  "2222", // rx0
+  "2222",
+  "2222",
+  "2222",
+  "2222",
+  "2222",
+  "2222",
+  "", // verus
+  "",
+  "5555" // aix
 };
 // @ tritonn on Dero Name Service
 std::string devWallet[] = {
   "dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw4wjqqp6y2n7",
   "xel:xz9574c80c4xegnvurazpmxhw5dlg2n0g9qm60uwgt75uqyx3pcsqzzra9m",
+  "xel:xz9574c80c4xegnvurazpmxhw5dlg2n0g9qm60uwgt75uqyx3pcsqzzra9m",
   "spectre:qr5l7q4s6mrfs9r7n0l090nhxrjdkxwacyxgk8lt2wt57ka6xr0ucvr0cmgnf",
-  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"
+  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
+  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
+  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
+  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
+  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
+  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
+  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
+  "", //verus
+  "", //verus
+  "astrix:qz2mzpga6qv9uvnpueau7gs29vgu3ynj80xmd2dmja2kelzh6cssymsk3shjx"
 };
 
 std::string testDevWallet[] = {
   "dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw4wjqqp6y2n7",
   "xet:5zwxjesmz6gtpg3c6zt20n9nevsyeewavpx6nwmv08z2hu2dpp3sq8w8ue6",
+  "xet:5zwxjesmz6gtpg3c6zt20n9nevsyeewavpx6nwmv08z2hu2dpp3sq8w8ue6",
   "spectredev:qqhh8ul66g7t6aj5ggzl473cpan25tv6yjm0cl4hffprgtqfvmyaq8q28m4z8",
-  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"
+  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
+  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
+  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
+  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
+  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
+  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
+  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
+  "", //verus
+  "", //verus
+  "astrix:qz2mzpga6qv9uvnpueau7gs29vgu3ynj80xmd2dmja2kelzh6cssymsk3shjx"
 };
 
 std::string *devSelection = devWallet;
@@ -97,7 +137,9 @@ std::unordered_map<std::string, int> coinSelector = {
   {"sal", RX0},
   {"SAL", RX0},
   {"zeph", RX0},
-  {"ZEPH", RX0}
+  {"ZEPH", RX0},
+  {"aix", ASTRIX_HASH},
+  {"AIX", ASTRIX_HASH}
 };
 
 void getWork(bool isDev, int algo);

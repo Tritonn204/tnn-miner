@@ -299,6 +299,20 @@ int main(int argc, char **argv)
     #endif
   }
 
+  if (vm.count("astrix"))
+  {
+    #if defined(TNN_ASTRIXHASH)
+    symbol = "AIX";
+    protocol = ASTRIX_SOLO;
+    #else
+    setcolor(RED);
+    printf(unsupported_astrix);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
+  }
+
   if (vm.count("randomx"))
   {
     fflush(stdout);
@@ -445,6 +459,10 @@ int main(int argc, char **argv)
     if(wallet.find("spectre", 0) != std::string::npos) {
       symbol = "SPR";
       protocol = SPECTRE_STRATUM;
+    }
+    if(wallet.find("astrix", 0) != std::string::npos) {
+      symbol = "AIX";
+      protocol = ASTRIX_SOLO;
     }
     if(wallet.find("ZEPHYR", 0) != std::string::npos) {
       symbol = "ZEPH";
@@ -1089,6 +1107,15 @@ connectionAttempt:
           HOST = defaultHost[RX0];
           WORKER = devWorkerName;
           PORT = devPort[RX0];
+          break;
+        }
+        case ASTRIX_HASH:
+        {
+          DAEMONTYPE = daemonType;
+          DAEMONPROTOCOL = protocol;
+          HOST = host;
+          WORKER = devWorkerName;
+          PORT = port;
           break;
         }
       }

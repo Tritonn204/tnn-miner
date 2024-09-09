@@ -5,7 +5,7 @@
 #include <hex.h>
 
 extern "C"{
-#include "cshake.h"
+#include "cshake/cshake.h"
 }
 
 namespace SpectreX

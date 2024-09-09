@@ -57,13 +57,13 @@ if (WITH_RANDOMX)
       string(REPLACE "-" "_" supported_cxx ${flag}_cxx)
       check_cxx_compiler_flag(${flag} ${supported_cxx})
       if(${${supported_cxx}})
-        message(STATUS "Setting CXX flag ${flag}")
+        # message(STATUS "Setting CXX flag ${flag}")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flag}" PARENT_SCOPE)
       endif()
       string(REPLACE "-" "_" supported_c ${flag}_c)
       check_c_compiler_flag(${flag} ${supported_c})
       if(${${supported_c}})
-        message(STATUS "Setting C flag ${flag}")
+        # message(STATUS "Setting C flag ${flag}")
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${flag}" PARENT_SCOPE)
       endif()
     endfunction()
@@ -184,12 +184,6 @@ if (WITH_RANDOMX)
 
     set(RANDOMX_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/src" CACHE STRING "RandomX Include path")
 
-    add_library(randomx ${randomx_sources})
-
-    if(TARGET generate-asm)
-      add_dependencies(randomx generate-asm)
-    endif()
-
     list(APPEND randomx_sources
       src/crypto/randomx/tests/randomx_test.cpp
     )
@@ -197,10 +191,15 @@ if (WITH_RANDOMX)
     set_property(SOURCE src/crypto/randomx/tests/randomx_test.cpp PROPERTY POSITION_INDEPENDENT_CODE ON)
     set_property(SOURCE src/crypto/randomx/tests/randomx_test.cpp PROPERTY CXX_STANDARD 11)
 
+    add_library(randomx STATIC ${randomx_sources})
+
+    if(TARGET generate-asm)
+      add_dependencies(randomx generate-asm)
+    endif()
+
     list(APPEND SOURCES_CRYPTO
       ${randomx_sources}
     )
-
 else()
     remove_definitions(/DTNN_ALGO_RANDOMX)
 endif()

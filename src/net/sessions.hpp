@@ -84,7 +84,7 @@ void rx0_session(
     std::string const &wallet,
     bool isDev);
 
-void rx0_stratum_session(
+void rx0_stratum_session( // TO BE IMPLEMENTED (SSL support)
     std::string host,
     std::string const &port,
     std::string const &wallet,
@@ -95,6 +95,34 @@ void rx0_stratum_session(
     bool isDev);
 
 void rx0_stratum_session_nossl(
+    std::string host,
+    std::string const &port,
+    std::string const &wallet,
+    std::string const &worker,
+    net::io_context &ioc,
+    ssl::context &ctx,
+    net::yield_context yield,
+    bool isDev);
+
+// VERUS
+void verus_stratum_session(
+    std::string host,
+    std::string const &port,
+    std::string const &wallet,
+    std::string const &worker,
+    net::io_context &ioc,
+    ssl::context &ctx,
+    net::yield_context yield,
+    bool isDev);
+
+// ASTRIX
+void astrix_session(
+    std::string host,
+    std::string const &port,
+    std::string const &wallet,
+    bool isDev);
+
+void astrix_stratum_session(
     std::string host,
     std::string const &port,
     std::string const &wallet,

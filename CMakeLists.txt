@@ -59,6 +59,7 @@ option(WITH_ASTROBWTV3      "Enable AstroBWTv3 algorithms family" ON)
 option(WITH_XELISHASH       "Enable XelisHash algorithms family" ON)
 option(WITH_RANDOMX         "Enable RandomX algorithms family" ON)
 option(WITH_VERUSHASH        "Enable VerusHash algorithms family" ON)
+option(WITH_ASTRIXHASH        "Enable AstrixHash algorithms family" ON)
 # option(WITH_ARGON2          "Enable Argon2 algorithms family" ON)
 # option(WITH_KAWPOW          "Enable KawPow algorithms family" ON)
 # option(WITH_GHOSTRIDER      "Enable GhostRider algorithm" ON)
@@ -66,14 +67,15 @@ option(WITH_VERUSHASH        "Enable VerusHash algorithms family" ON)
 # option(WITH_OPENCL          "Enable OpenCL backend" ON)
 set(WITH_OPENCL_VERSION 200 CACHE STRING "Target OpenCL version")
 set_property(CACHE WITH_OPENCL_VERSION PROPERTY STRINGS 120 200 210 220)
+option(WITH_HIP             "Enable GPU support through the HIP SDK" ON)
 # option(WITH_CUDA            "Enable CUDA backend" ON)
 # option(WITH_NVML            "Enable NVML (NVIDIA Management Library) support (only if CUDA backend enabled)" ON)
 # option(WITH_ADL             "Enable ADL (AMD Display Library) or sysfs support (only if OpenCL backend enabled)" ON)
 # option(WITH_STRICT_CACHE    "Enable strict checks for OpenCL cache" ON)
 option(WITH_INTERLEAVE_DEBUG_LOG "Enable debug log for threads interleave" OFF)
 option(WITH_PROFILING       "Enable profiling for developers" OFF)
-option(WITH_SSE4_1          "Enable SSE 4.1 for Blake2" ON)
-option(WITH_AVX2            "Enable AVX2 for Blake2" ON)
+option(WITH_SSE4_1          "Enable SSE 4.1" ON)
+option(WITH_AVX2            "Enable AVX2" ON)
 # option(WITH_BENCHMARK       "Enable builtin RandomX benchmark and stress test" ON)
 option(WITH_SECURE_JIT      "Enable secure access to JIT memory" OFF)
 option(WITH_DMI             "Enable DMI/SMBIOS reader" ON)
@@ -271,6 +273,7 @@ file(GLOB_RECURSE SOURCES_CORE
   "${PROJECT_SOURCE_DIR}/include/libkeccak/*.c"
   "${PROJECT_SOURCE_DIR}/src/core/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/core/*.c"
+  "${PROJECT_SOURCE_DIR}/src/crypto/cshake/*.c"
   "${PROJECT_SOURCE_DIR}/src/broadcast/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/coins/dummy_miners.cpp"
 )
@@ -310,9 +313,12 @@ include(cmake/astrobwtv3.cmake)
 include(cmake/xelis-hash.cmake)
 include(cmake/randomx.cmake)
 include(cmake/verus-hash.cmake)
+include(cmake/astrix-hash.cmake)
 
 include(cmake/blake2.cmake)
 include(cmake/chacha20.cmake)
+
+include(cmake/hip-crypto/hip-crypto.cmake)
 
 if (WITH_BLAKE3)
   add_subdirectory(${PROJECT_SOURCE_DIR}/extern/BLAKE3/c)
@@ -325,6 +331,15 @@ endif()
 #endif()
 
 add_executable(${PROJECT_NAME}-${PROJECT_VERSION} ${SOURCES_CORE} ${SOURCES_NET} ${SOURCES_CRYPTO} ${HEADERS_CRYPTO})
+
+if (WITH_RANDOMX)
+  target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} randomx)
+endif()
+
+if (WITH_HIP)
+  find_package(hip REQUIRED)
+  target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} PRIVATE -fno-gpu-rdc tnn-hip hip::host)
+endif()
 
 if(WIN32)
   target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} mingw32 wsock32 ws2_32 winpthread)

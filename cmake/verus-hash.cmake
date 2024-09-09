@@ -15,6 +15,7 @@ if (WITH_VERUSHASH)
       src/crypto/verus/*.cpp
       src/crypto/verus/*.c
       src/net/verus/*.cpp
+      src/coins/mine_verus.cpp
     )
 
     set_source_files_properties(src/crypto/verus/haraka.c COMPILE_FLAGS -maes)
@@ -24,8 +25,6 @@ if (WITH_VERUSHASH)
     # list(APPEND xelisSources
     #   src/coins/mine_xelis.cpp
     # )
-
-    list(FILTER verusSources EXCLUDE REGEX src/xelis-hash/target/*)
 
     list(APPEND HEADERS_CRYPTO
       ${verusHeaders}

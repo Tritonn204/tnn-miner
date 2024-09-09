@@ -185,6 +185,19 @@ void rxRPCTest() {
 }
 
 void mineRx0(int tid){
+  // const char* minerSig = "tnn-miner";
+
+  // byte random_buf[12 + strlen(minerSig)];
+  // std::random_device rd;
+  // std::mt19937 gen(rd());
+  // std::uniform_int_distribution<uint8_t> dist(0, 255);
+  // std::array<uint8_t, 12> buf;
+  // std::generate(buf.begin(), buf.end(), [&dist, &gen]()
+  //               { return dist(gen); });
+  // std::memcpy(random_buf, buf.data(), buf.size());
+
+  // memcpy(random_buf + 12, minerSig, strlen(minerSig));
+
   boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
 
   bool updateCache = false;

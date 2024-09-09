@@ -19,3 +19,8 @@ const char* unsupported_xelishash = "This Binary was compiled without XelisHash 
 
 const char* unsupported_randomx = "This Binary was compiled without RandomX support... \n"
             "Please source a TNN Miner binary with RandomX support";
+
+// verus goes
+
+const char* unsupported_astrix = "This Binary was compiled without AstrixHash support... \n"
+"Please source a TNN Miner binary with AstrixHash support";

@@ -215,7 +215,40 @@ inline void do_session(
         break;
       }
     }
+    break;
   }
+  #endif
+  #ifdef TNN_VERUSHASH
+  case VERUSHASH:
+  {
+    switch (hostProtocol)
+    {
+      case VERUS_SOLO:
+        break;
+      case VERUS_STRATUM:
+      {
+        // if (use_ssl) {
+
+        // } else {
+          verus_stratum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+        // }
+        break;
+      }
+    }
+    break;
+  }
+  #endif
+  #ifdef TNN_ASTRIXHASH
+  case ASTRIX_HASH:
+    switch (hostProtocol)
+    {
+      case ASTRIX_SOLO:
+        astrix_session(host, port, wallet, isDev);
+        break;
+      case ASTRIX_STRATUM:
+        astrix_stratum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+        break;
+    }
   #endif
   }
 }
