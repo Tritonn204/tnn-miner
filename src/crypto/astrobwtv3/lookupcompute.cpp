@@ -75,6 +75,7 @@ void lookupGen(workerData &worker, uint16_t *lookup2D, byte *lookup3D) {
     }
   }
   
+  /*
   std::ofstream file1("2d.bin", std::ios::binary);
   if (file1.is_open()) {
       file1.write(reinterpret_cast<const char*>(worker.lookup2D), 256*256*regOps_size);
@@ -89,6 +90,7 @@ void lookupGen(workerData &worker, uint16_t *lookup2D, byte *lookup3D) {
   } else {
       std::cerr << "Unable to open file: " << "3d.bin" << std::endl;
   }
+  */
   // worker.lookup3D = &lookup3D[0];
   // worker.lookup2D = &lookup2D[0];
 }
