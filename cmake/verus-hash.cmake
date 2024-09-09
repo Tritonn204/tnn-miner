@@ -1,3 +1,7 @@
+if (ARM_TARGET)
+  message(STATUS "Removing VerusHash support due to arm build")
+  unset(WITH_VERUSHASH CACHE)
+endif()
 if (WITH_VERUSHASH)
     add_definitions(/DTNN_VERUSHASH)
 

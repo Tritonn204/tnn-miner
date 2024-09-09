@@ -1,28 +1,17 @@
-# This file is a template, and might need editing before it works on your project.
-# You can copy and paste this template into a new `.gitlab-ci.yml` file.
-# You should not add this template to an existing `.gitlab-ci.yml` file by using the `include:` keyword.
-#
-# To contribute improvements to CI/CD templates, please follow the Development guide at:
-# https://docs.gitlab.com/ee/development/cicd/templates.html
-# This specific template is located at:
-# https://gitlab.com/gitlab-org/gitlab/-/blob/master/lib/gitlab/ci/templates/C++.gitlab-ci.yml
-
-# use the official gcc image, based on debian
-# can use versions as well, like gcc:5.2
-# see https://hub.docker.com/_/gcc/
-
 stages:
   - build
   - test
-  #- upload
   - release
 
 variables:
+  RUNNER_SCRIPT_TIMEOUT: 30m
+  DOCKER_TLS_CERTDIR: "/certs"
   TNN_BUILD_MAC: false
   TNN_BUILD_WIN: true
   AMD64_TARGET_LEVEL: x86-64-v3
   PACKAGE_VERSION: "0.0.1"
   LINUX_AMD64_TGZ: "Tnn-miner-amd64-${PACKAGE_VERSION}.tar.gz"
+  LINUX_ARM64_TGZ: "Tnn-miner-arm64-${PACKAGE_VERSION}.tar.gz"
   MACOS_ARM64_TGZ: "Tnn-miner-macos-arm64-${PACKAGE_VERSION}.tar.gz"
   WRAPPER_TEMP: "wrapper.tar.gz"
   WIN_AMD64_ZIP: "Tnn-miner-win64-${PACKAGE_VERSION}.zip"
@@ -35,11 +24,12 @@ workflow:
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_BRANCH == "dev"
-    # if the pipeline is on the default branch, then change the RUNNER_TAG variable
+    # if the pipeline is executing because of a tag, then change the variables for a 
     - if: $CI_COMMIT_TAG
       variables:
         PACKAGE_VERSION: $CI_COMMIT_TAG
         LINUX_AMD64_TGZ: "Tnn-miner-amd64-${PACKAGE_VERSION}.tar.gz"
+        LINUX_ARM64_TGZ: "Tnn-miner-arm64-${PACKAGE_VERSION}.tar.gz"
         MACOS_ARM64_TGZ: "Tnn-miner-macos-arm64-${PACKAGE_VERSION}.tar.gz"
         WRAPPER_TEMP: "wrapper.tar.gz"
         WIN_AMD64_ZIP: "Tnn-miner-win64-${PACKAGE_VERSION}.zip"
@@ -63,44 +53,32 @@ workflow:
     - echo ${time}
     - echo "started by ${GITLAB_USER_NAME} / @${GITLAB_USER_LOGIN}"
 
-image: ubuntu:noble
-
-build-linux:
+build-linux-amd64:
+  image: docker:24.0.5
   stage: build
-  # instead of calling g++ directly you can also use some build toolkit like make
-  # install the necessary build tools when needed
-  #before_script:
-  #  - ./scripts/prereqs.sh
-  #  #- apt update && apt -y install wget build-essential cmake clang libssl-dev libfmt-dev libudns-dev libc++-dev lld git
+  tags:
+    - linux
+    - amd64
+  before_script:
+    - until docker info; do sleep 1; done
   script:
-    - apt update && apt install -y dos2unix
-    - dos2unix ./scripts/*.sh
-    - ./scripts/prereqs.sh
-    - export
-    - mkdir ./build
-    - cd ./build
-    - cmake -DTNN_VERSION=$PACKAGE_VERSION ..
-    - make -j$(nproc)
-    - cd ../
-    - mv ./build/Tnn-miner-${PACKAGE_VERSION} ./Tnn-miner
-    - tar -czvf ${LINUX_AMD64_TGZ} ./Tnn-miner
+    - docker buildx build --platform=linux/amd64 --build-arg PACKAGE_VERSION=${PACKAGE_VERSION} --build-arg TARGZ_FILE=${LINUX_AMD64_TGZ} -f docker/Dockerfile.ubu . --output ./
     - export HIVEOS_MMPOS_AMD64_TGZ="tnn-miner-hiveos_mmpos_amd64_${PACKAGE_VERSION//-/.}.tar.gz"
-    - echo "HIVEOS_MMPOS_AMD64_TGZ=$HIVEOS_MMPOS_AMD64_TGZ" >> linux-job.env
+    - echo "HIVEOS_MMPOS_AMD64_TGZ=$HIVEOS_MMPOS_AMD64_TGZ" >> linux-amd64-job.env
   after_script:
-    - echo "LINUX_BUILD_JOB_ID=$CI_JOB_ID" >> linux-job.env
+    - echo "LINUX_AMD64_BUILD_JOB_ID=$CI_JOB_ID" >> linux-amd64-job.env
   artifacts:
     name: ${LINUX_AMD64_TGZ}
     paths:
       - ${LINUX_AMD64_TGZ}
-      # depending on your build setup it's most likely a good idea to cache outputs to reduce the build time
-      # cache:
-      #   paths:
     reports:
-      dotenv: linux-job.env
+      dotenv: linux-amd64-job.env
+  services:
+    - name: docker:24.0.5-dind
 
 build-hiveos-mmpos:
   needs:
-    - build-linux
+    - build-linux-amd64
   script:
     - tar -xvf ${LINUX_AMD64_TGZ}
     - mv ./Tnn-miner ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
@@ -174,24 +152,67 @@ build-windows:
       dotenv: win-job.env
 
 
+build-linux-aarch64:
+  image: docker:24.0.5
+  stage: build
+  tags:
+    - linux
+    - aarch64
+  before_script:
+    - until docker info; do sleep 1; done
+  script:
+    - docker buildx ls
+    - docker buildx build --platform=linux/arm64 --build-arg PACKAGE_VERSION=${PACKAGE_VERSION} --build-arg TARGZ_FILE=${LINUX_ARM64_TGZ} -f docker/Dockerfile.ubu . --output ./
+  after_script:
+    - echo "LINUX_ARM64_BUILD_JOB_ID=$CI_JOB_ID" >> linux-arm64-job.env
+  artifacts:
+    name: ${LINUX_ARM64_TGZ}
+    paths:
+      - ${LINUX_ARM64_TGZ}
+    reports:
+      dotenv: linux-arm64-job.env
+  services:
+    - name: docker:24.0.5-dind
+
+
+
 # run tests using the binary built before
-test-linux:
+test-linux-amd64:
   rules:
     - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
   stage: test
   needs:
-    - job: build-linux
+    - job: build-linux-amd64
       artifacts: true
+  tags:
+    - linux
+    - amd64
   before_script:
-    - apt update && apt -y install gdb unzip
-    - ls -la ./
-    - tar -xvf ${LINUX_AMD64_TGZ}
     - ls -la ./
   script:
     - tar -xvf ./${LINUX_AMD64_TGZ}
-    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./Tnn-miner --test-dero --quiet
-    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./Tnn-miner --test-spectre --quiet
-    - gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./Tnn-miner --test-xelis --quiet
+    - ./Tnn-miner --test-dero --quiet
+    - ./Tnn-miner --test-spectre --quiet
+    - ./Tnn-miner --test-xelis --quiet
+    
+# run tests using the binary built before
+test-linux-aarch64:
+  rules:
+    - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
+  stage: test
+  needs:
+    - job: build-linux-aarch64
+      artifacts: true
+  tags:
+    - linux
+    - aarch64
+  before_script:
+    - ls -la ./
+  script:
+    - tar -xvf ./${LINUX_ARM64_TGZ}
+    - ./Tnn-miner --test-dero --quiet
+    - ./Tnn-miner --test-spectre --quiet
+    - ./Tnn-miner --test-xelis --quiet
 
 # TODO install gdb instead of running prereqs
 # test-windows:
@@ -203,7 +224,7 @@ test-linux:
 #   needs:
 #     - job: build-windows
 #       artifacts: true
-      
+
 #   script:
 #     - $PSVersionTable.PSVersion
 #     - .\scripts\prereqs.bat ci
@@ -232,7 +253,9 @@ release_job:
   stage: release
   image: registry.gitlab.com/gitlab-org/release-cli:latest
   needs:
-    - job: build-linux
+    - job: build-linux-amd64
+      artifacts: true
+    - job: build-linux-aarch64
       artifacts: true
     - job: build-hiveos-mmpos
       artifacts: true
@@ -244,7 +267,8 @@ release_job:
     - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
   script:
     - ls -la
-    - echo $LINUX_BUILD_JOB_ID
+    - echo $LINUX_AMD64_BUILD_JOB_ID
+    - echo $LINUX_ARM64_BUILD_JOB_ID
     - echo $HIVEOS_MMPOS_BUILD_JOB_ID
     - echo $MACOS_BUILD_JOB_ID
     - echo $WIN_BUILD_JOB_ID
@@ -259,8 +283,11 @@ release_job:
     assets:
       links:
         - name: "${LINUX_AMD64_TGZ}"
-          url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${LINUX_BUILD_JOB_ID}/artifacts/raw/${LINUX_AMD64_TGZ}"
+          url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${LINUX_AMD64_BUILD_JOB_ID}/artifacts/raw/${LINUX_AMD64_TGZ}"
           filepath: "/${LINUX_AMD64_TGZ}"
+        - name: "${LINUX_ARM64_TGZ}"
+          url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${LINUX_ARM64_BUILD_JOB_ID}/artifacts/raw/${LINUX_ARM64_TGZ}"
+          filepath: "/${LINUX_ARM64_TGZ}"
         - name: "${HIVEOS_MMPOS_AMD64_TGZ}"
           url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${HIVEOS_MMPOS_BUILD_JOB_ID}/artifacts/raw/${HIVEOS_MMPOS_AMD64_TGZ}"
           filepath: "/${HIVEOS_MMPOS_AMD64_TGZ}"
