@@ -12,9 +12,9 @@ if [[ -f /etc/os-release ]]; then
   source /etc/os-release
   $SUDO apt update
   $SUDO apt install -y git wget build-essential cmake clang libssl-dev libudns-dev libc++-dev lld libsodium-dev
-  if [[ "$VERSION_CODENAME" == "noble" ]]; then
-    $SUDO apt install -y libboost1.83-all-dev
-  elif [[ "$VERSION_CODENAME" == "bookworm" ]]; then
+  #if [[ "$VERSION_CODENAME" == "noble" ]]; then
+  #  $SUDO apt install -y libboost1.83-all-dev
+  if [[ "$VERSION_CODENAME" == "bookworm" ]]; then
     $SUDO apt install -y libpthread-stubs0-dev
   fi
 fi

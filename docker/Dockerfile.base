@@ -1,0 +1,7 @@
+# syntax=docker/dockerfile:1.4
+
+FROM docker.io/ubuntu:noble as base
+
+# Set environment variable to avoid interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt update && apt install -y git wget build-essential cmake clang libssl-dev libudns-dev libc++-dev lld libsodium-dev && rm -rf /var/lib/apt
