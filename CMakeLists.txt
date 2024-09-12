@@ -6,11 +6,18 @@ cmake_print_variables(CMAKE_HOST_SYSTEM_NAME)
 
 set(TARGET_ARCH "amd64")
 set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   -Ofast -flto -fPIE -DNDEBUG")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Ofast -flto -Wuninitialized -DNDEBUG")
+set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   -Ofast -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Ofast -Wuninitialized -DNDEBUG")
 
 option(USE_GCC        "Use GCC instead of Clang" OFF)
 option(USE_ASTRO_SPSA "Use Astro Stamped Permutation Suffix Array library" ON)
+
+if (WIN32)
+  if(WITH_HIP)
+    message(STATUS "HIP compilation is not currently support for TNN Miner on Windows.")
+  endif()
+  set(WITH_HIP OFF)
+endif()
 
 if(USE_GCC)
   set(CMAKE_C_COMPILER gcc)
@@ -23,6 +30,9 @@ else()
   set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Wno-deprecated")
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-deprecated")
 endif()
+
+set(CMAKE_C_COMPILER_WORKS 1)
+set(CMAKE_CXX_COMPILER_WORKS 1)
 
 set(CMAKE_COLOR_DIAGNOSTICS ON)
 # force C colored diagnostic output
@@ -42,15 +52,7 @@ endif()
 
 string(REGEX REPLACE "^[a-zA-Z]" ""  INTERNAL_TNN_VERSION ${INTERNAL_TNN_VERSION})
 
-project(
-  Tnn-miner
-  DESCRIPTION "Open Source Dero/Spectre/Xelis Miner"
-)
-set(PROJECT_VERSION ${INTERNAL_TNN_VERSION})
-
-list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
-
-# XMRig Options
+# TNN Options
 # option(WITH_CN_LITE         "Enable CryptoNight-Lite algorithms family" ON)
 # option(WITH_CN_HEAVY        "Enable CryptoNight-Heavy algorithms family" ON)
 # option(WITH_CN_PICO         "Enable CryptoNight-Pico algorithm" ON)
@@ -85,6 +87,44 @@ option(ARM_V8               "Force ARMv8 (64 bit) architecture, use with caution
 option(ARM_V7               "Force ARMv7 (32 bit) architecture, use with caution if automatic detection fails, but you sure it may work" OFF)
 # End of XMRig options
 
+if (WITH_HIP)
+  # if (WIN32)
+  #   set(CMAKE_C_COMPILER clang-cl)
+  #   set(CMAKE_CXX_COMPILER clang-cl)
+  # endif()
+  # set(CMAKE_C_COMPILER "C:/Program Files/LLVM/bin/clang-cl.exe")  # Adjust path as needed
+  # set(CMAKE_CXX_COMPILER "C:/Program Files/LLVM/bin/clang-cl.exe")  # Adjust path as needed
+
+  # set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -target x86_64-pc-windows-msvc")
+  # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -target x86_64-pc-windows-msvc")
+  # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc")
+
+  set(HIP_LANG HIP)
+
+  link_directories(
+    $ENV{HIP_PATH}/lib
+  )
+
+  set(ROCM_BIN_PATH "$ENV{HIP_PATH}/bin")
+  # Modify PATH for the current process so that CMake can find the ROCm binaries
+  # list(APPEND CMAKE_PREFIX_PATH ${ROCM_BIN_PATH})
+  # list(APPEND CMAKE_PROGRAM_PATH ${ROCM_BIN_PATH})
+  # set(ENV{PATH} "$ENV{PATH};${ROCM_BIN_PATH}")
+endif()
+
+project(
+  Tnn-miner
+  LANGUAGES C CXX ${HIP_LANG}
+  DESCRIPTION "Open Source Dero/Spectre/Xelis Miner"
+)
+
+# enable_language(${HIP_LANG})
+# set(CMAKE_HIP_COMPILER_WORKS 1)
+
+set(PROJECT_VERSION ${INTERNAL_TNN_VERSION})
+
+list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
+
 include (CheckIncludeFile)
 include (cmake/cpu.cmake)
 include (cmake/os.cmake)
@@ -101,17 +141,21 @@ if(CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
 endif()
 
 if(CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin" OR USE_GCC)
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=ld")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lc++ -fuse-ld=ld")
 else()
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
+  # if (NOT WITH_HIP)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
+  # endif()
 endif()
 
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
+  set(WITH_HIP OFF)
   set(TARGET_ARCH "aarch64")
   # AES needed for Xelisv2
   set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -flax-vector-conversions -march=armv8-a+aes")
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flax-vector-conversions -march=armv8-a+aes")
 elseif($ENV{GITLAB_CI} MATCHES "true")
+  set(WITH_HIP OFF)
   if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
     set(TARGET_ARCH "aarch64")
     set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -g -flax-vector-conversions -march=armv8-a+aes")
@@ -119,6 +163,7 @@ elseif($ENV{GITLAB_CI} MATCHES "true")
   else()
     set(TARGET_ARCH "amd64")
     set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} ")
+    
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=$ENV{AMD64_TARGET_LEVEL}")
   endif()
 else()
@@ -149,14 +194,17 @@ set (CMAKE_STANDARD_REQUIRED TRUE)
 enable_language(ASM)
 
 if(WIN32)
-  include_directories(
-    "C:/mingw64/include"
-    "C:/mingw64/x86_64-w64-mingw32/include"
-    "C:/mingw64/include/c++"
-  )
-  link_directories(
-    "C:/mingw64/lib"
-  )
+  # if(NOT WITH_HIP)
+    include_directories(
+      "C:/mingw64/include"
+      "C:/mingw64/x86_64-w64-mingw32/include"
+      "C:/mingw64/include/c++"
+    )
+    link_directories(
+      "C:/mingw64/lib"
+      "C:/mingw64/x86_64-w64-mingw32/lib"
+    )
+  # endif()
   set(OPENSSL_ROOT_DIR "C:/mingw64/")
 endif()
 
@@ -186,14 +234,21 @@ include(${CPM_DOWNLOAD_LOCATION})
 set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL REQUIRED)
 
+link_directories(OpenSSL_LIBRARY_DIRS)
+
 find_program(LSB_RELEASE_EXEC lsb_release)
 execute_process(COMMAND ${LSB_RELEASE_EXEC} -cs
     OUTPUT_VARIABLE LSB_RELEASE_CODENAME_SHORT
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 
-set(THREADS_PREFER_PTHREAD_FLAG ON)
-find_package(Threads REQUIRED)
+
+if (UNIX)
+  set(THREAD_LIB pthread)
+else()
+  set(THREAD_LIB winpthread)
+endif()
+
 
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_MULTITHREADED ON)
@@ -207,8 +262,12 @@ find_package(Boost 1.80 COMPONENTS
   thread
   atomic
   program_options
+  coroutine
 )
 endif()
+
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+# find_package(Threads REQUIRED)
 
 if(Boost_FOUND AND NOT USE_CPM_BOOST)
   message("OS-provided Boost found")
@@ -216,13 +275,21 @@ if(Boost_FOUND AND NOT USE_CPM_BOOST)
   message(${Boost_VERSION})
 else()
   message("Boost not found. Using CPM to add it")
+  # if (WIN32 AND WITH_HIP)
+  #   set(CPM_COMPILER 
+  #     "CMAKE_C_COMPILER clang-cl"
+  #     "CMAKE_CXX_COMPILER clang-cl"
+  #   )
+  # endif()
   CPMAddPackage(
     NAME Boost
     VERSION 1.85.0
     URL https://github.com/boostorg/boost/releases/download/boost-1.85.0/boost-1.85.0-cmake.tar.xz
     URL_HASH SHA256=0a9cc56ceae46986f5f4d43fe0311d90cf6d2fa9028258a95cab49ffdacf92ad
-    OPTIONS "Boost_ENABLE_CMAKE ON" "BOOST_INCLUDE_LIBRARIES chrono\\\;context\\\;json\\\;thread\\\;atomic\\\;program_options" # Note the escapes!
-      # Maintain build compatibility between find_package and CMakeLists.txt variants
+    OPTIONS "Boost_USE_STATIC_LIBS ON" "Boost_ENABLE_CMAKE ON" "BOOST_INCLUDE_LIBRARIES chrono\\\;context\\\;coroutine\\\;json\\\;thread\\\;atomic\\\;program_options" 
+      # ${CPM_COMPILER}  
+      # "CMAKE_CXX_FLAGS /DCLANG_COMPILER=1 /fms-compatibility"
+    # Maintain build compatibility between find_package and CMakeLists.txt variants
   )
 
   if(Boost_ADDED)
@@ -243,11 +310,17 @@ else()
 endif()
 
 # This is universal regardless of how wheter we compiled or found Boost
-set(TNN_BOOST_LIBS Boost::chrono Boost::context Boost::json Boost::thread Boost::atomic Boost::program_options)
+set(TNN_BOOST_LIBS Boost::context Boost::chrono Boost::coroutine Boost::thread Boost::json Boost::atomic Boost::program_options)
+message(STATUS "Boost Libraries: ${Boost_LIBRARIES}")
+message(STATUS "Boost Library Dirs: ${Boost_LIBRARY_DIRS}")
 
-if(APPLE)
-  CPMAddPackage("gh:robinlinden/libsodium-cmake#f568ff02f1bed155ea598c0e803ef3c9db2703d2")
-endif()
+# # if(APPLE)
+# CPMAddPackage("gh:robinlinden/libsodium-cmake#f568ff02f1bed155ea598c0e803ef3c9db2703d2")
+
+# if (TARGET sodium)
+#   # Add SSSE3 and PCLMUL flags for sodium target
+#   target_compile_options(sodium PRIVATE -Ofast -mssse3 -mpclmul -maes -mavx2)
+# endif()
 
 #cmake_print_variables(TNN_BOOST_INCLUDES)
 #cmake_print_variables(TNN_BOOST_LIBS)
@@ -283,14 +356,13 @@ file(GLOB SOURCES_NET
   "${PROJECT_SOURCE_DIR}/src/net/*.c"
 )
 
-# AstroSPSA only works on x64 Linux at the moment
 if(USE_ASTRO_SPSA)
   set(SPSA_OS_PREFIX "linux")
   if(WIN32)
     set(SPSA_OS_PREFIX "win")
   endif()
-  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -DUSE_ASTRO_SPSA=ON")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DUSE_ASTRO_SPSA=ON")
+  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -flto -DUSE_ASTRO_SPSA=ON")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flto -DUSE_ASTRO_SPSA=ON")
 
   if(EXISTS ${PROJECT_SOURCE_DIR}/lib/astrospsa/libastroSPSA_${SPSA_OS_PREFIX}_${TARGET_ARCH}.a)
     set(SPSA_LIB_DIR ${PROJECT_SOURCE_DIR}/lib/astrospsa)
@@ -320,6 +392,10 @@ include(cmake/chacha20.cmake)
 
 include(cmake/hip-crypto/hip-crypto.cmake)
 
+# enable_language(HIP)
+# set(CMAKE_HIP_COMPILER_WORKS 1)
+
+
 if (WITH_BLAKE3)
   add_subdirectory(${PROJECT_SOURCE_DIR}/extern/BLAKE3/c)
   set(BLAKE3_LIBRARIES blake3)
@@ -336,21 +412,41 @@ if (WITH_RANDOMX)
   target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} randomx)
 endif()
 
-if (WITH_HIP)
-  find_package(hip REQUIRED)
-  target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} PRIVATE -fno-gpu-rdc tnn-hip hip::host)
-endif()
+# if (WITH_HIP)
+  # include(ExternalProject)
+  # set(hip_DIR "${HIP_PATH}/cmake")
+  # message(STATUS "hip_DIR = ${hip_DIR}")
+  # find_package(hip REQUIRED)
+  # include_directories(${hip_INCLUDE_DIRS})
+  # link_directories(${hip_LIBRARY_DIRS})
+  set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -fgpu-rdc")
+
+  # ExternalProject_Add(tnn_hip_project
+  #   SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/tnn_hip
+  #   CMAKE_ARGS -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_HIP_COMPILER_WORKS=1 -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}
+  #   BUILD_ALWAYS TRUE
+  # )
+
+  # add_dependencies(${PROJECT_NAME}-${PROJECT_VERSION} tnn_hip_project)
+  # target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} ${CMAKE_BINARY_DIR}/tnn_hip.lib)
+  # target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} ${CMAKE_BINARY_DIR}/libtnn_hip.a)
+  # set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --hip-link")
+# endif()
 
 if(WIN32)
-  target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} mingw32 wsock32 ws2_32 winpthread)
+  target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} mingw32 wsock32 ws2_32)
 endif()
-if(UNIX)
-  target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} pthread)
-endif()
+
 if(NOT APPLE AND NOT WIN32)
   target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} udns)
 endif()
 if(USE_ASTRO_SPSA)
   target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} ${SPSA_LIB_DIR}/libastroSPSA_${SPSA_OS_PREFIX}_${TARGET_ARCH}.a)
 endif()
-target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} -flto Threads::Threads ${TNN_BOOST_LIBS} OpenSSL::SSL OpenSSL::Crypto sodium ${BLAKE3_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} ${THREAD_LIB} ${TNN_BOOST_LIBS} OpenSSL::SSL OpenSSL::Crypto sodium ${BLAKE3_LIBRARIES})
+
+include(cmake/unset.cmake)
+
+# Get and print link directories for a target (e.g., your target is named "MyTarget")
+# get_target_property(LINK_DIRS ${PROJECT_NAME}-${PROJECT_VERSION} LINK_DIRECTORIES)
+# message(STATUS "Link directories for MyTarget: ${LINK_DIRS}")

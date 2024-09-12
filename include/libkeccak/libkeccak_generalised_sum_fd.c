@@ -79,7 +79,11 @@ libkeccak_generalised_sum_fd(int fd, struct libkeccak_state *restrict state, con
 
 	offset = 0;
 	for (;;) {
-		got = read(fd, &chunk[offset], blksize - offset);
+    #ifdef _MSC_VER
+		got = _read(fd, &chunk[offset], (unsigned int)(blksize - offset));
+    #else
+    got = read(fd, &chunk[offset], blksize - offset);
+    #endif
 		if (got <= 0) {
 			if (!got)
 				break;

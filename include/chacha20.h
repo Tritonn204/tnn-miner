@@ -2,6 +2,10 @@
 #pragma once
 #include <stdint.h>
 
+#ifdef _MSC_VER
+#include <x86intrin.h>
+#endif
+
 #define ChaCha20StateSizeBytes 48;
 #define ChaCha20KeySizeByte 32
 #define ChaCha20NonceSizeByte 12

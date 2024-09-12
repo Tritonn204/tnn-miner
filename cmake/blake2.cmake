@@ -11,6 +11,6 @@ if (WITH_BLAKE2)
       ${blake2_sources}
     )
 else()
-    remove_definitions(/DTNN_ALGO_BLAKE2)
+    remove_definitions(/DTNN_BLAKE2)
 endif()
 unset(WITH_BLAKE2 CACHE)

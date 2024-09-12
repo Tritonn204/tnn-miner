@@ -62,6 +62,5 @@ if (WITH_ASTRIXHASH)
     # endif()
 
 else()
-    remove_definitions(/DTNN_ALGO_ASTRIXHASH)
+    remove_definitions(/DTNN_ASTRIXHASH)
 endif()
-unset(WITH_ASTRIXHASH CACHE)

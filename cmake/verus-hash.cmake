@@ -34,6 +34,5 @@ if (WITH_VERUSHASH)
       ${verusSources}
     )
 else()
-    remove_definitions(/DTNN_ALGO_VERUSHASH)
+    remove_definitions(/DTNN_VERUSHASH)
 endif()
-unset(WITH_VERUSHASH CACHE)

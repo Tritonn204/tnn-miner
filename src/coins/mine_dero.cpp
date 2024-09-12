@@ -8,8 +8,8 @@ void mineDero(int tid)
   byte random_buf[12];
   std::random_device rd;
   std::mt19937 gen(rd());
-  std::uniform_int_distribution<uint8_t> dist(0, 255);
-  std::array<uint8_t, 12> buf;
+  std::uniform_int_distribution<int> dist(0, 255);
+  std::array<int, 12> buf;
   std::generate(buf.begin(), buf.end(), [&dist, &gen]()
                 { return dist(gen); });
   std::memcpy(random_buf, buf.data(), buf.size());

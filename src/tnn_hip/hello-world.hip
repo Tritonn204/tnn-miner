@@ -19,14 +19,16 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
+#include "hello.hpp"
 
-#include <hip/hip_runtime.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <iostream>
 #include <string>
 #include <fstream>
+
+#include <hip/hip_runtime.h>
 
 #define SAMPLE_VERSION "HIP-Examples-Application-v1.0"
 #define SUCCESS 0
@@ -40,7 +42,7 @@ __global__ void helloworld(char* in, char* out)
 	out[num] = in[num] + 1;
 }
 
-int main(int argc, char* argv[])
+int helloTest()
 {
 
     hipDeviceProp_t devProp;
@@ -83,3 +85,7 @@ int main(int argc, char* argv[])
 	std::cout<<"Passed!\n";
 	return SUCCESS;
 }
+
+// int main(int argc, char *argv[]) {
+//   helloTest();
+// }

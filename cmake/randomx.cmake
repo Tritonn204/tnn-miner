@@ -197,11 +197,9 @@ if (WITH_RANDOMX)
       add_dependencies(randomx generate-asm)
     endif()
 
-    list(APPEND SOURCES_CRYPTO
-      ${randomx_sources}
-    )
+    # list(APPEND SOURCES_CRYPTO
+    #   ${randomx_sources}
+    # )
 else()
     remove_definitions(/DTNN_ALGO_RANDOMX)
 endif()
-unset(WITH_RANDOMX CACHE)
-unset(ARCH_ID CACHE)

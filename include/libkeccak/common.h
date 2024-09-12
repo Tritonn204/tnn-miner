@@ -19,7 +19,14 @@
 # endif
 #endif
 #include <errno.h>
+
+#ifdef _MSC_VER
+#include <windows.h>
+#include <io.h>
+typedef ptrdiff_t ssize_t;  // Use ptrdiff_t as ssize_t equivalent in MSVC
+#else
 #include <unistd.h>
+#endif
 
 
 /* Use built in functions and branching optimisation if available */

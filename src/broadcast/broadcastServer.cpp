@@ -1,5 +1,6 @@
 #include "broadcastServer.hpp"
 #include <chrono>
+#include <numeric>
 
 namespace BroadcastServer
 {

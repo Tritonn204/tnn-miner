@@ -1,7 +1,11 @@
 #include <endian.hpp>
 #include <inttypes.h>
 
+#ifdef _MSC_VER
+#include <io.h>
+#else
 #include <unistd.h>
+#endif
 
 #include <boost/thread.hpp>
 #include <algorithm>

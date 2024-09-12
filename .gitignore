@@ -46,6 +46,10 @@
 
 /src/xelis-hash/xelis-hash-v2.cpp
 
+# tnn_hip build files
+/src/tnn_hip/build
+/src/tnn_hip/linux
+
 # Misc
 **.txt
 # Blake3

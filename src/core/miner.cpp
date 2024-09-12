@@ -22,6 +22,7 @@
 #include <functional>
 #include <iostream>
 #include <string>
+#include <numeric>
 #include "miner.h"
 
 #include <random>
@@ -49,6 +50,9 @@
 
 #include "reporter.hpp"
 #include "coins/miners.hpp"
+
+#include <tnn_hip/hello.hpp>
+#include <tnn_hip/crypto/cshake/cshake256.h>
 
 // INITIALIZE COMMON STUFF
 int miningAlgo = DERO_HASH;
@@ -185,6 +189,13 @@ void sigterm(int signum) {
 
 int main(int argc, char **argv)
 {
+  // test_cshake256();
+
+  #ifdef TNN_HIP
+  helloTest();
+  test_cshake256();
+  #endif
+
   std::atexit(onExit);
   signal(SIGTERM, sigterm);
   alignas(64) char buf[65536];

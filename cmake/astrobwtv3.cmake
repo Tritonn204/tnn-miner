@@ -66,6 +66,5 @@ if (WITH_ASTROBWTV3)
     # endif()
 
 else()
-    remove_definitions(/DTNN_ALGO_ASTROBWTV3)
+    remove_definitions(/DTNN_ASTROBWTV3)
 endif()
-unset(WITH_ASTROBWTV3 CACHE)

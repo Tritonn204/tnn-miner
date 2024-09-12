@@ -3,37 +3,66 @@ if (WITH_HIP)
   message(STATUS "Building with HIP GPU support")
   cmake_minimum_required(VERSION 3.21) # HIP language support requires 3.21
 
-  # set(CMAKE_HIP_CREATE_STATIC_LIBRARY ON)
+  set(HIP_PATH FILEPATH $ENV{HIP_PATH})
+  string(REPLACE "\\" "/" HIP_PATH ${HIP_PATH})  # Replace backslashes with forward slashes
 
-  set(CMAKE_HIP_COMPILER_WORKS 1)
+  # set(HIP_PLATFORM "amd" CACHE STRING "Specify HIP platform (amd or nvidia)")
 
-  file(GLOB_RECURSE hipSources
-    src/crypto/hip/hello-world.hip
-  )
-
-  # Create a static archive incrementally for large object file counts.
-  if(NOT DEFINED CMAKE_HIP_ARCHIVE_CREATE)
-    set(CMAKE_HIP_ARCHIVE_CREATE "<CMAKE_AR> qc <TARGET> <LINK_FLAGS> <OBJECTS>")
-  endif()
-  if(NOT DEFINED CMAKE_HIP_ARCHIVE_APPEND)
-    set(CMAKE_HIP_ARCHIVE_APPEND "<CMAKE_AR> q <TARGET> <LINK_FLAGS> <OBJECTS>")
-  endif()
-  if(NOT DEFINED CMAKE_HIP_ARCHIVE_FINISH)
-    set(CMAKE_HIP_ARCHIVE_FINISH "<CMAKE_RANLIB> <TARGET>")
-  endif()
-
-  # # compile a HIP file into an object file
-  # if(NOT CMAKE_HIP_COMPILE_OBJECT)
-  #   set(CMAKE_HIP_COMPILE_OBJECT
-  #     "<CMAKE_HIP_COMPILER> ${_CMAKE_HIP_EXTRA_FLAGS} <DEFINES> <INCLUDES> <FLAGS> -o <OBJECT> ${_CMAKE_COMPILE_AS_HIP_FLAG} -c <SOURCE>")
+  # if(HIP_PLATFORM MATCHES "amd")
+  #     add_definitions(-D__HIP_PLATFORM_AMD__)
+  #     message(STATUS "Building for AMD platform")
+  # elseif(HIP_PLATFORM MATCHES "nvidia")
+  #     add_definitions(-D__HIP_PLATFORM_NVIDIA__)
+  #     message(STATUS "Building for NVIDIA platform")
+  # else()
+  #     message(FATAL_ERROR "Invalid HIP platform specified. Must be 'amd' or 'nvidia'.")
   # endif()
 
+  # if(WIN32)
+  #   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -target x86_64-pc-windows-gnu")
+  #   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -target x86_64-pc-windows-gnu")
+  #   set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -target x86_64-pc-windows-gnu")
+  # endif()
 
-  add_library(tnn_hip ${hipSources})
-  set_target_properties(tnn_hip PROPERTIES HIP_ARCHITECTURES gfx1100)
-  set_target_properties(tnn_hip PROPERTIES LANGUAGES HIP)
-  set_target_properties(tnn_hip PROPERTIES LINKER_LANGUAGE HIP)
+  # # set(CMAKE_HIP_COMPILER_WORKS 1)
 
-endif()
+  # # enable_language(HIP)
+  # # set(CMAKE_HIP_COMPILER ${HIP_PATH}/bin/clang.exe)
+
+  file(GLOB_RECURSE hipSources
+    src/tnn_hip/hello-world.hip
+    # src/tnn_hip/crypto/cshake/cshake256.hip
+  )
+  
+  include(cmake/hip-crypto/astrix-hash/astrix-hash-hip.cmake)
+
+  list(APPEND SOURCES_CRYPTO ${hipSources})
+
+  # list(APPEND SOURCES_CRYPTO
+  #   src/tnn_hip/crypto/cshake/testshake.cpp
+  # )
+
+  # # Create a static archive incrementally for large object file counts.
+  # if(NOT DEFINED CMAKE_HIP_ARCHIVE_CREATE)
+  #   set(CMAKE_HIP_ARCHIVE_CREATE "<CMAKE_AR> qc <TARGET> <LINK_FLAGS> <OBJECTS>")
+  # endif()
+  # if(NOT DEFINED CMAKE_HIP_ARCHIVE_APPEND)
+  #   set(CMAKE_HIP_ARCHIVE_APPEND "<CMAKE_AR> q <TARGET> <LINK_FLAGS> <OBJECTS>")
+  # endif()
+  # if(NOT DEFINED CMAKE_HIP_ARCHIVE_FINISH)
+  #   set(CMAKE_HIP_ARCHIVE_FINISH "<CMAKE_RANLIB> <TARGET>")
+  # endif()
+
+  # add_library(tnn_hip STATIC ${hipSources})
+  # set_target_properties(tnn_hip PROPERTIES HIP_ARCHITECTURES gfx1100)
+  # set_target_properties(tnn_hip PROPERTIES LANGUAGES HIP)
+  # set_target_properties(tnn_hip PROPERTIES LINKER_LANGUAGE HIP)
+
+  # set(CMAKE_C_COMPILER ${HIP_PATH}/bin/clang.exe)
+  # set(CMAKE_CXX_COMPILER ${HIP_PATH}/bin/clang++.exe)
+
+  # set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -target x86_64-pc-windows-gnu")
+  # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -target x86_64-pc-windows-gnu")
+else()
   remove_definitions(/DTNN_HIP)
-unset(WITH_HIP CACHE)
+endif()

@@ -30,6 +30,5 @@ if (WITH_XELISHASH)
       ${xelisSources}
     )
 else()
-    remove_definitions(/DTNN_ALGO_XELISHASH)
+    remove_definitions(/DTNN_XELISHASH)
 endif()
-unset(WITH_XELISHASH CACHE)
