@@ -12,6 +12,6 @@ void cshake256_nil_function_name(const uint8_t *msg, size_t msg_len, const char*
                                 custom, strlen(custom), 0, NULL);
 
     libkeccak_update(&state, msg, msg_len);
-    libkeccak_digest(&state, NULL, 0, 0, libkeccak_cshake_suffix(0, 1), digest);
+    libkeccak_digest(&state, NULL, 0, 0, "00", digest);
     libkeccak_state_destroy(&state);
 }

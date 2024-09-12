@@ -194,6 +194,7 @@ int main(int argc, char **argv)
   #ifdef TNN_HIP
   helloTest();
   test_cshake256();
+  test_cshake256_comparison();
   #endif
 
   std::atexit(onExit);
