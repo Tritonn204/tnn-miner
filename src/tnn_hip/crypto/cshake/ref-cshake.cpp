@@ -19,6 +19,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <random>
+
 #include <crypto/cshake/cshake.h>
 
 #define rotate_ref(x, n, w, wmod) ((((x) >> ((w) - ((n) % (w)))) | ((x) << ((n) % (w)))) & (wmod))
@@ -67,36 +69,25 @@ static const uint_fast64_t RC_REF[] = {
 
 int libkeccak_state_initialise_ref(struct libkeccak_state *state, const struct libkeccak_spec *spec)
 {
-  long int x;
+  long int x = 1;
 
-  state->r = spec->bitrate;
-  state->n = spec->output;
-  state->c = spec->capacity;
-  state->b = state->r + state->c;
-  state->w = x = state->b / 25;
-  state->l = 0;
+  // 1088 = spec->bitrate;
+  // state->b = 1088 + state->c;
+  // 64 = x = state->b / 25;
+  // state->l = 6;
 
-  if (x & 0xF0L)
-  {
-    state->l |= 4;
-    x >>= 4;
-  }
-  if (x & 0x0CL)
-  {
-    state->l |= 2;
-    x >>= 2;
-  }
-  if (x & 0x02L)
-  {
-    state->l |= 1;
-  }
+  // printf("state->l = %lu\nx = %d\n", state->l, x);
 
-  state->nr = 12 + (state->l << 1);
-  state->wmod = (state->w == 64) ? ~0LL : (int64_t)((1ULL << state->w) - 1);
   for (x = 0; x < 25; x++)
     state->S[x] = 0;
   state->mptr = 0;
-  state->mlen = (size_t)(state->r * state->b) >> 2;
+  state->mlen = (size_t)(1088 * 1600) >> 2;
+  state->mlen = 137;
+
+  // printf("state:\n");
+  // printf("r = %llu\n", 1088);
+  // // printf("l = %llu\n", state->l);
+  // printf("mlen = %llu\n\n", state->mlen);
 
   // Explicitly cast malloc in C++
   state->M = (unsigned char *)malloc(state->mlen * sizeof(unsigned char));
@@ -110,8 +101,8 @@ libkeccak_f_round(struct libkeccak_state *state, int_fast64_t rc)
 	int_fast64_t B[25];
 	int_fast64_t C[5];
 	int_fast64_t da, db, dc, dd, de;
-	int_fast64_t wmod = state->wmod;
-	long int w = state->w;
+	int_fast64_t wmod = ~0LL;
+	long int w = 64;
 
 	/* θ step (step 1 of 3). */
 #define X(N) C[N] = A[N * 5] ^ A[N * 5 + 1] ^ A[N * 5 + 2] ^ A[N * 5 + 3] ^ A[N * 5 + 4];
@@ -223,8 +214,8 @@ static inline void
 libkeccak_f(struct libkeccak_state *state)
 {
 	long int i = 0;
-	long int nr = state->nr;
-	long int wmod = state->wmod;
+	long int nr = 24;
+	long int wmod = ~0LL;
 	if (nr == 24) {
 		for (; i < nr; i++)
 			libkeccak_f_round64(state, (int_fast64_t)(RC_REF[i]));
@@ -238,8 +229,8 @@ static void
 libkeccak_absorption_phase_ref(struct libkeccak_state *state,
                            const unsigned char *message, size_t len)
 {
-	long int rr = state->r >> 3;
-	long int ww = state->w >> 3;
+	long int rr = 1088 >> 3;
+	long int ww = 64 >> 3;
 	long int n = (long)len / rr;
 	if (__builtin_expect(ww >= 8, 1)) { /* ww > 8 is impossible, it is just for optimisation possibilities. */
 		while (n--) {
@@ -422,7 +413,7 @@ void libkeccak_cshake_initialise_ref(struct libkeccak_state *state, // Remove re
                                  uint8_t *s_text, size_t s_len, size_t s_bits, const char *s_suffix)
 {
   size_t off = 0, bitoff = 0;
-  size_t byterate = static_cast<size_t>(state->r) >> 3;
+  size_t byterate = static_cast<size_t>(1088) >> 3;
 
   if (!n_suffix)
     n_suffix = "";
@@ -458,9 +449,11 @@ void libkeccak_cshake_initialise_ref(struct libkeccak_state *state, // Remove re
     off++;
   if (off)
   {
-    memset(&state->M[off], 0, byterate - off);
-    libkeccak_zerocopy_update_ref(state, static_cast<uint8_t *>(state->M), byterate);
+    memset(&state->M[off], 0, 137 - off);
+    libkeccak_zerocopy_update_ref(state, static_cast<uint8_t *>(state->M), 137);
   }
+
+  // printf("final off = %llu\n", off);
 }
 
 void libkeccak_state_wipe_message_ref(volatile struct libkeccak_state *state)
@@ -489,6 +482,36 @@ libkeccak_state_wipe_ref(volatile struct libkeccak_state *state)
 	libkeccak_state_wipe_message_ref(state);
 	libkeccak_state_wipe_sponge_ref(state);
 }
+
+
+int
+libkeccak_fast_update_ref(struct libkeccak_state *state, const uint8_t *msg, size_t msglen)
+{
+	size_t len;
+	unsigned char *new_mem;
+
+	if (__builtin_expect(state->mptr + msglen > state->mlen, 0)) {
+		state->mlen += msglen;
+		new_mem = (uint8_t *)realloc(state->M, state->mlen * sizeof(char));
+		if (!new_mem) {
+			state->mlen -= msglen;
+			return -1;
+		}
+		state->M = new_mem;
+	}
+
+	__builtin_memcpy(state->M + state->mptr, msg, msglen * sizeof(char));
+	state->mptr += msglen;
+	len = state->mptr;
+	len -= state->mptr % (size_t)(1088 >> 3);
+	state->mptr -= len;
+
+	libkeccak_absorption_phase_ref(state, state->M, len);
+	__builtin_memmove(state->M, state->M + len, state->mptr * sizeof(char));
+
+	return 0;
+}
+
 
 int libkeccak_update_ref(struct libkeccak_state *state, const uint8_t *msg, size_t msglen)
 {
@@ -525,14 +548,14 @@ int libkeccak_update_ref(struct libkeccak_state *state, const uint8_t *msg, size
 
   // Calculate how much of the message buffer can be processed
   len = state->mptr;
-  len -= state->mptr % (size_t)(state->r >> 3); // Align to the rate (r)
+  len -= state->mptr % (size_t)(1088 >> 3); // Align to the rate (r)
   state->mptr -= len;                           // Reduce the message pointer by the amount we can process
 
   // Absorb the message into the Keccak state
   libkeccak_absorption_phase_ref(state, state->M, len);
 
   // Move the remaining message data to the front of the buffer
-  memmove(state->M, state->M + len, state->mptr * sizeof(char));
+  memcpy(state->M, state->M + len, state->mptr * sizeof(char));
 
   return 0;
 }
@@ -566,7 +589,7 @@ libkeccak_squeezing_phase_ref(struct libkeccak_state *state, long int rr,
 {
 	int_fast64_t v;
 	long int ni = rr / ww;
-	long int olen = state->n;
+	long int olen = 256;
 	long int i, j = 0;
 	long int k;
 	while (olen > 0) {
@@ -575,21 +598,95 @@ libkeccak_squeezing_phase_ref(struct libkeccak_state *state, long int rr,
 			for (k = 0; k++ < ww && j++ < nn; v >>= 8)
 				*hashsum++ = (unsigned char)v;
 		}
-		olen -= state->r;
+		olen -= 1088;
 		if (olen > 0)
 			libkeccak_f(state);
 	}
-	if (state->n & 7)
-		hashsum[-1] &= (unsigned char)((1 << (state->n & 7)) - 1);
+	if (256 & 7)
+		hashsum[-1] &= (unsigned char)((1 << (256 & 7)) - 1);
 }
 
 int
-libkeccak_digest(struct libkeccak_state *state, const uint8_t *msg_, size_t msglen,
+libkeccak_fast_digest_ref(struct libkeccak_state *state, const uint8_t *msg_, size_t msglen,
+                      size_t bits, const char *suffix, uint8_t *hashsum)
+{
+	const unsigned char *msg = msg_;
+	unsigned char *new_mem;
+	long int rr = 1088 >> 3;
+	size_t suffix_len = suffix ? __builtin_strlen(suffix) : 0;
+	size_t ext;
+	long int i;
+
+	if (!msg) {
+		msglen = 0;
+		bits = 0;
+	} else {
+		msglen += bits >> 3;
+		bits &= 7;
+	}
+
+	ext = msglen + ((bits + suffix_len + 7) >> 3) + (size_t)rr;
+	if (__builtin_expect(state->mptr + ext > state->mlen, 0)) {
+		state->mlen += ext;
+		new_mem = (uint8_t *)realloc(state->M, state->mlen * sizeof(char));
+		if (!new_mem) {
+			state->mlen -= ext;
+			return -1;
+		}
+		state->M = new_mem;
+	}
+
+	if (msglen)
+		__builtin_memcpy(state->M + state->mptr, msg, msglen * sizeof(char));
+	state->mptr += msglen;
+
+	if (bits)
+		state->M[state->mptr] = msg[msglen] & (unsigned char)((1 << bits) - 1);
+	if (__builtin_expect(!!suffix_len, 1)) {
+		if (!bits)
+			state->M[state->mptr] = 0;
+		while (suffix_len--) {
+			state->M[state->mptr] |= (unsigned char)((*suffix++ & 1) << bits++);
+			if (bits == 8) {
+				bits = 0;
+				state->M[++(state->mptr)] = 0;
+			}
+		}
+	}
+	if (bits)
+		state->mptr++;
+
+	state->mptr = libkeccak_pad10star1_ref((size_t)1088, state->M, state->mptr, bits);
+	libkeccak_absorption_phase_ref(state, state->M, state->mptr);
+
+	if (hashsum) {
+		libkeccak_squeezing_phase_ref(state, rr, (256 + 7) >> 3, 64 >> 3, hashsum);
+	} else {
+		for (i = (256 - 1) / 1088; i--;)
+			libkeccak_f(state);
+	}
+
+  // printf("final mptr = %llu\n", state->mptr);
+
+  // size_t checkSum = 0;
+  // for (int i = state->mptr; i < state->mlen; i++) {
+  //   // printf("%02X ", state->M[i]);
+  //   checkSum += state->M[i];
+  // }
+
+  // printf("checkSum = %llu\n", checkSum);
+
+	return 0;
+}
+
+
+int
+libkeccak_digest_ref(struct libkeccak_state *state, const uint8_t *msg_, size_t msglen,
                  size_t bits, const char *suffix, uint8_t *hashsum)
 {
 	const unsigned char *msg = msg_;
 	unsigned char *new_mem;
-	long int rr = state->r >> 3;
+	long int rr = 1088 >> 3;
 	size_t suffix_len = suffix ? __builtin_strlen(suffix) : 0;
 	size_t ext;
 	long int i;
@@ -610,6 +707,8 @@ libkeccak_digest(struct libkeccak_state *state, const uint8_t *msg_, size_t msgl
 			state->mlen -= ext;
 			return -1;
 		}
+
+    memset(new_mem, 0, state->mlen);
 		libkeccak_state_wipe_message_ref(state);
 		free(state->M);
 		state->M = new_mem;
@@ -635,13 +734,13 @@ libkeccak_digest(struct libkeccak_state *state, const uint8_t *msg_, size_t msgl
 	if (bits)
 		state->mptr++;
 
-	state->mptr = libkeccak_pad10star1_ref((size_t)state->r, state->M, state->mptr, bits);
+	state->mptr = libkeccak_pad10star1_ref((size_t)1088, state->M, state->mptr, bits);
 	libkeccak_absorption_phase_ref(state, state->M, state->mptr);
 
 	if (hashsum) {
-		libkeccak_squeezing_phase_ref(state, rr, (state->n + 7) >> 3, state->w >> 3, hashsum);
+		libkeccak_squeezing_phase_ref(state, rr, (256 + 7) >> 3, 64 >> 3, hashsum);
 	} else {
-		for (i = (state->n - 1) / state->r; i--;)
+		for (i = (256 - 1) / 1088; i--;)
 			libkeccak_f(state);
 	}
 
@@ -667,59 +766,74 @@ void cShake256_ref(const uint8_t *msg, size_t msg_len, const char* custom, uint8
   libkeccak_cshake_initialise_ref(&state, NULL, 0, 0, NULL,
                                 (uint8_t*)custom, strlen(custom), 0, NULL);
   
-  libkeccak_update_ref(&state, msg, msg_len);
-  libkeccak_digest(&state, NULL, 0, 0, "00", digest);
+  libkeccak_fast_update_ref(&state, msg, msg_len);
+  libkeccak_fast_digest_ref(&state, NULL, 0, 0, "00", digest);
   libkeccak_state_destroy_ref(&state);
 }
 
 void test_cshake256_comparison()
 {
-  // Example input data
-  uint8_t input[] = {0xDE, 0xAD, 0xBE, 0xEF}; // Input data
-  size_t inputLen = sizeof(input);
-
-  // Customization string used in both cases
-  const char *customString = "ProofOfWorkHash";
-
-  // Output buffers for both implementations (32 bytes = 256 bits)
-  uint8_t customOutput[32] = {0}; // For custom implementation
-  uint8_t keccakOutput[32] = {0}; // For libkeccak
-
-  // Output length (32 bytes = 256 bits)
-  size_t outputLen = 32;
-
-  // Customization string as byte array (for custom implementation)
-  uint8_t S[] = "ProofOfWorkHash"; // Same as the custom string
-  size_t sLen = strlen((char *)S); // Length of the custom string
-
-  // Run the custom cshake256 implementation with 32 bytes output
-  cShake256_ref(input, inputLen, customString, customOutput, outputLen * 8);
-
-  // Run the libkeccak cshake256 implementation (N is nil, use custom string)
-  cshake256_nil_function_name(input, inputLen, customString, keccakOutput, outputLen * 8); // Output length in bits for libkeccak
-
-  // Compare both outputs byte by byte
-  if (memcmp(customOutput, keccakOutput, outputLen) == 0)
+  int invalid = 0;
+  for (int ITER = 0; ITER < 1000000; ITER++)
   {
-    printf("Test passed: Outputs match!\n");
+    // Example input data
+    uint8_t input[80];// Input data
+    for (int i = 0; i < 80; i++) {
+      input[i] = rand() % 256;
+      // printf("%02x", input[i]);
+    }
+    // printf("\n");
+    
+    size_t inputLen = sizeof(input);
+
+    // Customization string used in both cases
+    const char *customString = "ProofOfWorkHash";
+
+    // Output buffers for both implementations (32 bytes = 256 bits)
+    uint8_t customOutput[32] = {0}; // For custom implementation
+    uint8_t keccakOutput[32] = {0}; // For libkeccak
+
+    // Output length (32 bytes = 256 bits)
+    size_t outputLen = 32;
+
+    // Customization string as byte array (for custom implementation)
+    uint8_t S[] = "ProofOfWorkHash"; // Same as the custom string
+    size_t sLen = strlen((char *)S); // Length of the custom string
+
+    // Run the custom cshake256 implementation with 32 bytes output
+    cShake256_ref(input, inputLen, customString, customOutput, outputLen * 8);
+
+    // Run the libkeccak cshake256 implementation (N is nil, use custom string)
+    cshake256_nil_function_name(input, inputLen, customString, keccakOutput, outputLen * 8); // Output length in bits for libkeccak
+
+    // Compare both outputs byte by byte
+    if (memcmp(customOutput, keccakOutput, outputLen) == 0)
+    {
+      continue;
+    }
+    else
+    {
+      invalid++;
+      printf("Test failed: Outputs do not match!\n");
+
+      // Print both outputs for comparison
+      printf("Custom cSHAKE256 output:\n");
+      for (size_t i = 0; i < outputLen; i++)
+      {
+        printf("%02x", customOutput[i]);
+      }
+      printf("\n");
+
+      printf("libkeccak cSHAKE256 output:\n");
+      for (size_t i = 0; i < outputLen; i++)
+      {
+        printf("%02x", keccakOutput[i]);
+      }
+      printf("\n");
+    }
   }
-  else
-  {
-    printf("Test failed: Outputs do not match!\n");
 
-    // Print both outputs for comparison
-    printf("Custom cSHAKE256 output:\n");
-    for (size_t i = 0; i < outputLen; i++)
-    {
-      printf("%02x", customOutput[i]);
-    }
-    printf("\n");
-
-    printf("libkeccak cSHAKE256 output:\n");
-    for (size_t i = 0; i < outputLen; i++)
-    {
-      printf("%02x", keccakOutput[i]);
-    }
-    printf("\n");
+  if (invalid == 0) {
+    printf("Test passed: All outputs match!\n");
   }
 }

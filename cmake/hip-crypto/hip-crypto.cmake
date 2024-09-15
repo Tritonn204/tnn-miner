@@ -1,10 +1,7 @@
 if (WITH_HIP)
   add_definitions(/DTNN_HIP)
   message(STATUS "Building with HIP GPU support")
-  cmake_minimum_required(VERSION 3.21) # HIP language support requires 3.21
-
-  set(HIP_PATH FILEPATH $ENV{HIP_PATH})
-  string(REPLACE "\\" "/" HIP_PATH ${HIP_PATH})  # Replace backslashes with forward slashes
+  cmake_minimum_required(VERSION 3.28) # TNN HIP language support requires 3.28
 
   # set(HIP_PLATFORM "amd" CACHE STRING "Specify HIP platform (amd or nvidia)")
 
@@ -36,11 +33,25 @@ if (WITH_HIP)
   
   include(cmake/hip-crypto/astrix-hash/astrix-hash-hip.cmake)
 
-  list(APPEND SOURCES_CRYPTO ${hipSources})
+  # # Add HIP sources and libraries
+  # add_library(tnn_hip STATIC ${hipSources})
+  # # add_executable(tnn_hip_run ${hipSources})
 
-  # list(APPEND SOURCES_CRYPTO
-  #   src/tnn_hip/crypto/cshake/testshake.cpp
+  # install(TARGETS tnn_hip
+  #   DESTINATION ${CMAKE_INSTALL_PREFIX}
   # )
+
+  if (CMAKE_HIP_PLATFORM MATCHES nvidia OR CMAKE_HIP_PLATFORM MATCHES nvcc)
+    set(TNN_RDC "-rdc=false")
+  else()
+    set(TNN_RDC "-fno-gpu-rdc")
+  endif()
+
+  set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} ${TNN_RDC}")
+  list(APPEND SOURCES_CRYPTO
+    ${hipSources}
+    src/tnn_hip/crypto/cshake/ref-cshake.cpp
+  )
 
   # # Create a static archive incrementally for large object file counts.
   # if(NOT DEFINED CMAKE_HIP_ARCHIVE_CREATE)

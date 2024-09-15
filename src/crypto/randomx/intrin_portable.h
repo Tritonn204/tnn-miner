@@ -53,10 +53,10 @@ constexpr int RoundToZero = 3;
 #define __SSE2__ 1
 #endif
 
-//MSVC doesn't define __AES__
-#if defined(_MSC_VER) && defined(__SSE2__)
-#define __AES__
-#endif
+// //MSVC doesn't define __AES__
+// #if defined(_MSC_VER) && defined(__SSE2__)
+// #define __AES__
+// #endif
 
 //the library "sqrt" function provided by MSVC for x86 targets doesn't give
 //the correct results, so we have to use inline assembly to call x87 fsqrt directly

@@ -407,6 +407,16 @@ LIBKECCAK_GCC_ONLY(__attribute__((__leaf__, __nonnull__)))
 int libkeccak_state_initialise(struct libkeccak_state *, const struct libkeccak_spec *);
 
 /**
+ * Initialise a state according to cSHAKE256 Kaspa specifications
+ * 
+ * @param   state  The state that should be initialised
+ * @param   spec   The specifications for the state
+ * @return         Zero on success, -1 on error
+ */
+LIBKECCAK_GCC_ONLY(__attribute__((__leaf__, __nonnull__)))
+int libkeccak_kas_state_initialise(struct libkeccak_state *restrict state, const struct libkeccak_spec *restrict spec);
+
+/**
  * Reset a state according to hashing specifications
  * 
  * @param  state  The state that should be reset

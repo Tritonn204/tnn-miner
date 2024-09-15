@@ -38,8 +38,44 @@ libkeccak_state_initialise(struct libkeccak_state *restrict state, const struct 
 	for (x = 0; x < 25; x++)
 		state->S[x] = 0;
 	state->mptr = 0;
-	state->mlen = (size_t)(state->r * state->b) >> 2;
+	state->mlen = (size_t)(state->r * state->b) >> 2; 
 
 	state->M = malloc(state->mlen * sizeof(char));
 	return state->M == NULL ? -1 : 0;
 }
+
+int
+libkeccak_kas_state_initialise(struct libkeccak_state *restrict state, const struct libkeccak_spec *restrict spec)
+{
+	long int x;
+
+	state->r = 1088;
+	state->n = 256;
+	state->c = 512;
+	state->b = 1600;
+	state->w = x = 64;
+	state->l = 6;
+
+	// if (x & 0xF0L) {
+	// 	state->l |= 4;
+	// 	x >>= 4;
+	// }
+	// if (x & 0x0CL) {
+	// 	state->l |= 2;
+	// 	x >>= 2;
+	// }
+	// if (x & 0x02L) {
+	// 	state->l |= 1;
+	// }
+
+	state->nr = 24;
+	state->wmod = ~0LL;
+	for (x = 0; x < 25; x++)
+		state->S[x] = 0;
+	state->mptr = 0;
+	state->mlen = 137; 
+
+	state->M = malloc(state->mlen * sizeof(char));
+	return state->M == NULL ? -1 : 0;
+}
+

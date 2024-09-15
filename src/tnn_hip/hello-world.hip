@@ -42,6 +42,29 @@ __global__ void helloworld(char* in, char* out)
 	out[num] = in[num] + 1;
 }
 
+bool is_hip_supported()
+{
+  int deviceCount = 0;
+  hipError_t err = hipGetDeviceCount(&deviceCount);
+  if (err == hipSuccess && deviceCount > 0)
+  {
+    return true;
+  }
+  else
+  {
+    // Handle error (e.g., no device or ROCm runtime not present)
+    if (err == hipErrorNoDevice)
+    {
+      printf("No ROCm-capable devices detected.\n");
+    }
+    else
+    {
+      printf("HIP runtime error: %s\n", hipGetErrorString(err));
+    }
+    return false;
+  }
+}
+
 int helloTest()
 {
 
@@ -61,9 +84,9 @@ int helloTest()
 	char* inputBuffer;
 	char* outputBuffer;
 	hipMalloc((void**)&inputBuffer, (strlength + 1) * sizeof(char));
-    hipMalloc((void**)&outputBuffer, (strlength + 1) * sizeof(char));
+  hipMalloc((void**)&outputBuffer, (strlength + 1) * sizeof(char));
 
-    hipMemcpy(inputBuffer, input, (strlength + 1) * sizeof(char), hipMemcpyHostToDevice);
+  hipMemcpy(inputBuffer, input, (strlength + 1) * sizeof(char), hipMemcpyHostToDevice);
 
 	hipLaunchKernelGGL(helloworld,
                   dim3(1),

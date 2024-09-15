@@ -208,7 +208,7 @@ void mineRx0(int tid){
   byte work[RANDOMX_TEMPLATE_SIZE];
 
   randomx_vm *vm = randomx_create_vm(rxFlags, rxCache, rxDataset);
-  randomx_vm *vmDev = randomx_create_vm(rxFlags, rxCache, rxDataset);
+  randomx_vm *vmDev = randomx_create_vm(rxFlags, rxCache_dev, rxDataset_dev);
 
   if (vm == nullptr) {
     if ((rxFlags & RANDOMX_FLAG_HARD_AES)) {

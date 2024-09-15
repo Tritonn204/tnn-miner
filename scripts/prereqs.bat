@@ -9,6 +9,7 @@ if "%1%" == "ci" (
 dir c:\
 
 mkdir c:\mingw64
+mkdir c:\openssl
 mkdir c:\packages
 pushd c:\packages
   if not exist zstd-v1.5.6-win64.zip (
@@ -42,8 +43,8 @@ echo Uncompressing Sodium
 
 dir c:\packages\
 
-echo Untarring OpenSSL
-tar -xf c:\packages\openssl-330.tar -C c:\
+echo Untarring OpenSSL to c:\openssl
+tar -xf c:\packages\openssl-330.tar -C c:\openssl
 echo Untarring Sodium
 tar -xf c:\packages\libsodium-1020.tar -C c:\
 echo Untarring HWLoc

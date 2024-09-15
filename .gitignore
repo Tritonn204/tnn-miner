@@ -56,3 +56,5 @@
 !/extern/BLAKE3/c/CMakeLists.txt
 # SPSA
 !/src/astrobwtv3/CMakeLists.txt
+# tnn-hip
+!/src/tnn_hip/CMakeLists.txt

@@ -26,7 +26,6 @@ using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
 int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCache *cache, bool isDev)
 {
   std::string M = packet.at("method").get_string().c_str();
-  // std::cout << "Stratum packet: " << boost::json::serialize(packet).c_str() << std::endl;
   if (M.compare(SpectreStratum::s_notify) == 0)
   {
     std::scoped_lock<boost::mutex> lockGuard(mutex);
@@ -75,6 +74,9 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
       fflush(stdout);
       setcolor(BRIGHT_WHITE);
     }
+
+    // if (!isDev) std::cout << "Stratum packet: " << boost::json::serialize(packet).c_str() << std::endl;
+
 
     SpectreStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 

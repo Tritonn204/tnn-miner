@@ -46,7 +46,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endif
 
 #if defined(_MSC_VER)
-	#define HAS_VALUE(X) X ## 0
+  #ifdef _MSC_VER
+    // MSVC specific version of the macro
+    #define HAS_VALUE(X) X
+
+    #define __MACHINEARM64_X64(x) _M_ARM64
+    #define __MACHINEX64(x) _M_X64
+  #else
+    // Other compilers (e.g., GCC, Clang)
+    #define HAS_VALUE(X) X ## 0
+  #endif
 	#define EVAL_DEFINE(X) HAS_VALUE(X)
 	#include <intrin.h>
 	#include <stdlib.h>
@@ -68,12 +77,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	#endif
 
 	#if EVAL_DEFINE(__MACHINEX64(1))
-		int64_t smulh(int64_t a, int64_t b) {
-			int64_t hi;
-			_mul128(a, b, &hi);
-			return hi;
-		}
-		#define HAVE_SMULH
+    #ifndef __SIZEOF_INT128__
+      int64_t smulh(int64_t a, int64_t b) {
+        int64_t hi;
+        _mul128(a, b, &hi);
+        return hi;
+      }
+      #define HAVE_SMULH
+    #endif
 	#endif
 
 	static void setRoundMode_(uint32_t mode) {

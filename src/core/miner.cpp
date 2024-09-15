@@ -14,6 +14,8 @@
 //------------------------------------------------------------------------------
 
 #include "tnn-common.hpp"
+#include "gpulibs.h"
+
 #include "rootcert.h"
 #include <DNSResolver.hpp>
 #include "net.hpp"
@@ -23,6 +25,7 @@
 #include <iostream>
 #include <string>
 #include <numeric>
+
 #include "miner.h"
 
 #include <random>
@@ -50,9 +53,6 @@
 
 #include "reporter.hpp"
 #include "coins/miners.hpp"
-
-#include <tnn_hip/hello.hpp>
-#include <tnn_hip/crypto/cshake/cshake256.h>
 
 // INITIALIZE COMMON STUFF
 int miningAlgo = DERO_HASH;
@@ -174,7 +174,9 @@ void initializeExterns() {
 
 void onExit() {
   setcolor(BRIGHT_WHITE);
-  printf("\n\nExiting Miner...");
+  printf("\n\nExiting Miner...\n");
+  fflush(stdout);
+  boost::this_thread::sleep_for(boost::chrono::seconds(3));
   fflush(stdout);
 
 #if defined(_WIN32)
@@ -183,6 +185,11 @@ void onExit() {
 }
 
 void sigterm(int signum) {
+  std::cout << "\n\nTerminate signal (" << signum << ") received.\n" << std::flush;
+  exit(0);
+}
+
+void sigint(int signum) {
   std::cout << "\n\nInterrupt signal (" << signum << ") received.\n" << std::flush;
   exit(0);
 }
@@ -191,14 +198,11 @@ int main(int argc, char **argv)
 {
   // test_cshake256();
 
-  #ifdef TNN_HIP
-  helloTest();
-  test_cshake256();
-  test_cshake256_comparison();
-  #endif
+  GPUTest();
 
   std::atexit(onExit);
   signal(SIGTERM, sigterm);
+  signal(SIGINT, sigterm);
   alignas(64) char buf[65536];
   setvbuf(stdout, buf, _IOFBF, 65536);
   srand(time(NULL)); // Placing higher here to ensure the effect cascades through the entire program
@@ -858,8 +862,10 @@ fillBlanks:
 Mining:
 {
  //  mutex.lock();
-  printSupported();
- //  mutex.unlock();
+  #ifndef TNN_HIP
+    printSupported();
+  #endif
+ //  mutex.unlock();1
 
   if (miningAlgo == DERO_HASH && (wallet.find("der", 0) == std::string::npos && wallet.find("det", 0) == std::string::npos))
   {
