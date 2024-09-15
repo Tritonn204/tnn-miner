@@ -34,6 +34,7 @@ build_target() {
     return 0
 }
 
+
 export HIP_PATH="$(hipconfig --path)"
 export ROCM_PATH="$(hipconfig --rocmpath)"
 

@@ -39,13 +39,13 @@ export ROCM_PATH=$(hipconfig --rocmpath)
 
 export HIP_PLATFORM=nvidia
 # Build for NVIDIA using hipcc (with HIP_PLATFORM=nvidia)
-build_target "bin" ON nvidia
+build_target "" ON nvidia
 if [ $? -ne 0 ]; then
     echo "Failed to build for NVIDIA."
 fi
 
-# Build without HIP
-build_target "bin" OFF ""
-if [ $? -ne 0 ]; then
-    echo "Failed to build for CPU-only."
-fi
+# # Build without HIP
+# build_target "bin" OFF ""
+# if [ $? -ne 0 ]; then
+#     echo "Failed to build for CPU-only."
+# fi

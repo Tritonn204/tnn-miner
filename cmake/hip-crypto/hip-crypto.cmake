@@ -42,7 +42,7 @@ if (WITH_HIP)
   # )
 
   if (CMAKE_HIP_PLATFORM MATCHES nvidia OR CMAKE_HIP_PLATFORM MATCHES nvcc)
-    set(TNN_RDC "-rdc=false")
+    # set(TNN_RDC "-rdc=false")
   else()
     set(TNN_RDC "-fno-gpu-rdc")
   endif()

@@ -99,8 +99,16 @@ if (WITH_HIP)
     add_definitions(-DBOOST_ALL_NO_LIB)
     set(CMAKE_C_COMPILER $ENV{HIP_PATH}/bin/clang.exe)
     set(CMAKE_CXX_COMPILER $ENV{HIP_PATH}/bin/clang++.exe)
+
+    # if (HIP_PLATFORM MATCHES "nvidia")
+    #   set(CMAKE_C_COMPILER "cl")  # Adjust path as needed
+    #   set(CMAKE_CXX_COMPILER "cl")  # Adjust path as needed
+
+    #   link_directories($ENV{LIB})
+    # else()
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -target x86_64-pc-windows-msvc")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -target x86_64-pc-windows-msvc")
+    # endif()
   endif()
   file(GLOB HIP_MODULES 
     "${HIP_PATH}/lib/cmake/*"
@@ -143,9 +151,7 @@ endif()
 if(CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin" OR USE_GCC)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lc++ -fuse-ld=ld")
 else()
-  if (NOT WITH_HIP)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
-  endif()
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
 endif()
 
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")

@@ -92,17 +92,7 @@ function Get-ProcessorCount {
     return $count
 }
 
-# Build for AMD using ROCm
-if (-not (Build-Target "" "ON" "amd")) {
-    Write-Host "Failed to build for AMD."
-}
-
 # Build for NVIDIA using hipcc (with HIP_PLATFORM=nvidia)
 if (-not (Build-Target "" "ON" "nvidia")) {
     Write-Host "Failed to build for NVIDIA."
-}
-
-# Build without HIP
-if (-not (Build-Target "" "OFF" "")) {
-    Write-Host "Failed to build for CPU-only."
 }
