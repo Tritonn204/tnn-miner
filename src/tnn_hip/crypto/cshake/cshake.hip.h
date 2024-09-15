@@ -226,7 +226,7 @@ struct hipkeccak_state {
 	/**
 	 * The lanes (state/sponge)
 	 */
-	int64_t S[25];
+	uint64_t S[25];
 
 	/**
 	 * The bitrate
@@ -256,7 +256,7 @@ struct hipkeccak_state {
 	/**
 	 * The word mask
 	 */
-	int64_t wmod;
+	uint64_t wmod;
 
 	/**
 	 * ℓ, the binary logarithm of the word size
@@ -289,7 +289,7 @@ struct hipkeccak_state_optimized {
 	/**
 	 * The lanes (state/sponge)
 	 */
-	int64_t S[25*CSHAKE256_THREADS];
+	uint64_t S[25*CSHAKE256_THREADS];
 
 	/**
 	 * Left over water to fill the sponge with at next update
@@ -639,16 +639,6 @@ __device__ int hipkeccak_fast_update(struct hipkeccak_state *, const void *, siz
  * @param   msg     The partial message
  * @param   msglen  The length of the partial message
  * @return          Zero on success, -1 on error
- */
-
-__device__ int hipkeccak_update(struct hipkeccak_state *, const void *, size_t);
-
-/**
- * Get message suffix for cSHAKE hashing
- * 
- * @param   nlen  Whether the function-name bit string is non-empty
- * @param   slen  Whether the customisation bit string is non-empty
- * @return        The message suffix to use
  */
 
 __device__ inline const char *

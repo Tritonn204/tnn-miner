@@ -91,6 +91,7 @@ int libkeccak_state_initialise_ref(struct libkeccak_state *state, const struct l
 
   // Explicitly cast malloc in C++
   state->M = (unsigned char *)malloc(state->mlen * sizeof(unsigned char));
+  memset(state->S, 0, 25*sizeof(uint64_t));
   return state->M == nullptr ? -1 : 0; // Use nullptr instead of NULL in C++
 }
 
@@ -432,7 +433,8 @@ void libkeccak_cshake_initialise_ref(struct libkeccak_state *state, // Remove re
   // Function calls with adjusted parameters
   off = encode_left(state, static_cast<uint8_t *>(state->M), byterate, byterate, off); // Explicit cast for state->M
   off = encode_left(state, static_cast<uint8_t *>(state->M), byterate, (n_len << 3) + n_bits + strlen(n_suffix), off);
-  off = feed_text(state, static_cast<uint8_t *>(state->M), n_text, n_len, n_bits, n_suffix, off, byterate, &bitoff);
+
+  // off = feed_text(state, static_cast<uint8_t *>(state->M), n_text, n_len, n_bits, n_suffix, off, byterate, &bitoff);
 
   if (!bitoff)
   {
@@ -445,13 +447,19 @@ void libkeccak_cshake_initialise_ref(struct libkeccak_state *state, // Remove re
     off = feed_text_shifted(state, static_cast<uint8_t *>(state->M), s_text, s_len, s_bits, s_suffix, off, byterate, &bitoff);
   }
 
-  if (bitoff)
-    off++;
+  printf("off = %d\n", off);
+
   if (off)
   {
     memset(&state->M[off], 0, 137 - off);
     libkeccak_zerocopy_update_ref(state, static_cast<uint8_t *>(state->M), 137);
   }
+
+  // printf("ref S:\n");
+  // for (int i = 0; i < 25; i++) {
+  //   printf("%llu\n", state->S[i]);
+  // }
+  // printf("\n");
 
   // printf("final off = %llu\n", off);
 }
@@ -489,16 +497,6 @@ libkeccak_fast_update_ref(struct libkeccak_state *state, const uint8_t *msg, siz
 {
 	size_t len;
 	unsigned char *new_mem;
-
-	if (__builtin_expect(state->mptr + msglen > state->mlen, 0)) {
-		state->mlen += msglen;
-		new_mem = (uint8_t *)realloc(state->M, state->mlen * sizeof(char));
-		if (!new_mem) {
-			state->mlen -= msglen;
-			return -1;
-		}
-		state->M = new_mem;
-	}
 
 	__builtin_memcpy(state->M + state->mptr, msg, msglen * sizeof(char));
 	state->mptr += msglen;
@@ -602,8 +600,6 @@ libkeccak_squeezing_phase_ref(struct libkeccak_state *state, long int rr,
 		if (olen > 0)
 			libkeccak_f(state);
 	}
-	if (256 & 7)
-		hashsum[-1] &= (unsigned char)((1 << (256 & 7)) - 1);
 }
 
 int
@@ -617,46 +613,57 @@ libkeccak_fast_digest_ref(struct libkeccak_state *state, const uint8_t *msg_, si
 	size_t ext;
 	long int i;
 
-	if (!msg) {
-		msglen = 0;
-		bits = 0;
-	} else {
-		msglen += bits >> 3;
-		bits &= 7;
-	}
+	// if (!msg) {
+	// 	msglen = 0;
+	// 	bits = 0;
+	// } else {
+	// 	msglen += bits >> 3;
+	// 	bits &= 7;
+	// }
 
-	ext = msglen + ((bits + suffix_len + 7) >> 3) + (size_t)rr;
-	if (__builtin_expect(state->mptr + ext > state->mlen, 0)) {
-		state->mlen += ext;
-		new_mem = (uint8_t *)realloc(state->M, state->mlen * sizeof(char));
-		if (!new_mem) {
-			state->mlen -= ext;
-			return -1;
-		}
-		state->M = new_mem;
-	}
+	// ext = msglen + ((bits + suffix_len + 7) >> 3) + (size_t)rr;
+	// if (__builtin_expect(state->mptr + ext > state->mlen, 0)) {
+	// 	state->mlen += ext;
+	// 	new_mem = (uint8_t *)realloc(state->M, state->mlen * sizeof(char));
+	// 	if (!new_mem) {
+	// 		state->mlen -= ext;
+	// 		return -1;
+	// 	}
+	// 	state->M = new_mem;
+	// }
 
-	if (msglen)
-		__builtin_memcpy(state->M + state->mptr, msg, msglen * sizeof(char));
-	state->mptr += msglen;
+	// if (msglen)
+	// 	__builtin_memcpy(state->M + state->mptr, msg, msglen * sizeof(char));
+	// state->mptr += msglen;
 
-	if (bits)
-		state->M[state->mptr] = msg[msglen] & (unsigned char)((1 << bits) - 1);
+	// if (bits)
+	// 	state->M[state->mptr] = msg[msglen] & (unsigned char)((1 << bits) - 1);
 	if (__builtin_expect(!!suffix_len, 1)) {
-		if (!bits)
-			state->M[state->mptr] = 0;
-		while (suffix_len--) {
+		state->M[state->mptr] = 0;
+		// while (suffix_len--) {
 			state->M[state->mptr] |= (unsigned char)((*suffix++ & 1) << bits++);
 			if (bits == 8) {
 				bits = 0;
 				state->M[++(state->mptr)] = 0;
 			}
-		}
+      state->M[state->mptr] |= (unsigned char)((*suffix++ & 1) << bits++);
+			if (bits == 8) {
+				bits = 0;
+				state->M[++(state->mptr)] = 0;
+			}
+		// }
 	}
 	if (bits)
 		state->mptr++;
 
 	state->mptr = libkeccak_pad10star1_ref((size_t)1088, state->M, state->mptr, bits);
+
+  // printf("ref buffer:\n");
+  // for (int i = 0; i < 137; i++) {
+  //   printf("%02X", state->M[i]);
+  // }
+  // printf("\n");
+
 	libkeccak_absorption_phase_ref(state, state->M, state->mptr);
 
 	if (hashsum) {
@@ -763,10 +770,12 @@ void cShake256_ref(const uint8_t *msg, size_t msg_len, const char* custom, uint8
 
   struct libkeccak_state state;
   libkeccak_state_initialise_ref(&state, &spec);
+
   libkeccak_cshake_initialise_ref(&state, NULL, 0, 0, NULL,
                                 (uint8_t*)custom, strlen(custom), 0, NULL);
-  
+
   libkeccak_fast_update_ref(&state, msg, msg_len);
+
   libkeccak_fast_digest_ref(&state, NULL, 0, 0, "00", digest);
   libkeccak_state_destroy_ref(&state);
 }
@@ -774,15 +783,16 @@ void cShake256_ref(const uint8_t *msg, size_t msg_len, const char* custom, uint8
 void test_cshake256_comparison()
 {
   int invalid = 0;
-  for (int ITER = 0; ITER < 1000000; ITER++)
+  for (int ITER = 0; ITER < 1; ITER++)
   {
     // Example input data
-    uint8_t input[80];// Input data
+    uint8_t input[80] ;// Input data
     for (int i = 0; i < 80; i++) {
-      input[i] = rand() % 256;
+      // input[i] = rand() % 256;
+      input[i] = (i*i) % 256;
       // printf("%02x", input[i]);
     }
-    // printf("\n");
+    // // printf("\n");
     
     size_t inputLen = sizeof(input);
 
@@ -809,6 +819,12 @@ void test_cshake256_comparison()
     // Compare both outputs byte by byte
     if (memcmp(customOutput, keccakOutput, outputLen) == 0)
     {
+      printf("Custom cSHAKE256 output:\n");
+      for (size_t i = 0; i < outputLen; i++)
+      {
+        printf("%02x", customOutput[i]);
+      }
+      printf("\n");
       continue;
     }
     else

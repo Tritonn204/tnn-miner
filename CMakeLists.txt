@@ -449,6 +449,10 @@ endif()
 if (WITH_HIP)
   if (HIP_PLATFORM MATCHES amd)
    set(TNN_OUTPUT_NAME "tnn-miner-${INTERNAL_TNN_VERSION}_rocm")
+   set_target_properties(${PROJECT_NAME}-${PROJECT_VERSION} PROPERTIES
+    HIP_ARCHITECTURES "gfx900;gfx1100"   # For AMD GPUs
+    HIP_PLATFORM "amd"
+  )
   else ()
     set(TNN_OUTPUT_NAME "tnn-miner-${INTERNAL_TNN_VERSION}_cuda")
   endif ()

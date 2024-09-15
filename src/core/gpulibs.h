@@ -7,7 +7,7 @@ inline int GPUTest() {
   #ifdef TNN_HIP
     if (is_hip_supported()) {
       helloTest();
-      // test_cshake256();
+      test_cshake256_hip();
       test_cshake256_comparison();
     }
   #endif

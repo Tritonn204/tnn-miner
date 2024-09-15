@@ -176,11 +176,11 @@ void onExit() {
   setcolor(BRIGHT_WHITE);
   printf("\n\nExiting Miner...\n");
   fflush(stdout);
-  boost::this_thread::sleep_for(boost::chrono::seconds(3));
+  boost::this_thread::sleep_for(boost::chrono::seconds(1));
   fflush(stdout);
 
 #if defined(_WIN32)
-  SetConsoleMode(hInput, ENABLE_EXTENDED_FLAGS | (prev_mode & ~ENABLE_QUICK_EDIT_MODE));
+  SetConsoleMode(hInput, ENABLE_EXTENDED_FLAGS | (prev_mode));
 #endif
 }
 
