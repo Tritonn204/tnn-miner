@@ -10,6 +10,7 @@ variables:
   TNN_BUILD_WIN: true
   AMD64_TARGET_LEVEL: x86-64-v3
   PACKAGE_VERSION: "0.0.1"
+  CMAKE_ARGS: "-DWITH_HIP=OFF"
   LINUX_AMD64_TGZ: "Tnn-miner-amd64-${PACKAGE_VERSION}.tar.gz"
   LINUX_ARM64_TGZ: "Tnn-miner-arm64-${PACKAGE_VERSION}.tar.gz"
   MACOS_ARM64_TGZ: "Tnn-miner-macos-arm64-${PACKAGE_VERSION}.tar.gz"
@@ -62,7 +63,7 @@ build-linux-amd64:
   before_script:
     - until docker info; do sleep 1; done
   script:
-    - docker buildx build --platform=linux/amd64 --build-arg PACKAGE_VERSION=${PACKAGE_VERSION} --build-arg TARGZ_FILE=${LINUX_AMD64_TGZ} -f docker/Dockerfile.ubu . --output ./
+    - docker buildx build --platform=linux/amd64 --build-arg PACKAGE_VERSION=${PACKAGE_VERSION} --build-arg TARGZ_FILE=${LINUX_AMD64_TGZ} --build-arg CMAKE_ARGS=${CMAKE_ARGS} -f docker/Dockerfile.ubu . --output ./
     - export HIVEOS_MMPOS_AMD64_TGZ="tnn-miner-hiveos_mmpos_amd64_${PACKAGE_VERSION//-/.}.tar.gz"
     - echo "HIVEOS_MMPOS_AMD64_TGZ=$HIVEOS_MMPOS_AMD64_TGZ" >> linux-amd64-job.env
   after_script:
@@ -81,7 +82,7 @@ build-hiveos-mmpos:
     - build-linux-amd64
   script:
     - tar -xvf ${LINUX_AMD64_TGZ}
-    - mv ./Tnn-miner ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
+    - mv ./tnn-miner-${PACKAGE_VERSION}_cpu ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
     - sed "s/^EXTERNAL_VERSION=custom/EXTERNAL_VERSION=$PACKAGE_VERSION/g" -i ./wrappers/hiveos+mmpos/tnn-miner/mmp-external.conf
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/h-run.sh
@@ -162,7 +163,7 @@ build-linux-aarch64:
     - until docker info; do sleep 1; done
   script:
     - docker buildx ls
-    - docker buildx build --platform=linux/arm64 --build-arg PACKAGE_VERSION=${PACKAGE_VERSION} --build-arg TARGZ_FILE=${LINUX_ARM64_TGZ} -f docker/Dockerfile.ubu . --output ./
+    - docker buildx build --platform=linux/arm64 --build-arg PACKAGE_VERSION=${PACKAGE_VERSION} --build-arg TARGZ_FILE=${LINUX_ARM64_TGZ} --build-arg CMAKE_ARGS=${CMAKE_ARGS} -f docker/Dockerfile.ubu . --output ./
   after_script:
     - echo "LINUX_ARM64_BUILD_JOB_ID=$CI_JOB_ID" >> linux-arm64-job.env
   artifacts:
@@ -174,12 +175,10 @@ build-linux-aarch64:
   services:
     - name: docker:24.0.5-dind
 
-
-
 # run tests using the binary built before
 test-linux-amd64:
-  rules:
-    - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
+  #rules:
+  #  - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
   stage: test
   needs:
     - job: build-linux-amd64
@@ -191,14 +190,14 @@ test-linux-amd64:
     - ls -la ./
   script:
     - tar -xvf ./${LINUX_AMD64_TGZ}
-    - ./Tnn-miner --test-dero --quiet
-    - ./Tnn-miner --test-spectre --quiet
-    - ./Tnn-miner --test-xelis --quiet
+    - ./tnn-miner-${PACKAGE_VERSION}_cpu --test-dero --quiet
+    - ./tnn-miner-${PACKAGE_VERSION}_cpu --test-spectre --quiet
+    - ./tnn-miner-${PACKAGE_VERSION}_cpu --test-xelis --quiet
     
 # run tests using the binary built before
 test-linux-aarch64:
-  rules:
-    - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
+  #rules:
+  #  - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
   stage: test
   needs:
     - job: build-linux-aarch64
@@ -210,9 +209,9 @@ test-linux-aarch64:
     - ls -la ./
   script:
     - tar -xvf ./${LINUX_ARM64_TGZ}
-    - ./Tnn-miner --test-dero --quiet
-    - ./Tnn-miner --test-spectre --quiet
-    - ./Tnn-miner --test-xelis --quiet
+    - ./tnn-miner-${PACKAGE_VERSION}_cpu --test-dero --quiet
+    - ./tnn-miner-${PACKAGE_VERSION}_cpu --test-spectre --quiet
+    - ./tnn-miner-${PACKAGE_VERSION}_cpu --test-xelis --quiet
 
 # TODO install gdb instead of running prereqs
 # test-windows:
