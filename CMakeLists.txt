@@ -125,7 +125,7 @@ endif()
 
 project(
   Tnn-miner
-  LANGUAGES C CXX ${HIP_LANG}
+  LANGUAGES C CXX
   DESCRIPTION "Open Source Dero/Spectre/Xelis Miner"
 )
 
@@ -447,6 +447,7 @@ if (WITH_RANDOMX AND NOT WITH_HIP)
 endif()
 
 if (WITH_HIP)
+  enable_language(${HIP_LANG})
   if (HIP_PLATFORM MATCHES amd)
    set(TNN_OUTPUT_NAME "tnn-miner-${INTERNAL_TNN_VERSION}_rocm")
    set_target_properties(${PROJECT_NAME}-${PROJECT_VERSION} PROPERTIES
