@@ -447,8 +447,6 @@ void libkeccak_cshake_initialise_ref(struct libkeccak_state *state, // Remove re
     off = feed_text_shifted(state, static_cast<uint8_t *>(state->M), s_text, s_len, s_bits, s_suffix, off, byterate, &bitoff);
   }
 
-  printf("off = %d\n", off);
-
   if (off)
   {
     memset(&state->M[off], 0, 137 - off);

@@ -24,7 +24,7 @@
 #define CSHAKE256_STATE_SIZE 1600
 #define CSHAKE256_WORD_SIZE ((CSHAKE256_STATE_SIZE) / 25)
 #define CSHAKE256_WORD_MASK (~0LL)
-#define CSHAKE256_MLEN 137
+#define CSHAKE256_KAS_MLEN 137
 
 /**
  * Message suffix for SHA3 hashing
@@ -285,16 +285,16 @@ struct hipkeccak_state {
 };
 
 
-struct hipkeccak_state_optimized {
+struct hipkeccak_state_kas {
 	/**
 	 * The lanes (state/sponge)
 	 */
-	uint64_t S[25*CSHAKE256_THREADS];
+	uint64_t S[25*CSHAKE256_KAS_THREADS];
 
 	/**
 	 * Left over water to fill the sponge with at next update
 	 */
-	unsigned char M[CSHAKE256_MLEN*CSHAKE256_THREADS];
+	unsigned char M[CSHAKE256_KAS_MLEN*CSHAKE256_KAS_THREADS];
 };
 
 

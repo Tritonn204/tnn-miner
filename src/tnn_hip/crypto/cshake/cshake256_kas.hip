@@ -300,25 +300,24 @@ hipkeccak_digest(uint64_t *stateBuffer, uint8_t *memBuffer, const char *suffix, 
 
 #include "initialize_kas.hip.inc"
 
-__global__ void cSHAKE256_kernel_kas(const uint8_t *msg, const char* custom, uint8_t *digest, size_t output_length) {
+__global__ void cSHAKE256_kernel_kas_nonce(const uint8_t *msg, const char* custom, uint8_t *digest, size_t output_length, 
+  size_t firstNonce, uint8_t nonceSize, uint16_t noncePos) {
   int threadId = threadIdx.x;  // Thread index within the block (x-dimension)
   int blockId = blockIdx.x;    // Block index within the grid (x-dimension)
-
-  if (threadId == 0) printf("block %d used\n", blockId);
   
   // Calculate global thread index (linear index)
-  int globalId = blockId * CSHAKE256_THREADS + threadId;
+  int globalId = blockId * CSHAKE256_KAS_THREADS + threadId;
 
-  // Each block handles 80 * CSHAKE256_THREADS bytes of message
-  size_t block_msg_len = 80 * CSHAKE256_THREADS;
+  // Each block handles 80 * CSHAKE256_KAS_THREADS bytes of message
+  size_t block_msg_len = 80 * CSHAKE256_KAS_THREADS;
  
   // Pointer to the start of this block's message data
   const uint8_t* block_msg = &msg[blockId * block_msg_len];
 
-  __shared__ struct hipkeccak_state_optimized state;
+  __shared__ struct hipkeccak_state_kas state;
 
-  for (size_t i = threadId; i < CSHAKE256_MLEN*blockDim.x; i += blockDim.x) {
-    state.M[i] = ((i % CSHAKE256_MLEN) <= 80) ? block_msg[i] : 0;
+  for (size_t i = threadId; i < CSHAKE256_KAS_MLEN*blockDim.x; i += blockDim.x) {
+    state.M[i] = ((i % CSHAKE256_KAS_MLEN) <= 80) ? block_msg[i] : 0;
   }
 
   size_t mptr = 0;
@@ -327,7 +326,7 @@ __global__ void cSHAKE256_kernel_kas(const uint8_t *msg, const char* custom, uin
 
   __syncthreads();
 
-  hipkeccak_cshake_initialise(&state.S[threadId*25], &state.M[threadId*CSHAKE256_MLEN], (uint8_t*)custom, 15);
+  hipkeccak_cshake_initialise(&state.S[threadId*25], &state.M[threadId*CSHAKE256_KAS_MLEN], (uint8_t*)custom, 15);
   
   // printf("kernel state\n");
   // for (int i = 0; i < 25; i++) {
@@ -335,19 +334,52 @@ __global__ void cSHAKE256_kernel_kas(const uint8_t *msg, const char* custom, uin
   // }
   // printf("\n");
 
-  hipkeccak_update(&state.S[threadId*25], &state.M[threadId*CSHAKE256_MLEN], msg, 80, mptr);
-  hipkeccak_digest(&state.S[threadId*25], &state.M[threadId*CSHAKE256_MLEN], "00", &digest[32*globalId], mptr);
+  hipkeccak_update(&state.S[threadId*25], &state.M[threadId*CSHAKE256_KAS_MLEN], msg, 80, mptr);
+  hipkeccak_digest(&state.S[threadId*25], &state.M[threadId*CSHAKE256_KAS_MLEN], "00", &digest[32*globalId], mptr);
+}
+
+__global__ void cSHAKE256_kernel_kas(const uint8_t *msg, const char* custom, uint8_t *digest, size_t output_length) {
+  int threadId = threadIdx.x;  // Thread index within the block (x-dimension)
+  int blockId = blockIdx.x;    // Block index within the grid (x-dimension)
+  
+  // Calculate global thread index (linear index)
+  int globalId = blockId * CSHAKE256_KAS_THREADS + threadId;
+
+  // Each block handles 80 * CSHAKE256_KAS_THREADS bytes of message
+  size_t block_msg_len = 80 * CSHAKE256_KAS_THREADS;
+
+  __shared__ struct hipkeccak_state_kas state;
+
+  for (size_t i = threadId; i < CSHAKE256_KAS_MLEN*blockDim.x; i += blockDim.x) {
+    state.M[i] = ((i % CSHAKE256_KAS_MLEN) < 80) ? msg[i % 80] : 0;
+  }
+
+  size_t mptr = 0;
+  for (size_t x = threadId; x < 25*blockDim.x; x += blockDim.x)
+    state.S[x] = 0;
+
+  __syncthreads();
+
+  hipkeccak_cshake_initialise(&state.S[threadId*25], &state.M[threadId*CSHAKE256_KAS_MLEN], (uint8_t*)custom, 15);
+  
+  // printf("kernel state\n");
+  // for (int i = 0; i < 25; i++) {
+  //   printf("%llu\n", state.S[i]);
+  // }
+  // printf("\n");
+
+  hipkeccak_update(&state.S[threadId*25], &state.M[threadId*CSHAKE256_KAS_MLEN], msg, 80, mptr);
+  hipkeccak_digest(&state.S[threadId*25], &state.M[threadId*CSHAKE256_KAS_MLEN], "00", &digest[32*globalId], mptr);
 }
 
 void test_cshake256_hip()
 {
     int invalid = 0;
 
-    printf("batchSize = %d, blocks: %d, threads: %d\n", CSHAKE256_BATCH_SIZE, CSHAKE256_BLOCKS, CSHAKE256_THREADS);
-
+    fflush(stdout);
     // Example input data
     // printf("original input\n");
-    uint8_t input[80*CSHAKE256_BATCH_SIZE]; // Input data
+    uint8_t input[80]; // Input data
     for (int i = 0; i < 80; i++) {
         // input[i] = rand() % 256;
         input[i] = (i*i) % 256;
@@ -355,17 +387,17 @@ void test_cshake256_hip()
     }
     // printf("\n");
 
-    // printf("test input\n");
-    for (int i = 1; i < CSHAKE256_BATCH_SIZE; i++) {
-      memcpy(&input[i*80], input, 80);
-    }
-
-    // for (int i = 0; i < 80; i++) {
-    //     printf("%02x", input[i]);
+    // // printf("test input\n");
+    // for (int i = 1; i < CSHAKE256_KAS_BATCH_SIZE; i++) {
+    //   memcpy(&input[i*80], input, 80);
     // }
-    // printf("\n");
 
-    // printf("PRE LAUNCH\n");
+    // // for (int i = 0; i < 80; i++) {
+    // //     printf("%02x", input[i]);
+    // // }
+    // // printf("\n");
+
+    // // printf("PRE LAUNCH\n");
 
     size_t inputLen = sizeof(input);
 
@@ -373,7 +405,7 @@ void test_cshake256_hip()
     const char *customString = "ProofOfWorkHash";
 
     // Output buffers for both implementations (32 bytes = 256 bits)
-    uint8_t customOutput[32*CSHAKE256_BATCH_SIZE] = {0}; // For custom implementation
+    uint8_t *customOutput = (uint8_t*)malloc(32*CSHAKE256_KAS_BATCH_SIZE); // For custom implementation
 
     // Output length (32 bytes = 256 bits)
     size_t outputLen = 32;
@@ -388,17 +420,30 @@ void test_cshake256_hip()
 
     // Allocate memory on the GPU for input, output, and custom string
     hipMalloc((void **)&d_input, inputLen * sizeof(uint8_t));          // Allocate input on GPU
-    hipMalloc((void **)&d_customOutput, outputLen * sizeof(uint8_t) * CSHAKE256_BATCH_SIZE);  // Allocate output on GPU
+    hipMalloc((void **)&d_customOutput, outputLen * sizeof(uint8_t) * CSHAKE256_KAS_BATCH_SIZE);  // Allocate output on GPU
     hipMalloc((void **)&d_customString, sLen * sizeof(char));          // Allocate custom string on GPU
 
     // --- Copy Data to GPU ---
     hipMemcpy(d_input, input, inputLen * sizeof(uint8_t), hipMemcpyHostToDevice); // Copy input to GPU
     hipMemcpy(d_customString, customString, sLen * sizeof(char), hipMemcpyHostToDevice); // Copy custom string to GPU
 
-    constexpr int BLOCKS = (CSHAKE256_BATCH_SIZE + CSHAKE256_THREADS-1) / CSHAKE256_THREADS;
+    size_t BLOCKS = 0;
+    size_t THREADS = 0;
+    size_t BATCH_SIZE = 0;
+
+    getArchDims(BLOCKS, THREADS, BATCH_SIZE);
+
+    printf("batchSize = %d, blocks: %d, threads: %d\n", BATCH_SIZE, BLOCKS, THREADS);
 
     // --- Kernel Launch ---
-    cSHAKE256_kernel_kas<<<BLOCKS, CSHAKE256_THREADS>>>(d_input, d_customString, d_customOutput, outputLen * 8);
+    hipLaunchKernelGGL(
+      cSHAKE256_kernel_kas,           // Kernel function
+      dim3(BLOCKS),                   // Number of blocks (grid size)
+      dim3(THREADS),                  // Number of threads per block (block size)
+      0,                              // Dynamic shared memory size
+      0,                              // Stream (0 for default stream)
+      d_input, d_customString, d_customOutput, outputLen * 8  // Kernel parameters
+    );
     // Synchronize and check for errors
     hipError_t err = hipGetLastError();
     if (err != hipSuccess) {
@@ -406,13 +451,13 @@ void test_cshake256_hip()
     }
 
     // --- Copy Results Back to Host ---
-    hipMemcpy(customOutput, d_customOutput, outputLen * sizeof(uint8_t) * CSHAKE256_BATCH_SIZE, hipMemcpyDeviceToHost); // Copy result back to host
+    hipMemcpy(customOutput, d_customOutput, outputLen * sizeof(uint8_t) * CSHAKE256_KAS_BATCH_SIZE, hipMemcpyDeviceToHost); // Copy result back to host
 
     // --- Print the result ---
     printf("HIP cSHAKE256 output:\n");
-    // printf("output at index: %d\n", (CSHAKE256_BATCH_SIZE-1)*outputLen);
+    // printf("output at index: %d\n", (CSHAKE256_KAS_BATCH_SIZE-1)*outputLen);
     for (size_t i = 0; i < outputLen; i++) {
-        printf("%02x", customOutput[i + (CSHAKE256_BATCH_SIZE-1)*outputLen]);
+        printf("%02x", customOutput[i + (CSHAKE256_KAS_BATCH_SIZE-1)*outputLen]);
     }
     printf("\n");
 
@@ -420,4 +465,6 @@ void test_cshake256_hip()
     hipFree(d_input);
     hipFree(d_customOutput);
     hipFree(d_customString);
+    
+    free(customOutput);
 }

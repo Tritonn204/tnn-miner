@@ -1,54 +1,93 @@
 #include <tnn_hip/arch_def.h>
+#include <unordered_map>
+#include <tuple>  // For using std::tuple
+#include <string>
+#include <cstring>  // For strcmp
+
+// Structure to hold blocks, threads, and batchSize
+using ArchDims = std::tuple<size_t, size_t, size_t>;
 
 // Architecture-dependent grid dimensions and shared memory size
 #if defined(__HIP_PLATFORM_AMD__)
 // AMD platform: Define grid dimensions and shared memory size based on architecture
-  #if defined(__gfx9__)  // Vega
-    #if defined(__gfx906__)  // Radeon VII (Vega 20)
-      archDim(CSHAKE256, 38400, 192);
-    #elif defined(__gfx900__)  // Vega 56/64 (Vega 10)
-      archDim(CSHAKE256, 40960, 192);
-    #else
-      archDim(CSHAKE256, 2048, 192);
-    #endif
 
-  #elif defined(__gfx10__)  // RDNA 1/2
-    archDim(CSHAKE256, 2048, 192);
+// VEGA
+  // Radeon VII
+    archDim(CSHAKE256_KAS_gfx906, 38400, 192);
+  // Vega 56/64
+    archDim(CSHAKE256_KAS_gfx900, 40960, 192);
 
+// RDNA2
+  // RX 6800+
+    archDim(CSHAKE256_KAS_gfx1030, 51200, 192);
+  // RX 6700+
+    archDim(CSHAKE256_KAS_gfx1031, 25600, 192);
+  // RX 6600+
+    archDim(CSHAKE256_KAS_gfx1032, 20480, 192);
+  // RX 6300+
+    archDim(CSHAKE256_KAS_gfx1034, 10240, 192);
 
-  // RDNA 3
-  #elif defined(__gfx1100__)  // 7900 XTX/XT
-    archDim(CSHAKE256, 61440, 192);
+// RDNA 3
+  // RX 7900+
+    archDim(CSHAKE256_KAS_gfx1100, 61440, 192);
+  // RX 7800+
+    archDim(CSHAKE256_KAS_gfx1101, 38400, 192);
+  // RX 7700+
+    archDim(CSHAKE256_KAS_gfx1102, 34560, 192);
 
-  #elif defined(__gfx1101__)  // 7800XT
-    archDim(CSHAKE256, 38400, 192);
-
-  #elif defined(__gfx1102__)  // 7700XT/7600XT
-    archDim(CSHAKE256, 34560, 192);
-
-  #else  // Default AMD architecture
-    archDim(CSHAKE256, 10240, 192);
-  #endif
+  // Default AMD architecture
+    archDim(CSHAKE256_KAS, 20480, 192);
 
 #elif defined(__HIP_PLATFORM_NVIDIA__)
 // NVIDIA platform: Define grid dimensions and shared memory size based on architecture
   #if defined(__CUDA_ARCH__)
     #if __CUDA_ARCH__ >= 900  // Hopper
-      archDim(CSHAKE256, 2048, 256);
+      archDim(CSHAKE256_KAS, 2048, 256);
 
     #elif __CUDA_ARCH__ >= 800  // Ampere
-      archDim(CSHAKE256, 2048, 256);
+      archDim(CSHAKE256_KAS, 2048, 256);
 
-    #elif __CUDA_ARCH__ >= 700  // Volta or newer
-      archDim(CSHAKE256, 2048, 192);
+    #elif __CUDA_ARCH__ >= 700  // Volta
+      archDim(CSHAKE256_KAS, 2048, 192);
 
-    #elif __CUDA_ARCH__ >= 600  // Pascal or newer
-      archDim(CSHAKE256, 2048, 192);
+    #elif __CUDA_ARCH__ >= 600  // Pascal
+      archDim(CSHAKE256_KAS, 2048, 192);
 
     #else  // Older NVIDIA architectures
-      archDim(CSHAKE256, 2048, 192);
+      archDim(CSHAKE256_KAS, 2048, 192);
     #endif
   #endif
 #else
     #error "Unsupported platform"
 #endif
+
+ArchDims defaultDims = {CSHAKE256_KAS_BLOCKS, CSHAKE256_KAS_THREADS, CSHAKE256_KAS_BATCH_SIZE};
+
+// Define a lookup table (map) that holds the block/thread/batch sizes for each architecture
+static inline const std::unordered_map<std::string, ArchDims> archDimsMap = {
+  ARCH_DIM_ENTRY(CSHAKE256_KAS, gfx900),
+  ARCH_DIM_ENTRY(CSHAKE256_KAS, gfx906),
+  ARCH_DIM_ENTRY(CSHAKE256_KAS, gfx1030),
+  ARCH_DIM_ENTRY(CSHAKE256_KAS, gfx1031),
+  ARCH_DIM_ENTRY(CSHAKE256_KAS, gfx1032),
+  ARCH_DIM_ENTRY(CSHAKE256_KAS, gfx1034),
+  ARCH_DIM_ENTRY(CSHAKE256_KAS, gfx1100)
+};
+
+// Function to retrieve architecture dimensions
+static inline void getArchDims(size_t &blocks, size_t &threads, size_t &batchSize) {
+  int device;
+  hipGetDevice(&device);
+
+  hipDeviceProp_t props;
+  hipGetDeviceProperties(&props, device);
+
+  const char* archName = props.gcnArchName;
+
+  // Find the architecture in the lookup table
+  auto it = archDimsMap.find(std::string(archName));
+  const ArchDims& dims = (it != archDimsMap.end()) ? it->second : defaultDims;
+
+  // Unpack the tuple into blocks, threads, and batchSize
+  std::tie(blocks, threads, batchSize) = dims;
+}
