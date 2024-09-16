@@ -462,7 +462,7 @@ if (WITH_HIP)
   # message(STATUS "hip_DIR = ${hip_DIR}")
   # include_directories(${hip_INCLUDE_DIRS})
   # link_directories(${hip_LIBRARY_DIRS})
-  # set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -fgpu-rdc")
+  set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -O3 -ffast-math")
 
   # ExternalProject_Add(tnn_hip_project
   #   SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/tnn_hip

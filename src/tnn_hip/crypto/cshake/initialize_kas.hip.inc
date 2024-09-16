@@ -88,7 +88,24 @@ __device__ static void hipkeccak_cshake_initialise(uint64_t *stateBuffer, // Rem
   off = encode_left(stateBuffer, memBuffer, byterate, 0, off);
 
   off = encode_left(stateBuffer, memBuffer, byterate, (15 << 3), off);
-  off = feed_text(stateBuffer, memBuffer, s_text, s_len, 0, "", off, byterate, &bitoff);
+  off = feed_text(stateBuffer, memBuffer, s_text, 15, 0, "", off, byterate, &bitoff);
+
+  memset(&memBuffer[off], 0, 137 - off);
+  hipkeccak_zerocopy_update(stateBuffer, memBuffer, 137);
+}
+
+__device__ static void hipkeccak_cshake_initialise_heavy(uint64_t *stateBuffer, // Remove restrict
+                                                   uint8_t *memBuffer, uint8_t *s_text, size_t s_len)
+{
+  size_t off = 0, bitoff = 0;
+  size_t byterate = static_cast<size_t>(1088) >> 3;
+
+  // Function calls with adjusted parameters
+  off = encode_left(stateBuffer, memBuffer, byterate, byterate, off); // Explicit cast for state->M
+  off = encode_left(stateBuffer, memBuffer, byterate, 0, off);
+
+  off = encode_left(stateBuffer, memBuffer, byterate, (9 << 3), off);
+  off = feed_text(stateBuffer, memBuffer, s_text, 9, 0, "", off, byterate, &bitoff);
 
   memset(&memBuffer[off], 0, 137 - off);
   hipkeccak_zerocopy_update(stateBuffer, memBuffer, 137);

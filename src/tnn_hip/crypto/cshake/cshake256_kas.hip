@@ -39,14 +39,13 @@
 static const long int LANE_TRANSPOSE_MAP[] = { LIST_25_REF };
 #undef X
 
-static const uint64_t RC_REF[] = {
-	0x0000000000000001ULL, 0x0000000000008082ULL, 0x800000000000808AULL, 0x8000000080008000ULL,
-	0x000000000000808BULL, 0x0000000080000001ULL, 0x8000000080008081ULL, 0x8000000000008009ULL,
-	0x000000000000008AULL, 0x0000000000000088ULL, 0x0000000080008009ULL, 0x000000008000000AULL,
-	0x000000008000808BULL, 0x800000000000008BULL, 0x8000000000008089ULL, 0x8000000000008003ULL,
-	0x8000000000008002ULL, 0x8000000000000080ULL, 0x000000000000800AULL, 0x800000008000000AULL,
-	0x8000000080008081ULL, 0x8000000000008080ULL, 0x0000000080000001ULL, 0x8000000080008008ULL
-};
+__device__ static size_t BLOCKS = 0;
+__device__ static size_t THREADS = 0;
+__device__ static size_t BATCH_SIZE = 0;
+
+__device__ static size_t BLOCKS_HEAVY = 0;
+__device__ static size_t THREADS_HEAVY = 0;
+__device__ static size_t BATCH_SIZE_HEAVY = 0;
 
 __device__ static void
 hipkeccak_f_round(uint64_t *A, uint64_t rc)
@@ -124,11 +123,22 @@ hipkeccak_f_round64(uint64_t *A, uint64_t rc)
 	A[0] ^= rc;
 }
 
+static const uint64_t RC_REF[] = {
+	0x0000000000000001ULL, 0x0000000000008082ULL, 0x800000000000808AULL, 0x8000000080008000ULL,
+	0x000000000000808BULL, 0x0000000080000001ULL, 0x8000000080008081ULL, 0x8000000000008009ULL,
+	0x000000000000008AULL, 0x0000000000000088ULL, 0x0000000080008009ULL, 0x000000008000000AULL,
+	0x000000008000808BULL, 0x800000000000008BULL, 0x8000000000008089ULL, 0x8000000000008003ULL,
+	0x8000000000008002ULL, 0x8000000000000080ULL, 0x000000000000800AULL, 0x800000008000000AULL,
+	0x8000000080008081ULL, 0x8000000000008080ULL, 0x0000000080000001ULL, 0x8000000080008008ULL
+};
+
+
 __device__ static inline void
 hipkeccak_f(uint64_t *stateBuffer)
 {
-  for (uint8_t i = 0; i < 24; i++)
+  for (int i = 0; i < 24; i++) {
     hipkeccak_f_round64(stateBuffer, (uint64_t)(RC_REF[i]));
+  }
 }
 
 __device__ static inline uint64_t
@@ -138,6 +148,7 @@ hipkeccak_to_lane(const unsigned char *message, size_t msglen,
 	long int n = (long)((msglen < (size_t)rr ? msglen : (size_t)rr) - off);
 	uint64_t rc = 0;
 	message += off;
+  
 	while (ww--) {
 		rc <<= 8;
 		rc |= __builtin_expect(ww < n, 1) ? (uint64_t)(unsigned char)(message[ww]) : 0L;
@@ -176,10 +187,10 @@ hipkeccak_pad10star1(size_t r, unsigned char *msg, size_t msglen, size_t bits)
 	size_t ll = len % r;
 	unsigned char b = (unsigned char)(bits ? (msg[nrf] | (1 << bits)) : 1);
 
-	if (r - 8 <= ll && ll <= r - 2) {
-		msg[nrf] = (unsigned char)(b ^ 0x80);
-		msglen = nrf + 1;
-	} else {
+	// if (r - 8 <= ll && ll <= r - 2) {
+	// 	msg[nrf] = (unsigned char)(b ^ 0x80);
+	// 	msglen = nrf + 1;
+	// } else {
 		len = ++nrf << 3;
 		len = (len - (len % r) + (r - 8)) >> 3;
 		msglen = len + 1;
@@ -187,36 +198,25 @@ hipkeccak_pad10star1(size_t r, unsigned char *msg, size_t msglen, size_t bits)
 		msg[nrf - 1] = b;
 		// __builtin_memset(&msg[nrf], 0, (len - nrf) * sizeof(char));
 		msg[len] = (unsigned char)0x80;
-	}
+	// }
 	return msglen;
 }
 
-__device__ static void
+__device__ static inline void
 hipkeccak_absorption_phase(uint64_t *stateBuffer,
                            const unsigned char *message, size_t len)
 {
 	constexpr long int rr = 1088 >> 3;
 	constexpr long int ww = 64 >> 3;
 	long int n = (long)len / rr;
-	if (__builtin_expect(ww >= 8, 1)) { /* ww > 8 is impossible, it is just for optimisation possibilities. */
-		while (n--) {
+  while (n--) {
 #define X(N) stateBuffer[N] ^= hipkeccak_to_lane64(message, len, rr, (size_t)(LANE_TRANSPOSE_MAP[N] * 8));
-			LIST_25_REF
+    LIST_25_REF
 #undef X
-			hipkeccak_f(stateBuffer);
-			message += (size_t)rr;
-			len -= (size_t)rr;
-		}
-	} else {
-		while (n--) {
-#define X(N) stateBuffer[N] ^= hipkeccak_to_lane(message, len, rr, ww, (size_t)(LANE_TRANSPOSE_MAP[N] * ww));
-			LIST_25_REF
-#undef X
-			hipkeccak_f(stateBuffer);
-			message += (size_t)rr;
-			len -= (size_t)rr;
-		}
-	}
+    hipkeccak_f(stateBuffer);
+    message += (size_t)rr;
+    len -= (size_t)rr;
+  }
 }
 
 __device__ static void
@@ -224,12 +224,12 @@ hipkeccak_squeezing_phase(uint64_t *stateBuffer, long int rr,
                           long int nn, long int ww, unsigned char *hashsum)
 {
 	uint64_t v;
-	long int ni = rr / ww;
+	// long int ni = rr / ww;
 	long int i, j = 0;
 	long int k;
-  for (i = 0; i < ni && j < nn; i++) {
+  for (i = 0; i < 17 && j < 32; i++) {
     v = stateBuffer[LANE_TRANSPOSE_MAP[i]];
-    for (k = 0; k++ < ww && j++ < nn; v >>= 8)
+    for (k = 0; k++ < 8 && j++ < 32; v >>= 8)
       *hashsum++ = (unsigned char)v;
   }
 }
@@ -271,17 +271,17 @@ hipkeccak_digest(uint64_t *stateBuffer, uint8_t *memBuffer, const char *suffix, 
 
   memBuffer[mptr] = 0;
   memBuffer[mptr] |= (unsigned char)((*suffix++ & 1) << bits++);
-  if (bits == 8) {
-    bits = 0;
-    memBuffer[++(mptr)] = 0;
-  }
+  // if (bits == 8) {
+  //   bits = 0;
+  //   memBuffer[++(mptr)] = 0;
+  // }
   memBuffer[mptr] |= (unsigned char)((*suffix++ & 1) << bits++);
-  if (bits == 8) {
-    bits = 0;
-    memBuffer[++(mptr)] = 0;
-  }
-	if (bits)
-		mptr++;
+  // if (bits == 8) {
+  //   bits = 0;
+  //   memBuffer[++(mptr)] = 0;
+  // }
+	// if (bits)
+  mptr++;
 
 	mptr = hipkeccak_pad10star1((size_t)1088, memBuffer, mptr, bits);
 
@@ -326,50 +326,86 @@ __global__ void cSHAKE256_kernel_kas_nonce(const uint8_t *msg, const char* custo
 
   __syncthreads();
 
+
   hipkeccak_cshake_initialise(&state.S[threadId*25], &state.M[threadId*CSHAKE256_KAS_MLEN], (uint8_t*)custom, 15);
-  
-  // printf("kernel state\n");
-  // for (int i = 0; i < 25; i++) {
-  //   printf("%llu\n", state.S[i]);
-  // }
-  // printf("\n");
 
   hipkeccak_update(&state.S[threadId*25], &state.M[threadId*CSHAKE256_KAS_MLEN], msg, 80, mptr);
   hipkeccak_digest(&state.S[threadId*25], &state.M[threadId*CSHAKE256_KAS_MLEN], "00", &digest[32*globalId], mptr);
 }
 
-__global__ void cSHAKE256_kernel_kas(const uint8_t *msg, const char* custom, uint8_t *digest, size_t output_length) {
+__global__ void cSHAKE256_kernel_kas(const uint8_t *msg, uint16_t msg_len, const char* custom, uint8_t *digest, size_t output_length) {
   int threadId = threadIdx.x;  // Thread index within the block (x-dimension)
   int blockId = blockIdx.x;    // Block index within the grid (x-dimension)
   
-  // Calculate global thread index (linear index)
   int globalId = blockId * CSHAKE256_KAS_THREADS + threadId;
 
-  // Each block handles 80 * CSHAKE256_KAS_THREADS bytes of message
-  size_t block_msg_len = 80 * CSHAKE256_KAS_THREADS;
+  size_t mptr = 0;
+  extern __shared__ uint64_t STATEBUF[];
+  uint8_t M[CSHAKE256_KAS_MLEN];
+  uint8_t digest_local[32];
 
-  __shared__ struct hipkeccak_state_kas state;
+  const char *custom2 = "ProofOfWorkHash";
+  const char *custom3 = "HeavyHash";
 
-  for (size_t i = threadId; i < CSHAKE256_KAS_MLEN*blockDim.x; i += blockDim.x) {
-    state.M[i] = ((i % CSHAKE256_KAS_MLEN) < 80) ? msg[i % 80] : 0;
-  }
+  memcpy(M, msg, 80);
+  memset(&M[80], 0, CSHAKE256_KAS_MLEN - 80);
+  memset(&STATEBUF[threadId*25], 0, 25*sizeof(uint64_t));
+
+  hipkeccak_cshake_initialise(&STATEBUF[threadId*25], M, (uint8_t*)custom2, 15);
+
+  hipkeccak_update(&STATEBUF[threadId*25], M, msg, 80, mptr);
+  hipkeccak_digest(&STATEBUF[threadId*25], M, "00", digest_local, mptr);
+
+
+  // Heavy
+
+  memcpy(M, digest_local, 32);
+  memset(&STATEBUF[threadId*25], 0, 25*sizeof(uint64_t));
+  mptr = 0;
+
+  hipkeccak_cshake_initialise_heavy(&STATEBUF[threadId*25], M, (uint8_t*)custom3, 9);
+
+  hipkeccak_update(&STATEBUF[threadId*25], M, digest_local, 32, mptr);
+  hipkeccak_digest(&STATEBUF[threadId*25], M, "00", digest_local, mptr);
+
+  memcpy(&digest[32*globalId], digest_local, 32);
+}
+
+__global__ void cSHAKE256_kernel_heavy(const uint8_t *msg, uint16_t msg_len, const char* custom, uint8_t *digest, size_t output_length) {
+  int threadId = threadIdx.x;  // Thread index within the block (x-dimension)
+  int blockId = blockIdx.x;    // Block index within the grid (x-dimension)
+  
+  int globalId = blockId * CSHAKE256_KAS_THREADS + threadId;
 
   size_t mptr = 0;
-  for (size_t x = threadId; x < 25*blockDim.x; x += blockDim.x)
-    state.S[x] = 0;
+  extern __shared__ uint64_t STATEBUF[];
+  uint8_t M[CSHAKE256_KAS_MLEN];
+  uint8_t digest_local[32];
 
-  __syncthreads();
+  const char *custom2 = "HeavyHash";
 
-  hipkeccak_cshake_initialise(&state.S[threadId*25], &state.M[threadId*CSHAKE256_KAS_MLEN], (uint8_t*)custom, 15);
+  memcpy(M, msg, 32);
+  memset(&M[32], 0, CSHAKE256_KAS_MLEN - 32);
+  memset(&STATEBUF[threadId*25], 0, 25*sizeof(uint64_t));
+
+  hipkeccak_cshake_initialise_heavy(&STATEBUF[threadId*25], M, (uint8_t*)custom2, 9);
   
-  // printf("kernel state\n");
-  // for (int i = 0; i < 25; i++) {
-  //   printf("%llu\n", state.S[i]);
+  // printf("kernel buffer\n");
+  // for (int i = 0; i < 137; i++) {
+  //   printf("%02X", M[i]);
   // }
   // printf("\n");
 
-  hipkeccak_update(&state.S[threadId*25], &state.M[threadId*CSHAKE256_KAS_MLEN], msg, 80, mptr);
-  hipkeccak_digest(&state.S[threadId*25], &state.M[threadId*CSHAKE256_KAS_MLEN], "00", &digest[32*globalId], mptr);
+  // printf("kernel state\n");
+  // for (int i = 0; i < 25; i++) {
+  //   printf("%llu\n", STATEBUF[threadId*25+i]);
+  // }
+  // printf("\n");
+
+  hipkeccak_update(&STATEBUF[threadId*25], M, msg, 32, mptr);
+  hipkeccak_digest(&STATEBUF[threadId*25], M, "00", digest_local, mptr);
+
+  memcpy(&digest[32*globalId], digest_local, 32);
 }
 
 void test_cshake256_hip()
@@ -403,6 +439,7 @@ void test_cshake256_hip()
 
     // Customization string used in both cases
     const char *customString = "ProofOfWorkHash";
+    const char *heavy = "HeavyHash";
 
     // Output buffers for both implementations (32 bytes = 256 bits)
     uint8_t *customOutput = (uint8_t*)malloc(32*CSHAKE256_KAS_BATCH_SIZE); // For custom implementation
@@ -417,38 +454,90 @@ void test_cshake256_hip()
     // --- GPU Memory Allocation ---
     uint8_t *d_input, *d_customOutput;
     char *d_customString;
+    char *d_heavyString;
 
     // Allocate memory on the GPU for input, output, and custom string
     hipMalloc((void **)&d_input, inputLen * sizeof(uint8_t));          // Allocate input on GPU
     hipMalloc((void **)&d_customOutput, outputLen * sizeof(uint8_t) * CSHAKE256_KAS_BATCH_SIZE);  // Allocate output on GPU
     hipMalloc((void **)&d_customString, sLen * sizeof(char));          // Allocate custom string on GPU
+    hipMalloc((void **)&d_heavyString, strlen(heavy) * sizeof(char));          // Allocate custom string on GPU
 
     // --- Copy Data to GPU ---
     hipMemcpy(d_input, input, inputLen * sizeof(uint8_t), hipMemcpyHostToDevice); // Copy input to GPU
     hipMemcpy(d_customString, customString, sLen * sizeof(char), hipMemcpyHostToDevice); // Copy custom string to GPU
+    hipMemcpy(d_heavyString, heavy, strlen(heavy) * sizeof(char), hipMemcpyHostToDevice); // Copy custom string to GPU
 
-    size_t BLOCKS = 0;
-    size_t THREADS = 0;
-    size_t BATCH_SIZE = 0;
+    BLOCKS = 0;
+    THREADS = 0;
+    BATCH_SIZE = 0;
+
+    BLOCKS_HEAVY = 0;
+    THREADS_HEAVY = 0;
+    BATCH_SIZE_HEAVY = 0;
 
     getArchDims(BLOCKS, THREADS, BATCH_SIZE);
+    getArchDims_heavy(BLOCKS_HEAVY, THREADS_HEAVY, BATCH_SIZE_HEAVY);
 
     printf("batchSize = %d, blocks: %d, threads: %d\n", BATCH_SIZE, BLOCKS, THREADS);
 
-    // --- Kernel Launch ---
-    hipLaunchKernelGGL(
-      cSHAKE256_kernel_kas,           // Kernel function
-      dim3(BLOCKS),                   // Number of blocks (grid size)
-      dim3(THREADS),                  // Number of threads per block (block size)
-      0,                              // Dynamic shared memory size
-      0,                              // Stream (0 for default stream)
-      d_input, d_customString, d_customOutput, outputLen * 8  // Kernel parameters
-    );
-    // Synchronize and check for errors
-    hipError_t err = hipGetLastError();
-    if (err != hipSuccess) {
-        printf("Kernel launch failed: %s\n", hipGetErrorString(err));
+    // --- Timing setup ---
+    hipEvent_t start, stop;
+    hipEventCreate(&start);
+    hipEventCreate(&stop);
+
+    // Start timing
+    hipEventRecord(start, 0);
+
+    // Number of kernel executions
+    const int numRuns = 2500;
+
+    for (int i = 0; i < numRuns; i++)
+    {
+      // --- Kernel Launch ---
+      hipLaunchKernelGGL(
+          cSHAKE256_kernel_kas,                                  // Kernel function
+          dim3(BLOCKS),                                          // Number of blocks (grid size)
+          dim3(THREADS),                                         // Number of threads per block (block size)
+          sizeof(uint64_t)*THREADS*25,                           // Dynamic shared memory size
+          0,                                                     // Stream (0 for default stream)
+          d_input, 80, d_customString, d_customOutput, outputLen * 8 // Kernel parameters
+      );
+      // hipDeviceSynchronize();
+
+      // hipLaunchKernelGGL(
+      //     cSHAKE256_kernel_heavy,                                  // Kernel function
+      //     dim3(BLOCKS_HEAVY),                                          // Number of blocks (grid size)
+      //     dim3(THREADS_HEAVY),                                         // Number of threads per block (block size)
+      //     sizeof(uint64_t)*THREADS_HEAVY*25,                           // Dynamic shared memory size
+      //     0,                                                     // Stream (0 for default stream)
+      //     d_customOutput, 32, d_heavyString, d_customOutput, outputLen * 8 // Kernel parameters
+      // );
+      // Check for kernel launch errors
+      // hipError_t err = hipGetLastError();
+      // if (err != hipSuccess)
+      // {
+      //   printf("Kernel launch failed: %s\n", hipGetErrorString(err));
+      //   break;
+      // }
     }
+
+    // Stop timing
+    hipEventRecord(stop, 0);
+    hipEventSynchronize(stop);
+
+    // Calculate the elapsed time
+    float milliseconds = 0;
+    hipEventElapsedTime(&milliseconds, start, stop);
+
+    // Total number of computations (BLOCKS * THREADS)
+    size_t totalComputations = BLOCKS * THREADS * numRuns;
+
+    // Calculate runs per second
+    float seconds = milliseconds / 1000.0f;
+    float runsPerSecond = totalComputations / seconds;
+
+    printf("Total time for %d runs: %.3f ms\n", numRuns, milliseconds);
+    printf("Runs per second: %.2f\n", runsPerSecond);
 
     // --- Copy Results Back to Host ---
     hipMemcpy(customOutput, d_customOutput, outputLen * sizeof(uint8_t) * CSHAKE256_KAS_BATCH_SIZE, hipMemcpyDeviceToHost); // Copy result back to host
@@ -457,7 +546,7 @@ void test_cshake256_hip()
     printf("HIP cSHAKE256 output:\n");
     // printf("output at index: %d\n", (CSHAKE256_KAS_BATCH_SIZE-1)*outputLen);
     for (size_t i = 0; i < outputLen; i++) {
-        printf("%02x", customOutput[i + (CSHAKE256_KAS_BATCH_SIZE-1)*outputLen]);
+        printf("%02x", customOutput[i+(rand()%CSHAKE256_KAS_BATCH_SIZE)*outputLen]);
     }
     printf("\n");
 

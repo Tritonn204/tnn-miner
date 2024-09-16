@@ -453,6 +453,13 @@ void libkeccak_cshake_initialise_ref(struct libkeccak_state *state, // Remove re
     libkeccak_zerocopy_update_ref(state, static_cast<uint8_t *>(state->M), 137);
   }
 
+  // printf("reference buffer\n");
+  // for (int i = 0; i < 137; i++) {
+  //   printf("%02X", state->M[i]);
+  // }
+  // printf("\n");
+
+
   // printf("ref S:\n");
   // for (int i = 0; i < 25; i++) {
   //   printf("%llu\n", state->S[i]);
@@ -768,9 +775,14 @@ void cShake256_ref(const uint8_t *msg, size_t msg_len, const char* custom, uint8
 
   struct libkeccak_state state;
   libkeccak_state_initialise_ref(&state, &spec);
-
   libkeccak_cshake_initialise_ref(&state, NULL, 0, 0, NULL,
                                 (uint8_t*)custom, strlen(custom), 0, NULL);
+
+  // printf("reference state:\n");
+  // for (int i = 0; i < 25; i++) {
+  //   printf("%llu\n", state.S[i]);
+  // }
+  // printf("\n");
 
   libkeccak_fast_update_ref(&state, msg, msg_len);
 
@@ -795,7 +807,8 @@ void test_cshake256_comparison()
     size_t inputLen = sizeof(input);
 
     // Customization string used in both cases
-    const char *customString = "ProofOfWorkHash";
+    // const char *customString = "ProofOfWorkHash";
+    const char *customString = "HeavyHash";
 
     // Output buffers for both implementations (32 bytes = 256 bits)
     uint8_t customOutput[32] = {0}; // For custom implementation
@@ -805,14 +818,15 @@ void test_cshake256_comparison()
     size_t outputLen = 32;
 
     // Customization string as byte array (for custom implementation)
-    uint8_t S[] = "ProofOfWorkHash"; // Same as the custom string
+    // uint8_t S[] = "ProofOfWorkHash"; // Same as the custom string
+    uint8_t S[] = "HeavyHash";
     size_t sLen = strlen((char *)S); // Length of the custom string
 
     // Run the custom cshake256 implementation with 32 bytes output
-    cShake256_ref(input, inputLen, customString, customOutput, outputLen * 8);
+    cShake256_ref(input, 32, customString, customOutput, outputLen * 8);
 
     // Run the libkeccak cshake256 implementation (N is nil, use custom string)
-    cshake256_nil_function_name(input, inputLen, customString, keccakOutput, outputLen * 8); // Output length in bits for libkeccak
+    cshake256_nil_function_name(input, 32, customString, keccakOutput, outputLen * 8); // Output length in bits for libkeccak
 
     // Compare both outputs byte by byte
     if (memcmp(customOutput, keccakOutput, outputLen) == 0)
