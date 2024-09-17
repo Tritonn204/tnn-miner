@@ -1,9 +1,15 @@
 if (WITH_CHACHA)
     add_definitions(/DTNN_CHACHA)
 
-    file(GLOB chacha_sources
-      "src/crypto/chacha/*.c"
-    )
+    if (TNN_ARM)
+      file(GLOB chacha_sources
+        "src/crypto/chacha/chacha20.c"
+      )
+    else()
+      file(GLOB chacha_sources
+        "src/crypto/chacha/*.c"
+      )
+    endif()
 
     set_source_files_properties(src/crypto/chacha/chacha20_sse2.c COMPILE_FLAGS -msse2)
     set_source_files_properties(src/crypto/chacha/chacha20_avx2.c COMPILE_FLAGS -mavx2)

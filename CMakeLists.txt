@@ -27,8 +27,8 @@ if(USE_GCC)
 else()
   set(CMAKE_C_COMPILER clang)
   set(CMAKE_CXX_COMPILER clang++)
-  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Wno-deprecated")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-deprecated")
+  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Wno-deprecated -Wno-nan-infinity-disabled")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-deprecated -Wno-nan-infinity-disabled")
 endif()
 
 # set(CMAKE_C_COMPILER_WORKS 1)
@@ -154,7 +154,7 @@ else()
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
 endif()
 
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
   set(WITH_HIP OFF)
   set(TARGET_ARCH "aarch64")
   # AES needed for Xelisv2
@@ -343,7 +343,7 @@ endif()
 # This is universal regardless of how wheter we compiled or found Boost
 set(TNN_BOOST_LIBS Boost::chrono Boost::context Boost::coroutine Boost::thread Boost::json Boost::atomic Boost::program_options)
 
-# # if(APPLE)
+if(APPLE OR WITH_HIP)
 CPMAddPackage(
   NAME sodium
   GITHUB_REPOSITORY robinlinden/libsodium-cmake
@@ -352,6 +352,7 @@ CPMAddPackage(
     "CMAKE_C_FLAGS_RELEASE -msse3 -mssse3 -maes -mpclmul -mavx2" 
     "CMAKE_CXX_FLAGS_RELEASE -msse3 -mssse3 -maes -mpclmul -mavx2"
 )
+endif()
 
 # if (TARGET sodium)
 #   # Add SSSE3 and PCLMUL flags for sodium target
