@@ -141,8 +141,9 @@ build-windows:
     - .\scripts\prereqs.bat ci
     - .\scripts\build.ps1 $PACKAGE_VERSION
     - dir .\build\
-    - move build\Tnn-miner-${PACKAGE_VERSION}.exe .\
-    - 7z.exe a ${WIN_AMD64_ZIP} Tnn-miner-${PACKAGE_VERSION}.exe
+    - dir .\build\bin\
+    - move build\bin\tnn-miner-${PACKAGE_VERSION}_cpu.exe .\
+    - 7z.exe a ${WIN_AMD64_ZIP} tnn-miner-${PACKAGE_VERSION}_cpu.exe
   after_script:
     - echo "WIN_BUILD_JOB_ID=$CI_JOB_ID" >> win-job.env
   artifacts:
