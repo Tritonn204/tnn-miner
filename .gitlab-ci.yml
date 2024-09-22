@@ -131,7 +131,7 @@ build-macos:
 
 build-windows:
   rules:
-    - if: $CI_COMMIT_TAG && $TNN_BUILD_WIN == "true"                 # Run this job when a tag is created
+    - if: $CI_COMMIT_TAG || ($TNN_BUILD_WIN == "true" && $CI_COMMIT_MESSAGE =~ /windows\|Windows/)                # Run this job when a tag is created
   extends:
     - .windows_job
   stage: build
@@ -143,7 +143,8 @@ build-windows:
     - dir .\build\
     - dir .\build\bin\
     - move build\bin\tnn-miner-${PACKAGE_VERSION}_cpu.exe .\
-    - 7z.exe a ${WIN_AMD64_ZIP} tnn-miner-${PACKAGE_VERSION}_cpu.exe
+    - Compress-Archive -Path tnn-miner-${PACKAGE_VERSION}_cpu.exe -DestinationPath ${WIN_AMD64_ZIP}
+    #- 7z.exe a ${WIN_AMD64_ZIP} tnn-miner-${PACKAGE_VERSION}_cpu.exe
   after_script:
     - echo "WIN_BUILD_JOB_ID=$CI_JOB_ID" >> win-job.env
   artifacts:
