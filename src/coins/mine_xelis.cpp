@@ -1,6 +1,6 @@
 #include "miners.hpp"
+#include "tnn-hugepages.h"
 #include <xelis-hash/xelis-hash.hpp>
-#include <hugepages.h>
 #include <base64.hpp>
 #include <stratum/stratum.h>
 

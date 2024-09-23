@@ -14,6 +14,7 @@
 //------------------------------------------------------------------------------
 
 #include "tnn-common.hpp"
+#include "tnn-hugepages.h"
 #include "gpulibs.h"
 
 #include "rootcert.h"
@@ -36,7 +37,6 @@
 
 #include <chrono>
 
-#include <hugepages.h>
 #include <future>
 #include <limits>
 #include <libcubwt.cuh>
@@ -63,6 +63,7 @@ std::atomic<int64_t> benchCounter = 0;
 boost::asio::io_context my_context;
 boost::asio::steady_timer update_timer = boost::asio::steady_timer(my_context);
 std::chrono::time_point<std::chrono::steady_clock> g_start_time = std::chrono::steady_clock::now();
+bool printHugepagesError = true;
 
 Num oneLsh256 = Num(1) << 256;
 Num maxU256 = Num(2).pow(256) - 1;
@@ -202,7 +203,7 @@ int main(int argc, char **argv)
 
   std::atexit(onExit);
   signal(SIGTERM, sigterm);
-  signal(SIGINT, sigterm);
+  signal(SIGINT, sigint);
   alignas(64) char buf[65536];
   setvbuf(stdout, buf, _IOFBF, 65536);
   srand(time(NULL)); // Placing higher here to ensure the effect cascades through the entire program

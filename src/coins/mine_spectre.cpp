@@ -1,8 +1,8 @@
 #include "miners.hpp"
+#include "tnn-hugepages.h"
 #include <astrobwtv3/astrobwtv3.h>
 #include <astrobwtv3/lookupcompute.h>
 #include <spectrex/spectrex.h>
-#include <hugepages.h>
 #include <stratum/stratum.h>
 
 void mineSpectre(int tid)

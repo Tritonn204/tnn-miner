@@ -7,6 +7,8 @@
 #endif
 #include <assert.h>
 
+extern bool printHugepagesError;
+
 #if defined(_WIN32)
 #include <Windows.h>
 #pragma comment(lib, "advapi32.lib")
@@ -112,9 +114,11 @@ inline void *malloc_huge_pages(size_t size)
   ptr = (char*)VirtualAlloc(NULL, real_size, MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
   if (ptr == NULL) {
     #ifdef __cplusplus
-    std::cout << GetLastErrorAsString() << std::endl;
-    // printf("regular malloc");
+      if (printHugepagesError) {
+        std::cerr << GetLastErrorAsString() << std::endl;
+      }
     #endif
+    printHugepagesError = false;
     ptr = (char *)malloc(real_size);
     if (ptr == NULL) return NULL;
     real_size = 0;
@@ -126,9 +130,12 @@ inline void *malloc_huge_pages(size_t size)
     #endif
      , -1, 0);
   if (ptr == MAP_FAILED) {
-    // #ifdef __cplusplus
-    // std::cerr << "failed to allocate hugepages... using regular malloc" << std::endl;
-    // #endif
+    #ifdef __cplusplus
+      if (printHugepagesError) {
+        std::cerr << "failed to allocate hugepages... using regular malloc" << std::endl;
+      }
+    #endif
+    printHugepagesError = false;
     ptr = (char *)malloc(real_size);
     if (ptr == NULL) return NULL;
     real_size = 0;

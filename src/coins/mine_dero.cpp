@@ -1,7 +1,7 @@
 #include "miners.hpp"
+#include "tnn-hugepages.h"
 #include <astrobwtv3/astrobwtv3.h>
 #include <astrobwtv3/lookupcompute.h>
-#include <hugepages.h>
 
 void mineDero(int tid)
 {

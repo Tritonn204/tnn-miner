@@ -1,5 +1,5 @@
 #include "miners.hpp"
-#include <hugepages.h>
+#include "tnn-hugepages.h"
 #include <stratum/stratum.h>
 
 void mineVerus(int tid)

@@ -1,6 +1,6 @@
 #include "miners.hpp"
+#include "tnn-hugepages.h"
 #include <astrix-hash/astrix-hash.h>
-#include <hugepages.h>
 #include <stratum/stratum.h>
 
 void mineAstrix(int tid)

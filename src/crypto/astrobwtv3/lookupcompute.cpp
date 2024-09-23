@@ -1,6 +1,6 @@
 #include "lookupcompute.h"
+#include "tnn-hugepages.h"
 
-#include <hugepages.h>
 #include <lookup.h>
 #include <algorithm>
 #include <bit>
