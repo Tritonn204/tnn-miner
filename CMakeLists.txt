@@ -423,6 +423,7 @@ if (NOT WITH_HIP)
   include(cmake/blake2.cmake)
   include(cmake/chacha20.cmake)
 else()
+  include(cmake/astrix-hash.cmake)
   include(cmake/hip-crypto/hip-crypto.cmake)
 endif()
 

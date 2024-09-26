@@ -1,9 +1,9 @@
 #pragma once
 
 #include <inttypes.h>
-#include <astrobwtv3/astrobwtv3.h>
 #include <array>
 #include <num.h>
+#include <bitset>
 
 // NOTES
 
@@ -152,4 +152,5 @@ namespace AstrixHash
   bool checkPow(Num in, Num diff);
   Num diffToTarget(double diff);
   Num diffToHash(double diff);
+  int hipCompare();
 }

@@ -8,8 +8,8 @@ if (WITH_ASTRIXHASH)
     )
 
     file(GLOB_RECURSE astrixHashSources
-      src/crypto/astrix-hash//*.cpp
-      src/crypto/astrix-hash//*.c
+      src/crypto/astrix-hash/*.cpp
+      src/crypto/astrix-hash/*.c
       src/net/astrix/*.cpp
       # src/net/proto/astrix/*.cc
     )

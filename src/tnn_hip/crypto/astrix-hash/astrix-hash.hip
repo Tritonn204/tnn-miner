@@ -15,8 +15,6 @@ typedef union _uint256_t
   uint8_t hash[32];
 } uint256_t;
 
-__device__ static size_t blocks, threads, batchSize;
-
 hipDeviceProp_t deviceProps;
 
 #define MATRIX_SIZE 64
@@ -88,23 +86,34 @@ __device__ inline void amul4bit(uint32_t packed_vec1[32], uint32_t packed_vec2[3
   *ret = res;
 }
 
-__global__ void astrixHash_hip(const uint64_t nonce_mask, const uint64_t nonce_fixed, uint64_t *final_nonces, int *nonce_count, int kIndex, uint8_t device = 0)
+__global__ void astrixHash_hip(const uint64_t nonce_mask, const uint64_t nonce_fixed, uint64_t *final_nonces, int *nonce_count, int kIndex, size_t batchSize, uint8_t device = 0)
 {
   // assuming header_len is 72
   int nonceId = threadIdx.x + blockIdx.x * blockDim.x;
   uint64_t nonce;
 
   nonce = nonceId + kIndex * batchSize;
-  nonce = (nonce << 4) | device;
-  nonce = (nonce & nonce_mask) | nonce_fixed;
+  // nonce = (nonce << 4) | device;
+  // nonce = (nonce & nonce_mask) | nonce_fixed;
 
   // header
   uint8_t input[80];
+  memset(input, 0, 80);
   memcpy(input, hash_header, HASH_HEADER_SIZE);
   // data
   // TODO: check endianity?
   uint256_t hash_;
-  memcpy(input + HASH_HEADER_SIZE, (uint8_t *)(&nonce), 8);
+  memcpy(&input[HASH_HEADER_SIZE], (uint8_t *)(&nonce), 8);
+
+  // if (blockIdx.x + threadIdx.x + kIndex == 0) {
+  //   printf("input 0:\n");
+  //   for (int i = 0; i < 80; i++) {
+  //     printf("%02x", input[i]);
+  //   }
+  //   printf("\n");
+  // }
+  // __syncthreads();
+
   hash(powP, hash_.hash, input);
 
   // assert((rowId != 0) || (hashId != 0) );
@@ -145,12 +154,81 @@ __global__ void astrixHash_hip(const uint64_t nonce_mask, const uint64_t nonce_f
   memset(input, 0, 80);
   memcpy(input, hash_.hash, 32);
   hash(heavyP, hash_.hash, input);
+
+  for (int i = 0; i < 16; i++) {
+    uint8_t temp = hash_.hash[i];
+    hash_.hash[i] = hash_.hash[31 - i];
+    hash_.hash[31 - i] = temp;
+  }
+
   if (LT_U256(hash_, target))
   {
     int index = atomicAdd(nonce_count, 1);
     index = index >= HIP_ASTRIX_MAX_NONCES ? HIP_ASTRIX_MAX_NONCES - 1 : index;
     final_nonces[index] = nonce;
   }
+
+  if (nonceId == 0 && kIndex == 0) {
+    printf("GPU result: ");
+    for (int i = 0; i < 32; i++) {
+      printf("%02x", hash_.hash[i]);
+    }
+    printf("\n");
+  }
+  // __syncthreads();
+}
+
+inline int calculateRank(uint8_t mat[MATRIX_SIZE][MATRIX_SIZE])
+{
+  double copied[MATRIX_SIZE][MATRIX_SIZE];
+  bool rowsSelected[MATRIX_SIZE];
+  const double epsilon = 1e-9;
+
+  for (int i = 0; i < MATRIX_SIZE; i++)
+  {
+    for (int j = 0; j < MATRIX_SIZE; j++)
+    {
+      copied[i][j] = static_cast<double>(mat[i][j]);
+    }
+  }
+
+  int rank = 0;
+  for (int i = 0; i < MATRIX_SIZE; i++)
+  {
+    int j;
+    for (j = 0; j < MATRIX_SIZE; j++)
+    {
+      if (!rowsSelected[j] && std::abs(copied[j][i]) > epsilon)
+      {
+        break;
+      }
+    }
+
+    if (j != MATRIX_SIZE)
+    {
+      rank++;
+      rowsSelected[j] = true;
+      for (int k = i + 1; k < MATRIX_SIZE; k++)
+      {
+        copied[j][k] /= copied[j][i];
+      }
+
+      for (int k = 0; k < MATRIX_SIZE; k++)
+      {
+        if (k == j || std::abs(copied[k][i]) <= epsilon)
+        {
+          continue;
+        }
+
+        for (int l = i + 1; l < MATRIX_SIZE; l++)
+        {
+          copied[k][l] -= copied[j][l] * copied[k][i];
+        }
+      }
+    }
+  }
+
+  return rank;
 }
 
 void benchAstrixHip()
@@ -166,6 +244,7 @@ void benchAstrixHip()
   // hipMemcpyToSymbol(HIP_SYMBOL(deviceArch), &arch, sizeof(int), 0, hipMemcpyHostToDevice);
 
   // Retrieve architecture-specific dimensions
+  size_t blocks, threads, batchSize;
   getArchDims(blocks, threads, batchSize);
 
   // Example input data setup
@@ -188,9 +267,6 @@ void benchAstrixHip()
   // Launch the kernel and perform the benchmark
   size_t numRuns = 2500;
 
-  // Record start event
-  hipEventRecord(start, 0);
-
   int *d_nonce_count;
   int h_nonce_count = 0; // Initialize on the host
   hipMalloc(&d_nonce_count, sizeof(int));
@@ -200,21 +276,41 @@ void benchAstrixHip()
   uint8_t h_hash_header[HASH_HEADER_SIZE];    // Host-side hash header
   uint256_t h_target;                         // Host-side target
 
-  // Fill the matrix, hash_header, and target with example data
-  for (int i = 0; i < MATRIX_SIZE; i++)
-  {
-    for (int j = 0; j < MATRIX_SIZE; j++)
-    {
-      h_matrix[i][j] = (i * MATRIX_SIZE + j) % 256; // Example data
-    }
-  }
   for (int i = 0; i < HASH_HEADER_SIZE; i++)
   {
     h_hash_header[i] = i % 256; // Example data
+    // h_hash_header[i] = 0; // test 0 input
   }
   for (int i = 0; i < 4; i++)
   {
     h_target.number[i] = 0xFFFFFFFFFFFFFFFFULL; // Example target
+  }
+
+  // Fill the matrix
+  for (int i = 0; i < MATRIX_SIZE; i++) {
+    memset(h_matrix[i], 0, MATRIX_SIZE);
+  }
+
+  alignas(64) uint64_t s0 = *(uint64_t*)&h_hash_header[0];
+  alignas(64) uint64_t s1 = *(uint64_t*)&h_hash_header[8];
+  alignas(64) uint64_t s2 = *(uint64_t*)&h_hash_header[16];
+  alignas(64) uint64_t s3 = *(uint64_t*)&h_hash_header[24];
+
+  Xoshiro256PlusPlusHasher hasher(s0, s1, s2, s3);
+                
+  while (calculateRank(h_matrix) != MATRIX_SIZE)
+  {
+    for (int i = 0; i < MATRIX_SIZE; i++)
+    {
+      for (int j = 0; j < MATRIX_SIZE; j += QUARTER_MATRIX_SIZE)
+      {
+        uint64_t value = hasher.next();
+        for (int k = 0; k < 16; k++)
+        {
+          h_matrix[i][j + k] = uint16_t((value >> (4 * k)) & 0x0f);
+        }
+      }
+    }
   }
 
   // Transfer the matrix, hash_header, and target data to device constant memory
@@ -222,11 +318,14 @@ void benchAstrixHip()
   hipMemcpyToSymbol(hash_header, h_hash_header, sizeof(h_hash_header));
   hipMemcpyToSymbol(target, &h_target, sizeof(h_target));
 
+  // Record start event
+  hipEventRecord(start, 0);
+
   for (int i = 0; i < numRuns; ++i)
   {
     hipMemcpy(d_nonce_count, &h_nonce_count, sizeof(int), hipMemcpyHostToDevice);
     hipLaunchKernelGGL(astrixHash_hip, dim3(blocks), dim3(threads), 0, 0,
-                       nonce_mask, nonce_fixed, d_final_nonces, d_nonce_count, i, 0);
+                       nonce_mask, nonce_fixed, d_final_nonces, d_nonce_count, i, batchSize, 0);
 
     // Check for errors after the kernel launch
     hipError_t err = hipGetLastError();
@@ -256,7 +355,7 @@ void benchAstrixHip()
   // Copy final nonce result back to the host
   hipMemcpy(&h_final_nonces, d_final_nonces, sizeof(uint64_t), hipMemcpyDeviceToHost);
 
-  printf("Final nonce: %llu\n", h_final_nonces);
+  // printf("Final nonce: %llu\n", h_final_nonces[0]);
 
   // Free memory on the GPU and CPU
   hipFree(d_final_nonces);

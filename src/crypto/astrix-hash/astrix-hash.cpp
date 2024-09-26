@@ -2,6 +2,7 @@
 #include <openssl/evp.h>
 #include <openssl/sha.h>
 #include <hex.h>
+#include <string.h>
 
 extern "C"{
 #include "cshake/cshake.h"
@@ -112,6 +113,24 @@ namespace AstrixHash
 
   //   hash(w, in, 80, out);
   //   free(aw);
+  }
+
+  int hipCompare() {
+    const char* input = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40414243444546470000000000000000";
+    byte in[80];
+    memset(in, 0, 80);
+
+    byte out[32];
+    memset(out, 0, 32);
+
+    hexstrToBytes(std::string(input), in);
+    AstrixHash::worker w;
+    
+    newMatrix(in, w.matBuffer, w);
+    hash(w, in, 80, out);
+
+    printf("CPU Result: %s\n", hexStr(out, 32).c_str());
+    return 0;
   }
 
   int test() {

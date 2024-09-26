@@ -3,6 +3,8 @@
 #include <tnn_hip/hello.hpp>
 #include <tnn_hip/crypto/astrix-hash/test_hip_astrix.h>
 
+#include <crypto/astrix-hash/astrix-hash.h>
+
 inline int GPUTest() {
   #ifdef TNN_HIP
     if (is_hip_supported()) {
@@ -10,5 +12,7 @@ inline int GPUTest() {
       benchAstrixHip();
     }
   #endif
+
+  AstrixHash::hipCompare();
   return 0;
 }
