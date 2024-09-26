@@ -50,8 +50,13 @@ if (WITH_HIP)
   set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} ${TNN_RDC}")
   list(APPEND SOURCES_CRYPTO
     ${hipSources}
-    src/tnn_hip/crypto/cshake/ref-cshake.cpp
   )
+
+  if (HIP_PLATFORM MATCHES "nvidia")
+    add_compile_definitions(__HIP_PLATFORM_NVIDIA__)
+  else()
+    add_compile_definitions(__HIP_PLATFORM_AMD__)
+  endif()
 
   # # Create a static archive incrementally for large object file counts.
   # if(NOT DEFINED CMAKE_HIP_ARCHIVE_CREATE)

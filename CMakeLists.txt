@@ -100,7 +100,6 @@ if (WITH_HIP)
     set(CMAKE_C_COMPILER $ENV{HIP_PATH}/bin/clang.exe)
     set(CMAKE_CXX_COMPILER $ENV{HIP_PATH}/bin/clang++.exe)
 
-    # if (HIP_PLATFORM MATCHES "nvidia")
     #   set(CMAKE_C_COMPILER "cl")  # Adjust path as needed
     #   set(CMAKE_CXX_COMPILER "cl")  # Adjust path as needed
 
@@ -441,22 +440,37 @@ endif()
 #  list(FILTER SOURCES_CORE EXCLUDE REGEX ".*/.*/*aarch64*")
 #endif()
 
-add_executable(${PROJECT_NAME}-${PROJECT_VERSION} ${SOURCES_CORE} ${SOURCES_NET} ${SOURCES_CRYPTO} ${HEADERS_CRYPTO})
-
-if (WITH_RANDOMX AND NOT WITH_HIP)
-  target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} randomx)
-endif()
+include(cmake/setup.cmake)
 
 if (WITH_HIP)
   enable_language(${HIP_LANG})
   if (HIP_PLATFORM MATCHES amd)
-   set(TNN_OUTPUT_NAME "tnn-miner-${INTERNAL_TNN_VERSION}_rocm")
-   set_target_properties(${PROJECT_NAME}-${PROJECT_VERSION} PROPERTIES
-    HIP_ARCHITECTURES "gfx900;gfx1010;gfx1030;gfx1100"   # For AMD GPUs
-    HIP_PLATFORM "amd"
-  )
+    set(HIP_ARCHITECTURES 
+      "gfx900"
+      "gfx1010"
+      "gfx1030"
+      "gfx1100"
+    )
+
+    foreach(ARCH IN LISTS HIP_ARCHITECTURES)
+      set(TNN_OUTPUT_NAME "tnn-miner-${ARCH}")
+      add_executable(${TNN_OUTPUT_NAME} ${SOURCES_CORE} ${SOURCES_NET} ${SOURCES_CRYPTO} ${HEADERS_CRYPTO})
+      
+      # Set architecture-specific compile options
+      target_compile_options(${TNN_OUTPUT_NAME} PRIVATE
+        $<$<COMPILE_LANGUAGE:HIP>:--offload-arch=${ARCH}>
+      )
+
+      # Set architecture-specific preprocessor definition
+      string(REPLACE "gfx" "" ARCH_NUM ${ARCH})
+      target_compile_definitions(${TNN_OUTPUT_NAME} PRIVATE -DHIP_ARCH=${ARCH_NUM})
+          
+      setup_target_libraries(${TNN_OUTPUT_NAME})
+    endforeach()
   else ()
     set(TNN_OUTPUT_NAME "tnn-miner-${INTERNAL_TNN_VERSION}_cuda")
+    add_executable(${TNN_OUTPUT_NAME} ${SOURCES_CORE} ${SOURCES_NET} ${SOURCES_CRYPTO} ${HEADERS_CRYPTO})
+    setup_target_libraries(${TNN_OUTPUT_NAME})
   endif ()
   
   # include(ExternalProject)
@@ -477,27 +491,15 @@ if (WITH_HIP)
   # target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} ${CMAKE_BINARY_DIR}/libtnn_hip.a)
 else() 
   set(TNN_OUTPUT_NAME "tnn-miner-${INTERNAL_TNN_VERSION}_cpu")
-endif()
+  add_executable(${TNN_OUTPUT_NAME} ${SOURCES_CORE} ${SOURCES_NET} ${SOURCES_CRYPTO} ${HEADERS_CRYPTO})
 
-target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} ${TNN_BOOST_LIBS})
+  setup_target_libraries(${TNN_OUTPUT_NAME})
 
-set_target_properties(${PROJECT_NAME}-${PROJECT_VERSION} PROPERTIES OUTPUT_NAME ${TNN_OUTPUT_NAME})
-
-if(WIN32)
-  if (NOT WITH_HIP)
-    target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} mingw32)
+  if (WITH_RANDOMX)
+    target_link_libraries(${TNN_OUTPUT_NAME} randomx)
   endif()
-  target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} wsock32 ws2_32 kernel32)
-endif()
 
-if(NOT APPLE AND NOT WIN32)
-  target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} udns)
-endif()
-if(USE_ASTRO_SPSA)
-  target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} ${SPSA_LIB_DIR}/libastroSPSA_${SPSA_OS_PREFIX}_${TARGET_ARCH}.a)
-endif()
-target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} ${THREAD_LIB} OpenSSL::SSL OpenSSL::Crypto sodium ${BLAKE3_LIBRARIES})
+  # Set output name
+  set_target_properties(${TNN_OUTPUT_NAME} PROPERTIES OUTPUT_NAME ${TNN_OUTPUT_NAME})
 
-set_target_properties(${PROJECT_NAME}-${PROJECT_VERSION} PROPERTIES
-  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-)
+endif()

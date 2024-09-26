@@ -84,9 +84,8 @@ __device__ static inline void keccakf(void* state) {
 #define P keccakf
 #define Plen 200
 
-
 /** The sponge-based hash construction. **/
-__device__ __forceinline__ static void hash(
+__device__ inline static void hash(
                        const uint8_t initP[Plen],
                        uint8_t* out,
                        const uint8_t* in) {
@@ -102,6 +101,5 @@ __device__ __forceinline__ static void hash(
   // Squeeze output.
   #pragma unroll
   for (int i=0; i<4; i++) ((uint64_t *)out)[i] = ((uint64_t *)a)[i];
-
 }
 
