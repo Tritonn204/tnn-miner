@@ -5,7 +5,8 @@
 #include <string.h>
 
 extern "C"{
-#include "cshake/cshake.h"
+#include <sha3/sha3.h>
+#include <cshake/cshake.h>
 }
 
 namespace AstrixHash
@@ -71,7 +72,7 @@ namespace AstrixHash
     // hash the digest a final time, reverse bytes
 
     cshake256_nil_function_name(out, 32, "HeavyHash", out, 32*8);
-    std::reverse(out, out+32);
+    // std::reverse(out, out+32);
   }
 
   void hash(worker &worker, byte *in, int len, byte *out)
@@ -79,7 +80,10 @@ namespace AstrixHash
     // cshake256("ProofOfWorkHash", in, len, worker.sha3Hash, 32);
     // newMatrix(in, worker.mat, worker);
     memcpy(worker.mat, worker.matBuffer, sizeof(matrix));
-    cshake256_nil_function_name(in, len, "ProofOfWorkHash", worker.sha3Hash, 32*8);
+    sha3_256(in, len, worker.sha3Hash);
+    
+    printf("SHA3 Result: %s\n", hexStr(worker.sha3Hash, 32).c_str());
+    // cshake256_nil_function_name(in, len, "ProofOfWorkHash", worker.sha3Hash, 32*8);
     // AstroBWTv3(worker.sha3Hash, 32, worker.astrobwtv3Hash, *worker.astroWorker, false);
     heavyHash(worker.sha3Hash, worker.mat, out);
   }
@@ -133,7 +137,7 @@ namespace AstrixHash
     return 0;
   }
 
-  int test() {
+  // int test() {
     // const char* input = "cb75500eabb7db4d2df02372d033c64085a9cec8f29d66a84ed9a8e38d2be6fcab42ea598f01000000000000000000000000000000000000000000000000000000000000000000000300000103000000";
     // byte *in = new byte[80];
     // byte out[32];
@@ -176,5 +180,5 @@ namespace AstrixHash
     //   pieces_failed += 1;
     // }
     // return pieces_failed;
-  }
+  // }
 }

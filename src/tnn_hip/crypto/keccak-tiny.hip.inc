@@ -44,12 +44,13 @@ __device__ static const uint64_t RC[24] = \
   REPEAT5(e; v += s;)
 
 /*** Keccak-f[1600] ***/
-__device__ static inline void keccakf(void* state) {
+__device__ __forceinline__ static void keccakf(void* state) {
   uint64_t* a = (uint64_t*)state;
   uint64_t b[5] = {0};
   uint64_t t = 0;
   uint8_t x, y;
 
+  #pragma unroll
   for (int i = 0; i < 24; i++) {
     // Theta
     FOR5(x, 1,
@@ -81,25 +82,92 @@ __device__ static inline void keccakf(void* state) {
 /******** The FIPS202-defined functions. ********/
 
 /*** Some helper macros. ***/
+
+#define _(S) do { S } while (0)
+#define FOR(i, ST, L, S) \
+  _(for (size_t i = 0; i < L; i += ST) { S; })
+#define mkapply_ds(NAME, S)                                          \
+  __device__ static __forceinline__ void NAME(uint8_t* dst,                              \
+                          const uint8_t* src,                        \
+                          size_t len) {                              \
+    FOR(i, 1, len, S);                                               \
+  }
+#define mkapply_sd(NAME, S)                                          \
+  __device__ static __forceinline__ void NAME(const uint8_t* src,                        \
+                          uint8_t* dst,                              \
+                          size_t len) {                              \
+    FOR(i, 1, len, S);                                               \
+  }
+
+mkapply_ds(xorin, dst[i] ^= src[i])  // xorin
+mkapply_sd(setout, dst[i] = src[i])  // setout
+
 #define P keccakf
 #define Plen 200
 
+#define foldP(I, L, F) \
+  while (L >= rate) {  \
+    F(a, I, rate);     \
+    P(a);              \
+    I += rate;         \
+    L -= rate;         \
+  }
+
 /** The sponge-based hash construction. **/
-__device__ inline static void hash(
-                       const uint8_t initP[Plen],
-                       uint8_t* out,
-                       const uint8_t* in) {
+__device__ __forceinline__ static void hash(uint8_t* out, size_t outlen,
+                       const uint8_t* in, size_t inlen,
+                       size_t rate, uint8_t delim) {
   uint8_t a[Plen] = {0};
-
-  #pragma unroll
-  for (int i=0; i<10; i++) ((uint64_t *)a)[i] = ((uint64_t *)initP)[i] ^ ((uint64_t *)in)[i];
-  #pragma unroll
-  for (int i=10; i<25; i++) ((uint64_t *)a)[i] = ((uint64_t *)initP)[i];
-
+  // Absorb input.
+  foldP(in, inlen, xorin);
+  // Xor in the DS and pad frame.
+  a[inlen] ^= delim;
+  a[rate - 1] ^= 0x80;
+  // Xor in the last block.
+  xorin(a, in, inlen);
   // Apply P
   P(a);
   // Squeeze output.
-  #pragma unroll
-  for (int i=0; i<4; i++) ((uint64_t *)out)[i] = ((uint64_t *)a)[i];
+  foldP(out, outlen, setout);
+  setout(a, out, outlen);
 }
 
+__device__ __forceinline__ static void shake32_heavy(
+                       const uint8_t initP[Plen],
+                       uint8_t* out,
+                       const uint8_t* in) {
+  uint8_t a[Plen];
+
+  #pragma unroll
+  for (int i=0; i<10; i++) ((uint64_t *)a)[i] = ((uint64_t *)initP)[i] ^ ((uint64_t *)in)[i];
+  // ((ulonglong4 *)a)[0] = ((ulonglong4 *)initP)[0] ^ ((ulonglong4 *)in)[0];
+  // ((ulonglong4 *)a)[1] = ((ulonglong4 *)initP)[1] ^ ((ulonglong4 *)in)[1];
+  // ((ulonglong2 *)a)[4] = ((ulonglong2 *)initP)[4] ^ ((ulonglong4 *)in)[4];
+
+  #pragma unroll
+  for (int i=10; i<25; i++) ((uint64_t *)a)[i] = ((uint64_t *)initP)[i];
+  // ((ulonglong2 *)a)[5] = ((ulonglong2 *)initP)[5];
+  
+  // #pragma unroll
+  // for (int i = 3; i < 6; i++) ((ulonglong4 *)a)[i] = ((ulonglong4 *)initP)[i];
+
+  // ((ulonglong2 *)a)[12] = ((ulonglong2 *)initP)[12];
+  // ((uint64_t *)a)[24] = ((uint64_t *)initP)[24];
+
+  P(a);
+  // ((ulonglong4*)out)[0] = ((ulonglong4*)a)[0];
+  memcpy(out, a, 32);
+}
+
+/*** Helper macros to define SHA3 and SHAKE instances. ***/
+#define defsha3(bits)                                             \
+  __device__ __forceinline__ static void sha3_##bits(uint8_t* out, size_t outlen,                    \
+                  const uint8_t* in, size_t inlen) {              \
+    hash(out, outlen, in, inlen, 200 - (bits / 4), 0x06);  \
+  }
+
+/*** FIPS202 SHA3 FOFs ***/
+defsha3(224)
+defsha3(256)
+defsha3(384)
+defsha3(512)

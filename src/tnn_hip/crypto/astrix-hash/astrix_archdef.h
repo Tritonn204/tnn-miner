@@ -13,31 +13,31 @@ using ArchDims = std::tuple<size_t, size_t, size_t>;
 
 // VEGA
   // Radeon VII
-    archDim(HIP_ASTRIX_gfx906, 38400, 128);
+    archDim(HIP_ASTRIX_gfx906, 38400, 256);
   // Vega 56/64
-    archDim(HIP_ASTRIX_gfx900, 40960, 128);
+    archDim(HIP_ASTRIX_gfx900, 40960, 256);
 
 // RDNA1
-    archDim(HIP_ASTRIX_gfx1010, 25600, 128);
+    archDim(HIP_ASTRIX_gfx1010, 25600, 256);
 // RDNA2
   // RX 6800+
-    archDim(HIP_ASTRIX_gfx1030, 51200, 128);
+    archDim(HIP_ASTRIX_gfx1030, 51200, 256);
   // RX 6700+
-    archDim(HIP_ASTRIX_gfx1031, 25600, 128);
+    archDim(HIP_ASTRIX_gfx1031, 25600, 256);
   // RX 6600+
-    archDim(HIP_ASTRIX_gfx1032, 20480, 128);
+    archDim(HIP_ASTRIX_gfx1032, 20480, 256);
   // RX 6300+
-    archDim(HIP_ASTRIX_gfx1034, 10240, 128);
+    archDim(HIP_ASTRIX_gfx1034, 10240, 256);
 
 // RDNA 3
   // RX 7900+
-    archDim(HIP_ASTRIX_gfx1100, 61440*16, 1024);
+    archDim(HIP_ASTRIX_gfx1100, 61440*256, 1024);
   // RX 7800+
-    archDim(HIP_ASTRIX_gfx1101, 38400, 128);
+    archDim(HIP_ASTRIX_gfx1101, 38400*128, 256);
   // RX 7700+
-    archDim(HIP_ASTRIX_gfx1102, 34560, 128);
+    archDim(HIP_ASTRIX_gfx1102, 34560*128, 256);
   // Default AMD architecture
-    archDim(HIP_ASTRIX, 20480, 128);
+    archDim(HIP_ASTRIX, 20480*128, 256);
 
 #elif defined(__HIP_PLATFORM_NVIDIA__)
 // NVIDIA platform: Define grid dimensions and shared memory size based on architecture

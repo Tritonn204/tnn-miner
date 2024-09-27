@@ -386,6 +386,7 @@ file(GLOB_RECURSE SOURCES_CORE
 file(GLOB SOURCES_NET
   "${PROJECT_SOURCE_DIR}/src/net/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/net/*.c"
+  "${PROJECT_SOURCE_DIR}/src/crypto/sha3/*.c"
 )
 
 if(USE_ASTRO_SPSA)
