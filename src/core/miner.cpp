@@ -58,6 +58,13 @@
 int miningAlgo = DERO_HASH;
 int reportCounter = 0;
 int reportInterval = 3;
+
+std::string HIP_names[32];
+std::vector<std::atomic<int64_t>> HIP_counters(32);
+std::vector<std::vector<int64_t>> HIP_rates5min(32);
+std::vector<std::vector<int64_t>> HIP_rates1min(32);
+std::vector<std::vector<int64_t>> HIP_rates30sec(32);
+
 std::atomic<int64_t> counter = 0;
 std::atomic<int64_t> benchCounter = 0;
 boost::asio::io_context my_context;
@@ -200,6 +207,9 @@ int main(int argc, char **argv)
   // test_cshake256();
 
   GPUTest();
+  #ifdef TNN_HIP
+  return 0;
+  #endif
 
   std::atexit(onExit);
   signal(SIGTERM, sigterm);
@@ -320,7 +330,7 @@ int main(int argc, char **argv)
   {
     #if defined(TNN_ASTRIXHASH)
     symbol = "AIX";
-    protocol = ASTRIX_SOLO;
+    protocol = ASTRIX_STRATUM;
     #else
     setcolor(RED);
     printf(unsupported_astrix);
@@ -386,6 +396,19 @@ int main(int argc, char **argv)
     #else
     setcolor(RED);
     printf(unsupported_randomx);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
+  }
+
+  if (vm.count("test-astrix"))
+  {
+    #if defined(TNN_RANDOMX)
+    return AstrixHash::test();
+    #else
+    setcolor(RED);
+    printf(unsupported_astrix);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -479,7 +502,7 @@ int main(int argc, char **argv)
     }
     if(wallet.find("astrix", 0) != std::string::npos) {
       symbol = "AIX";
-      protocol = ASTRIX_SOLO;
+      protocol = ASTRIX_STRATUM;
     }
     if(wallet.find("ZEPHYR", 0) != std::string::npos) {
       symbol = "ZEPH";

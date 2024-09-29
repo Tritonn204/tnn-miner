@@ -31,7 +31,7 @@ using ArchDims = std::tuple<size_t, size_t, size_t>;
 
 // RDNA 3
   // RX 7900+
-    archDim(HIP_ASTRIX_gfx1100, 61440*256, 1024);
+    archDim(HIP_ASTRIX_gfx1100, 61440*192, 1024);
   // RX 7800+
     archDim(HIP_ASTRIX_gfx1101, 38400*128, 256);
   // RX 7700+
@@ -41,7 +41,6 @@ using ArchDims = std::tuple<size_t, size_t, size_t>;
 
 #elif defined(__HIP_PLATFORM_NVIDIA__)
 // NVIDIA platform: Define grid dimensions and shared memory size based on architecture
-  #if defined(__CUDA_ARCH__)
     #if __CUDA_ARCH__ >= 900  // Hopper
       archDim(HIP_ASTRIX, 2048, 256);
 
@@ -57,7 +56,6 @@ using ArchDims = std::tuple<size_t, size_t, size_t>;
     #else  // Older NVIDIA architectures
       archDim(HIP_ASTRIX, 2048, 128);
     #endif
-  #endif
 #else
     #error "Unsupported platform"
 #endif
@@ -65,31 +63,37 @@ using ArchDims = std::tuple<size_t, size_t, size_t>;
 ArchDims defaultDims = {HIP_ASTRIX_BLOCKS, HIP_ASTRIX_THREADS, HIP_ASTRIX_BATCH_SIZE};
 
 // Define a lookup table (map) that holds the block/thread/batch sizes for each architecture
-static inline const std::unordered_map<std::string, ArchDims> archDimsMap = {
-  ARCH_DIM_ENTRY(HIP_ASTRIX, gfx900),
-  ARCH_DIM_ENTRY(HIP_ASTRIX, gfx906),
-  ARCH_DIM_ENTRY(HIP_ASTRIX, gfx1010),
-  ARCH_DIM_ENTRY(HIP_ASTRIX, gfx1030),
-  ARCH_DIM_ENTRY(HIP_ASTRIX, gfx1031),
-  ARCH_DIM_ENTRY(HIP_ASTRIX, gfx1032),
-  ARCH_DIM_ENTRY(HIP_ASTRIX, gfx1034),
-  ARCH_DIM_ENTRY(HIP_ASTRIX, gfx1100)
-};
+// #if defined(__HIP_PLATFORM_AMD__)
+// static inline const std::unordered_map<std::string, ArchDims> archDimsMap = {
+//   ARCH_DIM_ENTRY(HIP_ASTRIX, gfx900),
+//   ARCH_DIM_ENTRY(HIP_ASTRIX, gfx906),
+//   ARCH_DIM_ENTRY(HIP_ASTRIX, gfx1010),
+//   ARCH_DIM_ENTRY(HIP_ASTRIX, gfx1030),
+//   // ARCH_DIM_ENTRY(HIP_ASTRIX, gfx1031),
+//   // ARCH_DIM_ENTRY(HIP_ASTRIX, gfx1032),
+//   // ARCH_DIM_ENTRY(HIP_ASTRIX, gfx1034),
+//   ARCH_DIM_ENTRY(HIP_ASTRIX, gfx1100)
+// };
+// #elif defined(__HIP_PLATFORM_NVIDIA__)
+// static inline const std::unordered_map<std::string, ArchDims> archDimsMap = {
+  
+// }
+// #endif
 
 // Function to retrieve architecture dimensions
-static inline void getArchDims(size_t &blocks, size_t &threads, size_t &batchSize) {
-  int device;
-  hipGetDevice(&device);
+// static inline void getArchDims(size_t &blocks, size_t &threads, size_t &batchSize) {
+//   int device;
+//   hipGetDevice(&device);
 
-  hipDeviceProp_t props;
-  hipGetDeviceProperties(&props, device);
+//   hipDeviceProp_t props;
+//   hipGetDeviceProperties(&props, device);
 
-  const char* archName = props.gcnArchName;
+//   const char* archName = props.gcnArchName;
 
-  // Find the architecture in the lookup table
-  auto it = archDimsMap.find(std::string(archName));
-  const ArchDims& dims = (it != archDimsMap.end()) ? it->second : defaultDims;
+//   // Find the architecture in the lookup table
+//   auto it = archDimsMap.find(std::string(archName));
+//   const ArchDims& dims = (it != archDimsMap.end()) ? it->second : defaultDims;
 
-  // Unpack the tuple into blocks, threads, and batchSize
-  std::tie(blocks, threads, batchSize) = dims;
-}
+//   // Unpack the tuple into blocks, threads, and batchSize
+//   std::tie(blocks, threads, batchSize) = dims;
+// }

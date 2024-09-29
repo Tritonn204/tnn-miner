@@ -27,6 +27,7 @@ namespace SpectreX
     matrix mat;
     double copied[matSize][matSize];
     std::bitset<matSize> rowsSelected;
+    byte scratchData[200];
     byte sha3Hash[32];
     byte astrobwtv3Hash[32];
     workerData *astroWorker;

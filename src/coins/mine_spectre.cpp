@@ -166,7 +166,7 @@ waitForJob:
         }
 
 
-        if (Num(hexStr(powHash, 32).c_str(), 16) <= cmpDiff)
+        if (Num(hexStr(usedWorker.scratchData, 32).c_str(), 16) <= cmpDiff)
         {
           // printf("thread %d entered submission process\n", tid);
           if (!submit) {

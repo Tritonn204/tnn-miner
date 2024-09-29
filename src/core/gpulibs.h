@@ -10,9 +10,8 @@ inline int GPUTest() {
     if (is_hip_supported()) {
       helloTest();
       benchAstrixHip();
+      AstrixHash::test();
     }
   #endif
-
-  AstrixHash::hipCompare();
   return 0;
 }

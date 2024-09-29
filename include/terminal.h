@@ -177,12 +177,10 @@ inline po::options_description get_prog_opts()
     ("test-randomx", "Run Tevador's reference RandomX tests")
   ;
 
-  // po::options_description astrix("Astrix", col_width);
-  // astrix.add_options()
-  //   ("astrix", "Required for mining to Xatum pools on Xelis")
-  //   ("xelis-bench", "Run a benchmark of xelis-hash with 1 thread")
-  //   ("test-xelis", "Run the xelis-hash tests from the official source code")
-  // ;
+  po::options_description astrix("Astrix", col_width);
+  astrix.add_options()
+    ("test-astrix", "Run a basic astrix-hash validation test")
+  ;
 
   po::options_description advanced("Advanced", col_width);
   advanced.add_options()
@@ -203,6 +201,7 @@ inline po::options_description get_prog_opts()
   general.add(spectre);
   general.add(xelis);
   general.add(randomX);
+  general.add(astrix);
   general.add(advanced);
   general.add(debug);
   return general;

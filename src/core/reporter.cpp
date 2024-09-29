@@ -85,6 +85,12 @@ int update_handler(const boost::system::error_code& error)
       case RX0:
         dPrint = difficulty;
         break;
+      case VERUSHASH:
+        dPrint = difficulty;
+        break;
+      case ASTRIX_HASH:
+        dPrint = doubleDiff;
+        break;
     }
 
     std::cout << std::setw(2) << "ACCEPTED " << accepted << std::setw(2) << " | REJECTED " << rejected

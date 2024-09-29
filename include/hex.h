@@ -10,7 +10,6 @@
 // #include <cuda.h>
 // #include <cuda_runtime.h>
 
-// __host__ __forceinline__ CUDA hints
 inline std::string hexStr(const unsigned char *data, int len)
 {
   static const char characters[] = "0123456789abcdef";
@@ -38,7 +37,6 @@ inline std::string hexStr(const unsigned char *data, int len)
 //   return result;
 // }
 
-// __host__ __device__ __forceinline__ CUDA hints
 inline void hexstrToBytes(std::string s, unsigned char *b)
 {
   for (unsigned int i = 0; i < s.length(); i += 2)

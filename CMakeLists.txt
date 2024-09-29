@@ -492,7 +492,8 @@ if (WITH_HIP)
   # target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} ${CMAKE_BINARY_DIR}/tnn_hip.lib)
   # target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} ${CMAKE_BINARY_DIR}/libtnn_hip.a)
 else() 
-  set(TNN_OUTPUT_NAME "tnn-miner-${INTERNAL_TNN_VERSION}_cpu")
+  # set(TNN_OUTPUT_NAME "tnn-miner-${INTERNAL_TNN_VERSION}_cpu")
+  set(TNN_OUTPUT_NAME "tnn-miner-cpu")
   add_executable(${TNN_OUTPUT_NAME} ${SOURCES_CORE} ${SOURCES_NET} ${SOURCES_CRYPTO} ${HEADERS_CRYPTO})
 
   setup_target_libraries(${TNN_OUTPUT_NAME})
@@ -505,3 +506,5 @@ else()
   set_target_properties(${TNN_OUTPUT_NAME} PROPERTIES OUTPUT_NAME ${TNN_OUTPUT_NAME})
 
 endif()
+
+unset(HIP_LANG CACHE)

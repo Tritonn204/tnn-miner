@@ -66,6 +66,12 @@ extern int64_t difficultyDev;
 extern double doubleDiff;
 extern double doubleDiffDev;
 
+extern std::string HIP_names[32];
+extern std::vector<std::atomic<int64_t>> HIP_counters;
+extern std::vector<std::vector<int64_t>> HIP_rates5min;
+extern std::vector<std::vector<int64_t>> HIP_rates1min;
+extern std::vector<std::vector<int64_t>> HIP_rates30sec;
+
 extern std::vector<int64_t> rate5min;
 extern std::vector<int64_t> rate1min;
 extern std::vector<int64_t> rate30sec;

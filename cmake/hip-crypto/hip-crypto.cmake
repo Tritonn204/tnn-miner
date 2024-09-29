@@ -41,13 +41,15 @@ if (WITH_HIP)
   #   DESTINATION ${CMAKE_INSTALL_PREFIX}
   # )
 
-  if (CMAKE_HIP_PLATFORM MATCHES nvidia OR CMAKE_HIP_PLATFORM MATCHES nvcc)
+  if (HIP_PLATFORM MATCHES nvidia OR HIP_PLATFORM MATCHES nvcc)
     # set(TNN_RDC "-rdc=false")
   else()
     set(TNN_RDC "-fno-gpu-rdc")
   endif()
 
   set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} ${TNN_RDC}")
+  unset(TNN_RDC CACHE)
+
   list(APPEND SOURCES_CRYPTO
     ${hipSources}
   )

@@ -4,6 +4,7 @@
 #include <array>
 #include <num.h>
 #include <bitset>
+#include <string.h>
 
 // NOTES
 
@@ -25,6 +26,7 @@ namespace AstrixHash
   {
     matrix matBuffer;
     matrix mat;
+    uint8_t scratchData[200];
     double copied[matSize][matSize];
     std::bitset<matSize> rowsSelected;
     byte sha3Hash[32];
@@ -152,5 +154,5 @@ namespace AstrixHash
   bool checkPow(Num in, Num diff);
   Num diffToTarget(double diff);
   Num diffToHash(double diff);
-  int hipCompare();
+  int test();
 }

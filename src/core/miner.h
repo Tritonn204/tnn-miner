@@ -68,7 +68,7 @@ std::string defaultHost[] = {
   "monerohash.com",
   "", // verus
   "",
-  "34150" // aix
+  "127.0.0.1" // aix
 };
 
 std::string devPort[] = {

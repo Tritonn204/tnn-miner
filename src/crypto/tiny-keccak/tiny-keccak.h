@@ -6,7 +6,7 @@
  * License: CC0, attribution kindly requested. Blame taken too,
  * but not liability.
  */
-#define __STDC_WANT_LIB_EXT1__ 1
+#pragma once
 
 #include <stdint.h>
 #include <stdio.h>
@@ -16,17 +16,17 @@
 /******** The Keccak-f[1600] permutation ********/
 
 /*** Constants. ***/
-__device__ static const uint8_t rho[24] = \
+static const uint8_t rho[24] = \
   { 1,  3,   6, 10, 15, 21,
     28, 36, 45, 55,  2, 14,
     27, 41, 56,  8, 25, 43,
     62, 18, 39, 61, 20, 44};
-__device__ static const uint8_t pi[24] = \
+static const uint8_t pi[24] = \
   {10,  7, 11, 17, 18, 3,
     5, 16,  8, 21, 24, 4,
    15, 23, 19, 13, 12, 2,
    20, 14, 22,  9, 6,  1};
-__device__ static const uint64_t RC[24] = \
+static const uint64_t RC[24] = \
   {1ULL, 0x8082ULL, 0x800000000000808aULL, 0x8000000080008000ULL,
    0x808bULL, 0x80000001ULL, 0x8000000080008081ULL, 0x8000000000008009ULL,
    0x8aULL, 0x88ULL, 0x80008009ULL, 0x8000000aULL,
@@ -44,7 +44,7 @@ __device__ static const uint64_t RC[24] = \
   REPEAT5(e; v += s;)
 
 /*** Keccak-f[1600] ***/
-static inline void keccakf(void* state) {
+inline static void keccakf(void* state) {
   uint64_t* a = (uint64_t*)state;
   uint64_t b[5] = {0};
   uint64_t t = 0;
@@ -87,13 +87,13 @@ static inline void keccakf(void* state) {
 #define FOR(i, ST, L, S) \
   _(for (size_t i = 0; i < L; i += ST) { S; })
 #define mkapply_ds(NAME, S)                                          \
-  __device__ static __forceinline__ void NAME(uint8_t* dst,                              \
+  static inline void NAME(uint8_t* dst,                              \
                           const uint8_t* src,                        \
                           size_t len) {                              \
     FOR(i, 1, len, S);                                               \
   }
 #define mkapply_sd(NAME, S)                                          \
-  __device__ static __forceinline__ void NAME(const uint8_t* src,                        \
+  static inline void NAME(const uint8_t* src,                        \
                           uint8_t* dst,                              \
                           size_t len) {                              \
     FOR(i, 1, len, S);                                               \
@@ -114,9 +114,12 @@ mkapply_sd(setout, dst[i] = src[i])  // setout
   }
 
 /** The sponge-based hash construction. **/
-__device__ __forceinline__ static void hash(uint8_t* out, size_t outlen,
+static inline int hash(uint8_t* out, size_t outlen,
                        const uint8_t* in, size_t inlen,
                        size_t rate, uint8_t delim) {
+  if ((out == NULL) || ((in == NULL) && inlen != 0) || (rate >= Plen)) {
+    return -1;
+  }
   uint8_t a[Plen] = {0};
   // Absorb input.
   foldP(in, inlen, xorin);
@@ -130,41 +133,27 @@ __device__ __forceinline__ static void hash(uint8_t* out, size_t outlen,
   // Squeeze output.
   foldP(out, outlen, setout);
   setout(a, out, outlen);
-}
-
-__device__ __forceinline__ static void shake32_heavy(
-                       const uint8_t initP[Plen],
-                       uint8_t* out,
-                       const uint8_t* in) {
-  uint8_t a[Plen];
-
-  #pragma unroll
-  for (int i=0; i<10; i++) ((uint64_t *)a)[i] = ((uint64_t *)initP)[i] ^ ((uint64_t *)in)[i];
-  // ((ulonglong4 *)a)[0] = ((ulonglong4 *)initP)[0] ^ ((ulonglong4 *)in)[0];
-  // ((ulonglong4 *)a)[1] = ((ulonglong4 *)initP)[1] ^ ((ulonglong4 *)in)[1];
-  // ((ulonglong2 *)a)[4] = ((ulonglong2 *)initP)[4] ^ ((ulonglong4 *)in)[4];
-
-  #pragma unroll
-  for (int i=10; i<25; i++) ((uint64_t *)a)[i] = ((uint64_t *)initP)[i];
-  // ((ulonglong2 *)a)[5] = ((ulonglong2 *)initP)[5];
-  
-  // #pragma unroll
-  // for (int i = 3; i < 6; i++) ((ulonglong4 *)a)[i] = ((ulonglong4 *)initP)[i];
-
-  // ((ulonglong2 *)a)[12] = ((ulonglong2 *)initP)[12];
-  // ((uint64_t *)a)[24] = ((uint64_t *)initP)[24];
-
-  P(a);
-  // ((ulonglong4*)out)[0] = ((ulonglong4*)a)[0];
-  memcpy(out, a, 32);
+  return 0;
 }
 
 /*** Helper macros to define SHA3 and SHAKE instances. ***/
-#define defsha3(bits)                                             \
-  __device__ __forceinline__ static void sha3_##bits(uint8_t* out, size_t outlen,                    \
+#define defshake(bits)                                            \
+  static inline int shake##bits(uint8_t* out, size_t outlen,                    \
                   const uint8_t* in, size_t inlen) {              \
-    hash(out, outlen, in, inlen, 200 - (bits / 4), 0x06);  \
+    return hash(out, outlen, in, inlen, 200 - (bits / 4), 0x1f);  \
   }
+#define defsha3(bits)                                             \
+  static inline int sha3_##bits(uint8_t* out, size_t outlen,                    \
+                  const uint8_t* in, size_t inlen) {              \
+    if (outlen > (bits/8)) {                                      \
+      return -1;                                                  \
+    }                                                             \
+    return hash(out, outlen, in, inlen, 200 - (bits / 4), 0x06);  \
+  }
+
+/*** FIPS202 SHAKE VOFs ***/
+defshake(128)
+defshake(256)
 
 /*** FIPS202 SHA3 FOFs ***/
 defsha3(224)
