@@ -43,7 +43,7 @@ namespace SpectreX
     return target;
   }
 
-  void heavyHash(byte *scratch, matrix &mat, byte *out)
+  void heavyHash(byte *scratch, const matrix &mat, byte *out)
   {
     std::array<uint16_t, 64> v{}, p{};
     for (int i = 0; i < matSize / 2; i++)
@@ -75,7 +75,7 @@ namespace SpectreX
     #pragma unroll(5)
     for (int i=0; i<4; i++) ((uint64_t *)scratch)[i] = ((uint64_t *)heavyP)[i] ^ ((uint64_t *)scratch)[i];
 
-    #pragma unroll
+    #pragma unroll(10)
     for (int i = 4; i < 25; i++) ((uint64_t *)scratch)[i] = ((uint64_t *)heavyP)[i];
 
     keccakf(scratch);
@@ -88,12 +88,12 @@ namespace SpectreX
   {
     // cshake256("ProofOfWorkHash", in, len, worker.sha3Hash, 32);
     // newMatrix(in, worker.mat, worker);
-    memcpy(worker.mat, worker.matBuffer, sizeof(matrix));
+    // memcpy(worker.mat, worker.matBuffer, sizeof(matrix));
 
     #pragma unroll(5)
     for (int i=0; i<10; i++) ((uint64_t *)worker.scratchData)[i] = ((uint64_t *)powP)[i] ^ ((uint64_t *)in)[i];
 
-    #pragma unroll
+    #pragma unroll(10)
     for (int i = 10; i < 25; i++) ((uint64_t *)worker.scratchData)[i] = ((uint64_t *)powP)[i];
 
     keccakf(worker.scratchData);
@@ -101,7 +101,7 @@ namespace SpectreX
     AstroBWTv3(worker.scratchData, 32, worker.astrobwtv3Hash, *(worker.astroWorker), false);
     // AstroBWTv3(worker.sha3Hash, 32, worker.astrobwtv3Hash, *worker.astroWorker, false);
     memcpy(worker.scratchData, worker.astrobwtv3Hash, 32);
-    heavyHash(worker.scratchData, worker.mat, out);
+    heavyHash(worker.scratchData, worker.matBuffer, out);
   }
 
   void testWithInput(const char* input, byte *out) {

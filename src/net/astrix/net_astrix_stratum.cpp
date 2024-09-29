@@ -111,7 +111,7 @@ int handleAstrixStratumPacket(boost::json::object packet, AstrixStratum::jobCach
   }
   else if (M.compare(AstrixStratum::s_setDifficulty) == 0)
   {
-    std::cout << boost::json::serialize(packet).c_str() << std::endl;
+    // std::cout << boost::json::serialize(packet).c_str() << std::endl;
     double *d = isDev ? &doubleDiffDev : &doubleDiff;
     (*d) = packet.at("params").as_array()[0].get_double();
     if ((*d) < 0.00000000001) (*d) = packet.at("params").as_array()[0].get_uint64();
@@ -317,7 +317,7 @@ void astrix_stratum_session(
       std::cerr << jsonEc.message() << std::endl;
     }
 
-    std::cout << "sub result: " << subResString << std::endl << std::flush;
+    // std::cout << "sub result: " << subResString << std::endl << std::flush;
 
     std::stringstream  jsonStream(subResString);
     std::vector<std::string> packets;
@@ -367,7 +367,7 @@ void astrix_stratum_session(
       std::cerr << jsonEc.message() << std::endl;
     }
 
-    std::cout << "auth result: " << authResString << std::endl << std::flush;
+    // std::cout << "auth result: " << authResString << std::endl << std::flush;
 
     std::stringstream  jsonStream(authResString);
     std::vector<std::string> packets;

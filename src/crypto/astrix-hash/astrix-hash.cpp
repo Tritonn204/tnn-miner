@@ -34,9 +34,15 @@ namespace AstrixHash
 
   Num diffToTarget(double diff) {
     // Create a Num object representing the difficulty
+    Num target;
 
     // Calculate the target by dividing maxTarget by difficulty
-    Num target = Num::div(maxTarget, diff);
+    if (diff < 1) {
+      double fac = 1.0/diff;
+      target = Num::mul(maxTarget, fac);
+    } else {
+      target = Num::div(maxTarget, diff);
+    }
 
     return target;
   }
@@ -70,7 +76,7 @@ namespace AstrixHash
     *ret = res;
   }
 
-  void heavyHash(byte *scratch, matrix &mat, byte *out)
+  void heavyHash(byte *scratch, const matrix &mat, byte *out)
   {
     std::array<uint16_t, 64> v{}, p{};
     for (int i = 0; i < matSize / 2; i++)
@@ -102,7 +108,7 @@ namespace AstrixHash
     #pragma unroll(5)
     for (int i=0; i<4; i++) ((uint64_t *)scratch)[i] = ((uint64_t *)heavyP)[i] ^ ((uint64_t *)scratch)[i];
 
-    #pragma unroll
+    #pragma unroll(10)
     for (int i = 4; i < 25; i++) ((uint64_t *)scratch)[i] = ((uint64_t *)heavyP)[i];
 
     keccakf(scratch);
@@ -125,12 +131,12 @@ namespace AstrixHash
     memset(worker.scratchData, 0, 200);
     // cshake256("ProofOfWorkHash", in, len, worker.sha3Hash, 32);
     // newMatrix(in, worker.mat, worker);
-    memcpy(worker.mat, worker.matBuffer, sizeof(matrix));
+    // memcpy(worker.mat, worker.matBuffer, sizeof(matrix));
     sha3_256_astrix(in, worker.scratchData);
     
     // cshake256_nil_function_name(in, len, "ProofOfWorkHash", worker.sha3Hash, 32*8);
     // AstroBWTv3(worker.sha3Hash, 32, worker.astrobwtv3Hash, *worker.astroWorker, false);
-    heavyHash(worker.scratchData, worker.mat, out);
+    heavyHash(worker.scratchData, worker.matBuffer, out);
   }
 
   void testWithInput(const char* input, byte *out) {

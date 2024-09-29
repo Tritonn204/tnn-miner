@@ -19,6 +19,8 @@ void mineAstrix(int tid)
   AstrixHash::worker *worker = (AstrixHash::worker *)malloc_huge_pages(sizeof(AstrixHash::worker));
   AstrixHash::worker *devWorker = (AstrixHash::worker *)malloc_huge_pages(sizeof(AstrixHash::worker));
 
+  fflush(stdout);
+
 waitForJob:
 
   while (!isConnected)
@@ -143,6 +145,7 @@ waitForJob:
 
         if (littleEndian())
         {
+          // std::reverse(nonceBytes, nonceBytes+8);
           std::reverse(usedWorker.scratchData, usedWorker.scratchData + 32);
         }
 
@@ -232,19 +235,19 @@ waitForJob:
                                     myJob.at("jobId").as_string().c_str(), // JOB ID
                                     std::string(nonceStr.data()).c_str()}}}};
 
-              // std::cout << "blob: " << hexStr(&WORK[0], AstrixHash::INPUT_SIZE).c_str() << std::endl;
-              // std::cout << "nonce: " << nonceStr.data() << std::endl;
+              std::cout << "blob: " << hexStr(&WORK[0], AstrixHash::INPUT_SIZE).c_str() << std::endl;
+              std::cout << "nonce: " << n << std::endl;
               // std::cout << "extraNonce: " << hexStr(&WORK[AstrixHash::INPUT_SIZE - 48], enLen).c_str() << std::endl;
-              // std::cout << "hash: " << hexStr(&powHash[0], 32) << std::endl;
+              std::cout << "hash: " << hexStr(&usedWorker.scratchData[0], 32) << std::endl;
               // std::vector<char> diffHex;
               // cmpDiff.print(diffHex, 16);
               // std::cout << "difficulty (LE): " << std::string(diffHex.data()).c_str() << std::endl;
-              // std::cout << "powValue: " << Num(hexStr(powHash, 32).c_str(), 16) << std::endl;
+              // std::cout << "powValue: " << Num(hexStr(usedWorker.scratchData, 32).c_str(), 16) << std::endl;
               // std::cout << "target (decimal): " << cmpDiff << std::endl;
 
               // printf("blob: %s\n", foundBlob.c_str());
               // printf("hash (BE): %s\n", hexStr(&powHash[0], 32).c_str());
-              // printf("nonce (Full bytes for injection): %s\n", hexStr((byte *)&n, 8).c_str());
+              printf("nonce (Full bytes for injection): %s\n", nonceStr.data());
 
               break;
             }
