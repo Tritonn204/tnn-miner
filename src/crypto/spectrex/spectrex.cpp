@@ -165,7 +165,7 @@ namespace SpectreX
     if(memcmp(hexStr(w->astrobwtv3Hash, 32).c_str(), bwt_expected, 32) != 0) {
       pieces_failed += 1;
     }
-    if(memcmp(hexStr(out, 32).c_str(), heavy_expected, 32) != 0) {
+    if(memcmp(hexStr(w->scratchData, 32).c_str(), heavy_expected, 32) != 0) {
       pieces_failed += 1;
     }
     return pieces_failed;
