@@ -19,9 +19,15 @@
 #include <boost/thread.hpp>
 #include <boost/tokenizer.hpp>
 
+#include <boost/multiprecision/cpp_int.hpp>
+
 #include <num.h>
 
 #include "algo_definitions.h"
+
+#define CMP_LT_U256(X, Y) (X[3] != Y[3] ? X[3] < Y[3] : X[2] != Y[2] ? X[2] < Y[2] \
+                                                                            : X[1] != Y[1]   ? X[1] < Y[1] \
+                                                                                                           : X[0] < Y[0])
 
 static const char *nullArg = "NULL";
 static const char* devWorkerName = "tnn-dev";                                      
@@ -36,7 +42,10 @@ extern std::string host;
 extern std::string wallet;
 
 extern Num oneLsh256;      
-extern Num maxU256;             
+extern Num maxU256;     
+
+extern boost::multiprecision::uint256_t bigDiff;
+extern boost::multiprecision::uint256_t bigDiff_dev;
 
 extern int miningAlgo;
 
@@ -63,6 +72,9 @@ extern int64_t devHeight;
 extern int64_t difficulty;
 extern int64_t difficultyDev;
 
+extern uint64_t nonce0;
+extern uint64_t nonce0_dev;
+
 extern double doubleDiff;
 extern double doubleDiffDev;
 
@@ -88,3 +100,23 @@ extern boost::asio::io_context my_context;
 // Construct a timer without setting an expiry time.
 extern boost::asio::steady_timer update_timer;
 extern std::chrono::time_point<std::chrono::steady_clock> g_start_time;
+
+inline std::string cpp_int_toHex(boost::multiprecision::cpp_int in) {
+  std::ostringstream oss;
+  oss << std::hex << in;
+  std::string hex_string = oss.str();
+
+  return hex_string;
+}
+
+inline void cpp_int_to_byte_array(const boost::multiprecision::uint256_t &num, uint8_t *out) {  
+  for (size_t i = 0; i < 32; ++i) {
+    out[i] = static_cast<uint8_t>(num >> (i * 8) & 0xFF);
+  }
+}
+
+inline void cpp_int_to_be_byte_array(const boost::multiprecision::uint256_t &num, uint8_t *out) {  
+  for (size_t i = 0; i < 32; ++i) {
+    out[i] = static_cast<uint8_t>(num >> ((32 - i - 1) * 8) & 0xFF);
+  }
+}

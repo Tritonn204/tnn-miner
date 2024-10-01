@@ -5,6 +5,8 @@
 #include <array>
 #include <num.h>
 
+#include <boost/multiprecision/cpp_int.hpp>
+
 // NOTES
 
 // Input structure
@@ -12,6 +14,8 @@
 // 0-31            32-39   40-71                   72-79
 
 using byte = unsigned char;
+using uint256_t = boost::multiprecision::uint256_t;
+using cpp_dec_float_50 = boost::multiprecision::cpp_dec_float_50;
 
 namespace SpectreX
 {
@@ -21,10 +25,35 @@ namespace SpectreX
   using matrix = uint16_t[matSize][matSize];
   const double epsilon = 1e-9;
 
+  inline uint64_t flipped(uint64_t in) {
+    uint64_t res;
+    res = (
+      (in >> 56) |
+      ((in & 0x00FF000000000000) >> 40) |
+      ((in & 0x0000FF0000000000) >> 24) |
+      ((in & 0x000000FF00000000) >> 8) |
+      ((in & 0x00000000FF000000) << 8) |
+      ((in & 0x0000000000FF0000) << 24) |
+      ((in & 0x000000000000FF00) << 40) | 
+      ((in & 0x00000000000000FF) << 56)
+    );
+    return in;
+  }
+
+  inline bool checkNonce(uint64_t *Xr, uint64_t *Yr) {
+    uint64_t X[4] = {flipped(Xr[0]),flipped(Xr[1]),flipped(Xr[2]),flipped(Xr[3])};
+    uint64_t Y[4] = {flipped(Yr[0]),flipped(Yr[1]),flipped(Yr[2]),flipped(Yr[3])};
+
+    return (X[3] != Y[3] ? X[3] < Y[3] : 
+      X[2] != Y[2] ? X[2] < Y[2] : 
+      X[1] != Y[1] ? X[1] < Y[1] : 
+      X[0] < Y[0]);
+  }
+
+
   typedef struct worker
   {
     matrix matBuffer;
-    matrix mat;
     double copied[matSize][matSize];
     std::bitset<matSize> rowsSelected;
     byte scratchData[200];
@@ -152,9 +181,8 @@ namespace SpectreX
   void hash(worker &worker, byte *in, int len, byte *out);
   int test();
 
-  bool checkPow(Num in, Num diff);
-  Num diffToTarget(double diff);
-  Num diffToHash(double diff);
+  uint256_t diffToTarget(double diff);
+  uint256_t diffToHash(double diff);
 }
 
 void mineSpectre(int tid);

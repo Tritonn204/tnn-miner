@@ -4,7 +4,9 @@
 #include "aes.hpp"
 #include "chacha20.h"
 #include <crc32.h>
+
 #include <BLAKE3/c/blake3.h>
+
 #include <chacha20.h>
 
 #if defined(__x86_64__)

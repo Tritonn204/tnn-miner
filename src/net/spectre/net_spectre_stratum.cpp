@@ -39,11 +39,16 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
 
     uint64_t comboHeader[4] = {h1, h2, h3, h4};
 
+    (*J).as_object()["jobId"] = packet["params"].as_array()[0].get_string().c_str();
+
     bool isEqual = true;
     for (int i = 0; i < 4; i++) {
       isEqual &= comboHeader[i] == cache->header[i];
     }
-    if (isEqual) return 0;
+    if (!isEqual) {
+      uint64_t &N = isDev ? nonce0_dev : nonce0;
+      N = 0;
+    }
 
     for (int i = 0; i < 4; i++) {
       cache->header[i] = comboHeader[i];
@@ -118,6 +123,10 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
     (*d) = packet.at("params").as_array()[0].get_double();
     if ((*d) < 0.00000000001) (*d) = packet.at("params").as_array()[0].get_uint64();
 
+    uint256_t *dRef = isDev ? &bigDiff_dev : &bigDiff;
+    *dRef = SpectreX::diffToTarget(*d);
+
+    jobCounter++;
     // printf("%f\n", (*d));
   }
   else if (M.compare(SpectreStratum::s_setExtraNonce) == 0)

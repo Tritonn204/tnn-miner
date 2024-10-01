@@ -316,7 +316,7 @@ else()
     OPTIONS 
       "Boost_USE_STATIC_LIBS ON" 
       "Boost_ENABLE_CMAKE ON" 
-      "BOOST_INCLUDE_LIBRARIES chrono\\\;context\\\;coroutine\\\;json\\\;thread\\\;atomic\\\;program_options" 
+      "BOOST_INCLUDE_LIBRARIES chrono\\\;context\\\;coroutine\\\;multiprecision\\\;json\\\;thread\\\;atomic\\\;program_options" 
       # "BOOST_TOOLSET clangw"  # Specify Windows Clang toolset
       # ${CPM_COMPILER}  
       # "CMAKE_CXX_FLAGS /DCLANG_COMPILER=1 /fms-compatibility"
@@ -340,7 +340,7 @@ else()
 endif()
 
 # This is universal regardless of how wheter we compiled or found Boost
-set(TNN_BOOST_LIBS Boost::chrono Boost::context Boost::coroutine Boost::thread Boost::json Boost::atomic Boost::program_options)
+set(TNN_BOOST_LIBS Boost::chrono Boost::context Boost::coroutine Boost::thread Boost::multiprecision Boost::json Boost::atomic Boost::program_options)
 
 if(APPLE OR WITH_HIP)
 CPMAddPackage(

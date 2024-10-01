@@ -27,7 +27,7 @@ func DiffToHash(diff float64) float64 {
 }
 
 func main() {
-    difficulty := float64(0.000000001)
+    difficulty := float64(0.0158)
 
     target := DiffToTarget(difficulty)
 		hash := DiffToHash(difficulty)

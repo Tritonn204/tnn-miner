@@ -3,6 +3,8 @@ if (WITH_ASTRIXHASH)
 
     message(STATUS "Building with AstrixHash support")
 
+    set(WITH_BLAKE3 ON)
+
     file(GLOB_RECURSE astrixHashHeaders
       src/crypto/astrix-hash/*.h
     )

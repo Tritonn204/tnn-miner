@@ -11,12 +11,15 @@ void mineSpectre(int tid)
   int64_t localOurHeight = 0;
   int64_t localDevHeight = 0;
 
-  uint64_t i = 0;
-  uint64_t i_dev = 0;
-
   byte powHash[32];
   byte work[SpectreX::INPUT_SIZE] = {0};
   byte devWork[SpectreX::INPUT_SIZE] = {0};
+
+  std::string diffHex;
+  std::string diffHex_dev;
+
+  byte diffBytes[32];
+  byte diffBytes_dev[32];
 
   workerData *astroWorker = (workerData *)malloc_huge_pages(sizeof(workerData));
   SpectreX::worker *worker = (SpectreX::worker *)malloc_huge_pages(sizeof(SpectreX::worker));
@@ -75,7 +78,6 @@ waitForJob:
         // SpectreX::newMatrix(b2, worker->mat);
         delete[] b2;
         localOurHeight = ourHeight;
-        i = 0;
       }
 
       if (devConnected && myJobDev.at("template").is_string())
@@ -98,7 +100,6 @@ waitForJob:
           // SpectreX::newMatrix(b2d, devWorker->mat);
           delete[] b2d;
           localDevHeight = devHeight;
-          i_dev = 0;
         }
       }
 
@@ -106,7 +107,14 @@ waitForJob:
       double which;
       bool submit = false;
       double DIFF = 1;
-      Num cmpDiff;
+      diffHex.clear();
+      diffHex_dev.clear();
+
+      diffHex = cpp_int_toHex(bigDiff);
+      diffHex_dev = cpp_int_toHex(bigDiff_dev);
+
+      cpp_int_to_byte_array(bigDiff, diffBytes);
+      cpp_int_to_byte_array(bigDiff_dev, diffBytes_dev);
 
       // printf("end of job application\n");
       while (localJobCounter == jobCounter)
@@ -118,9 +126,9 @@ waitForJob:
           continue;
 
         // cmpDiff = ConvertDifficultyToBig(DIFF, SPECTRE_X);
-        cmpDiff = SpectreX::diffToTarget(DIFF);
+        byte* cmpDiff = devMine ? diffBytes_dev : diffBytes;
 
-        uint64_t *nonce = devMine ? &i_dev : &i;
+        uint64_t *nonce = devMine ? &nonce0_dev : &nonce0;
         (*nonce)++;
 
         // printf("nonce = %llu\n", *nonce);
@@ -166,18 +174,23 @@ waitForJob:
         }
 
 
-        if (Num(hexStr(usedWorker.scratchData, 32).c_str(), 16) <= cmpDiff)
+        if (SpectreX::checkNonce(((uint64_t*)usedWorker.scratchData),((uint64_t*)cmpDiff)))
         {
           // printf("thread %d entered submission process\n", tid);
           if (!submit) {
             for(;;) {
               submit = (devMine && devConnected) ? !submittingDev : !submitting;
-              if (submit || localJobCounter != jobCounter || localOurHeight != ourHeight)
+              int64_t &rH = devMine ? devHeight : ourHeight;
+              int64_t &oH = devMine ? localDevHeight : localOurHeight;
+              if (submit || localJobCounter != jobCounter || rH != oH)
                 break;
               boost::this_thread::yield();
             }
           }
-          if (localJobCounter != jobCounter) {
+
+          int64_t &rH = devMine ? devHeight : ourHeight;
+          int64_t &oH = devMine ? localDevHeight : localOurHeight;
+          if (localJobCounter != jobCounter || rH != oH) {
             // printf("thread %d updating job after check\n", tid);
             break;
           }

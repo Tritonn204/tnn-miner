@@ -44,7 +44,7 @@ __device__ static const uint64_t RC[24] = \
   REPEAT5(e; v += s;)
 
 /*** Keccak-f[1600] ***/
-static inline void keccakf(void* state) {
+__device__ static __forceinline__ void keccakf(void* state) {
   uint64_t* a = (uint64_t*)state;
   uint64_t b[5] = {0};
   uint64_t t = 0;

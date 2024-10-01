@@ -9,12 +9,15 @@ void mineAstrix(int tid)
   int64_t localOurHeight = 0;
   int64_t localDevHeight = 0;
 
-  uint64_t i = 0;
-  uint64_t i_dev = 0;
-
   byte powHash[32];
   byte work[AstrixHash::INPUT_SIZE] = {0};
   byte devWork[AstrixHash::INPUT_SIZE] = {0};
+
+  std::string diffHex;
+  std::string diffHex_dev;
+
+  byte diffBytes[32];
+  byte diffBytes_dev[32];
 
   AstrixHash::worker *worker = (AstrixHash::worker *)malloc_huge_pages(sizeof(AstrixHash::worker));
   AstrixHash::worker *devWorker = (AstrixHash::worker *)malloc_huge_pages(sizeof(AstrixHash::worker));
@@ -66,7 +69,7 @@ waitForJob:
         // AstrixHash::newMatrix(b2, worker->mat);
         delete[] b2;
         localOurHeight = ourHeight;
-        i = 0;
+        nonce0 = 0;
       }
 
       if (devConnected && myJobDev.at("template").is_string())
@@ -89,7 +92,7 @@ waitForJob:
           // AstrixHash::newMatrix(b2d, devWorker->mat);
           delete[] b2d;
           localDevHeight = devHeight;
-          i_dev = 0;
+          nonce0_dev = 0;
         }
       }
 
@@ -97,7 +100,18 @@ waitForJob:
       double which;
       bool submit = false;
       double DIFF = 1;
-      Num cmpDiff;
+
+      diffHex.clear();
+      diffHex_dev.clear();
+
+      diffHex = cpp_int_toHex(bigDiff);
+      diffHex_dev = cpp_int_toHex(bigDiff_dev);
+
+      cpp_int_to_byte_array(bigDiff, diffBytes);
+      cpp_int_to_byte_array(bigDiff_dev, diffBytes_dev);
+
+      // printf("reverse size: %d\n", diffHex.size()/2 + diffHex.size()%2);
+      // printf("difference in length: %d\n", 64-diffHex.size());
 
       // printf("end of job application\n");
       while (localJobCounter == jobCounter)
@@ -109,9 +123,9 @@ waitForJob:
           continue;
 
         // cmpDiff = ConvertDifficultyToBig(DIFF, ASTRIX_X);
-        cmpDiff = AstrixHash::diffToTarget(DIFF);
+        byte* cmpDiff = devMine ? diffBytes_dev : diffBytes;
 
-        uint64_t *nonce = devMine ? &i_dev : &i;
+        uint64_t *nonce = devMine ? &nonce0_dev : &nonce0;
         (*nonce)++;
 
         // printf("nonce = %llu\n", *nonce);
@@ -140,14 +154,17 @@ waitForJob:
           break;
         }
 
+        // if (littleEndian()) {
+        //   std::reverse(nonceBytes, nonceBytes+8);
+        // }
+
         AstrixHash::worker &usedWorker = devMine ? *devWorker : *worker;
         AstrixHash::hash(usedWorker, WORK, AstrixHash::INPUT_SIZE, powHash);
 
-        if (littleEndian())
-        {
-          // std::reverse(nonceBytes, nonceBytes+8);
-          std::reverse(usedWorker.scratchData, usedWorker.scratchData + 32);
-        }
+        // if (littleEndian())
+        // {
+        //   std::reverse(usedWorker.scratchData, usedWorker.scratchData + 32);
+        // }
 
         counter.fetch_add(1);
         submit = (devMine && devConnected) ? !submittingDev : !submitting;
@@ -158,18 +175,34 @@ waitForJob:
         }
 
 
-        if (Num(hexStr(usedWorker.scratchData, 32).c_str(), 16) <= cmpDiff)
+        if (AstrixHash::checkNonce(((uint64_t*)usedWorker.scratchData),((uint64_t*)cmpDiff)))
         {
+          // printf("cmpDiff:\n");
+          // for(int i = 0; i < 32; i++) {
+          //   printf("%02x", diffBytes[i]);
+          // }
+          // printf("\n");
+
+          // printf("comparison breakdown:\n");
+          // printf("0: %016llx / %016llx\n", ((uint64_t*)usedWorker.scratchData)[0], ((uint64_t*)cmpDiff)[0]);
+          // printf("1: %016llx / %016llx\n", ((uint64_t*)usedWorker.scratchData)[1], ((uint64_t*)cmpDiff)[1]);
+          // printf("2: %016llx / %016llx\n", ((uint64_t*)usedWorker.scratchData)[2], ((uint64_t*)cmpDiff)[2]);
+          // printf("3: %016llx / %016llx\n", ((uint64_t*)usedWorker.scratchData)[3], ((uint64_t*)cmpDiff)[3]);
           // printf("thread %d entered submission process\n", tid);
           if (!submit) {
             for(;;) {
               submit = (devMine && devConnected) ? !submittingDev : !submitting;
-              if (submit || localJobCounter != jobCounter || localOurHeight != ourHeight)
+              int64_t &rH = devMine ? devHeight : ourHeight;
+              int64_t &oH = devMine ? localDevHeight : localOurHeight;
+              if (submit || localJobCounter != jobCounter || rH != oH)
                 break;
               boost::this_thread::yield();
             }
           }
-          if (localJobCounter != jobCounter) {
+
+          int64_t &rH = devMine ? devHeight : ourHeight;
+          int64_t &oH = devMine ? localDevHeight : localOurHeight;
+          if (localJobCounter != jobCounter || rH != oH) {
             // printf("thread %d updating job after check\n", tid);
             break;
           }
@@ -205,6 +238,8 @@ waitForJob:
                                     myJobDev.at("jobId").as_string().c_str(), // JOB ID
                                     std::string(nonceStr.data()).c_str()}}}};
 
+              std::cout << "target: " << diffHex_dev << std::endl;
+
               break;
             }
             data_ready = true;
@@ -235,19 +270,19 @@ waitForJob:
                                     myJob.at("jobId").as_string().c_str(), // JOB ID
                                     std::string(nonceStr.data()).c_str()}}}};
 
-              std::cout << "blob: " << hexStr(&WORK[0], AstrixHash::INPUT_SIZE).c_str() << std::endl;
-              std::cout << "nonce: " << n << std::endl;
+              // std::cout << "blob: " << hexStr(&WORK[0], AstrixHash::INPUT_SIZE).c_str() << std::endl;
+              // std::cout << "nonce: " << n << std::endl;
               // std::cout << "extraNonce: " << hexStr(&WORK[AstrixHash::INPUT_SIZE - 48], enLen).c_str() << std::endl;
-              std::cout << "hash: " << hexStr(&usedWorker.scratchData[0], 32) << std::endl;
+              // std::cout << "hash: " << hexStr(&usedWorker.scratchData[0], 32) << std::endl;
               // std::vector<char> diffHex;
               // cmpDiff.print(diffHex, 16);
               // std::cout << "difficulty (LE): " << std::string(diffHex.data()).c_str() << std::endl;
               // std::cout << "powValue: " << Num(hexStr(usedWorker.scratchData, 32).c_str(), 16) << std::endl;
-              // std::cout << "target (decimal): " << cmpDiff << std::endl;
+              std::cout << "target: " << diffHex << std::endl;
 
               // printf("blob: %s\n", foundBlob.c_str());
               // printf("hash (BE): %s\n", hexStr(&powHash[0], 32).c_str());
-              printf("nonce (Full bytes for injection): %s\n", nonceStr.data());
+              // printf("nonce (Full bytes for injection): %s\n", nonceStr.data());
 
               break;
             }

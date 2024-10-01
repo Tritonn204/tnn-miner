@@ -59,6 +59,12 @@ int miningAlgo = DERO_HASH;
 int reportCounter = 0;
 int reportInterval = 3;
 
+uint256_t bigDiff(0);
+uint256_t bigDiff_dev(0);
+
+extern uint64_t nonce0 = 0;
+extern uint64_t nonce0_dev = 0;
+
 std::string HIP_names[32];
 std::vector<std::atomic<int64_t>> HIP_counters(32);
 std::vector<std::vector<int64_t>> HIP_rates5min(32);
