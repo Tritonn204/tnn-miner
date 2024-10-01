@@ -506,7 +506,7 @@ void spectre_stratum_session(
 
       boost::asio::streambuf response;
       std::stringstream workInfo;
-      beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(5));
+      beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(60));
 
       trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
       if (ec) {
