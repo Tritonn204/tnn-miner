@@ -4,8 +4,6 @@
 #include <hex.h>
 #include <string.h>
 
-#include <immintrin.h>
-
 #include <BLAKE3/c/blake3.h>
 #include <crypto/tiny-keccak/tiny-keccak.h>
 #include <boost/multiprecision/cpp_dec_float.hpp>
