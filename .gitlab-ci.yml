@@ -1,5 +1,6 @@
 stages:
   - build
+  - wrap
   - test
   - release
 
@@ -80,6 +81,7 @@ build-linux-amd64:
 build-hiveos-mmpos:
   needs:
     - build-linux-amd64
+  stage: wrap
   script:
     - tar -xvf ${LINUX_AMD64_TGZ}
     - mv ./tnn-miner-cpu ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
