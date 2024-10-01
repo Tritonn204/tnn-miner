@@ -82,7 +82,7 @@ build-hiveos-mmpos:
     - build-linux-amd64
   script:
     - tar -xvf ${LINUX_AMD64_TGZ}
-    - mv ./tnn-miner-${PACKAGE_VERSION}_cpu ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
+    - mv ./tnn-miner-cpu ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
     - sed "s/^EXTERNAL_VERSION=custom/EXTERNAL_VERSION=$PACKAGE_VERSION/g" -i ./wrappers/hiveos+mmpos/tnn-miner/mmp-external.conf
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/h-run.sh
@@ -142,9 +142,9 @@ build-windows:
     - .\scripts\build.ps1 $PACKAGE_VERSION
     - dir .\build\
     - dir .\build\bin\
-    - move build\bin\tnn-miner-${PACKAGE_VERSION}_cpu.exe .\
-    - Compress-Archive -Path tnn-miner-${PACKAGE_VERSION}_cpu.exe -DestinationPath ${WIN_AMD64_ZIP}
-    #- 7z.exe a ${WIN_AMD64_ZIP} tnn-miner-${PACKAGE_VERSION}_cpu.exe
+    - move build\bin\tnn-miner-cpu.exe .\
+    - Compress-Archive -Path tnn-miner-cpu.exe -DestinationPath ${WIN_AMD64_ZIP}
+    #- 7z.exe a ${WIN_AMD64_ZIP} tnn-miner-cpu.exe
   after_script:
     - echo "WIN_BUILD_JOB_ID=$CI_JOB_ID" >> win-job.env
   artifacts:
@@ -192,9 +192,9 @@ test-linux-amd64:
     - ls -la ./
   script:
     - tar -xvf ./${LINUX_AMD64_TGZ}
-    - ./tnn-miner-${PACKAGE_VERSION}_cpu --test-dero --quiet
-    - ./tnn-miner-${PACKAGE_VERSION}_cpu --test-spectre --quiet
-    - ./tnn-miner-${PACKAGE_VERSION}_cpu --test-xelis --quiet
+    - ./tnn-miner-cpu --test-dero --quiet
+    - ./tnn-miner-cpu --test-spectre --quiet
+    - ./tnn-miner-cpu --test-xelis --quiet
     
 # run tests using the binary built before
 test-linux-aarch64:
@@ -211,9 +211,9 @@ test-linux-aarch64:
     - ls -la ./
   script:
     - tar -xvf ./${LINUX_ARM64_TGZ}
-    - ./tnn-miner-${PACKAGE_VERSION}_cpu --test-dero --quiet
-    - ./tnn-miner-${PACKAGE_VERSION}_cpu --test-spectre --quiet
-    - ./tnn-miner-${PACKAGE_VERSION}_cpu --test-xelis --quiet
+    - ./tnn-miner-cpu --test-dero --quiet
+    - ./tnn-miner-cpu --test-spectre --quiet
+    - ./tnn-miner-cpu --test-xelis --quiet
 
 # TODO install gdb instead of running prereqs
 # test-windows:
