@@ -1251,6 +1251,8 @@ connectionAttempt:
 
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
+
+    rate30sec.clear();
    //  mutex.unlock();
   }
   else
