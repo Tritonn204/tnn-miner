@@ -114,7 +114,7 @@ build-macos:
     - cmake -DTNN_VERSION=$PACKAGE_VERSION ..
     - make -j$(nproc)
     - cd ../
-    - mv ./build/Tnn-miner-${PACKAGE_VERSION} ./Tnn-miner
+    - mv ./build/Tnn-miner-cpu ./Tnn-miner
     - ls -la ./
     - ls -la ./build/
     - tar -czvf Tnn-miner-macos-arm64.tar.gz ./Tnn-miner

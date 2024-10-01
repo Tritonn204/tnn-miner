@@ -37,37 +37,42 @@ namespace SpectreX
 
   void heavyHash(byte *scratch, const matrix &mat, byte *out)
   {
-    std::array<uint16_t, 64> v{}, p{};
+    uint8_t v[64];
+    uint8_t p[32];
     for (int i = 0; i < matSize / 2; i++)
     {
-      v[i * 2] = uint16_t(scratch[i] >> 4);
-      v[i * 2 + 1] = uint16_t(scratch[i] & 0x0f);
+      v[i * 2] = scratch[i] >> 4;
+      v[i * 2 + 1] = scratch[i] & 0x0f;
     }
 
     // build the product array
-    #pragma unroll(4)
-    for (int i = 0; i < 64; i++)
+    // #pragma unroll(4)
+    for (int i = 0; i < 32; i++) // Only iterate over half the rows, as you're processing two at a time
     {
-      uint16_t s = 0;
-      #pragma unroll(4)
-      for (int j = 0; j < 64; j++)
-      {
-        s += mat[i][j] * v[j];
-      }
-      p[i] = s >> 10;
-    }
+      uint16_t sum1 = 0, sum2 = 0;
 
+      // #pragma unroll(4)
+      for (int j = 0; j < 64; j++) // Loop over all columns
+      {
+        sum1 += mat[2 * i][j] * v[j];     // Sum for row 2*i
+        sum2 += mat[2 * i + 1][j] * v[j]; // Sum for row 2*i+1
+      }
+      
+      p[i] = ((sum1 >> 10) << 4) | (sum2 >> 10); // Shift and combine sums
+    }
+    
     // calculate the digest
-    for (size_t i = 0; i < 32; i++)
+    // #pragma unroll(4)
+    for (size_t i = 0; i < 4; i++)
     {
-      scratch[i] = scratch[i] ^ (static_cast<uint8_t>(p[i * 2] << 4) | static_cast<uint8_t>(p[i * 2 + 1]));
+      ((uint64_t*)scratch)[i] ^= ((uint64_t*)p)[i];
     }
 
     // hash the digest a final time, reverse bytes
-    #pragma unroll
+    // #pragma unroll
     for (int i=0; i<4; i++) ((uint64_t *)scratch)[i] = ((uint64_t *)heavyP)[i] ^ ((uint64_t *)scratch)[i];
 
-    #pragma unroll
+    // #pragma unroll
     for (int i = 4; i < 25; i++) ((uint64_t *)scratch)[i] = ((uint64_t *)heavyP)[i];
 
     keccakf(scratch);
@@ -82,10 +87,10 @@ namespace SpectreX
     // newMatrix(in, worker.mat, worker);
     // memcpy(worker.mat, worker.matBuffer, sizeof(matrix));
 
-    #pragma unroll(5)
+    // #pragma unroll(5)
     for (int i=0; i<10; i++) ((uint64_t *)worker.scratchData)[i] = ((uint64_t *)powP)[i] ^ ((uint64_t *)in)[i];
 
-    #pragma unroll(10)
+    // #pragma unroll(10)
     for (int i = 10; i < 25; i++) ((uint64_t *)worker.scratchData)[i] = ((uint64_t *)powP)[i];
 
     keccakf(worker.scratchData);

@@ -238,7 +238,7 @@ waitForJob:
                                     myJobDev.at("jobId").as_string().c_str(), // JOB ID
                                     std::string(nonceStr.data()).c_str()}}}};
 
-              std::cout << "target: " << diffHex_dev << std::endl;
+              // std::cout << "target: " << diffHex_dev << std::endl;
 
               break;
             }
@@ -278,7 +278,7 @@ waitForJob:
               // cmpDiff.print(diffHex, 16);
               // std::cout << "difficulty (LE): " << std::string(diffHex.data()).c_str() << std::endl;
               // std::cout << "powValue: " << Num(hexStr(usedWorker.scratchData, 32).c_str(), 16) << std::endl;
-              std::cout << "target: " << diffHex << std::endl;
+              // std::cout << "target: " << diffHex << std::endl;
 
               // printf("blob: %s\n", foundBlob.c_str());
               // printf("hash (BE): %s\n", hexStr(&powHash[0], 32).c_str());

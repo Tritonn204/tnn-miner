@@ -45,7 +45,7 @@ int handleAstrixStratumPacket(boost::json::object packet, AstrixStratum::jobCach
     for (int i = 0; i < 4; i++) {
       isEqual &= comboHeader[i] == cache->header[i];
     }
-    
+
     if (!isEqual) {
       uint64_t &N = isDev ? nonce0_dev : nonce0;
       N = 0;
@@ -73,7 +73,7 @@ int handleAstrixStratumPacket(boost::json::object packet, AstrixStratum::jobCach
     memcpy(newTemplate + 48 + 16 - h4Str.size(), h4Str.data(), h4Str.size());
     memcpy(newTemplate + 64 + 16 - tsStr.size(), tsStr.data(), tsStr.size());
 
-    if(!beQuiet) {
+    if(!isEqual && !beQuiet) {
       setcolor(CYAN);
       if (!isDev)
         printf("\nStratum: new job received\n");

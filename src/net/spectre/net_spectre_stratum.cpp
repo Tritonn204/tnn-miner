@@ -72,7 +72,7 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
     memcpy(newTemplate + 48 + 16 - h4Str.size(), h4Str.data(), h4Str.size());
     memcpy(newTemplate + 64 + 16 - tsStr.size(), tsStr.data(), tsStr.size());
 
-    if(!beQuiet) {
+    if(!isEqual && !beQuiet) {
       setcolor(CYAN);
       if (!isDev)
         printf("\nStratum: new job received\n");

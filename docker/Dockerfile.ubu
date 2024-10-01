@@ -24,8 +24,8 @@ RUN ls -la .
 
 RUN --mount=type=cache,target=/src/.cache mkdir ./build && cd ./build && cmake $CMAKE_ARGS -DTNN_VERSION=$PACKAGE_VERSION ..
 RUN --mount=type=cache,target=/src/.cache cd ./build && make -j$(nproc)
-RUN mv ./build/bin/tnn-miner-${PACKAGE_VERSION}_* ./
-RUN ./tnn-miner-${PACKAGE_VERSION}_* --test-spectre
+RUN mv ./build/bin/tnn-miner-* ./
+RUN ./tnn-miner-* --test-spectre
 RUN ls -la ./
 RUN tar -czvf ${TARGZ_FILE} ./tnn-miner*
 RUN md5sum ./${TARGZ_FILE}
