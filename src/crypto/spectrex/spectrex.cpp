@@ -158,7 +158,7 @@ namespace SpectreX
     printf("BWT hash: %s\n", hexStr(w->astrobwtv3Hash, 32).c_str());
     printf("WANT    : %s\n\n", bwt_expected);
 
-    const char *heavy_expected = "0b68c38a0d359b9ef74fecfae4b2b0a0ea026fdcee22c1d48bcc824f32050ef5";
+    const char *heavy_expected = "f50e05324f82cc8bd4c122eedc6f02eaa0b0b2e4faec4ff79e9b350d8ac3680b";
     printf("Heavy hash: %s\n", hexStr(w->scratchData, 32).c_str());
     printf("WANT      : %s\n\n", heavy_expected);
 
