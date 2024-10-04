@@ -9,7 +9,7 @@
 
 using byte = unsigned char;
 
-inline Num ConvertDifficultyToBig(Num d, int algo)
+inline Num ConvertDifficultyToBig_hip(Num d, int algo)
 {
   switch(algo) {
     case DERO_HASH:
@@ -23,28 +23,6 @@ inline Num ConvertDifficultyToBig(Num d, int algo)
   }
 }
 
-inline bool CheckHash(unsigned char *hash, int64_t diff, int algo)
-{
-  if (littleEndian()) std::reverse(hash, hash+32);
-  bool cmp = Num(hexStr(hash, 32).c_str(), 16) <= ConvertDifficultyToBig(diff, algo);
-  if (littleEndian()) std::reverse(hash, hash+32);
-  return (cmp);
-}
-
-inline bool CheckHash(unsigned char *hash, Num diff, int algo)
-{
-  if (littleEndian()) std::reverse(hash, hash+32);
-  bool cmp = Num(hexStr(hash, 32).c_str(), 16) <= diff;
-  if (littleEndian()) std::reverse(hash, hash+32);
-  return (cmp);
-}
-
-inline std::string uint32ToHex(uint32_t value) {
-  std::stringstream ss;
-  ss << std::hex << std::setw(8) << std::setfill('0') << value;
-  return ss.str();
-}
-
 void mineAstrix_hip();
 
 static inline void unsupported() {
@@ -52,7 +30,7 @@ static inline void unsupported() {
 }
 
 typedef void (*mineFunc_hip)();
-const mineFunc_hip POW[] = {
+const mineFunc_hip POW_HIP[] = {
   unsupported, // 0
   unsupported, 
   unsupported, 

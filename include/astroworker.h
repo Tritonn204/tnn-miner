@@ -111,5 +111,6 @@ public:
   int bB[256*256];
 
   friend std::ostream& operator<<(std::ostream& os, const workerData& wd);
+  byte cachePad[4096*4];
 };
 #endif

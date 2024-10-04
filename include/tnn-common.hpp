@@ -37,6 +37,7 @@ extern std::string workerNameFromWallet;
 extern bool useLookupMine;
 
 extern int protocol;
+extern bool gpuMine;
 
 extern std::string host;
 extern std::string wallet;
@@ -79,7 +80,7 @@ extern double doubleDiff;
 extern double doubleDiffDev;
 
 extern std::string HIP_names[32];
-extern std::vector<std::atomic<int64_t>> HIP_counters;
+extern std::vector<std::atomic<uint64_t>> HIP_counters;
 extern std::vector<std::vector<int64_t>> HIP_rates5min;
 extern std::vector<std::vector<int64_t>> HIP_rates1min;
 extern std::vector<std::vector<int64_t>> HIP_rates30sec;

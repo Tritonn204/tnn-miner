@@ -60,52 +60,49 @@ namespace AstrixHash
     *ret = res;
   }
 
-  void heavyHash(byte *scratch, const matrix &mat, byte *out)
+  static inline void heavyHash(byte *scratch, const matrix &mat, byte *out)
   {
     uint8_t v[64];
-    uint8_t p[32];
     
-    for (int i = 0; i < matSize / 2; i++)
+    __builtin_prefetch(v + 32, 1, 3);
+    for (int i = 0; i < QUARTER_MATRIX_SIZE; i++)
     {
-      v[i * 2] = uint16_t(scratch[i] >> 4);
-      v[i * 2 + 1] = uint16_t(scratch[i] & 0x0f);
+      v[i * 4] = uint16_t(scratch[i * 2] >> 4);
+      v[i * 4 + 1] = uint16_t(scratch[i * 2] & 0x0f);
+      v[i * 4 + 2] = uint16_t(scratch[i * 2 + 1] >> 4);
+      v[i * 4 + 3] = uint16_t(scratch[i * 2 + 1] & 0x0f);
     }
 
     // build the product array
-    // #pragma unroll(4)
-    for (int i = 0; i < 32; i++) // Only iterate over half the rows, as you're processing two at a time
+    for (int i = 0; i < QUARTER_MATRIX_SIZE; i++)
     {
-      uint16_t sum1 = 0, sum2 = 0;
+      uint16_t sum1 = 0, sum2 = 0, sum3 = 0, sum4 = 0;
+      __builtin_prefetch(mat[4*(i+1)], 0, 3);
+      __builtin_prefetch(mat[4*(i+1)+1], 0, 3);
+      __builtin_prefetch(mat[4*(i+1)+2], 0, 3);
+      __builtin_prefetch(mat[4*(i+1)+3], 0, 3);
 
-      // #pragma unroll(4)
-      for (int j = 0; j < 64; j++) // Loop over all columns
+      for (int j = 0; j < 64; j++)
       {
-        sum1 += mat[2 * i][j] * v[j];     // Sum for row 2*i
-        sum2 += mat[2 * i + 1][j] * v[j]; // Sum for row 2*i+1
+        sum1 += mat[4 * i][j] * v[j];
+        sum2 += mat[4 * i + 1][j] * v[j];
+        sum3 += mat[4 * i + 2][j] * v[j];
+        sum4 += mat[4 * i + 3][j] * v[j];
       }
       
-      p[i] = ((sum1 >> 10) << 4) | (sum2 >> 10); // Shift and combine sums
+      scratch[i * 2] ^= ((sum1 >> 10) << 4) | (sum2 >> 10);
+      scratch[i * 2 + 1] ^= ((sum3 >> 10) << 4) | (sum4 >> 10);
     }
 
     // calculate the digest
-    // #pragma unroll(4)
-    for (size_t i = 0; i < 4; i++)
-    {
-      ((uint64_t*)scratch)[i] ^= ((uint64_t*)p)[i];
-    }
+    ((uint64_t*)scratch)[0] ^= ((uint64_t *)heavyP)[0];
+    ((uint64_t*)scratch)[1] ^= ((uint64_t *)heavyP)[1];
+    ((uint64_t*)scratch)[2] ^= ((uint64_t *)heavyP)[2];
+    ((uint64_t*)scratch)[3] ^= ((uint64_t *)heavyP)[3];
 
-    // hash the digest a final time, reverse bytes
-    // #pragma unroll
-    for (int i=0; i<4; i++) ((uint64_t *)scratch)[i] = ((uint64_t *)heavyP)[i] ^ ((uint64_t *)scratch)[i];
-
-    // #pragma unroll
     for (int i = 4; i < 25; i++) ((uint64_t *)scratch)[i] = ((uint64_t *)heavyP)[i];
 
     keccakf(scratch);
-
-    // std::reverse(scratch, scratch+32);
-
-    // memcpy(out, scratch, 32);
   }
 
   static inline void sha3_256_astrix(byte *in, byte *scratch) {
@@ -124,28 +121,27 @@ namespace AstrixHash
 
   void hash(worker &worker, byte *in, int len, byte *out)
   {
-    // cshake256("ProofOfWorkHash", in, len, worker.sha3Hash, 32);
-    // newMatrix(in, worker.mat, worker);
-    // memcpy(worker.mat, worker.matBuffer, sizeof(matrix));
-    // #pragma unroll
-    for (int i=0; i<10; i++) ((uint64_t *)worker.scratchData)[i] = ((uint64_t *)powP)[i] ^ ((uint64_t *)in)[i];
+    uint8_t scratchData[200] = {0};
 
-    // #pragma unroll
-    for (int i = 10; i < 25; i++) ((uint64_t *)worker.scratchData)[i] = ((uint64_t *)powP)[i];
+    for (int i=0; i<10; i++) ((uint64_t *)scratchData)[i] = ((uint64_t *)powP)[i] ^ ((uint64_t *)in)[i];
+    for (int i = 10; i < 25; i++) ((uint64_t *)scratchData)[i] = ((uint64_t *)powP)[i];
 
-    keccakf(worker.scratchData);
+    // printf("Cshake Keccak In:\n%s\n", hexStr(scratchData, 200).c_str());
 
-    // printf("cShake hash:\n%s\n", hexStr(worker.scratchData, 32).c_str());
+    keccakf(scratchData);
 
-    blake3(worker.scratchData, 32, worker.scratchData);
-    memset(worker.scratchData + 32, 0, 200-32);
+    // printf("Cshake hash:\n%s\n", hexStr(scratchData, 32).c_str());
 
-    sha3_256_astrix(worker.scratchData, worker.scratchData);
-    // printf("SHA3 hash:\n%s\n", hexStr(worker.scratchData, 32).c_str());
-    
-    // cshake256_nil_function_name(in, len, "ProofOfWorkHash", worker.sha3Hash, 32*8);
-    // AstroBWTv3(worker.sha3Hash, 32, worker.astrobwtv3Hash, *worker.astroWorker, false);
-    heavyHash(worker.scratchData, worker.matBuffer, out);
+    blake3(scratchData, 32, scratchData);
+
+    for (int i = 4; i < 25; i++) ((uint64_t *)scratchData)[i] = 0;
+
+    sha3_256_astrix(scratchData, scratchData);
+
+    // printf("SHA3 hash:\n%s\n", hexStr(scratchData, 32).c_str());
+
+    heavyHash(scratchData, worker.matBuffer, out);
+    memcpy(worker.scratchData, scratchData, 32);
   }
 
   void testWithInput(const char* input, byte *out) {
@@ -180,8 +176,8 @@ namespace AstrixHash
   }
 
   int test() {
-    const char* input = "6d231fb312443c0296f124ef8864dee8bc2434ae40188a0dd7bfadf52011a3cd6cb47a3d92010000000000000000000000000000000000000000000000000000000000000000000004008e6d8c010000";
-    const char* expected = "5252683db1f8907e0b60b13693a158e8b287582a981227e92d838561cb8b7459";
+    const char* input = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40414243444546470000000000000000";
+    const char* expected = "b76caa07801864da3426861a13c3c58da7ac2ba02183a1860ecbee6149b92518";
 
     byte in[80];
     memset(in, 0, 80);

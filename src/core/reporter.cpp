@@ -28,7 +28,7 @@ int update_handler(const boost::system::error_code& error)
   auto minutesUp = std::chrono::duration_cast<std::chrono::minutes>(now - g_start_time).count() % 60;
   auto secondsUp = std::chrono::duration_cast<std::chrono::seconds>(now - g_start_time).count() % 60;
 
-  int64_t currentHashes = counter.load();
+  uint64_t currentHashes = counter.load();
   counter.store(0);
 
   double ratio = 1.0 * 1;
@@ -42,28 +42,23 @@ int update_handler(const boost::system::error_code& error)
     rate30sec.push_back((int64_t)(currentHashes * ratio));
   }
 
-  int64_t hashrate = 1.0 * std::accumulate(rate30sec.begin(), rate30sec.end(), 0LL) / (rate30sec.size() * 1);
-  hashrate = (hashrate * 1.0) / (double)1;
+  double hashrate = 1.0 * (double)std::accumulate(rate30sec.begin(), rate30sec.end(), 0LL) / (rate30sec.size() * 1);
+  // hashrate = (hashrate * 1.0) / (double)1;
+
+  int unitIdx = 0;
+  std::string units[] = {" ", " K", " M", " G", " T", " P"}; // Note the space
+
+  for (;;) {
+    if (hashrate < 1000) break;
+    unitIdx++;
+    hashrate /= 1000.0;
+  }
 
   if (reportCounter >= reportInterval) {
-    std::string rateSuffix = " H/s";
-    double rate = (double)hashrate;
-    if (hashrate >= 1000000)
-    {
-      rate = (double)(hashrate / 1000000.0);
-      rateSuffix = " MH/s";
-    }
-    else if (hashrate >= 1000)
-    {
-      rate = (double)(hashrate / 1000.0);
-      rateSuffix = " KH/s";
-    }
-
-
     setcolor(BRIGHT_WHITE);
     std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine << versionString << " " << std::flush;
     setcolor(CYAN);
-    std::cout << std::setw(2) << std::setprecision(3) << "HASHRATE " << rate << rateSuffix << " | " << std::flush;
+    std::cout << std::setw(2) << std::setprecision(3) << "HASHRATE " << hashrate << units[unitIdx] << "H/s" << " | " << std::flush;
 
     std::string uptime = std::to_string(daysUp) + "d-" +
                   std::to_string(hoursUp) + "h-" +

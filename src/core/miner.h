@@ -44,7 +44,6 @@ int threads = 0;
 int testOp = -1;
 int testLen = -1;
 int processPriority = 0;
-bool gpuMine = false;
 bool broadcastStats = false;
 bool checkWallet = true;
 

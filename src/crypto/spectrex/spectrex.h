@@ -60,6 +60,7 @@ namespace SpectreX
     byte sha3Hash[32];
     byte astrobwtv3Hash[32];
     workerData *astroWorker;
+    byte padding[4096*4];
   } worker;
 
   class Xoshiro256PlusPlusHasher

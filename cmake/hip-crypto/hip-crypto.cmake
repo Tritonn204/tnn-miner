@@ -52,6 +52,7 @@ if (WITH_HIP)
 
   list(APPEND SOURCES_CRYPTO
     ${hipSources}
+    src/core/hipkill.hip
   )
 
   if (HIP_PLATFORM MATCHES "nvidia")

@@ -685,39 +685,25 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
 
   try
   {
-    std::fill_n(worker.sData + 256, 64, 0);
-    memset(worker.sData + 256, 0, 64);
-
-    __builtin_prefetch(&worker.sData[256], 1, 3);
-    __builtin_prefetch(&worker.sData[256+64], 1, 3);
-    __builtin_prefetch(&worker.sData[256+128], 1, 3);
-    __builtin_prefetch(&worker.sData[256+192], 1, 3);
+    uint8_t scratch[384] = {0};
     
-    hashSHA256(worker.sha256, input, &worker.sData[320], inputLen);
-    worker.salsa20.setKey(&worker.sData[320]);
-    worker.salsa20.setIv(&worker.sData[256]);
+    hashSHA256(worker.sha256, input, &scratch[320], inputLen);
+    worker.salsa20.setKey(&scratch[320]);
+    worker.salsa20.setIv(&scratch[256]);
 
-    __builtin_prefetch(&worker.sData, 1, 3);
-    __builtin_prefetch(&worker.sData[64], 1, 3);
-    __builtin_prefetch(&worker.sData[128], 1, 3);
-    __builtin_prefetch(&worker.sData[192], 1, 3);
+    worker.salsa20.processBytes(worker.salsaInput, scratch, 256);
 
-    worker.salsa20.processBytes(worker.salsaInput, worker.sData, 256);
-
-    __builtin_prefetch(&worker.key[0] + 8, 1, 3);
-    __builtin_prefetch(&worker.key[0] + 8+64, 1, 3);
-    __builtin_prefetch(&worker.key[0] + 8+128, 1, 3);
-    __builtin_prefetch(&worker.key[0] + 8+192, 1, 3);
-
-    RC4_set_key(&worker.key[0], 256,  worker.sData);
-    RC4(&worker.key[0], 256, worker.sData,  worker.sData);
+    RC4_set_key(&worker.key[0], 256,  scratch);
+    RC4(&worker.key[0], 256, scratch,  scratch);
 
 
-    worker.lhash = hash_64_fnv1a_256(worker.sData);
+    worker.lhash = hash_64_fnv1a_256(scratch);
     worker.prev_lhash = worker.lhash;
 
     worker.tries[0] = 0;
     worker.isSame = false;
+
+    memcpy(worker.sData, scratch, 256);
 
     // printf(hexStr(worker.chunk, 256).c_str());
     // printf("\n\n");

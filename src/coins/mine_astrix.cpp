@@ -141,7 +141,7 @@ waitForJob:
           n = ((tid - 1) % (256 * 256)) | ((rand() % 256) << 16) | ((*nonce) << 24);
         else {
           uint64_t eN = std::stoull(std::string(J.at("extraNonce").as_string().c_str()), NULL, 16);
-          enLen = std::string(J.at("extraNonce").as_string()).size()/2;
+          enLen = (std::string(J.at("extraNonce").as_string()).size()+1) / 2;
           int offset = (64 - enLen*8);
           n = ((tid - 1) % (256 * 256)) | (((*nonce) << 16) & ((1ULL << offset)-1)) | (eN << offset);
         }
@@ -293,14 +293,10 @@ waitForJob:
         }
 
         if (!isConnected) {
-          data_ready = true;
-          cv.notify_all();
           break;
         }
       }
       if (!isConnected) {
-        data_ready = true;
-        cv.notify_all();
         break;
       }
     }

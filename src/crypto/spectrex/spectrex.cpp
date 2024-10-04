@@ -35,51 +35,52 @@ namespace SpectreX
   }
 
 
-  void heavyHash(byte *scratch, const matrix &mat, byte *out)
+  static inline void heavyHash(byte *scratch, const matrix &mat, byte *out)
   {
     uint8_t v[64];
     uint8_t p[32];
-    for (int i = 0; i < matSize / 2; i++)
+    
+    __builtin_prefetch(v + 32, 1, 3);
+    for (int i = 0; i < 16; i++)
     {
-      v[i * 2] = scratch[i] >> 4;
-      v[i * 2 + 1] = scratch[i] & 0x0f;
+      v[i * 4] = uint16_t(scratch[i * 2] >> 4);
+      v[i * 4 + 1] = uint16_t(scratch[i * 2] & 0x0f);
+      v[i * 4 + 2] = uint16_t(scratch[i * 2 + 1] >> 4);
+      v[i * 4 + 3] = uint16_t(scratch[i * 2 + 1] & 0x0f);
     }
 
     // build the product array
-    // #pragma unroll(4)
-    for (int i = 0; i < 32; i++) // Only iterate over half the rows, as you're processing two at a time
+    for (int i = 0; i < 16; i++)
     {
-      uint16_t sum1 = 0, sum2 = 0;
+      uint16_t sum1 = 0, sum2 = 0, sum3 = 0, sum4 = 0;
+      __builtin_prefetch(mat[4*(i+1)], 0, 3);
+      __builtin_prefetch(mat[4*(i+1)+1], 0, 3);
+      __builtin_prefetch(mat[4*(i+1)+2], 0, 3);
+      __builtin_prefetch(mat[4*(i+1)+3], 0, 3);
 
-      // #pragma unroll(4)
-      for (int j = 0; j < 64; j++) // Loop over all columns
+      for (int j = 0; j < 64; j++)
       {
-        sum1 += mat[2 * i][j] * v[j];     // Sum for row 2*i
-        sum2 += mat[2 * i + 1][j] * v[j]; // Sum for row 2*i+1
+        sum1 += mat[4 * i][j] * v[j];
+        sum2 += mat[4 * i + 1][j] * v[j];
+        sum3 += mat[4 * i + 2][j] * v[j];
+        sum4 += mat[4 * i + 3][j] * v[j];
       }
       
-      p[i] = ((sum1 >> 10) << 4) | (sum2 >> 10); // Shift and combine sums
+      scratch[i * 2] ^= ((sum1 >> 10) << 4) | (sum2 >> 10);
+      scratch[i * 2 + 1] ^= ((sum3 >> 10) << 4) | (sum4 >> 10);
     }
-    
+
     // calculate the digest
-    // #pragma unroll(4)
-    for (size_t i = 0; i < 4; i++)
-    {
-      ((uint64_t*)scratch)[i] ^= ((uint64_t*)p)[i];
-    }
+    ((uint64_t*)scratch)[0] ^= ((uint64_t *)heavyP)[0];
+    ((uint64_t*)scratch)[1] ^= ((uint64_t *)heavyP)[1];
+    ((uint64_t*)scratch)[2] ^= ((uint64_t *)heavyP)[2];
+    ((uint64_t*)scratch)[3] ^= ((uint64_t *)heavyP)[3];
 
-    // hash the digest a final time, reverse bytes
-    // #pragma unroll
-    for (int i=0; i<4; i++) ((uint64_t *)scratch)[i] = ((uint64_t *)heavyP)[i] ^ ((uint64_t *)scratch)[i];
-
-    // #pragma unroll
     for (int i = 4; i < 25; i++) ((uint64_t *)scratch)[i] = ((uint64_t *)heavyP)[i];
 
     keccakf(scratch);
-    // std::reverse(scratch, scratch+32);
-
-    // memcpy(out, scratch, 32);
   }
+
 
   void hash(worker &worker, byte *in, int len, byte *out)
   {

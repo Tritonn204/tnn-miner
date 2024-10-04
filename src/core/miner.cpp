@@ -16,6 +16,7 @@
 #include "tnn-common.hpp"
 #include "tnn-hugepages.h"
 #include "gpulibs.h"
+#include "hipkill.h"
 
 #include "rootcert.h"
 #include <DNSResolver.hpp>
@@ -52,21 +53,25 @@
 #include <exception>
 
 #include "reporter.hpp"
-#include "coins/miners.hpp"
+
+#include <coins/miners.hpp>
+#include <tnn_hip/coins/miners.hip.hpp>
 
 // INITIALIZE COMMON STUFF
 int miningAlgo = DERO_HASH;
 int reportCounter = 0;
 int reportInterval = 3;
 
+bool gpuMine = false;
+
 uint256_t bigDiff(0);
 uint256_t bigDiff_dev(0);
 
-extern uint64_t nonce0 = 0;
-extern uint64_t nonce0_dev = 0;
+uint64_t nonce0 = 0;
+uint64_t nonce0_dev = 0;
 
 std::string HIP_names[32];
-std::vector<std::atomic<int64_t>> HIP_counters(32);
+std::vector<std::atomic<uint64_t>> HIP_counters(32);
 std::vector<std::vector<int64_t>> HIP_rates5min(32);
 std::vector<std::vector<int64_t>> HIP_rates1min(32);
 std::vector<std::vector<int64_t>> HIP_rates30sec(32);
@@ -186,10 +191,18 @@ void initializeExterns() {
 }
 #endif
 
+void hipKill() {
+  #ifdef TNN_HIP
+  hipDeviceReset_wrapper();
+  #endif
+}
+
 void onExit() {
   setcolor(BRIGHT_WHITE);
   printf("\n\nExiting Miner...\n");
   fflush(stdout);
+
+  hipKill();
   boost::this_thread::sleep_for(boost::chrono::seconds(1));
   fflush(stdout);
 
@@ -213,9 +226,6 @@ int main(int argc, char **argv)
   // test_cshake256();
 
   GPUTest();
-  #ifdef TNN_HIP
-  return 0;
-  #endif
 
   std::atexit(onExit);
   signal(SIGTERM, sigterm);
@@ -894,6 +904,8 @@ Mining:
  //  mutex.lock();
   #ifndef TNN_HIP
     printSupported();
+  #else
+    gpuMine = true;
   #endif
  //  mutex.unlock();1
 
@@ -931,17 +943,14 @@ Mining:
 
   // Create worker threads and set CPU affinity
  //  mutex.lock();
-  if (false /*gpuMine*/)
+  if (gpuMine)
   {
-    // boost::thread t(cudaMine);
-    // setPriority(t.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
-    // continue;
-  }
-  else
+    std::cout << "Starting GPU worker.." << std::endl;
+    boost::thread t(POW_HIP[miningAlgo]);
+  } else {
     std::cout << "Starting threads: ";
     for (int i = 0; i < threads; i++)
     {
-
       boost::thread t(POW[miningAlgo], i + 1);
 
       if (lockThreads)
@@ -956,6 +965,7 @@ Mining:
         std::cout << ", ";
     }
     std::cout << std::endl;
+  }
  //  mutex.unlock();
 
   g_start_time = std::chrono::steady_clock::now();

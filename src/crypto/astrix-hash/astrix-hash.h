@@ -54,13 +54,10 @@ namespace AstrixHash
   typedef struct worker
   {
     matrix matBuffer;
-    uint16_t v[64];
-    uint16_t p[64];
-    uint64_t b[5];
-    uint8_t scratchData[200];
+    byte scratchData[32];
     double copied[matSize][matSize];
     std::bitset<matSize> rowsSelected;
-    byte sha3Hash[32];
+    byte padding[4096*4];
   } worker;
 
   class Xoshiro256PlusPlusHasher
