@@ -7,6 +7,9 @@
 #define RX0 4
 #define VERUSHASH 11
 #define ASTRIX_HASH 13
+#define NXL_HASH 14
+#define HOOHASH 15
+#define WALA_HASH 16
 
 // Each new blockchain has 10 reserved net protocol slots
 
@@ -27,9 +30,9 @@
 #define RX0_STRATUM 31
 
 // VerusHash
-#define VERUS_SOLO 30
-#define VERUS_STRATUM 31
+#define VERUS_SOLO 50
+#define VERUS_STRATUM 51
 
-// AstrixHash
-#define ASTRIX_SOLO 40
-#define ASTRIX_STRATUM 41
+// KAS family
+#define KAS_SOLO 60
+#define KAS_STRATUM 61

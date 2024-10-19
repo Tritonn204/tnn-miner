@@ -19,6 +19,8 @@ namespace Astrix_HIP {
 
   void absorbPow(uint8_t *work, bool isDev);
 
+  void nonceCounter(int *d_nonce_count, int *h_nonce_count, uint64_t *d_final_nonces, uint64_t *h_nonce_buffer);
+
   template<bool isDev>
   void copyWork(uint8_t *work);
 

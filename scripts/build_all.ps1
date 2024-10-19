@@ -1,13 +1,15 @@
 # Check if TNN_VERSION is passed as an argument
 if (-not $args[0]) {
-    Write-Host "Usage: .\build.ps1 <TNN_VERSION>"
+    Write-Host "Usage: .\build.ps1 <TNN_VERSION> [TARGET]"
     exit 1
 }
 
 $TNN_VERSION = $args[0]
+$targetToBuild = if ($args.Count -ge 2) { $args[1].ToLower() } else { "" }
 
-# Print TNN_VERSION for debugging
+# Print TNN_VERSION and targetToBuild for debugging
 Write-Host "TNN_VERSION: $TNN_VERSION"
+Write-Host "Target to build: $targetToBuild"
 
 # Function to run cmake and build only if cmake succeeds
 function Build-Target {
@@ -27,9 +29,6 @@ function Build-Target {
     if (Test-Path $CacheFile) {
         Remove-Item $CacheFile
     }
-
-    # Set HIP platform environment variable
-    # $env:HIP_PLATFORM = $HipPlatform
 
     # Print the HIP_PATH for debugging
     $hip_path_quoted = "`"$env:HIP_PATH`""
@@ -93,16 +92,22 @@ function Get-ProcessorCount {
 }
 
 # Build for AMD using ROCm
-if (-not (Build-Target "" "ON" "amd")) {
-    Write-Host "Failed to build for AMD."
+if ($targetToBuild -eq "" -or $targetToBuild -eq "amd") {
+    if (-not (Build-Target "" "ON" "amd")) {
+        Write-Host "Failed to build for AMD."
+    }
 }
 
 # Build for NVIDIA using hipcc (with HIP_PLATFORM=nvidia)
-if (-not (Build-Target "" "ON" "nvidia")) {
-    Write-Host "Failed to build for NVIDIA."
+if ($targetToBuild -eq "" -or $targetToBuild -eq "nvidia") {
+    if (-not (Build-Target "" "ON" "nvidia")) {
+        Write-Host "Failed to build for NVIDIA."
+    }
 }
 
-# Build without HIP
-if (-not (Build-Target "" "OFF" "")) {
-    Write-Host "Failed to build for CPU-only."
+# Build without HIP (CPU-only)
+if ($targetToBuild -eq "" -or $targetToBuild -eq "cpu") {
+    if (-not (Build-Target "" "OFF" "")) {
+        Write-Host "Failed to build for CPU-only."
+    }
 }

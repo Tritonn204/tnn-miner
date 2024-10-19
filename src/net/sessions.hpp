@@ -115,14 +115,14 @@ void verus_stratum_session(
     net::yield_context yield,
     bool isDev);
 
-// ASTRIX
-void astrix_session(
+// KAS Family
+void kas_session(
     std::string host,
     std::string const &port,
     std::string const &wallet,
     bool isDev);
 
-void astrix_stratum_session(
+void kas_stratum_session(
     std::string host,
     std::string const &port,
     std::string const &wallet,

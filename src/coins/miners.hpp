@@ -47,6 +47,10 @@ inline std::string uint32ToHex(uint32_t value) {
   return ss.str();
 }
 
+static inline void unsupportedCPU(int tid) {
+  printf("This coin is not supported on CPUs\n");
+}
+
 void mineDero(int tid);
 
 void mineXelis(int tid);
@@ -64,6 +68,12 @@ void mineVerus(int tid);
 
 void mineAstrix(int tid);
 
+void mineNexellia(int tid);
+
+void mineHoosat(int tid);
+
+void mineWaglayla(int tid);
+
 typedef void (*mineFunc)(int);
 const mineFunc POW[] = {
   mineDero, // 0
@@ -79,6 +89,9 @@ const mineFunc POW[] = {
   mineRx0,
   mineVerus, // 10
   mineVerus,
-  mineAstrix
+  mineAstrix,
+  mineNexellia,
+  mineHoosat,
+  mineWaglayla 
 };
 

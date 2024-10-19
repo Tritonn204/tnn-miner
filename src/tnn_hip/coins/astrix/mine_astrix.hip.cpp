@@ -2,7 +2,10 @@
 #include "tnn-hugepages.h"
 #include <stratum/stratum.h>
 
+#include <astrix-hash/astrix-hash.h>
 #include "mine_astrix.hip.h"
+
+#include <algo_definitions.h>
 
 void jobThread(
   int d, 
@@ -11,24 +14,31 @@ void jobThread(
   int64_t localOurHeight,
   uint64_t n,
   uint64_t nonceMask,
+  uint8_t *work,
+  std::string jobId,
   bool devMine
 ) {
   Astrix_HIP_Worker::setDevice(d);
   Astrix_HIP::copyDiff(ctx.cmpDiff);
 
-  int kernelIndex = 0;
-
-  uint16_t h_nonceCount = 0;
+  int h_nonceCount = 0;
   uint64_t h_nonceBuffer[Astrix_HIP::MAX_NONCES];
+
+  while (doubleDiff == 0) {
+    std::this_thread::yield();
+  }
 
   // printf("GPU config sanity:\nblocks: %d, batchSize: %d\n", ctx.blocks[d],ctx.batchSizes[d]);
 
   while (localJobCounter == jobCounter)
   {
+    CHECK_CLOSE;
     if (localJobCounter != jobCounter)
     {
       break;
     }
+
+    uint64_t &N = devMine ? HIP_kIndex_dev[d] : HIP_kIndex[d];
 
     Astrix_HIP::astrixHash_wrapper(
         ctx.blocks[d],
@@ -37,7 +47,7 @@ void jobThread(
         ctx.d_nonceBuffer,
         ctx.d_nonceCount,
         ctx.d_hashBuffer,
-        kernelIndex,
+        N,
         ctx.batchSizes[d],
         d,
         devMine);
@@ -46,13 +56,89 @@ void jobThread(
     counter.fetch_add(ctx.batchSizes[d]);
     // printf("%d loops\n", kernelIndex);
 
-    kernelIndex++;
+    N++;
     // bool submit = (devMine && devConnected) ? !submittingDev : !submitting;
 
     if (localJobCounter != jobCounter || localOurHeight != ourHeight)
     {
       // printf("thread %d updating job after hash\n", tid);
       break;
+    }
+
+    Astrix_HIP::nonceCounter(ctx.d_nonceCount, &h_nonceCount, ctx.d_nonceBuffer, h_nonceBuffer);
+    if (h_nonceCount > 0) {
+      for (int i = 0; i < h_nonceCount; i++) {
+        uint64_t nonce = h_nonceBuffer[i];
+        printf("\n");
+        if (devMine) {
+          setcolor(CYAN);
+          printf("DEV | ");
+        } else {
+          setcolor(BRIGHT_YELLOW);
+        }
+        printf("GPU #%d found a nonce!", d);
+        fflush(stdout);
+        setcolor(BRIGHT_WHITE);
+
+        bool submit = (devMine && devConnected) ? !submittingDev : !submitting;
+
+        if (!submit) {
+          for(;;) {
+            submit = (devMine && devConnected) ? !submittingDev : !submitting;
+            int64_t &rH = devMine ? devHeight : ourHeight;
+            if (submit || localJobCounter != jobCounter || rH != localOurHeight)
+              break;
+            boost::this_thread::yield();
+          }
+        }
+
+        int64_t &rH = devMine ? devHeight : ourHeight;
+        if (localJobCounter != jobCounter || rH != localOurHeight) {
+          break;
+        }
+
+        if (devMine)
+        {
+          submittingDev = true;
+          switch (protocol)
+          {
+          case KAS_SOLO:
+            break;
+          case KAS_STRATUM:
+            std::vector<char> nonceStr;
+            Num(std::to_string(nonce).c_str(),10).print(nonceStr, 16);
+            devShare = {{{"id", SpectreStratum::submitID},
+                      {"method", SpectreStratum::submit.method.c_str()},
+                      {"params", {devWorkerName,                                   // WORKER
+                                  jobId.c_str(), // JOB ID
+                                  std::string(nonceStr.data()).c_str()}}}};
+
+
+            break;
+          }
+          data_ready = true;
+        }
+        else
+        {
+          submitting = true;
+          switch (protocol)
+          {
+          case KAS_SOLO:
+            break;
+          case KAS_STRATUM:
+            std::vector<char> nonceStr;
+            Num(std::to_string(nonce).c_str(),10).print(nonceStr, 16);
+            share = {{{"id", SpectreStratum::submitID},
+                      {"method", SpectreStratum::submit.method.c_str()},
+                      {"params", {workerName,                                   // WORKER
+                                  jobId.c_str(), // JOB ID
+                                  std::string(nonceStr.data()).c_str()}}}};
+            break;
+          }
+          data_ready = true;
+        }
+        cv.notify_all();
+      }
     }
 
     if (!isConnected)
@@ -119,10 +205,10 @@ waitForJob:
         byte *b2 = new byte[Astrix_HIP::INPUT_SIZE];
         switch (protocol)
         {
-        case ASTRIX_SOLO:
+        case KAS_SOLO:
           hexstrToBytes(std::string(myJob.at("template").as_string()), b2);
           break;
-        case ASTRIX_STRATUM:
+        case KAS_STRATUM:
           hexstrToBytes(std::string(myJob.at("template").as_string()), b2);
           break;
         }
@@ -130,7 +216,6 @@ waitForJob:
         delete[] b2;
 
         localOurHeight = ourHeight;
-        nonce0 = 0;
       }
 
       for (d = 0; d < ctx.GPUCount; d++) {
@@ -147,10 +232,10 @@ waitForJob:
           byte *b2d = new byte[Astrix_HIP::INPUT_SIZE];
           switch (protocol)
           {
-          case ASTRIX_SOLO:
+          case KAS_SOLO:
             hexstrToBytes(std::string(myJobDev.at("template").as_string()), b2d);
             break;
-          case ASTRIX_STRATUM:
+          case KAS_STRATUM:
             hexstrToBytes(std::string(myJobDev.at("template").as_string()), b2d);
             break;
           }
@@ -158,7 +243,6 @@ waitForJob:
           delete[] b2d;
 
           localDevHeight = devHeight;
-          nonce0_dev = 0;
         }
 
         for (d = 0; d < ctx.GPUCount; d++) {
@@ -206,9 +290,21 @@ waitForJob:
 
       ctx.cmpDiff = devMine ? diffBytes_dev : diffBytes;
 
+      CHECK_CLOSE;
+
       // printf("end of job application\n");
       for(d = 0; d < ctx.GPUCount; d++) {
-        workers.emplace_back(jobThread, d, ctx, localJobCounter, localOurHeight, n, nonceMask, devMine);
+        workers.emplace_back(jobThread, 
+          d, 
+          ctx, 
+          localJobCounter, 
+          devMine ? localDevHeight : localOurHeight, 
+          n, 
+          nonceMask,
+          work, 
+          devMine ? myJobDev.at("jobId").as_string().c_str() : myJob.at("jobId").as_string().c_str(),
+          devMine
+        );
       }
 
       for (auto& th : workers) {

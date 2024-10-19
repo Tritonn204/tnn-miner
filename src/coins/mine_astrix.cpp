@@ -19,8 +19,8 @@ void mineAstrix(int tid)
   byte diffBytes[32];
   byte diffBytes_dev[32];
 
-  AstrixHash::worker *worker = (AstrixHash::worker *)malloc_huge_pages(sizeof(AstrixHash::worker));
-  AstrixHash::worker *devWorker = (AstrixHash::worker *)malloc_huge_pages(sizeof(AstrixHash::worker));
+  AstrixHash::worker *worker = (AstrixHash::worker *)malloc(sizeof(AstrixHash::worker));
+  AstrixHash::worker *devWorker = (AstrixHash::worker *)malloc(sizeof(AstrixHash::worker));
 
   fflush(stdout);
 
@@ -56,10 +56,10 @@ waitForJob:
         byte *b2 = new byte[AstrixHash::INPUT_SIZE];
         switch (protocol)
         {
-        case ASTRIX_SOLO:
+        case KAS_SOLO:
           hexstrToBytes(std::string(myJob.at("template").as_string()), b2);
           break;
-        case ASTRIX_STRATUM:
+        case KAS_STRATUM:
           hexstrToBytes(std::string(myJob.at("template").as_string()), b2);
           break;
         }
@@ -69,7 +69,6 @@ waitForJob:
         // AstrixHash::newMatrix(b2, worker->mat);
         delete[] b2;
         localOurHeight = ourHeight;
-        nonce0 = 0;
       }
 
       if (devConnected && myJobDev.at("template").is_string())
@@ -79,10 +78,10 @@ waitForJob:
           byte *b2d = new byte[AstrixHash::INPUT_SIZE];
           switch (protocol)
           {
-          case ASTRIX_SOLO:
+          case KAS_SOLO:
             hexstrToBytes(std::string(myJobDev.at("template").as_string()), b2d);
             break;
-          case ASTRIX_STRATUM:
+          case KAS_STRATUM:
             hexstrToBytes(std::string(myJobDev.at("template").as_string()), b2d);
             break;
           }
@@ -92,7 +91,6 @@ waitForJob:
           // AstrixHash::newMatrix(b2d, devWorker->mat);
           delete[] b2d;
           localDevHeight = devHeight;
-          nonce0_dev = 0;
         }
       }
 
@@ -116,6 +114,8 @@ waitForJob:
       // printf("end of job application\n");
       while (localJobCounter == jobCounter)
       {
+        CHECK_CLOSE;
+
         which = (double)(rand() % 10000);
         devMine = (devConnected && devHeight > 0 && which < devFee * 100.0);
         DIFF = devMine ? doubleDiffDev : doubleDiff;
@@ -225,15 +225,15 @@ waitForJob:
             setcolor(BRIGHT_WHITE);
             switch (protocol)
             {
-            case ASTRIX_SOLO:
+            case KAS_SOLO:
               devShare = {{"block_template", hexStr(&WORK[0], AstrixHash::INPUT_SIZE).c_str()}};
               break;
-            case ASTRIX_STRATUM:
+            case KAS_STRATUM:
               std::vector<char> nonceStr;
               // Num(std::to_string((n << enLen*8) >> enLen*8).c_str(),10).print(nonceStr, 16);
               Num(std::to_string(n).c_str(),10).print(nonceStr, 16);
-              devShare = {{{"id", SpectreStratum::submitID},
-                        {"method", SpectreStratum::submit.method.c_str()},
+              devShare = {{{"id", KasStratum::submitID},
+                        {"method", KasStratum::submit.method.c_str()},
                         {"params", {devWorkerName,                                   // WORKER
                                     myJobDev.at("jobId").as_string().c_str(), // JOB ID
                                     std::string(nonceStr.data()).c_str()}}}};
@@ -257,15 +257,15 @@ waitForJob:
             setcolor(BRIGHT_WHITE);
             switch (protocol)
             {
-            case ASTRIX_SOLO:
+            case KAS_SOLO:
               share = {{"block_template", hexStr(&WORK[0], AstrixHash::INPUT_SIZE).c_str()}};
               break;
-            case ASTRIX_STRATUM:
+            case KAS_STRATUM:
               std::vector<char> nonceStr;
               // Num(std::to_string((n << enLen*8) >> enLen*8).c_str(),10).print(nonceStr, 16);
               Num(std::to_string(n).c_str(),10).print(nonceStr, 16);
-              share = {{{"id", SpectreStratum::submitID},
-                        {"method", SpectreStratum::submit.method.c_str()},
+              share = {{{"id", KasStratum::submitID},
+                        {"method", KasStratum::submit.method.c_str()},
                         {"params", {workerName,                                   // WORKER
                                     myJob.at("jobId").as_string().c_str(), // JOB ID
                                     std::string(nonceStr.data()).c_str()}}}};

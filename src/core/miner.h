@@ -55,9 +55,9 @@ int cudaMemDenominator = 750; //Kilobytes per worker in VRAM
 
 std::string defaultHost[] = {
   "dero-node-sk.mysrv.cloud",
-  "127.0.0.1", // xel
-  "127.0.0.1",
-  "127.0.0.1", // spr
+  "fr.vipor.net", // xel
+  "fr.vipor.net",
+  "spectre.cedric-crispin.com", // spr
   "monerohash.com", // rx0
   "monerohash.com",
   "monerohash.com",
@@ -67,14 +67,17 @@ std::string defaultHost[] = {
   "monerohash.com",
   "", // verus
   "",
-  "127.0.0.1" // aix
+  "na.mining4people.com", // aix
+  "178.16.131.178", // nxl
+  "na.mining4people.com", // htn
+  "wala.gogpool.eu" // wala
 };
 
 std::string devPort[] = {
   "10300", // dero
-  "8080", // xel
-  "8080",
-  "5555", // spr
+  "5177", // xel
+  "5177",
+  "4364", // spr
   "2222", // rx0
   "2222",
   "2222",
@@ -84,7 +87,10 @@ std::string devPort[] = {
   "2222",
   "", // verus
   "",
-  "5555" // aix
+  "3394", // aix
+  "5555", // nxl
+  "3390", // htn
+  "4633" // wala
 };
 // @ tritonn on Dero Name Service
 std::string devWallet[] = {
@@ -105,7 +111,10 @@ std::string devWallet[] = {
   "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
   "", //verus
   "", //verus
-  "astrix:qz2mzpga6qv9uvnpueau7gs29vgu3ynj80xmd2dmja2kelzh6cssymsk3shjx"
+  "astrix:qz2mzpga6qv9uvnpueau7gs29vgu3ynj80xmd2dmja2kelzh6cssymsk3shjx",
+  "nexellia:qqq3lwqrnh6alujup2me8gkedvp4w4d8zkjxdzmlrzpju2npdvvmctwl649xr",
+  "hoosat:qr03chtq640d6p9r5p95kw4t4txcrt9x2cyfjf5w6wpfqwugs35yy472wq6hu",
+  "waglayla:qr6h2tqwx8ad57nkte9kvcd9cqyjfgk30gznnza9jte7qzfa6gu0xy5n3evj5"
 };
 
 std::string testDevWallet[] = {
@@ -122,27 +131,26 @@ std::string testDevWallet[] = {
   "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
   "", //verus
   "", //verus
-  "astrix:qz2mzpga6qv9uvnpueau7gs29vgu3ynj80xmd2dmja2kelzh6cssymsk3shjx"
+  "astrix:qz2mzpga6qv9uvnpueau7gs29vgu3ynj80xmd2dmja2kelzh6cssymsk3shjx",
+  "nexellia:qqq3lwqrnh6alujup2me8gkedvp4w4d8zkjxdzmlrzpju2npdvvmctwl649xr",
+  "hoosat:qr03chtq640d6p9r5p95kw4t4txcrt9x2cyfjf5w6wpfqwugs35yy472wq6hu",
+  "waglayla:qr6h2tqwx8ad57nkte9kvcd9cqyjfgk30gznnza9jte7qzfa6gu0xy5n3evj5"
 };
 
 std::string *devSelection = devWallet;
 
 std::unordered_map<std::string, int> coinSelector = {
-  {"dero", DERO_HASH},
   {"DERO", DERO_HASH},
-  {"xel", XELIS_HASH},
   {"XEL", XELIS_HASH},
-  {"spr", SPECTRE_X},
   {"SPR", SPECTRE_X},
-  {"rx0", RX0},
-  {"xmr", RX0},
+  {"RX0", RX0},
   {"XMR", RX0},
-  {"sal", RX0},
   {"SAL", RX0},
-  {"zeph", RX0},
   {"ZEPH", RX0},
-  {"aix", ASTRIX_HASH},
-  {"AIX", ASTRIX_HASH}
+  {"AIX", ASTRIX_HASH},
+  {"NXL", NXL_HASH},
+  {"HTN", HOOHASH},
+  {"WALA", WALA_HASH}
 };
 
 void getWork(bool isDev, int algo);

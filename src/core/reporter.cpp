@@ -2,6 +2,8 @@
 #include <numeric>
 #include <iostream>
 
+const std::string units[] = {" ", " K", " M", " G", " T", " P"}; // Note the space
+
 int update_handler(const boost::system::error_code& error)
 {
   if (error == boost::asio::error::operation_aborted) {
@@ -28,6 +30,48 @@ int update_handler(const boost::system::error_code& error)
   auto minutesUp = std::chrono::duration_cast<std::chrono::minutes>(now - g_start_time).count() % 60;
   auto secondsUp = std::chrono::duration_cast<std::chrono::seconds>(now - g_start_time).count() % 60;
 
+  if (gpuMine) {
+    setcolor(BRIGHT_YELLOW);
+
+    // if (reportCounter >= reportInterval) printf("\n");
+    for (int i = 0; i < HIP_deviceCount; i++) {
+      uint64_t currentHashesG = HIP_counters[i].load();
+      HIP_counters[i].store(0);
+
+      double ratioG = 1.0 * 1;
+      if (HIP_rates30sec[i].size() <= (30 / 1))
+      {
+        HIP_rates30sec[i].push_back((int64_t)(currentHashesG * ratioG));
+      }
+      else
+      {
+        HIP_rates30sec[i].erase(HIP_rates30sec[i].begin());
+        HIP_rates30sec[i].push_back((int64_t)(currentHashesG * ratioG));
+      }
+
+      double hashrateG = 1.0 * (double)std::accumulate(HIP_rates30sec[i].begin(), HIP_rates30sec[i].end(), 0LL) / (HIP_rates30sec[i].size() * 1);
+
+      int unitIdxG = 0;
+
+      for (;;) {
+        if (hashrateG < 1000) break;
+        unitIdxG++;
+        hashrateG /= 1000.0;
+      }
+
+      if (reportCounter >= reportInterval)
+        printf("\n[ GPU #%d | PCIe ID: %s | %s | %lf%sH/s ]", 
+          i, 
+          HIP_pcieID[i].c_str(), 
+          HIP_names[i].c_str(), 
+          hashrateG, 
+          units[unitIdxG].c_str()
+        );
+    }
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+  }
+
   uint64_t currentHashes = counter.load();
   counter.store(0);
 
@@ -46,7 +90,6 @@ int update_handler(const boost::system::error_code& error)
   // hashrate = (hashrate * 1.0) / (double)1;
 
   int unitIdx = 0;
-  std::string units[] = {" ", " K", " M", " G", " T", " P"}; // Note the space
 
   for (;;) {
     if (hashrate < 1000) break;
@@ -56,7 +99,9 @@ int update_handler(const boost::system::error_code& error)
 
   if (reportCounter >= reportInterval) {
     setcolor(BRIGHT_WHITE);
-    std::cout << "\r" << std::setw(2) << std::setfill('0') << consoleLine << versionString << " " << std::flush;
+    if (!gpuMine) std::cout << "\r";
+    else std::cout << "\n";
+    std::cout << std::setw(2) << std::setfill('0') << consoleLine << versionString << " " << std::flush;
     setcolor(CYAN);
     std::cout << std::setw(2) << std::setprecision(3) << "HASHRATE " << hashrate << units[unitIdx] << "H/s" << " | " << std::flush;
 
@@ -69,8 +114,6 @@ int update_handler(const boost::system::error_code& error)
 
     switch(miningAlgo) {
       case DERO_HASH:
-        dPrint = difficulty;
-        break;
       case XELIS_HASH:
         dPrint = difficulty;
         break;
@@ -78,12 +121,13 @@ int update_handler(const boost::system::error_code& error)
         dPrint = doubleDiff;
         break;
       case RX0:
-        dPrint = difficulty;
-        break;
       case VERUSHASH:
         dPrint = difficulty;
         break;
       case ASTRIX_HASH:
+      case NXL_HASH:
+      case HOOHASH:
+      case WALA_HASH:
         dPrint = doubleDiff;
         break;
     }
@@ -92,6 +136,7 @@ int update_handler(const boost::system::error_code& error)
               << std::setw(2) << " | DIFFICULTY " << std::setw(6) << std::setfill(' ') << dPrint << std::setw(2) << " | UPTIME " << uptime << std::flush;
     setcolor(BRIGHT_WHITE); 
     fflush(stdout);
+
     reportCounter = 0;
   }
 

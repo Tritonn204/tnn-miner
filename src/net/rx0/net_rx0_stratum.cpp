@@ -61,10 +61,9 @@ int handleRandomXStratumPacket(boost::json::object packet, bool isDev)
 
     int64_t *h = isDev ? &devHeight : &ourHeight;
 
-    if (!isDev) {
-      difficulty = rx_targetToDifficulty(newJob.at("target").as_string().c_str());
-    }
-
+    if (!isDev) difficulty = rx_targetToDifficulty(newJob.at("target").as_string().c_str());
+    else difficultyDev = rx_targetToDifficulty(newJob.at("target").as_string().c_str());
+    
     std::string &refKey = isDev ? randomx_cacheKey_dev : randomx_cacheKey;
 
     updateVM(newJob, isDev);
@@ -166,7 +165,7 @@ int handleRandomXStratumResponse(boost::json::object packet, bool isDev)
       else
       {
         setcolor(CYAN);
-        printf("Connected to dev node: %s\n", host.c_str());
+        printf("Connected to dev node");
         fflush(stdout);
         setcolor(BRIGHT_WHITE);
       }
@@ -208,7 +207,7 @@ int handleRandomXStratumResponse(boost::json::object packet, bool isDev)
 }
 
 void rx0_stratum_session(
-    std::string host,
+    std::string sessionHost,
     std::string const &port,
     std::string const &wallet,
     std::string const &worker,
@@ -527,7 +526,7 @@ void rx0_stratum_session(
 }
 
 void rx0_stratum_session_nossl(
-    std::string host,
+    std::string sessionHost,
     std::string const &port,
     std::string const &wallet,
     std::string const &worker,
@@ -545,7 +544,7 @@ void rx0_stratum_session_nossl(
   beast::error_code ec;
   boost::system::error_code jsonEc;
 
-  auto endpoint = resolve_host(wsMutex, ioc, yield, host, port);
+  auto endpoint = resolve_host(wsMutex, ioc, yield, sessionHost, port);
   boost::beast::tcp_stream stream(ioc);
 
   // Set a timeout on the operation

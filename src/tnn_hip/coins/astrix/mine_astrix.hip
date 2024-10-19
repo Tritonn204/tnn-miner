@@ -11,10 +11,10 @@ namespace Astrix_HIP_Worker {
   __host__ void newCtx(workerCtx &ctx) {
     hipError_t err = hipGetDeviceCount(&ctx.GPUCount);
 
-    if (err != hipSuccess) {
-      std::cerr << "Failed to get device count: " << hipGetErrorString(err) << std::endl;
-      return;
-    }
+    // if (err != hipSuccess) {
+    //   std::cerr << "Failed to get device count: " << hipGetErrorString(err) << std::endl;
+    //   return;
+    // }
 
     int d = 0;
 
@@ -28,12 +28,12 @@ namespace Astrix_HIP_Worker {
       ctx.blocks[d] = numBlocksPerSm*smCount*128;
       ctx.batchSizes[d] = ctx.blocks[d]*Astrix_HIP::THREAD_DIM;
 
-      if (ctx.batchSizes[d] == 0) {
+      // if (ctx.batchSizes[d] == 0) {
         getArchDims(ctx.blocks[d], ctx.threads[d], ctx.batchSizes[d]);
-        printf("Using default GPU config instead\nblocks: %d, batchSize: %d\n", ctx.blocks[d],ctx.batchSizes[d]);
-      } else {
-        printf("Using GPU config:\nblocks: %d, batchSize: %d\n", ctx.blocks[d],ctx.batchSizes[d]);
-      }
+        // printf("Using default GPU config instead\nblocks: %d, batchSize: %d\n", ctx.blocks[d],ctx.batchSizes[d]);
+      // } else {
+      //   printf("Using GPU config:\nblocks: %d, batchSize: %d\n", ctx.blocks[d],ctx.batchSizes[d]);
+      // }
     }
   }
 

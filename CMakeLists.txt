@@ -62,6 +62,9 @@ option(WITH_XELISHASH       "Enable XelisHash algorithms family" ON)
 option(WITH_RANDOMX         "Enable RandomX algorithms family" ON)
 option(WITH_VERUSHASH        "Enable VerusHash algorithms family" ON)
 option(WITH_ASTRIXHASH        "Enable AstrixHash algorithms family" ON)
+option(WITH_NXLHASH        "Enable NxlHash algorithms family" ON)
+option(WITH_HOOHASH        "Enable Hoohash algorithms family" ON)
+option(WITH_WALAHASH        "Enable Walahash algorithms family" ON)
 # option(WITH_ARGON2          "Enable Argon2 algorithms family" ON)
 # option(WITH_KAWPOW          "Enable KawPow algorithms family" ON)
 # option(WITH_GHOSTRIDER      "Enable GhostRider algorithm" ON)
@@ -173,7 +176,11 @@ elseif($ENV{GITLAB_CI} MATCHES "true")
   endif()
 else()
   set(TARGET_ARCH "amd64")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=x86-64-v3 -m64")
+  set(HIP_CPU_ARCHTARGET "-march=x86-64-v3")
+  if (WITH_HIP)
+    set(HIP_CPU_ARCHTARGET "-mtune=generic -march=x86-64")
+  endif()
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${HIP_CPU_ARCHTARGET} -m64")
 endif()
 
 set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} ${DO_STATIC} -DTNN_VERSION=${INTERNAL_TNN_VERSION}")
@@ -198,6 +205,8 @@ set (CMAKE_STANDARD_REQUIRED TRUE)
 
 enable_language(ASM)
 
+set(OPENSSL_USE_STATIC_LIBS TRUE)
+
 if(WIN32)
   if(NOT WITH_HIP)
     set(OPENSSL_ROOT_DIR "C:/openssl/clang64")
@@ -213,10 +222,10 @@ if(WIN32)
   else()
     set(OPENSSL_ROOT_DIR "C:/openssl_msvc")
     add_library(OpenSSL::Crypto UNKNOWN IMPORTED)
-    set_target_properties(OpenSSL::Crypto PROPERTIES IMPORTED_LOCATION "${OPENSSL_ROOT_DIR}/lib/libcrypto.lib")
+    set_target_properties(OpenSSL::Crypto PROPERTIES IMPORTED_LOCATION "${OPENSSL_ROOT_DIR}/lib/libcrypto_static.lib")
   
     add_library(OpenSSL::SSL UNKNOWN IMPORTED)
-    set_target_properties(OpenSSL::SSL PROPERTIES IMPORTED_LOCATION "${OPENSSL_ROOT_DIR}/lib/libssl.lib")
+    set_target_properties(OpenSSL::SSL PROPERTIES IMPORTED_LOCATION "${OPENSSL_ROOT_DIR}/lib/libssl_static.lib")
   endif()
   include_directories(
     ${OPENSSL_ROOT_DIR}/include
@@ -379,6 +388,7 @@ file(GLOB_RECURSE SOURCES_CORE
   "${PROJECT_SOURCE_DIR}/src/core/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/core/*.c"
   "${PROJECT_SOURCE_DIR}/src/crypto/cshake/*.c"
+  "${PROJECT_SOURCE_DIR}/src/crypto/skein/*.c"
   "${PROJECT_SOURCE_DIR}/src/broadcast/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/coins/dummy_miners.cpp"
 )
@@ -386,6 +396,7 @@ file(GLOB_RECURSE SOURCES_CORE
 file(GLOB SOURCES_NET
   "${PROJECT_SOURCE_DIR}/src/net/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/net/*.c"
+  "${PROJECT_SOURCE_DIR}/src/net/kas/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/crypto/sha3/*.c"
 )
 
@@ -397,11 +408,16 @@ if (NOT WITH_HIP)
   include(cmake/randomx.cmake)
   include(cmake/verus-hash.cmake)
   include(cmake/astrix-hash.cmake)
+  include(cmake/nxl-hash.cmake)
+  include(cmake/hoohash.cmake)
+  include(cmake/wala-hash.cmake)
 
   include(cmake/blake2.cmake)
   include(cmake/chacha20.cmake)
 else()
   include(cmake/astrix-hash.cmake)
+  include(cmake/nxl-hash.cmake)
+  include(cmake/wala-hash.cmake)
   include(cmake/hip-crypto/hip-crypto.cmake)
 endif()
 
@@ -424,30 +440,19 @@ include(cmake/setup.cmake)
 if (WITH_HIP)
   enable_language(${HIP_LANG})
   if (HIP_PLATFORM MATCHES amd)
-    set(HIP_ARCHITECTURES 
-      "gfx900"
-      "gfx1010"
-      "gfx1030"
-      "gfx1100"
+    set(CMAKE_HIP_ARCHITECTURES 
+    "gfx900;gfx902;gfx904;gfx906;"
+    "gfx1010;gfx1011;gfx1012;gfx1013;"
+    "gfx1030;gfx1031;gfx1032;gfx1033;gfx1034;gfx1035;gfx1036;"
+    "gfx1100;gfx1101;gfx1102;gfx1103;gfx1150;gfx1151"
     )
 
-    foreach(ARCH IN LISTS HIP_ARCHITECTURES)
-      set(TNN_OUTPUT_NAME "tnn-miner-${ARCH}")
-      add_executable(${TNN_OUTPUT_NAME} ${SOURCES_CORE} ${SOURCES_NET} ${SOURCES_CRYPTO} ${HEADERS_CRYPTO})
-      
-      # Set architecture-specific compile options
-      target_compile_options(${TNN_OUTPUT_NAME} PRIVATE
-        $<$<COMPILE_LANGUAGE:HIP>:--offload-arch=${ARCH}>
-      )
-
-      # Set architecture-specific preprocessor definition
-      string(REPLACE "gfx" "" ARCH_NUM ${ARCH})
-      target_compile_definitions(${TNN_OUTPUT_NAME} PRIVATE -DHIP_ARCH=${ARCH_NUM})
-          
-      setup_target_libraries(${TNN_OUTPUT_NAME})
-    endforeach()
+    set(TNN_OUTPUT_NAME "tnn-miner-rocm")
+    add_executable(${TNN_OUTPUT_NAME} ${SOURCES_CORE} ${SOURCES_NET} ${SOURCES_CRYPTO} ${HEADERS_CRYPTO})
+    setup_target_libraries(${TNN_OUTPUT_NAME})
   else ()
-    set(TNN_OUTPUT_NAME "tnn-miner-${INTERNAL_TNN_VERSION}_cuda")
+    set(TNN_OUTPUT_NAME "tnn-miner-cuda")
+    set(CMAKE_HIP_ARCHITECTURES "61;70;75;80;89;90")
     add_executable(${TNN_OUTPUT_NAME} ${SOURCES_CORE} ${SOURCES_NET} ${SOURCES_CRYPTO} ${HEADERS_CRYPTO})
     setup_target_libraries(${TNN_OUTPUT_NAME})
   endif ()

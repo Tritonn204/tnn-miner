@@ -29,6 +29,10 @@
                                                                             : X[1] != Y[1]   ? X[1] < Y[1] \
                                                                                                            : X[0] < Y[0])
 
+extern bool ABORT_MINER;
+
+#define CHECK_CLOSE if (ABORT_MINER) return;
+
 static const char *nullArg = "NULL";
 static const char* devWorkerName = "tnn-dev";                                      
 
@@ -79,7 +83,11 @@ extern uint64_t nonce0_dev;
 extern double doubleDiff;
 extern double doubleDiffDev;
 
+extern int HIP_deviceCount;
 extern std::string HIP_names[32];
+extern std::string HIP_pcieID[32];
+extern uint64_t HIP_kIndex[32];
+extern uint64_t HIP_kIndex_dev[32];
 extern std::vector<std::atomic<uint64_t>> HIP_counters;
 extern std::vector<std::vector<int64_t>> HIP_rates5min;
 extern std::vector<std::vector<int64_t>> HIP_rates1min;

@@ -18,3 +18,4 @@ will generate sym_BATCH_SIZE, sym_BLOCKS, sym_THREADS for use in compile-time ke
 
 #define ARCH_DIM_ENTRY(sym, arch) \
     {#arch, {GET_BLOCKS(sym, arch), GET_THREADS(sym, arch), GET_BATCH_SIZE(sym, arch)}}
+    

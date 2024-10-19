@@ -41,25 +41,6 @@ namespace AstrixHash
     return uint256_t(target);
   }
 
-  static inline void amul4bit(uint32_t packed_vec1[32], uint32_t packed_vec2[32], uint32_t *ret)
-  {
-    unsigned int res = 0;
-
-    // Loop through each 32-bit element (containing four 4-bit values)
-    for (int i = 0; i < QUARTER_MATRIX_SIZE; i++)
-    {
-      // Extract 4-bit values from packed_vec1 and packed_vec2
-      for (int j = 0; j < 8; j++)
-      {
-        uint8_t val1 = (packed_vec1[i] >> (4 * j)) & 0xF; // Extract 4 bits
-        uint8_t val2 = (packed_vec2[i] >> (4 * j)) & 0xF; // Extract 4 bits
-        res += val1 * val2;                               // Perform the dot product
-      }
-    }
-
-    *ret = res;
-  }
-
   static inline void heavyHash(byte *scratch, const matrix &mat, byte *out)
   {
     uint8_t v[64];
@@ -112,7 +93,7 @@ namespace AstrixHash
     keccakf(scratch);
   }
 
-  static inline void blake3(const uint8_t *input, int len, uint8_t *output) {
+  static inline void blake3(const uint8_t *input, const int len, uint8_t *output) {
     blake3_hasher hasher;
     blake3_hasher_init(&hasher);
     blake3_hasher_update(&hasher, input, len);
@@ -121,7 +102,7 @@ namespace AstrixHash
 
   void hash(worker &worker, byte *in, int len, byte *out)
   {
-    uint8_t scratchData[200] = {0};
+    alignas(4) uint8_t scratchData[200] = {0};
 
     for (int i=0; i<10; i++) ((uint64_t *)scratchData)[i] = ((uint64_t *)powP)[i] ^ ((uint64_t *)in)[i];
     for (int i = 10; i < 25; i++) ((uint64_t *)scratchData)[i] = ((uint64_t *)powP)[i];

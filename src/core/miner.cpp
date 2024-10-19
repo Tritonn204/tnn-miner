@@ -56,13 +56,18 @@
 
 #include <coins/miners.hpp>
 #include <tnn_hip/coins/miners.hip.hpp>
+#include <tnn_hip/core/devInfo.hip.h>
 
 // INITIALIZE COMMON STUFF
 int miningAlgo = DERO_HASH;
 int reportCounter = 0;
 int reportInterval = 3;
 
+bool ABORT_MINER = false;
+
 bool gpuMine = false;
+
+int HIP_deviceCount = 0;
 
 uint256_t bigDiff(0);
 uint256_t bigDiff_dev(0);
@@ -71,6 +76,9 @@ uint64_t nonce0 = 0;
 uint64_t nonce0_dev = 0;
 
 std::string HIP_names[32];
+std::string HIP_pcieID[32];
+uint64_t HIP_kIndex[32] = {0};
+uint64_t HIP_kIndex_dev[32] = {0};
 std::vector<std::atomic<uint64_t>> HIP_counters(32);
 std::vector<std::vector<int64_t>> HIP_rates5min(32);
 std::vector<std::vector<int64_t>> HIP_rates1min(32);
@@ -118,8 +126,8 @@ int64_t devHeight;
 int64_t difficulty;
 int64_t difficultyDev;
 
-double doubleDiff;
-double doubleDiffDev;
+double doubleDiff = 0;
+double doubleDiffDev = 0;
 
 bool useLookupMine = false;
 
@@ -203,6 +211,8 @@ void onExit() {
   fflush(stdout);
 
   hipKill();
+  ABORT_MINER = true;
+
   boost::this_thread::sleep_for(boost::chrono::seconds(1));
   fflush(stdout);
 
@@ -225,7 +235,16 @@ int main(int argc, char **argv)
 {
   // test_cshake256();
 
+  // GPUTest();
+  #ifdef TNN_HIP
   GPUTest();
+  if (reportInterval == 3) reportInterval = 5;
+  HIP_deviceCount = getGPUCount();
+  for (int i = 0; i < HIP_deviceCount; i++) {
+    HIP_names[i] = getDeviceName(i);
+    HIP_pcieID[i] = getPCIBusId(i);
+  }
+  #endif
 
   std::atexit(onExit);
   signal(SIGTERM, sigterm);
@@ -346,10 +365,52 @@ int main(int argc, char **argv)
   {
     #if defined(TNN_ASTRIXHASH)
     symbol = "AIX";
-    protocol = ASTRIX_STRATUM;
+    protocol = KAS_STRATUM;
     #else
     setcolor(RED);
     printf(unsupported_astrix);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
+  }
+
+  if (vm.count("nexellia"))
+  {
+    #if defined(TNN_ASTRIXHASH)
+    symbol = "NXL";
+    protocol = KAS_STRATUM;
+    #else
+    setcolor(RED);
+    printf(unsupported_astrix);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
+  }
+
+  if (vm.count("hoosat"))
+  {
+    #if defined(TNN_HOOHASH)
+    symbol = "HTN";
+    protocol = KAS_STRATUM;
+    #else
+    setcolor(RED);
+    printf(unsupported_hoohash);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
+  }
+
+  if (vm.count("waglayla"))
+  {
+    #if defined(TNN_WALAHASH)
+    symbol = "WALA";
+    protocol = KAS_STRATUM;
+    #else
+    setcolor(RED);
+    printf(unsupported_waglayla);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -360,7 +421,7 @@ int main(int argc, char **argv)
   {
     fflush(stdout);
     #if defined(TNN_RANDOMX)
-    symbol = "rx0";
+    symbol = "RX0";
     protocol = RX0_SOLO; // Solo minin unsupported for now, so default to stratum instead
     #else
     setcolor(RED);
@@ -425,6 +486,45 @@ int main(int argc, char **argv)
     #else
     setcolor(RED);
     printf(unsupported_astrix);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
+  }
+
+  if (vm.count("test-nexellia"))
+  {
+    #if defined(TNN_RANDOMX)
+    return NxlHash::test();
+    #else
+    setcolor(RED);
+    printf(unsupported_nexellia);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
+  }
+
+  if (vm.count("test-hoosat"))
+  {
+    #if defined(TNN_RANDOMX)
+    return HooHash::test();
+    #else
+    setcolor(RED);
+    printf(unsupported_hoohash);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
+  }
+
+  if (vm.count("test-waglayla"))
+  {
+    #if defined(TNN_RANDOMX)
+    return WalaHash::test();
+    #else
+    setcolor(RED);
+    printf(unsupported_waglayla);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -512,13 +612,21 @@ int main(int argc, char **argv)
     if(wallet.find("xel:", 0) != std::string::npos || wallet.find("xet:", 0) != std::string::npos) {
       symbol = "XEL";
     }
-    if(wallet.find("spectre", 0) != std::string::npos) {
+    if(wallet.find("spectre", 0) != std::string::npos || wallet.find("spectretest", 0)) {
       symbol = "SPR";
       protocol = SPECTRE_STRATUM;
     }
-    if(wallet.find("astrix", 0) != std::string::npos) {
+    if(wallet.find("astrix", 0) != std::string::npos || wallet.find("astrixtest", 0)) {
       symbol = "AIX";
-      protocol = ASTRIX_STRATUM;
+      protocol = KAS_STRATUM;
+    }
+    if(wallet.find("nexellia", 0) != std::string::npos || wallet.find("nexelliatest", 0) != std::string::npos) {
+      symbol = "NXL";
+      protocol = KAS_STRATUM;
+    }
+    if(wallet.find("hoosat", 0) != std::string::npos || wallet.find("hoosattest", 0) != std::string::npos) {
+      symbol = "HTN";
+      protocol = KAS_STRATUM;
     }
     if(wallet.find("ZEPHYR", 0) != std::string::npos) {
       symbol = "ZEPH";
@@ -668,6 +776,7 @@ fillBlanks:
     if (cmdLine != "" && cmdLine.find_first_not_of(' ') != std::string::npos)
     {
       symbol = cmdLine;
+      std::transform(symbol.begin(), symbol.end(), symbol.begin(), ::toupper);
     }
     else
     {
@@ -945,8 +1054,13 @@ Mining:
  //  mutex.lock();
   if (gpuMine)
   {
+    #ifdef TNN_HIP
     std::cout << "Starting GPU worker.." << std::endl;
     boost::thread t(POW_HIP[miningAlgo]);
+    #else
+    printf("Please use a GPU TNN Miner binary...\n");
+    return -1;
+    #endif
   } else {
     std::cout << "Starting threads: ";
     for (int i = 0; i < threads; i++)
@@ -1142,20 +1256,20 @@ connectionAttempt:
         }
         case XELIS_HASH:
         {
-          DAEMONTYPE = daemonType;
-          DAEMONPROTOCOL = protocol;
-          HOST = host;
+          DAEMONTYPE = "ssl";
+          DAEMONPROTOCOL = XELIS_STRATUM;
+          HOST = defaultHost[XELIS_HASH];
           WORKER = devWorkerName;
-          PORT = port;
+          PORT = devPort[XELIS_HASH];
           break;
         }
         case SPECTRE_X:
         {
-          DAEMONTYPE = daemonType;
-          DAEMONPROTOCOL = protocol;
-          HOST = host;
+          DAEMONTYPE = "";
+          DAEMONPROTOCOL = KAS_STRATUM;
+          HOST = defaultHost[SPECTRE_X];
           WORKER = devWorkerName;
-          PORT = port;
+          PORT = devPort[SPECTRE_X];
           break;
         }
         case RX0:
@@ -1169,7 +1283,34 @@ connectionAttempt:
         }
         case ASTRIX_HASH:
         {
+          DAEMONTYPE = "";
+          DAEMONPROTOCOL = KAS_STRATUM;
+          HOST = defaultHost[ASTRIX_HASH];
+          WORKER = devWorkerName;
+          PORT = devPort[ASTRIX_HASH];
+          break;
+        }
+        case NXL_HASH:
+        {
           DAEMONTYPE = daemonType;
+          DAEMONPROTOCOL = protocol;
+          HOST = host;
+          WORKER = devWorkerName;
+          PORT = port;
+          break;
+        }
+        case HOOHASH:
+        {
+          DAEMONTYPE = "";
+          DAEMONPROTOCOL = KAS_STRATUM;
+          HOST = defaultHost[HOOHASH];
+          WORKER = devWorkerName;
+          PORT = devPort[HOOHASH];
+          break;
+        }
+        case WALA_HASH:
+        {
+          DAEMONTYPE = "";
           DAEMONPROTOCOL = protocol;
           HOST = host;
           WORKER = devWorkerName;

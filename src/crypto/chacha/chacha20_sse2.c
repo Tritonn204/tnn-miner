@@ -49,10 +49,8 @@ static inline __m128i RotateLeft16(const __m128i val)
 __attribute__((target("sse2")))
 void ChaCha20EncryptBytes(uint8_t* state, uint8_t* In, uint8_t* Out, uint64_t Size, int rounds)
 {
-
 	uint8_t* CurrentIn = In;
 	uint8_t* CurrentOut = Out;
-
 
 	uint64_t FullBlocksCount = Size / 256;
 	uint64_t RemainingBytes = Size % 256;

@@ -20,7 +20,7 @@ using cpp_dec_float_50 = boost::multiprecision::cpp_dec_float_50;
 
 namespace AstrixHash
 {
-  const int INPUT_SIZE = 80;
+  constexpr int INPUT_SIZE = 80;
 
   const byte matSize = 64;
   using matrix = uint16_t[matSize][matSize];

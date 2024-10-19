@@ -289,6 +289,7 @@ waitForJob:
 
       while (localJobCounter == jobCounter)
       {
+        CHECK_CLOSE;
         which = (double)(rand() % 10000);
         devMine = (devConnected && which < devFee * 100.0 && randomx_ready_dev) || (randomx_ready_dev && !randomx_ready);
 

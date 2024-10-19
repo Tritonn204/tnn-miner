@@ -28,10 +28,12 @@ if (WITH_HIP)
 
   file(GLOB_RECURSE hipSources
     src/tnn_hip/hello-world.hip
-    # src/tnn_hip/crypto/cshake/cshake256.hip
+    src/tnn_hip/core/devInfo.hip
   )
   
   include(cmake/hip-crypto/astrix-hash/astrix-hash-hip.cmake)
+  include(cmake/hip-crypto/nxl-hash/nxl-hash-hip.cmake)
+  include(cmake/hip-crypto/wala-hash/wala-hash-hip.cmake)
 
   # # Add HIP sources and libraries
   # add_library(tnn_hip STATIC ${hipSources})
@@ -59,6 +61,7 @@ if (WITH_HIP)
     add_compile_definitions(__HIP_PLATFORM_NVIDIA__)
   else()
     add_compile_definitions(__HIP_PLATFORM_AMD__)
+    set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS}")
   endif()
 
   # # Create a static archive incrementally for large object file counts.

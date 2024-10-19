@@ -1,27 +1,39 @@
 #include "miners.hpp"
 
+#define blankfunc(S) void S(int tid){}
+
 // AstroBWTv3 coins
 #ifndef TNN_ASTROBWTV3
-void mineDero(int tid){}
-void mineSpectre(int tid){}
+blankfunc(mineDero);
+blankfunc(mineSpectre);
 #endif
 
 // XelisHash v1/v2 coins
 #ifndef TNN_XELISHASH
-void mineXelis(int tid){}
+blankfunc(mineXelis);
 #endif
 
 // RandomX coins
 #ifndef TNN_RANDOMX
-void mineRx0(int tid){}
+blankfunc(mineRx0);
 #endif
 
 // Verus 
 #ifndef TNN_VERUSHASH
-void mineVerus(int tid){}
+blankfunc(mineVerus);
 #endif
 
 // Astrix
 #ifndef TNN_ASTRIXHASH
-void mineAstrix(int tid){}
+blankfunc(mineAstrix);
+#endif
+
+// Nexellia
+#ifndef TNN_NXLHASH
+blankfunc(mineNexellia);
+#endif
+
+// Hoosat
+#ifndef TNN_HOOHASH
+blankfunc(mineHoosat);
 #endif

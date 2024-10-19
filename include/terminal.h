@@ -131,11 +131,6 @@ inline po::options_description get_prog_opts()
   po::options_description general("General", col_width);
   general.add_options()
     ("help", "Produce help message")
-    ("dero", "Will mine Dero")
-    ("xelis", "Will mine Xelis")
-    ("spectre", "Will mine Spectre")
-    ("randomx", "For mining RandomX coins")
-    ("astrix", "Will mine Astrix")
     ("stratum", "Required for mining to Stratum pools")
     ("broadcast", "Creates an http server to query miner stats")
     ("testnet", "Adjusts in-house parameters to mine on testnets")
@@ -150,6 +145,18 @@ inline po::options_description get_prog_opts()
     ("worker-name", po::value<std::string>(), "Sets the worker name for this instance when mining on Pools or Bridges")
     // ("gpu", "Mine with GPU instead of CPU")
     // ("batch-size", po::value<int>(), "(GPU Setting) Sets batch size used for GPU mining")
+  ;
+
+  po::options_description coins("Coin Selection", col_width);
+  coins.add_options()
+    ("dero", "Will mine Dero")
+    ("xelis", "Will mine Xelis")
+    ("spectre", "Will mine Spectre")
+    ("randomx", "For mining RandomX coins")
+    ("astrix", "Will mine Astrix")
+    ("nexellia", "Will mine Nexellia")
+    ("hoosat", "Will mine Hoosat")
+    ("waglayla", "Will mine Waglayla")
   ;
 
   po::options_description dero("Dero", col_width);
@@ -182,6 +189,21 @@ inline po::options_description get_prog_opts()
     ("test-astrix", "Run a basic astrix-hash validation test")
   ;
 
+  po::options_description hoosat("Hoosat", col_width);
+  astrix.add_options()
+    ("test-hoosat", "Run a basic hoohash validation test")
+  ;
+
+  po::options_description nexellia("Nexell-AI", col_width);
+  astrix.add_options()
+    ("test-nexellia", "Run a basic nxl-hash validation test")
+  ;
+
+  po::options_description waglayla("Waglayla", col_width);
+  astrix.add_options()
+    ("test-waglayla", "Run a basic wala-hash validation test")
+  ;
+
   po::options_description advanced("Advanced", col_width);
   advanced.add_options()
     ("tune-warmup", po::value<int>()->default_value(1), "Number of seconds to warmup the CPU before starting the AstroBWTv3 tuning")
@@ -197,11 +219,14 @@ inline po::options_description get_prog_opts()
     ("quiet", "Do not print TNN banner")
   ;
 
+  general.add(coins);
   general.add(dero);
   general.add(spectre);
   general.add(xelis);
   general.add(randomX);
   general.add(astrix);
+  general.add(nexellia);
+  general.add(waglayla);
   general.add(advanced);
   general.add(debug);
   return general;

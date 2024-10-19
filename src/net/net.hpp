@@ -242,11 +242,47 @@ inline void do_session(
   case ASTRIX_HASH:
     switch (hostProtocol)
     {
-      case ASTRIX_SOLO:
-        astrix_session(host, port, wallet, isDev);
+      case KAS_SOLO:
+        kas_session(host, port, wallet, isDev);
         break;
-      case ASTRIX_STRATUM:
-        astrix_stratum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+      case KAS_STRATUM:
+        kas_stratum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+        break;
+    }
+  #endif
+  #ifdef TNN_NXLHASH
+  case NXL_HASH:
+    switch (hostProtocol)
+    {
+      case KAS_SOLO:
+        kas_session(host, port, wallet, isDev);
+        break;
+      case KAS_STRATUM:
+        kas_stratum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+        break;
+    }
+  #endif
+  #ifdef TNN_HOOHASH
+  case HOOHASH:
+    switch (hostProtocol)
+    {
+      case KAS_SOLO:
+        kas_session(host, port, wallet, isDev);
+        break;
+      case KAS_STRATUM:
+        kas_stratum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+        break;
+    }
+  #endif
+  #ifdef TNN_WALAHASH
+  case WALA_HASH:
+    switch (hostProtocol)
+    {
+      case KAS_SOLO:
+        kas_session(host, port, wallet, isDev);
+        break;
+      case KAS_STRATUM:
+        kas_stratum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
         break;
     }
   #endif

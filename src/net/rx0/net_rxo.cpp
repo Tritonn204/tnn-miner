@@ -74,12 +74,12 @@ void updateVM(boost::json::object &newJob, bool isDev) {
 
 
 void rx0_session(
-    std::string host,
+    std::string sessionHost,
     std::string const &port,
     std::string const &wallet,
     bool isDev)
 {
-  httplib::Client daemon(host, stoul(port));
+  httplib::Client daemon(sessionHost, stoul(port));
 
   // submit thread here
 
@@ -106,65 +106,74 @@ void rx0_session(
     {
       std::string response = res->body;
       boost::json::object resJson = boost::json::parse(response).as_object();
-      boost::json::object newJob = resJson.at("result").as_object();
 
-      if ((isDev ? devJob : job).as_object()["template"].is_null() ||
-        std::string(newJob.at("blocktemplate_blob").as_string().c_str()).compare(
-        (isDev ? devJob : job).at("template").as_string().c_str()) != 0)
-      {
-        chainHeight = newJob.at("height").to_number<uint64_t>();
-        boost::json::value &J = isDev ? devJob : job;
+      if (resJson["error"].is_null()) {
+        boost::json::object newJob = resJson["result"].as_object();
 
-        Num newTarget = maxTarget / Num(newJob.at("difficulty").to_number<uint64_t>());
-        std::vector<char> tmp;
-        newTarget.print(tmp, 16);
-
-        // std::cout << "new target: " << &tmp[0] << std::endl
-        //           << std::flush;
-
-        std::string tString = (const char *)tmp.data();
-        if (!isDev) difficulty = newJob.at("difficulty").to_number<uint64_t>();
-
-        J = {
-            {"blob", newJob.at("blockhashing_blob").as_string().c_str()},
-            {"template", newJob.at("blocktemplate_blob").as_string().c_str()},
-            {"target", tString.c_str()},
-            {"seed_hash", newJob.at("seed_hash").as_string().c_str()}
-        };
-
-        // std::cout << "Received template: " << response << std::endl;
-      }
-
-      // std::cout << "difficulty: " << newJob.at("difficulty").to_number<uint64_t>() << std::endl;
-
-      bool *C = isDev ? &devConnected : &isConnected;
-      if (!*C)
-      {
-        if (!isDev)
+        if ((isDev ? devJob : job).as_object()["template"].is_null() ||
+          std::string(newJob["blocktemplate_blob"].as_string().c_str()).compare(
+          (isDev ? devJob : job).as_object()["template"].as_string().c_str()) != 0)
         {
-          difficulty = newJob.at("difficulty").to_number<uint64_t>();
-          setcolor(BRIGHT_YELLOW);
-          printf("Mining at: %s to wallet %s\n", host.c_str(), wallet.c_str());
-          fflush(stdout);
-          setcolor(CYAN);
-          printf("Dev fee: %.2f%% of your total hashrate\n", devFee);
-  
-          fflush(stdout);
-          setcolor(BRIGHT_WHITE);
+          chainHeight = newJob.at("height").to_number<uint64_t>();
+          boost::json::value &J = isDev ? devJob : job;
+
+          Num newTarget = maxTarget / Num(newJob["difficulty"].to_number<uint64_t>());
+          std::vector<char> tmp;
+          newTarget.print(tmp, 16);
+
+          std::string tString = (const char *)tmp.data();
+          if (!isDev) difficulty = newJob["difficulty"].to_number<uint64_t>();
+          else difficultyDev = newJob["difficulty"].to_number<uint64_t>();
+    
+
+          J = {
+              {"blob", newJob["blockhashing_blob"].as_string().c_str()},
+              {"template", newJob["blocktemplate_blob"].as_string().c_str()},
+              {"target", tString.c_str()},
+              {"seed_hash", newJob["seed_hash"].as_string().c_str()}
+          };
+
+          // std::cout << "Received template: " << response << std::endl;
         }
-        else
+
+        // std::cout << "difficulty: " << newJob.at("difficulty").to_number<uint64_t>() << std::endl;
+
+        bool *C = isDev ? &devConnected : &isConnected;
+        if (!*C)
         {
-          setcolor(CYAN);
-          printf("Connected to dev node: %s\n", host.c_str());
-          fflush(stdout);
-          setcolor(BRIGHT_WHITE);
+          if (!isDev)
+          {
+            difficulty = newJob.at("difficulty").to_number<uint64_t>();
+            setcolor(BRIGHT_YELLOW);
+            printf("Mining at: %s to wallet %s\n", sessionHost.c_str(), wallet.c_str());
+            fflush(stdout);
+            setcolor(CYAN);
+            printf("Dev fee: %.2f%% of your total hashrate\n", devFee);
+    
+            fflush(stdout);
+            setcolor(BRIGHT_WHITE);
+          }
+          else
+          {
+            setcolor(CYAN);
+            printf("Connected to dev node: %s\n", sessionHost.c_str());
+            fflush(stdout);
+            setcolor(BRIGHT_WHITE);
+          }
         }
+
+        updateVM(newJob, isDev);
+        jobCounter++;
+
+        *C = true;
+        return 0;
+      } else {
+        setcolor(RED);
+        // printf("get_block_template: %s\n", resJson.at("error").as_object().at("message").as_string().c_str());
+        fflush(stdout);
+        setcolor(BRIGHT_WHITE);
+        return 1;
       }
-
-      updateVM(newJob, isDev);
-
-      *C = true;
-      return 0;
     }
     else
     {

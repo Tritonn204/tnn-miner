@@ -104,7 +104,7 @@ int handleAstrixStratumPacket(boost::json::object packet, AstrixStratum::jobCach
       else
       {
         setcolor(CYAN);
-        printf("Connected to dev node: %s\n", host.c_str());
+        printf("Connected to dev node\n");
         fflush(stdout);
         setcolor(BRIGHT_WHITE);
       }

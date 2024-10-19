@@ -74,7 +74,7 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
       else
       {
         setcolor(CYAN);
-        printf("Connected to dev node: %s\n", host.c_str());
+        printf("Connected to dev node");
         fflush(stdout);
         setcolor(BRIGHT_WHITE);
       }

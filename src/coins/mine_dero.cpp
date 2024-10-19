@@ -94,6 +94,7 @@ waitForJob:
       int32_t nonce = 0;
       while (localJobCounter == jobCounter)
       {
+        CHECK_CLOSE;
         which = (double)(rand() % 10000);
         devMine = (devConnected && which < devFee * 100.0);
         DIFF = devMine ? difficultyDev : difficulty;
