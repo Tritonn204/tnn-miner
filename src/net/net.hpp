@@ -194,7 +194,14 @@ inline void do_session(
   #endif
   #ifdef TNN_ASTROBWTV3
   case SPECTRE_X:
-    spectre_stratum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+    switch (hostProtocol)
+    {
+      case SPECTRE_SOLO:
+        break;
+      case SPECTRE_STRATUM:
+        spectre_stratum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+        break;
+    }
     break;
   #endif
   #ifdef TNN_RANDOMX

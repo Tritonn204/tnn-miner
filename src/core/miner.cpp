@@ -141,6 +141,7 @@ std::string workerNameFromWallet = "";
 bool isConnected = false;
 bool devConnected = false;
 
+bool devTurn = false;
 bool beQuiet = false;
 /* End definitions from tnn-common.hpp */
 
@@ -612,11 +613,11 @@ int main(int argc, char **argv)
     if(wallet.find("xel:", 0) != std::string::npos || wallet.find("xet:", 0) != std::string::npos) {
       symbol = "XEL";
     }
-    if(wallet.find("spectre", 0) != std::string::npos || wallet.find("spectretest", 0)) {
+    if(wallet.find("spectre", 0) != std::string::npos || wallet.find("spectretest", 0) != std::string::npos) {
       symbol = "SPR";
       protocol = SPECTRE_STRATUM;
     }
-    if(wallet.find("astrix", 0) != std::string::npos || wallet.find("astrixtest", 0)) {
+    if(wallet.find("astrix", 0) != std::string::npos || wallet.find("astrixtest", 0) != std::string::npos) {
       symbol = "AIX";
       protocol = KAS_STRATUM;
     }
@@ -1266,7 +1267,7 @@ connectionAttempt:
         case SPECTRE_X:
         {
           DAEMONTYPE = "";
-          DAEMONPROTOCOL = KAS_STRATUM;
+          DAEMONPROTOCOL = SPECTRE_STRATUM;
           HOST = defaultHost[SPECTRE_X];
           WORKER = devWorkerName;
           PORT = devPort[SPECTRE_X];

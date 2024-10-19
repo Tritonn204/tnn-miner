@@ -37,3 +37,8 @@ blankfunc(mineNexellia);
 #ifndef TNN_HOOHASH
 blankfunc(mineHoosat);
 #endif
+
+// Hoosat
+#ifndef TNN_WALAHASH
+blankfunc(mineWaglayla);
+#endif

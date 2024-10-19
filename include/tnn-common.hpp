@@ -36,6 +36,8 @@ extern bool ABORT_MINER;
 static const char *nullArg = "NULL";
 static const char* devWorkerName = "tnn-dev";                                      
 
+extern bool devTurn;
+
 extern std::string workerName;
 extern std::string workerNameFromWallet;
 extern bool useLookupMine;

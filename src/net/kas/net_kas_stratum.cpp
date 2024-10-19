@@ -48,7 +48,7 @@ int handleKasStratumPacket(boost::json::object packet, KasStratum::jobCache *cac
       isEqual &= comboHeader[i] == cache->header[i];
     }
 
-    isEqual &= ts != cache->ts;
+    isEqual &= ts == cache->ts;
 
     if (!isEqual) {
       uint64_t &N = isDev ? nonce0_dev : nonce0;
