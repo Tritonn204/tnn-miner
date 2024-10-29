@@ -5,7 +5,7 @@ stages:
   - release
 
 variables:
-  RUNNER_SCRIPT_TIMEOUT: 30m
+  RUNNER_SCRIPT_TIMEOUT: 60m
   DOCKER_TLS_CERTDIR: "/certs"
   TNN_BUILD_MAC: false
   TNN_BUILD_WIN: true
