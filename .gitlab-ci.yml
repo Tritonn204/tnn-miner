@@ -26,6 +26,7 @@ workflow:
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_BRANCH == "dev"
+    - if: $CI_COMMIT_BRANCH =~ /^cicd.*/ # regular expression cicd*
     # if the pipeline is executing because of a tag, then change the variables for a 
     - if: $CI_COMMIT_TAG
       variables:
@@ -64,7 +65,10 @@ build-linux-amd64:
   before_script:
     - until docker info; do sleep 1; done
   script:
-    - docker buildx build --platform=linux/amd64 --build-arg PACKAGE_VERSION=${PACKAGE_VERSION} --build-arg TARGZ_FILE=${LINUX_AMD64_TGZ} --build-arg CMAKE_ARGS=${CMAKE_ARGS} -f docker/Dockerfile.ubu . --output ./
+    - docker buildx build -f docker/Dockerfile.ubu . --output ./ --platform=linux/amd64 --build-arg PKG_VERSION=${PACKAGE_VERSION} --build-arg CMAKE_ARGS=-DWITH_HIP=OFF
+    - docker buildx build -f docker/Dockerfile.ubu . --output ./ --platform=linux/amd64 --build-arg PKG_VERSION=${PACKAGE_VERSION} --build-arg CMAKE_ARGS=-DHIP_PLATFORM=amd --build-arg HIP_PLAT=amd --build-arg BASE_IMAGE=rocm-62
+    #- docker buildx build -f docker/Dockerfile.ubu . --output ./ --platform=linux/amd64 --build-arg PKG_VERSION=${PACKAGE_VERSION} --build-arg CMAKE_ARGS=-DHIP_PLATFORM=nvidia --build-arg HIP_PLAT=nvidia --build-arg BASE_IMAGE=rocm-62
+    - tar -czvf ${LINUX_AMD64_TGZ} ./tnn-miner*
     - export HIVEOS_MMPOS_AMD64_TGZ="tnn-miner-hiveos_mmpos_amd64_${PACKAGE_VERSION//-/.}.tar.gz"
     - echo "HIVEOS_MMPOS_AMD64_TGZ=$HIVEOS_MMPOS_AMD64_TGZ" >> linux-amd64-job.env
   after_script:
@@ -167,7 +171,8 @@ build-linux-aarch64:
     - until docker info; do sleep 1; done
   script:
     - docker buildx ls
-    - docker buildx build --platform=linux/arm64 --build-arg PACKAGE_VERSION=${PACKAGE_VERSION} --build-arg TARGZ_FILE=${LINUX_ARM64_TGZ} --build-arg CMAKE_ARGS=${CMAKE_ARGS} -f docker/Dockerfile.ubu . --output ./
+    - docker buildx build --platform=linux/arm64 --build-arg PKG_VERSION=${PACKAGE_VERSION} --build-arg CMAKE_ARGS=${CMAKE_ARGS} -f docker/Dockerfile.ubu . --output ./
+    - tar -czvf ${LINUX_ARM64_TGZ} ./tnn-miner*
   after_script:
     - echo "LINUX_ARM64_BUILD_JOB_ID=$CI_JOB_ID" >> linux-arm64-job.env
   artifacts:

@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.4
 
-FROM docker.io/dirkerdero/tnn-miner-base:latest AS base
+ARG BASE_IMAGE=latest
+FROM docker.io/dirkerdero/tnn-miner-base:${BASE_IMAGE} AS base
 
 # Set environment variable to avoid interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
@@ -11,9 +12,9 @@ COPY ./scripts/prereqs.sh ./scripts/prereqs.sh
 RUN chmod +x ./scripts/prereqs.sh && ./scripts/prereqs.sh
 
 FROM base AS build
+ARG  HIP_PLAT=
 ARG  CMAKE_ARGS=
-ARG  PACKAGE_VERSION=0.0.1
-ARG  TARGZ_FILE
+ARG  PKG_VERSION=0.0.1
 RUN pwd
 RUN ls -la .
 RUN ls -la ./scripts/
@@ -22,15 +23,14 @@ COPY . .
 
 RUN ls -la .
 
-RUN --mount=type=cache,target=/src/.cache mkdir ./build && cd ./build && cmake $CMAKE_ARGS -DTNN_VERSION=$PACKAGE_VERSION ..
+RUN HIP_PLATFORM=$HIP_PLAT hipconfig --platform | exit 0
+RUN HIP_PLATFORM=$HIP_PLAT hipconfig --rocmpath | exit 0
+#RUN --mount=type=cache,target=/src/.cache cd ./scripts/ && ./build_nvidia.sh $PKG_VERSION
+RUN --mount=type=cache,target=/src/.cache mkdir ./build && cd ./build && HIP_PLATFORM=$HIP_PLAT cmake $CMAKE_ARGS -DTNN_VERSION=$PKG_VERSION ..
 RUN --mount=type=cache,target=/src/.cache cd ./build && make -j$(nproc)
+#RUN ls -laR ./build/bin/ || exit 1
+#RUN ls -laR ./build/bin/
 RUN mv ./build/bin/tnn-miner-* ./
-RUN ./tnn-miner-* --test-spectre
-RUN ls -la ./
-RUN tar -czvf ${TARGZ_FILE} ./tnn-miner*
-RUN md5sum ./${TARGZ_FILE}
 
 FROM scratch
-ARG  PACKAGE_VERSION
-ARG  TARGZ_FILE
-COPY --from=build /src/${TARGZ_FILE} /
+COPY --from=build /src/tnn-miner-* /

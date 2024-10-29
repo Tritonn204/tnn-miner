@@ -116,7 +116,6 @@ if (WITH_HIP)
     "${HIP_PATH}/lib/cmake/*"
   )
   list(APPEND CMAKE_MODULE_PATH ${HIP_MODULES})
-  set(HIP_LANG HIP)
 
   link_directories(
     $ENV{HIP_PATH}/lib
@@ -438,7 +437,7 @@ endif()
 include(cmake/setup.cmake)
 
 if (WITH_HIP)
-  enable_language(${HIP_LANG})
+  enable_language(HIP)
   if (HIP_PLATFORM MATCHES amd)
     set(CMAKE_HIP_ARCHITECTURES 
     "gfx900;gfx902;gfx904;gfx906;"
@@ -450,11 +449,14 @@ if (WITH_HIP)
     set(TNN_OUTPUT_NAME "tnn-miner-rocm")
     add_executable(${TNN_OUTPUT_NAME} ${SOURCES_CORE} ${SOURCES_NET} ${SOURCES_CRYPTO} ${HEADERS_CRYPTO})
     setup_target_libraries(${TNN_OUTPUT_NAME})
-  else ()
+  elseif (HIP_PLATFORM MATCHES nvidia)
+    #set(CMAKE_HIP_ARCHITECTURES "61;70;75;80;89;90")
     set(TNN_OUTPUT_NAME "tnn-miner-cuda")
-    set(CMAKE_HIP_ARCHITECTURES "61;70;75;80;89;90")
     add_executable(${TNN_OUTPUT_NAME} ${SOURCES_CORE} ${SOURCES_NET} ${SOURCES_CRYPTO} ${HEADERS_CRYPTO})
     setup_target_libraries(${TNN_OUTPUT_NAME})
+  else ()
+    cmake_print_variables(HIP_PLATFORM)
+    message(FATAL_ERROR "HIP requested, but invalid HIP_PLATFORM supplied")
   endif ()
   
   # include(ExternalProject)
@@ -489,4 +491,4 @@ else()
 
 endif()
 
-unset(HIP_LANG CACHE)
+unset(CACHE)
