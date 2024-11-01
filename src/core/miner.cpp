@@ -237,6 +237,7 @@ int main(int argc, char **argv)
   // test_cshake256();
 
   // GPUTest();
+  printf("pre test\n");
   #ifdef TNN_HIP
   GPUTest();
   if (reportInterval == 3) reportInterval = 5;
@@ -246,6 +247,7 @@ int main(int argc, char **argv)
     HIP_pcieID[i] = getPCIBusId(i);
   }
   #endif
+  printf("post test\n");
 
   std::atexit(onExit);
   signal(SIGTERM, sigterm);
@@ -258,11 +260,11 @@ int main(int argc, char **argv)
   initWolfLUT();
   initializeExterns();
   #endif
+  printf("post wolf\n");
 
   // Check command line arguments.
   lookup2D_global = (uint16_t *)malloc_huge_pages(regOps_size * (256 * 256) * sizeof(uint16_t));
   lookup3D_global = (byte *)malloc_huge_pages(branchedOps_size * (256 * 256) * sizeof(byte));
-
 
   // default values
   bool lockThreads = true;
@@ -1019,20 +1021,23 @@ Mining:
   #endif
  //  mutex.unlock();1
 
-  if (miningAlgo == DERO_HASH && (wallet.find("der", 0) == std::string::npos && wallet.find("det", 0) == std::string::npos))
-  {
-    std::cout << "Provided wallet address is not valid for Dero" << std::endl;
-    return EXIT_FAILURE;
+  if (checkWallet) {
+    if (miningAlgo == DERO_HASH && (wallet.find("der", 0) == std::string::npos && wallet.find("det", 0) == std::string::npos))
+    {
+      std::cout << "Provided wallet address is not valid for Dero" << std::endl;
+      return EXIT_FAILURE;
+    }
+    if (miningAlgo == XELIS_HASH && (wallet.find("xel", 0) == std::string::npos && wallet.find("xet") == std::string::npos && wallet.find("Kr", 0) == std::string::npos))
+    {
+      std::cout << "Provided wallet address is not valid for Xelis" << std::endl;
+      return EXIT_FAILURE;
+    }
+    if (miningAlgo == SPECTRE_X && (wallet.find("spectre", 0) == std::string::npos)) {
+      std::cout << "Provided wallet address is not valid for Spectre" << std::endl;
+      return EXIT_FAILURE;
+    }
   }
-  if (miningAlgo == XELIS_HASH && (wallet.find("xel", 0) == std::string::npos && wallet.find("xet") == std::string::npos && wallet.find("Kr", 0) == std::string::npos))
-  {
-    std::cout << "Provided wallet address is not valid for Xelis" << std::endl;
-    return EXIT_FAILURE;
-  }
-  if (miningAlgo == SPECTRE_X && (wallet.find("spectre", 0) == std::string::npos)) {
-    std::cout << "Provided wallet address is not valid for Spectre" << std::endl;
-    return EXIT_FAILURE;
-  }
+
   boost::thread GETWORK(getWork, false, miningAlgo);
   // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 

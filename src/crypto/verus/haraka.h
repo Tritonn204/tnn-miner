@@ -27,6 +27,7 @@ Optimized Implementations for Haraka256 and Haraka512
 #ifndef HARAKA_H_
 #define HARAKA_H_
 
+#include "immintrin.h"
 
 #define NUMROUNDS 5
 
@@ -131,6 +132,8 @@ Optimized Implementations for Haraka256 and Haraka512
 */
 #ifdef HARAKA_H_
 
+
+#include "immintrin.h"
 
 #define NUMROUNDS 5
 
@@ -259,4 +262,3 @@ void haraka512_4x(unsigned char *out, const unsigned char *in);
 void haraka512_8x(unsigned char *out, const unsigned char *in);
 
 #endif
-

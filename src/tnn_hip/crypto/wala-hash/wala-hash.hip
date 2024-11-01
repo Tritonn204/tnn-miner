@@ -110,7 +110,7 @@ __device__ __forceinline__ void amul4bit(const uint32_t packed_vec1[32], const u
 }
 
 template <bool isDev>
-__launch_bounds__(Wala_HIP::THREAD_DIM, 11)
+// __launch_bounds__(Wala_HIP::THREAD_DIM, 16)
 __global__ void walaHash_hip(const uint64_t nonce_mask, const uint64_t nonce_fixed, int kIndex, size_t batchSize, uint64_t *final_nonces, int *nonce_count, uint8_t *dataBuf, uint8_t device = 0)
 {
   int globalId = threadIdx.x + blockIdx.x * blockDim.x;

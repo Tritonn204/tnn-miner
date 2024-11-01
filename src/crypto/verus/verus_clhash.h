@@ -21,14 +21,20 @@
 #define INCLUDE_VERUS_CLHASH_H
 
 
+//#include <intrin.h>
 
+#ifndef _WIN32
+#include <cpuid.h>
+#else
+#include <intrin.h>
+#endif // !WIN32
 
 
 #include <stdlib.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <assert.h>
-#include <stdbool.h>
+//#include <boost/thread.hpp>
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,6 +48,8 @@ extern "C" {
 typedef unsigned char u_char;
 
 #endif
+#include "haraka.h"
+#include "haraka_portable.h"
 enum {
     // Verus Key size must include the equivalent size of a Haraka key
     // after the first part.
@@ -55,7 +63,7 @@ enum {
 
 extern int __cpuverusoptimized;
 
-static inline bool IsCPUVerusOptimized()
+inline bool IsCPUVerusOptimized()
 {
 
 #ifndef _WIN32
@@ -68,6 +76,12 @@ static inline bool IsCPUVerusOptimized()
 	return ((ecx & (bit_AVX | bit_AES)) == (bit_AVX | bit_AES));
 #else
 
+	// https://github.com/gcc-mirror/gcc/blob/master/gcc/config/i386/cpuid.h
+#define bit_AVX		(1 << 28)
+#define bit_AES		(1 << 25)
+	// https://insufficientlycomplicated.wordpress.com/2011/11/07/detecting-intel-advanced-vector-extensions-avx-in-visual-studio/
+	// bool cpuAVXSuport = cpuInfo[2] & (1 << 28) || false;
+
 	int cpuInfo[4];
 	__cpuid(cpuInfo, 1);
 	return ((cpuInfo[2] & (bit_AVX | bit_AES)) == (bit_AVX | bit_AES));
@@ -78,6 +92,9 @@ static inline bool IsCPUVerusOptimized()
     if (__cpuverusoptimized & 0x80)
     {
 #ifdef _WIN32
+        #define bit_AVX		(1 << 28)
+        #define bit_AES		(1 << 25)
+        #define bit_PCLMUL  (1 << 1)
         // https://insufficientlycomplicated.wordpress.com/2011/11/07/detecting-intel-advanced-vector-extensions-avx-in-visual-studio/
         // bool cpuAVXSuport = cpuInfo[2] & (1 << 28) || false;
 

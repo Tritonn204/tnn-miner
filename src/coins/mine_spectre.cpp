@@ -299,8 +299,6 @@ waitForJob:
       localDevHeight = -1;
     }
     if (!isConnected) {
-      data_ready = true;
-      cv.notify_all();
       break;
     }
   }

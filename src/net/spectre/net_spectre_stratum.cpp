@@ -74,20 +74,25 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
 
     if(!isEqual && !beQuiet) {
       setcolor(CYAN);
-      if (!isDev)
-        printf("\nStratum: new job received\n");
+      // if (!isDev)
+      printf("\n");
+      if (isDev) printf("DEV | ");
+      printf("\nStratum: new job received\n");
       fflush(stdout);
       setcolor(BRIGHT_WHITE);
     }
-
-    // if (!isDev) std::cout << "Stratum packet: " << boost::json::serialize(packet).c_str() << std::endl;
-
 
     SpectreStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
 
     (*J).as_object()["template"] = std::string(newTemplate, SpectreX::INPUT_SIZE*2);
     (*J).as_object()["jobId"] = packet["params"].as_array()[0].get_string().c_str();
+
+    if (!isDev) std::cout << "job packet: " << boost::json::serialize(packet).c_str() << std::endl;
+    if (!isDev) std::cout << "stored job: " << boost::json::serialize(*J).c_str() << std::endl;
+
+    if (isDev) std::cout << "Dev job packet: " << boost::json::serialize(packet).c_str() << std::endl;
+    if (isDev) std::cout << "Devstored job: " << boost::json::serialize(*J).c_str() << std::endl;
 
     bool *C = isDev ? &devConnected : &isConnected;
     if (!*C)
@@ -603,7 +608,7 @@ void spectre_stratum_session(
 
             if (tryParse) {
               chopQueue += packet;
-              // printf("resulting json string: %s\n\n", chopQueue.c_str());
+              printf("resulting json string: %s\n\n", chopQueue.c_str());
               try
               {
                 packets.clear();
@@ -661,7 +666,7 @@ void spectre_stratum_session(
               }
             } else {
               chopQueue = packet;
-              // printf("partial json start = %s\n", chopQueue.c_str());
+              printf("partial json start = %s\n", chopQueue.c_str());
             } 
           }
         }

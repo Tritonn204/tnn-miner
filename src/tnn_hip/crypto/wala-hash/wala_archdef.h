@@ -7,7 +7,7 @@
 // Structure to hold blocks, threads, and batchSize
 using ArchDims = std::tuple<size_t, size_t, size_t>;
 
-static constexpr double factor = 6;
+static constexpr double factor = 2.5;
 
 // Architecture-dependent grid dimensions and shared memory size
 #if defined(__HIP_PLATFORM_AMD__)

@@ -60,7 +60,7 @@ string(REGEX REPLACE "^[a-zA-Z]" ""  INTERNAL_TNN_VERSION ${INTERNAL_TNN_VERSION
 option(WITH_ASTROBWTV3      "Enable AstroBWTv3 algorithms family" ON)
 option(WITH_XELISHASH       "Enable XelisHash algorithms family" ON)
 option(WITH_RANDOMX         "Enable RandomX algorithms family" ON)
-option(WITH_VERUSHASH        "Enable VerusHash algorithms family" ON)
+option(WITH_VERUSHASH        "Enable VerusHash algorithms family" OFF)
 option(WITH_ASTRIXHASH        "Enable AstrixHash algorithms family" ON)
 option(WITH_NXLHASH        "Enable NxlHash algorithms family" ON)
 option(WITH_HOOHASH        "Enable Hoohash algorithms family" ON)

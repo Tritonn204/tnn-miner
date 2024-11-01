@@ -364,7 +364,7 @@ namespace Nxl_HIP {
 
     hipError_t event_status = hipEventQuery(stop_event);
     while (event_status != hipSuccess) {
-      nanosleep_simple(1000000 / 2); // 1ms / 4
+      nanosleep_simple(1000000 / 4); // 1ms / 4
       event_status = hipEventQuery(stop_event);
 
       if (event_status != hipSuccess && event_status != hipErrorNotReady)
