@@ -58,6 +58,10 @@
 #include <tnn_hip/coins/miners.hip.hpp>
 #include <tnn_hip/core/devInfo.hip.h>
 
+#if defined(USE_ASTRO_SPSA)
+  #include "spsa.hpp"
+#endif
+
 // INITIALIZE COMMON STUFF
 int miningAlgo = DERO_HASH;
 int reportCounter = 0;
@@ -102,6 +106,7 @@ int protocol = XELIS_SOLO;
 std::string daemonType = "";
 std::string host = "NULL";
 std::string wallet = "NULL";
+std::string devWallet = "NULL";
 
 // Dev fee config
 // Dev fee is a % of hashrate
@@ -197,6 +202,9 @@ void openssl_log_callback(const SSL *ssl, int where, int ret)
 #if defined(TNN_ASTROBWTV3)
 void initializeExterns() {
   numAstroFuncs = std::size(allAstroFuncs); //sizeof(allAstroFuncs)/sizeof(allAstroFuncs[0]);
+  #if defined(USE_ASTRO_SPSA)
+    initSPSA();
+  #endif
 }
 #endif
 
@@ -438,7 +446,7 @@ int main(int argc, char **argv)
   protocol = vm.count("xatum") ? XELIS_XATUM : protocol;
 
   useStratum |= vm.count("stratum");
-  devSelection = vm.count("testnet") ? testDevWallet : devSelection;
+  devSelection = vm.count("testnet") ? testDevWallets : devSelection;
 
   if (vm.count("test-spectre"))
   {
@@ -1324,6 +1332,7 @@ connectionAttempt:
           break;
         }
       }
+      devWallet = devSelection[algo];
       boost::asio::spawn(ioc, std::bind(&do_session, DAEMONTYPE, DAEMONPROTOCOL, HOST, PORT, devSelection[algo], WORKER, algo, std::ref(ioc), std::ref(ctx), std::placeholders::_1, true),
                          // on completion, spawn will call this function
                          [&](std::exception_ptr ex)

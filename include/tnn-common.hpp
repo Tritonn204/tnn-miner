@@ -47,6 +47,7 @@ extern bool gpuMine;
 
 extern std::string host;
 extern std::string wallet;
+extern std::string devWallet;
 
 extern Num oneLsh256;      
 extern Num maxU256;     

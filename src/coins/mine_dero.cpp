@@ -23,9 +23,13 @@ void mineDero(int tid)
   byte devWork[MINIBLOCK_SIZE*DERO_BATCH];
   byte work[MINIBLOCK_SIZE*DERO_BATCH];
 
-  workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
-  initWorker(*worker);
-  lookupGen(*worker, nullptr, nullptr);
+  workerData *userWorker = (workerData *)malloc_huge_pages(sizeof(workerData));
+  initWorker(*userWorker);
+  lookupGen(*userWorker, nullptr, nullptr);
+
+  workerData *devWorker = (workerData *)malloc_huge_pages(sizeof(workerData));
+  initWorker(*devWorker);
+  lookupGen(*devWorker, nullptr, nullptr);
 
   // std::cout << *worker << std::endl;
 
@@ -88,6 +92,7 @@ waitForJob:
       bool submit = false;
       int64_t DIFF;
       Num cmpDiff;
+      workerData *worker;
       // DIFF = 5000;
 
       std::string hex;
@@ -98,7 +103,7 @@ waitForJob:
         which = (double)(rand() % 10000);
         devMine = (devConnected && which < devFee * 100.0);
         DIFF = devMine ? difficultyDev : difficulty;
-
+        worker = devMine ? devWorker : userWorker;
         // printf("Difficulty: %" PRIx64 "\n", DIFF);
 
         cmpDiff = ConvertDifficultyToBig(DIFF, DERO_HASH);
