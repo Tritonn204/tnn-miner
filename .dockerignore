@@ -1,3 +1,5 @@
 .cache
 build
 docker/Dockerfile*
+_deps
+regress*.tgz

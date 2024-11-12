@@ -237,17 +237,11 @@ endif()
 
 # This stores downloaded dependencies so we do not need to re-download them
 set(CPM_SOURCE_CACHE "${PROJECT_SOURCE_DIR}/.cache/CPM")
+cmake_print_variables(CPM_SOURCE_CACHE)
 
 set(CPM_DOWNLOAD_VERSION 0.39.0)
 
-if(CPM_SOURCE_CACHE)
-  set(CPM_DOWNLOAD_LOCATION "${CPM_SOURCE_CACHE}/cpm/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
-elseif(DEFINED ENV{CPM_SOURCE_CACHE})
-  set(CPM_DOWNLOAD_LOCATION "$ENV{CPM_SOURCE_CACHE}/cpm/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
-else()
-  set(CPM_DOWNLOAD_LOCATION "${CMAKE_BINARY_DIR}/cmake/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
-endif()
-
+set(CPM_DOWNLOAD_LOCATION "${PROJECT_SOURCE_DIR}/_deps/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
 if(NOT (EXISTS ${CPM_DOWNLOAD_LOCATION}))
   message(STATUS "Downloading CPM.cmake to ${CPM_DOWNLOAD_LOCATION}")
   file(DOWNLOAD
@@ -317,10 +311,13 @@ else()
   #     "CMAKE_CXX_COMPILER clang-cl"
   #   )
   # endif()
+  file(DOWNLOAD https://github.com/boostorg/boost/releases/download/boost-1.85.0/boost-1.85.0-cmake.tar.xz
+	"${PROJECT_SOURCE_DIR}/_deps/boost-1.85.0-cmake.tar.xz"
+	EXPECTED_HASH SHA256=0a9cc56ceae46986f5f4d43fe0311d90cf6d2fa9028258a95cab49ffdacf92ad)
   CPMAddPackage(
     NAME Boost
     VERSION 1.85.0
-    URL https://github.com/boostorg/boost/releases/download/boost-1.85.0/boost-1.85.0-cmake.tar.xz
+	URL "${PROJECT_SOURCE_DIR}/_deps/boost-1.85.0-cmake.tar.xz"
     URL_HASH SHA256=0a9cc56ceae46986f5f4d43fe0311d90cf6d2fa9028258a95cab49ffdacf92ad
     OPTIONS 
       "Boost_USE_STATIC_LIBS ON" 

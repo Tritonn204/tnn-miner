@@ -33,10 +33,12 @@
 /tests
 /boost-1.82.0/**
 /.cache
+/_deps
 /scripts/build
 /src/astrobwtv3/build
 /src/astrobwtv3/export
 /lib/astrospsa/
+/regress*.tgz
 
 # Xelis rust resources
 /src/xelis-hash/**.rs

@@ -17,4 +17,7 @@ if [[ -f /etc/os-release ]]; then
   if [[ "$VERSION_CODENAME" == "bookworm" ]]; then
     $SUDO apt install -y libpthread-stubs0-dev
   fi
+  if [[ "$TNN_REGRESS" == "1" ]]; then
+    $SUDO apt install -y gdb
+  fi
 fi

@@ -1,20 +1,33 @@
+set(TNN_SPSA_CLANG_VER "")
 if(USE_ASTRO_SPSA)
   set(SPSA_OS_PREFIX "linux")
   if(WIN32)
     set(SPSA_OS_PREFIX "win")
   endif()
-  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -flto -DUSE_ASTRO_SPSA=ON")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flto -DUSE_ASTRO_SPSA=ON")
+  set(TNN_SPSA_USE_LTO ON)
+  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -DUSE_ASTRO_SPSA=ON")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DUSE_ASTRO_SPSA=ON")
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    string(REGEX MATCH "[0-9]+" CLANG_MAJOR_VERSION "${CMAKE_CXX_COMPILER_VERSION}")
+    if(CLANG_MAJOR_VERSION MATCHES "14")
+	  set(TNN_SPSA_CLANG_VER "_clang14")
+	  set(TNN_SPSA_USE_LTO OFF)
+    endif()
+  endif()
+  if(TNN_SPSA_USE_LTO)
+    set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -flto")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flto")
+  endif()
 
-  if(EXISTS ${PROJECT_SOURCE_DIR}/lib/astrospsa/libastroSPSA_${SPSA_OS_PREFIX}_${TARGET_ARCH}.a)
+  if(EXISTS ${PROJECT_SOURCE_DIR}/lib/astrospsa/libastroSPSA_${SPSA_OS_PREFIX}_${TARGET_ARCH}${TNN_SPSA_CLANG_VER}.a)
     set(SPSA_LIB_DIR ${PROJECT_SOURCE_DIR}/lib/astrospsa)
   else()
     include(FetchContent)
     ## Fetch the static library
     FetchContent_Declare(
         astrospsa
-        GIT_REPOSITORY https://gitlab.com/Tritonn204/astro-spsa.git
-        GIT_TAG        643809adc68d5fcf716ec45f5452f6d5c50abac1
+        GIT_REPOSITORY https://gitlab.com/dirkerdero/astro-spsa-dirker.git
+        GIT_TAG        e7d64f99fa8d8412b4126480c3dc96ea3bed6157
     )
     FetchContent_MakeAvailable(astrospsa)
     set(SPSA_LIB_DIR ${astrospsa_SOURCE_DIR})

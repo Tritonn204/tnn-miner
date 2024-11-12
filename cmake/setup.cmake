@@ -18,7 +18,7 @@ function(setup_target_libraries target_name)
 
   # Link AstroSPSA library if enabled
   if(USE_ASTRO_SPSA)
-    target_link_libraries(${target_name} ${SPSA_LIB_DIR}/libastroSPSA_${SPSA_OS_PREFIX}_${TARGET_ARCH}.a)
+    target_link_libraries(${target_name} ${SPSA_LIB_DIR}/libastroSPSA_${SPSA_OS_PREFIX}_${TARGET_ARCH}${TNN_SPSA_CLANG_VER}.a)
   endif()
 
   # Link threading libraries, OpenSSL, and other required libraries

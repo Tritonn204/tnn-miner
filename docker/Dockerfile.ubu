@@ -1,14 +1,25 @@
 # syntax=docker/dockerfile:1.4
 
-FROM docker.io/dirkerdero/tnn-miner-base:latest AS base
+ARG  IMAGE_VERSION=docker.io/dirkerdero/tnn-miner-base:latest
+FROM ${IMAGE_VERSION} AS base
+#FROM docker.io/dirkerdero/tnn-miner-base:latest AS base
+ARG REGRESS=0
+
+RUN if [ -f /etc/apt/apt.conf.d/docker-clean ]; then rm -f /etc/apt/apt.conf.d/docker-clean; fi \
+    && echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
+
 
 # Set environment variable to avoid interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
+ENV TNN_REGRESS=$REGRESS
 
 WORKDIR /src
 
 COPY ./scripts/prereqs.sh ./scripts/prereqs.sh
-RUN chmod +x ./scripts/prereqs.sh && ./scripts/prereqs.sh
+RUN chmod +x ./scripts/prereqs.sh
+RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
+    --mount=target=/var/cache/apt,type=cache,sharing=locked \
+    ./scripts/prereqs.sh
 
 FROM base AS build
 ARG  CMAKE_ARGS=
@@ -22,10 +33,15 @@ COPY . .
 
 RUN ls -la .
 
-RUN --mount=type=cache,target=/src/.cache mkdir ./build && cd ./build && cmake $CMAKE_ARGS -DTNN_VERSION=$PACKAGE_VERSION ..
-RUN --mount=type=cache,target=/src/.cache cd ./build && make -j$(nproc)
+RUN --mount=type=cache,target=/src/_deps mkdir ./build && cd ./build && cmake $CMAKE_ARGS -DTNN_VERSION=$PACKAGE_VERSION ..
+RUN --mount=type=cache,target=/src/_deps cd ./build && make -j$(nproc)
+
+RUN git diff -p
+RUN if [ "$REGRESS" = "1" ]; then gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./build/bin/tnn-miner-cpu --quiet --test-dero; fi
+RUN if [ "$REGRESS" = "1" ]; then gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./build/bin/tnn-miner-cpu --quiet --test-spectre; fi
+RUN if [ "$REGRESS" = "1" ]; then gdb --return-child-result --batch -ex "run" -ex "bt" -ex "cont" -ex "exit" --args ./build/bin/tnn-miner-cpu --quiet --test-xelis; fi
+
 RUN mv ./build/bin/tnn-miner-* ./
-RUN ./tnn-miner-* --test-spectre
 RUN ls -la ./
 RUN tar -czvf ${TARGZ_FILE} ./tnn-miner*
 RUN md5sum ./${TARGZ_FILE}
