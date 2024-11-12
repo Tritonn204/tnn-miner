@@ -6,6 +6,7 @@ const std::string units[] = {" ", " K", " M", " G", " T", " P"}; // Note the spa
 
 int update_handler(const boost::system::error_code& error)
 {
+  CHECK_CLOSE_RET(0);
   if (error == boost::asio::error::operation_aborted) {
     return 1;
   }

@@ -593,7 +593,7 @@ void rx0_stratum_session_nossl(
   bool submitThread = false;
   bool abort = false;
 
-  boost::thread([&](){
+  boost::thread subThread([&](){
     submitThread = true;
     while(!abort) {
       boost::unique_lock<boost::mutex> lock(mutex);
@@ -634,7 +634,7 @@ void rx0_stratum_session_nossl(
     submitThread = false;
   });
 
-  while (true)
+  while (!ABORT_MINER)
   {
     bool *C = isDev ? &devConnected : &isConnected;
     bool *B = isDev ? &submittingDev : &submitting;
@@ -772,6 +772,16 @@ void rx0_stratum_session_nossl(
       setcolor(BRIGHT_WHITE);
     }
     boost::this_thread::yield();
+    if(ABORT_MINER) {
+      bool *connPtr = isDev ? &devConnected : &isConnected;
+      bool *submitPtr = isDev ? &submittingDev : &submitting;
+      setForDisconnected(connPtr, submitPtr, &abort, &data_ready, &cv);
+      ioc.stop();
+    }
   }
+  cv.notify_all();
+
+  subThread.interrupt();
+  subThread.join();
   // submission_thread.interrupt();
 }
