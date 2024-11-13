@@ -447,7 +447,7 @@ void kas_stratum_session(
   bool submitThread = false;
   bool abort = false;
 
-  boost::thread([&](){
+  boost::thread subThread([&](){
     submitThread = true;
     while(!abort) {
       boost::unique_lock<boost::mutex> lock(mutex);
@@ -487,7 +487,7 @@ void kas_stratum_session(
     submitThread = false;
   });
 
-  while (true)
+  while (!ABORT_MINER)
   {
     bool *C = isDev ? &devConnected : &isConnected;
     bool *B = isDev ? &submittingDev : &submitting;
@@ -693,7 +693,17 @@ void kas_stratum_session(
       return fail(ec, "Stratum session error");
     }
     boost::this_thread::yield();
+    if(ABORT_MINER) {
+      bool *connPtr = isDev ? &devConnected : &isConnected;
+      bool *submitPtr = isDev ? &submittingDev : &submitting;
+      setForDisconnected(connPtr, submitPtr, &abort, &data_ready, &cv);
+      ioc.stop();
+    }
   }
+  cv.notify_all();
+
+  subThread.interrupt();
+  subThread.join();
 
   // submission_thread.interrupt();
   // printf("\n\n\nflagged connection loss\n");

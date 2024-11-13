@@ -250,7 +250,7 @@ void xatum_session(
   bool submitThread = false;
   bool abort = false;
 
-  boost::thread([&](){
+  boost::thread subThread([&](){
     submitThread = true;
     while(!abort) {
       boost::unique_lock<boost::mutex> lock(mutex);
@@ -290,7 +290,7 @@ void xatum_session(
     submitThread = false;
   });
 
-  while (true)
+  while (!ABORT_MINER)
   {
     bool *B = isDev ? &submittingDev : &submitting;
     try
@@ -355,7 +355,17 @@ void xatum_session(
       return fail(ec, "Xatum session error");
     }
     boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
+    if(ABORT_MINER) {
+      bool *connPtr = isDev ? &devConnected : &isConnected;
+      bool *submitPtr = isDev ? &submittingDev : &submitting;
+      setForDisconnected(connPtr, submitPtr, &abort, &data_ready, &cv);
+      ioc.stop();
+    }
   }
+  cv.notify_all();
+
+  subThread.interrupt();
+  subThread.join();
 
   // submission_thread.interrupt();
   stream.async_shutdown(yield[ec]);

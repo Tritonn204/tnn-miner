@@ -214,11 +214,7 @@ void hipKill() {
   #endif
 }
 
-void onExit() {
-  setcolor(BRIGHT_WHITE);
-  printf("\n\nExiting Miner...\n");
-  fflush(stdout);
-
+void beginExit() {
   hipKill();
   ABORT_MINER = true;
 
@@ -230,14 +226,20 @@ void onExit() {
 #endif
 }
 
+void onExit() {
+  setcolor(BRIGHT_WHITE);
+  printf("\n\nExiting Miner...\n");
+  fflush(stdout);
+}
+
 void sigterm(int signum) {
   std::cout << "\n\nTerminate signal (" << signum << ") received.\n" << std::flush;
-  exit(0);
+  beginExit();
 }
 
 void sigint(int signum) {
   std::cout << "\n\nInterrupt signal (" << signum << ") received.\n" << std::flush;
-  exit(0);
+  beginExit();
 }
 
 int main(int argc, char **argv)
@@ -1066,8 +1068,10 @@ Mining:
 
   // Create worker threads and set CPU affinity
  //  mutex.lock();
+  boost::thread minerThreads[threads];
   if (gpuMine)
   {
+    threads = 0;
     #ifdef TNN_HIP
     std::cout << "Starting GPU worker.." << std::endl;
     boost::thread t(POW_HIP[miningAlgo]);
@@ -1079,11 +1083,11 @@ Mining:
     std::cout << "Starting threads: ";
     for (int i = 0; i < threads; i++)
     {
-      boost::thread t(POW[miningAlgo], i + 1);
+      minerThreads[i] = boost::thread(POW[miningAlgo], i + 1);
 
       if (lockThreads)
       {
-        setAffinity(t.native_handle(), i);
+        setAffinity(minerThreads[i].native_handle(), i);
       }
       // if (threads == 1 || (n > 2 && i <= n - 2))
       // setPriority(t.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
@@ -1117,8 +1121,12 @@ Mining:
   // });
   // setPriority(reportThread.native_handle(), THREAD_PRIORITY_TIME_CRITICAL);
 
-  for(;;) {
+  while(!ABORT_MINER) {
     std::this_thread::yield();
+  }
+  for (unsigned i = 0; i < threads; ++i) {
+    minerThreads[i].interrupt();
+    minerThreads[i].join();
   }
 
   return EXIT_SUCCESS;
@@ -1241,6 +1249,7 @@ void getWork(bool isDev, int algo)
   bool caughtDisconnect = false;
 
 connectionAttempt:
+  CHECK_CLOSE;
   bool *B = isDev ? &devConnected : &isConnected;
   *B = false;
  //  mutex.lock();
@@ -1356,6 +1365,7 @@ connectionAttempt:
                            }
                          });
     ioc.run();
+
     if (err)
     {
       if (!isDev)
@@ -1404,6 +1414,7 @@ connectionAttempt:
     caughtDisconnect = false;
     boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
   }
+  CHECK_CLOSE;
   if (!isDev)
   {
    //  mutex.lock();
@@ -1437,6 +1448,7 @@ connectionAttempt:
    //  mutex.unlock();
   }
   caughtDisconnect = true;
+  CHECK_CLOSE;
   boost::this_thread::sleep_for(boost::chrono::milliseconds(10000));
   ioc.reset();
   goto connectionAttempt;

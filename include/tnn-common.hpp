@@ -32,6 +32,7 @@
 extern bool ABORT_MINER;
 
 #define CHECK_CLOSE if (ABORT_MINER) return;
+#define CHECK_CLOSE_RET(s) if (ABORT_MINER) return s;
 
 static const char *nullArg = "NULL";
 static const char* devWorkerName = "tnn-dev";                                      

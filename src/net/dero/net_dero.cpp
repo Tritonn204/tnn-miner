@@ -92,7 +92,8 @@ void dero_session(
     ws.async_handshake(host, url.c_str(), yield[ec]);
     if (ec) {
       ws.async_close(websocket::close_code::normal, yield[ec]);
-      return fail(ec, "handshake");
+      fail(ec, "handshake");
+      return;
     }
   }
   // This buffer will hold the incoming message
@@ -104,7 +105,7 @@ void dero_session(
   bool submitThread = false;
   bool abort = false;
 
-  boost::thread([&](){
+  boost::thread subThread([&](){
     submitThread = true;
     while(!abort) {
       boost::unique_lock<boost::mutex> lock(mutex);
@@ -141,7 +142,7 @@ void dero_session(
     submitThread = false;
   });
 
-  while (true)
+  while (!ABORT_MINER)
   {
     try
     {
@@ -250,5 +251,15 @@ void dero_session(
       setcolor(BRIGHT_WHITE);
     }
     boost::this_thread::yield();
+    if(ABORT_MINER) {
+      bool *connPtr = isDev ? &devConnected : &isConnected;
+      bool *submitPtr = isDev ? &submittingDev : &submitting;
+      setForDisconnected(connPtr, submitPtr, &abort, &data_ready, &cv);
+      ioc.stop();
+    }
   }
+  cv.notify_all();
+
+  subThread.interrupt();
+  subThread.join();
 }
