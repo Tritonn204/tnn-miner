@@ -70,7 +70,8 @@ std::string defaultHost[] = {
   "na.mining4people.com", // aix
   "178.16.131.178", // nxl
   "na.mining4people.com", // htn
-  "wala.gogpool.eu" // wala
+  "wala.gogpool.eu", // wala
+  "shaicoin.viporlab.net" // shai
 };
 
 std::string devPort[] = {
@@ -90,7 +91,8 @@ std::string devPort[] = {
   "3394", // aix
   "5555", // nxl
   "3390", // htn
-  "4633" // wala
+  "4633", // wala
+  "3333" // shai
 };
 // @ tritonn on Dero Name Service
 std::string devWallet[] = {
@@ -114,7 +116,9 @@ std::string devWallet[] = {
   "astrix:qz2mzpga6qv9uvnpueau7gs29vgu3ynj80xmd2dmja2kelzh6cssymsk3shjx",
   "nexellia:qqq3lwqrnh6alujup2me8gkedvp4w4d8zkjxdzmlrzpju2npdvvmctwl649xr",
   "hoosat:qr03chtq640d6p9r5p95kw4t4txcrt9x2cyfjf5w6wpfqwugs35yy472wq6hu",
-  "waglayla:qr6h2tqwx8ad57nkte9kvcd9cqyjfgk30gznnza9jte7qzfa6gu0xy5n3evj5"
+  "waglayla:qr6h2tqwx8ad57nkte9kvcd9cqyjfgk30gznnza9jte7qzfa6gu0xy5n3evj5",
+  // "sh1qxgw0wx3s6gyqjcdqpvpxedvrklth852lv5njxx" // Dirker
+  "sh1qvee0lejv22n7s43q3asw4uzap8d9t32k95cznj"
 };
 
 std::string testDevWallet[] = {
@@ -134,7 +138,9 @@ std::string testDevWallet[] = {
   "astrix:qz2mzpga6qv9uvnpueau7gs29vgu3ynj80xmd2dmja2kelzh6cssymsk3shjx",
   "nexellia:qqq3lwqrnh6alujup2me8gkedvp4w4d8zkjxdzmlrzpju2npdvvmctwl649xr",
   "hoosat:qr03chtq640d6p9r5p95kw4t4txcrt9x2cyfjf5w6wpfqwugs35yy472wq6hu",
-  "waglayla:qr6h2tqwx8ad57nkte9kvcd9cqyjfgk30gznnza9jte7qzfa6gu0xy5n3evj5"
+  "waglayla:qr6h2tqwx8ad57nkte9kvcd9cqyjfgk30gznnza9jte7qzfa6gu0xy5n3evj5",
+  // "sh1qxgw0wx3s6gyqjcdqpvpxedvrklth852lv5njxx" // Dirker
+  "sh1qvee0lejv22n7s43q3asw4uzap8d9t32k95cznj"
 };
 
 std::string *devSelection = devWallet;
@@ -150,7 +156,8 @@ std::unordered_map<std::string, int> coinSelector = {
   {"AIX", ASTRIX_HASH},
   {"NXL", NXL_HASH},
   {"HTN", HOOHASH},
-  {"WALA", WALA_HASH}
+  {"WALA", WALA_HASH},
+  {"SHAI", SHAI_HIVE}
 };
 
 void getWork(bool isDev, int algo);

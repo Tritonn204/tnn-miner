@@ -293,5 +293,10 @@ inline void do_session(
         break;
     }
   #endif
+  #ifdef TNN_SHAIHIVE
+  case SHAI_HIVE:
+    shai_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+    break;
+  #endif
   }
 }
