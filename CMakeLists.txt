@@ -65,6 +65,7 @@ option(WITH_ASTRIXHASH        "Enable AstrixHash algorithms family" ON)
 option(WITH_NXLHASH        "Enable NxlHash algorithms family" ON)
 option(WITH_HOOHASH        "Enable Hoohash algorithms family" ON)
 option(WITH_WALAHASH        "Enable Walahash algorithms family" ON)
+option(WITH_SHAIHIVE        "Enable ShaiHive algorithms family" ON)
 # option(WITH_ARGON2          "Enable Argon2 algorithms family" ON)
 # option(WITH_KAWPOW          "Enable KawPow algorithms family" ON)
 # option(WITH_GHOSTRIDER      "Enable GhostRider algorithm" ON)
@@ -391,6 +392,8 @@ file(GLOB_RECURSE SOURCES_CORE
   "${PROJECT_SOURCE_DIR}/src/crypto/skein/*.c"
   "${PROJECT_SOURCE_DIR}/src/broadcast/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/coins/dummy_miners.cpp"
+  "${PROJECT_SOURCE_DIR}/src/util/*.c"
+  "${PROJECT_SOURCE_DIR}/src/util/*.cpp"
 )
 
 file(GLOB SOURCES_NET
@@ -411,6 +414,7 @@ if (NOT WITH_HIP)
   include(cmake/nxl-hash.cmake)
   include(cmake/hoohash.cmake)
   include(cmake/wala-hash.cmake)
+  include(cmake/shai-hive.cmake)
 
   include(cmake/blake2.cmake)
   include(cmake/chacha20.cmake)

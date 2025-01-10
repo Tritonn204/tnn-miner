@@ -157,6 +157,7 @@ inline po::options_description get_prog_opts()
     ("nexellia", "Will mine Nexellia")
     ("hoosat", "Will mine Hoosat")
     ("waglayla", "Will mine Waglayla")
+    ("shai", "Will mine Shai")
   ;
 
   po::options_description dero("Dero", col_width);
@@ -202,6 +203,11 @@ inline po::options_description get_prog_opts()
   po::options_description waglayla("Waglayla", col_width);
   astrix.add_options()
     ("test-waglayla", "Run a basic wala-hash validation test")
+  ;
+
+  po::options_description shai("ShaiCoin", col_width);
+  astrix.add_options()
+    ("test-shai", "Run a basic shai-hive validation test")
   ;
 
   po::options_description advanced("Advanced", col_width);

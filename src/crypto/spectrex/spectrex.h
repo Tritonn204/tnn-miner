@@ -50,7 +50,6 @@ namespace SpectreX
       X[0] < Y[0]);
   }
 
-
   typedef struct worker
   {
     matrix matBuffer;
