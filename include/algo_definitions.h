@@ -10,6 +10,7 @@
 #define NXL_HASH 14
 #define HOOHASH 15
 #define WALA_HASH 16
+#define SHAI_HIVE 17
 
 // Each new blockchain has 10 reserved net protocol slots
 

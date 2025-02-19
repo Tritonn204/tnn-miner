@@ -112,10 +112,13 @@ int update_handler(const boost::system::error_code& error)
                   std::to_string(secondsUp) + "s >> ";
 
     double dPrint;
+    //printf("miningAlgo %d %s %ld\n", miningAlgo, (miningAlgo == SHAI_HIVE ? "true" : "false"), difficulty);
+    //fflush(stdout);
 
     switch(miningAlgo) {
       case DERO_HASH:
       case XELIS_HASH:
+      case SHAI_HIVE:
         dPrint = difficulty;
         break;
       case SPECTRE_X:

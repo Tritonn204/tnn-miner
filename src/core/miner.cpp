@@ -102,6 +102,7 @@ int protocol = XELIS_SOLO;
 std::string daemonType = "";
 std::string host = "NULL";
 std::string wallet = "NULL";
+std::string walletDev = "NULL";
 
 // Dev fee config
 // Dev fee is a % of hashrate
@@ -437,6 +438,21 @@ int main(int argc, char **argv)
     #endif
   }
 
+  if (vm.count("shai"))
+  {
+    fflush(stdout);
+    #if defined(TNN_SHAIHIVE)
+    symbol = "SHAI";
+    //protocol = RX0_SOLO; // Solo minin unsupported for now, so default to stratum instead
+    #else
+    setcolor(RED);
+    printf(unsupported_shai);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
+  }
+
   protocol = vm.count("xatum") ? XELIS_XATUM : protocol;
 
   useStratum |= vm.count("stratum");
@@ -530,6 +546,20 @@ int main(int argc, char **argv)
     #else
     setcolor(RED);
     printf(unsupported_waglayla);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
+  }
+
+  if (vm.count("test-shai"))
+  {
+    #if defined(TNN_SHAIHIVE)
+    ShaiHive::test();
+    return 0;
+    #else
+    setcolor(RED);
+    printf(unsupported_shai);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -924,6 +954,14 @@ fillBlanks:
   setcolor(BRIGHT_WHITE);
   #endif
 
+  #ifdef TNN_SHAIHIVE
+  if (miningAlgo == SHAI_HIVE) {
+    ShaiHive::tuneTimeLimit();
+  }
+  fflush(stdout);
+  setcolor(BRIGHT_WHITE);
+  #endif
+
   printf("\n");
 }
 
@@ -1036,6 +1074,11 @@ Mining:
     }
     if (miningAlgo == SPECTRE_X && (wallet.find("spectre", 0) == std::string::npos)) {
       std::cout << "Provided wallet address is not valid for Spectre" << std::endl;
+      return EXIT_FAILURE;
+    }
+    if (miningAlgo == SHAI_HIVE && (wallet.find("sh1", 0) == std::string::npos))
+    {
+      std::cout << "Provided wallet address is not valid for Shai" << std::endl;
       return EXIT_FAILURE;
     }
   }
@@ -1332,7 +1375,17 @@ connectionAttempt:
           PORT = port;
           break;
         }
+        case SHAI_HIVE:
+        {
+          DAEMONTYPE = "";
+          DAEMONPROTOCOL = protocol;
+          HOST = host;
+          WORKER = devWorkerName;
+          PORT = port;
+          break;
+        }
       }
+      walletDev = devSelection[algo];
       boost::asio::spawn(ioc, std::bind(&do_session, DAEMONTYPE, DAEMONPROTOCOL, HOST, PORT, devSelection[algo], WORKER, algo, std::ref(ioc), std::ref(ctx), std::placeholders::_1, true),
                          // on completion, spawn will call this function
                          [&](std::exception_ptr ex)

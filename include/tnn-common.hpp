@@ -48,9 +48,10 @@ extern bool gpuMine;
 
 extern std::string host;
 extern std::string wallet;
+extern std::string walletDev;
 
 extern Num oneLsh256;      
-extern Num maxU256;     
+extern Num maxU256;
 
 extern boost::multiprecision::uint256_t bigDiff;
 extern boost::multiprecision::uint256_t bigDiff_dev;

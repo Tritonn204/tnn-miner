@@ -131,3 +131,14 @@ void kas_stratum_session(
     ssl::context &ctx,
     net::yield_context yield,
     bool isDev);
+
+// SHAI
+void shai_session(
+    std::string host,
+    std::string const &port,
+    std::string const &wallet,
+    std::string const &worker,
+    net::io_context &ioc,
+    ssl::context &ctx,
+    net::yield_context yield,
+    bool isDev);

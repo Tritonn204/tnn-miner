@@ -74,6 +74,8 @@ void mineHoosat(int tid);
 
 void mineWaglayla(int tid);
 
+void mineShai(int tid);
+
 typedef void (*mineFunc)(int);
 const mineFunc POW[] = {
   mineDero, // 0
@@ -92,6 +94,7 @@ const mineFunc POW[] = {
   mineAstrix,
   mineNexellia,
   mineHoosat,
-  mineWaglayla 
+  mineWaglayla,
+  mineShai
 };
 
