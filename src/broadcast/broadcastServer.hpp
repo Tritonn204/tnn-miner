@@ -19,7 +19,8 @@ namespace BroadcastServer {
   extern uint64_t startTime;
   extern int *accepted_ptr;
   extern int *rejected_ptr;
+  extern const char* algo_b;
   extern const char* version_b;
 
-  void serverThread(std::vector<int64_t> *HR30, int *accepted, int *rejected, const char *version, int rinterval);
+  void serverThread(std::vector<int64_t> *HR30, int *accepted, int *rejected, const char *algo, const char *version, int rinterval);
 };

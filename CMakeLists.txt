@@ -1,8 +1,25 @@
 # HIP support was added in CMake 3.21
-cmake_minimum_required(VERSION 3.16.3)
+cmake_minimum_required(VERSION 3.18)
+
+#cmake_policy(SET CMP0156 NEW)
 
 include(CMakePrintHelpers)
 cmake_print_variables(CMAKE_HOST_SYSTEM_NAME)
+
+# TODO: Rename WIN_CROSS to something more intelligent.  And maybe use it to specific the -march value?
+
+# Specify C++ standard
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+
+if(CMAKE_HOST_SYSTEM_NAME MATCHES Windows)
+  message(STATUS "Target system is Windows!")
+  set(CMAKE_C_COMPILER clang)
+  set(CMAKE_CXX_COMPILER clang++)
+  set(BOOST_TOOLSET_OPTS "BOOST_TOOLSET clang")
+  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -Wno-unused-command-line-argument")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-unused-command-line-argument")
+endif()
 
 set(TARGET_ARCH "amd64")
 set(CMAKE_BUILD_TYPE Release)
@@ -11,6 +28,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Ofast -Wuninitialized -
 
 option(USE_GCC        "Use GCC instead of Clang" OFF)
 option(USE_ASTRO_SPSA "Use Astro Stamped Permutation Suffix Array library" ON)
+option(WIN_CROSS      "Whether we are cross-compiling on Linux for Windows" OFF)
 
 # if (WIN32)
 #   if(WITH_HIP)
@@ -20,15 +38,19 @@ option(USE_ASTRO_SPSA "Use Astro Stamped Permutation Suffix Array library" ON)
 # endif()
 
 if(USE_GCC)
-  set(CMAKE_C_COMPILER gcc)
-  set(CMAKE_CXX_COMPILER g++)
-  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Wno-deprecated-declarations")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-deprecated-declarations")
+  if(NOT CMAKE_C_COMPILER)
+    set(CMAKE_C_COMPILER gcc)
+  endif()
+  if(NOT CMAKE_CXX_COMPILER)
+    set(CMAKE_CXX_COMPILER g++)
+  endif()
 else()
-  set(CMAKE_C_COMPILER clang)
-  set(CMAKE_CXX_COMPILER clang++)
-  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Wno-deprecated -Wno-nan-infinity-disabled")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-deprecated -Wno-nan-infinity-disabled")
+  if(NOT CMAKE_C_COMPILER)
+    set(CMAKE_C_COMPILER clang)
+  endif()
+  if(NOT CMAKE_CXX_COMPILER)
+    set(CMAKE_CXX_COMPILER clang++)
+  endif()
 endif()
 
 # set(CMAKE_C_COMPILER_WORKS 1)
@@ -73,7 +95,7 @@ option(WITH_SHAIHIVE        "Enable ShaiHive algorithms family" ON)
 # option(WITH_OPENCL          "Enable OpenCL backend" ON)
 set(WITH_OPENCL_VERSION 200 CACHE STRING "Target OpenCL version")
 set_property(CACHE WITH_OPENCL_VERSION PROPERTY STRINGS 120 200 210 220)
-option(WITH_HIP             "Enable GPU support through the HIP SDK" ON)
+option(WITH_HIP             "Enable GPU support through the HIP SDK" OFF)
 # option(WITH_CUDA            "Enable CUDA backend" ON)
 # option(WITH_NVML            "Enable NVML (NVIDIA Management Library) support (only if CUDA backend enabled)" ON)
 # option(WITH_ADL             "Enable ADL (AMD Display Library) or sysfs support (only if OpenCL backend enabled)" ON)
@@ -92,6 +114,7 @@ option(ARM_V7               "Force ARMv7 (32 bit) architecture, use with caution
 # End of XMRig options
 
 if (WITH_HIP)
+  set(USE_ASTRO_SPSA OFF)
   # if (WIN32)
   #   set(CMAKE_C_COMPILER clang-cl)
   #   set(CMAKE_CXX_COMPILER clang-cl)
@@ -134,6 +157,40 @@ project(
 
 set(PROJECT_VERSION ${INTERNAL_TNN_VERSION})
 
+if(USE_GCC)
+  if(NOT CMAKE_C_COMPILER)
+    set(CMAKE_C_COMPILER gcc)
+  endif()
+  if(NOT CMAKE_CXX_COMPILER)
+    set(CMAKE_CXX_COMPILER g++)
+  endif()
+
+  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Wno-deprecated-declarations")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-deprecated-declarations")
+else()
+  if(NOT CMAKE_C_COMPILER)
+    set(CMAKE_C_COMPILER clang)
+  endif()
+  if(NOT CMAKE_CXX_COMPILER)
+    set(CMAKE_CXX_COMPILER clang++)
+  endif()
+
+  # TODO: Rename this to SPSA_LIB_SUFFIX
+  set(CMAKE_LIB_SUFFIX "")
+  set(CMAKE_DO_OPAQUE "")
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    string(REGEX MATCH "^([0-9]+)" CXX_MAJOR_VERSION "${CMAKE_CXX_COMPILER_VERSION}") 
+    set(CMAKE_LIB_SUFFIX "_clang_${CXX_MAJOR_VERSION}")
+    if(NOT CMAKE_HOST_SYSTEM_NAME MATCHES Windows)
+      set(CMAKE_AR "llvm-ar-${CXX_MAJOR_VERSION}")
+      set(CMAKE_RANLIB "llvm-ranlib-${CXX_MAJOR_VERSION}")
+    endif()
+  endif()
+
+  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Wno-deprecated -Wno-nan-infinity-disabled ${CMAKE_DO_OPAQUE}")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-deprecated -Wno-nan-infinity-disabled ${CMAKE_DO_OPAQUE}")
+endif()
+
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
 include (CheckIncludeFile)
@@ -151,41 +208,47 @@ if(CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
   set(DO_STATIC " ")
 endif()
 
-if(CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin" OR USE_GCC)
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lc++ -fuse-ld=ld")
-else()
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
+
+if(DEFINED ENV{CPU_ARCHTARGET})
+  set(CPU_ARCHTARGET "$ENV{CPU_ARCHTARGET}")
 endif()
 
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
   set(WITH_HIP OFF)
   set(TARGET_ARCH "aarch64")
-  # AES needed for Xelisv2
-  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -flax-vector-conversions -march=armv8-a+aes")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flax-vector-conversions -march=armv8-a+aes")
-elseif($ENV{GITLAB_CI} MATCHES "true")
-  set(WITH_HIP OFF)
-  if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
-    set(TARGET_ARCH "aarch64")
-    set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -g -flax-vector-conversions -march=armv8-a+aes")
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -g -flax-vector-conversions -march=armv8-a+aes")
-  else()
-    set(TARGET_ARCH "amd64")
-    set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} ")
-    
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=$ENV{AMD64_TARGET_LEVEL}")
+  if (NOT CPU_ARCHTARGET)
+    set(CPU_ARCHTARGET "armv8-a+aes")
   endif()
+  # AES needed for Xelisv2
+  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -flax-vector-conversions -march=${CPU_ARCHTARGET}")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flax-vector-conversions -march=${CPU_ARCHTARGET}")
 else()
   set(TARGET_ARCH "amd64")
-  set(HIP_CPU_ARCHTARGET "-march=x86-64-v3")
   if (WITH_HIP)
-    set(HIP_CPU_ARCHTARGET "-mtune=generic -march=x86-64")
+    set(CPU_ARCHTARGET "x86-64")
+    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -mtune=generic")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -mtune=generic")
   endif()
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${HIP_CPU_ARCHTARGET} -m64")
+  if (NOT CPU_ARCHTARGET)
+    set(CPU_ARCHTARGET "x86-64-v3")
+  endif()
+  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -march=${CPU_ARCHTARGET} -m64")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=${CPU_ARCHTARGET} -m64")
 endif()
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -D\"CPU_ARCHTARGET=${CPU_ARCHTARGET}\"")
+#if(WIN_CROSS)
+#  set(WIN_CROSS_OPTS "${WIN_CROSS_OPTS} --target=x86_64-pc-windows-msvc")
+#  set(WIN_CROSS_OPTS "${WIN_CROSS_OPTS} \
+#  -I/src/clang64/include \
+#  -I/src/winsdk/crt/include \
+#  -I/src/winsdk/sdk/Include/ucrt \
+#  -I/src/winsdk/sdk/Include/shared \
+#  -I/src/winsdk/sdk/Include/um")
+#endif()
+#set(CMAKE_LIB_SUFFIX "${CMAKE_LIB_SUFFIX}_${CPU_ARCHTARGET}")
 
-set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} ${DO_STATIC} -DTNN_VERSION=${INTERNAL_TNN_VERSION}")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${DO_STATIC} -DTNN_VERSION=${INTERNAL_TNN_VERSION}")
+set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} ${DO_STATIC} -DTNN_VERSION=${INTERNAL_TNN_VERSION}") # ${WIN_CROSS_OPTS}")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${DO_STATIC} -DTNN_VERSION=${INTERNAL_TNN_VERSION}") # ${WIN_CROSS_OPTS}")
 
 cmake_print_variables(CMAKE_C_FLAGS_RELEASE)
 cmake_print_variables(CMAKE_CXX_FLAGS_RELEASE)
@@ -201,16 +264,18 @@ cmake_print_variables(CMAKE_CXX_FLAGS_RELEASE)
 
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fstack-protector")
 
-set (CMAKE_CXX_STANDARD 20)
-set (CMAKE_STANDARD_REQUIRED TRUE)
+#set (CMAKE_CXX_STANDARD 20)
+#set (CMAKE_STANDARD_REQUIRED TRUE)
 
 enable_language(ASM)
 
 set(OPENSSL_USE_STATIC_LIBS TRUE)
 
 if(WIN32)
+  message(STATUS "WIN32!")
   if(NOT WITH_HIP)
     set(OPENSSL_ROOT_DIR "C:/openssl/clang64")
+    set(SODIUM_ROOT_DIR "C:/sodium/clang64")
     include_directories(
       "C:/mingw64/include"
       "C:/mingw64/x86_64-w64-mingw32/include"
@@ -230,24 +295,21 @@ if(WIN32)
   endif()
   include_directories(
     ${OPENSSL_ROOT_DIR}/include
+    ${SODIUM_ROOT_DIR}/include
   )
   link_directories(
     ${OPENSSL_ROOT_DIR}/lib
+    ${SODIUM_ROOT_DIR}/lib
   )
 endif()
 
 # This stores downloaded dependencies so we do not need to re-download them
-set(CPM_SOURCE_CACHE "${PROJECT_SOURCE_DIR}/.cache/CPM")
+set(CPM_SOURCE_CACHE "${PROJECT_SOURCE_DIR}/_deps/CPM")
+cmake_print_variables(CPM_SOURCE_CACHE)
 
-set(CPM_DOWNLOAD_VERSION 0.39.0)
+set(CPM_DOWNLOAD_VERSION 0.40.8)
 
-if(CPM_SOURCE_CACHE)
-  set(CPM_DOWNLOAD_LOCATION "${CPM_SOURCE_CACHE}/cpm/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
-elseif(DEFINED ENV{CPM_SOURCE_CACHE})
-  set(CPM_DOWNLOAD_LOCATION "$ENV{CPM_SOURCE_CACHE}/cpm/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
-else()
-  set(CPM_DOWNLOAD_LOCATION "${CMAKE_BINARY_DIR}/cmake/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
-endif()
+set(CPM_DOWNLOAD_LOCATION "${PROJECT_SOURCE_DIR}/_deps/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
 
 if(NOT (EXISTS ${CPM_DOWNLOAD_LOCATION}))
   message(STATUS "Downloading CPM.cmake to ${CPM_DOWNLOAD_LOCATION}")
@@ -257,22 +319,17 @@ if(NOT (EXISTS ${CPM_DOWNLOAD_LOCATION}))
   )
 endif()
 
+cmake_print_variables(CPM_DOWNLOAD_LOCATION)
 include(${CPM_DOWNLOAD_LOCATION})
 
-set(OPENSSL_USE_STATIC_LIBS TRUE)
+#set(OPENSSL_USE_STATIC_LIBS TRUE)
 
+if (WIN_CROSS)
+  set(OPENSSL_ROOT "/src/clang64")
+endif()
 if (NOT WIN32 OR NOT WITH_HIP)
   find_package(OpenSSL REQUIRED)
 endif()
-
-link_directories(OpenSSL_LIBRARY_DIRS)
-
-find_program(LSB_RELEASE_EXEC lsb_release)
-execute_process(COMMAND ${LSB_RELEASE_EXEC} -cs
-    OUTPUT_VARIABLE LSB_RELEASE_CODENAME_SHORT
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-
 
 if (UNIX)
   set(THREAD_LIB pthread)
@@ -280,6 +337,19 @@ elseif(NOT WITH_HIP)
   set(THREAD_LIB winpthread)
 endif()
 
+if (WIN_CROSS)
+  set(THREAD_LIB winpthread)
+endif()
+cmake_print_variables(THREAD_LIB)
+
+if (WIN_CROSS)
+  set(Boost_ROOT "${PROJECT_SOURCE_DIR}/export/boost-x64")
+  set(COMMON_FLAGS "-DBOOST_HAS_THREADS=1 -Wno-nonportable-include-path -Wno-pragma-pack -Wno-ignored-attributes -Wno-ignored-pragma-intrinsic -Wno-comment -Wno-microsoft-anon-tag")
+  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} ${COMMON_FLAGS}")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${COMMON_FLAGS}")
+  #set(BOOST_HAS_THREADS "1")
+  #set(BOOST_THREADAPI "win32")
+endif()
 
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_MULTITHREADED ON)
@@ -289,7 +359,6 @@ if (NOT USE_CPM_BOOST)
 find_package(Boost 1.80 COMPONENTS
   chrono
   context
-  coroutine
   thread
   json
   atomic
@@ -300,11 +369,15 @@ endif()
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 # find_package(Threads REQUIRED)
 
+if (WIN_CROSS AND NOT Boost_FOUND)
+  message(FATAL_ERROR "Boost was not found: ${Boost_ROOT}")
+endif()
+
 if(Boost_FOUND AND NOT USE_CPM_BOOST)
   message("OS-provided Boost found")
-  set(TNN_BOOST_INCLUDES ${Boost_INCLUDE_DIRS})
+  set(TNN_BOOST_INCLUDES ${BOOST_INCLUDE_DIRS})
   include_directories(${TNN_BOOST_INCLUDES})
-  set(TNN_BOOST_LIBDIRS ${Boost_LIBRARY_DIRS})
+  set(TNN_BOOST_LIBDIRS ${BOOST_LIBRARY_DIRS})
 
   message(STATUS "Boost library directories: ${TNN_BOOST_LIBDIRS}")
 
@@ -318,16 +391,25 @@ else()
   #     "CMAKE_CXX_COMPILER clang-cl"
   #   )
   # endif()
+
+  file(DOWNLOAD https://github.com/boostorg/boost/releases/download/boost-1.86.0/boost-1.86.0-cmake.tar.xz
+       "${PROJECT_SOURCE_DIR}/_deps/boost-1.86.0-cmake.tar.xz"
+       EXPECTED_HASH SHA256=2c5ec5edcdff47ff55e27ed9560b0a0b94b07bd07ed9928b476150e16b0efc57)
+  if(WIN32)
+    set(CMAKE_ASM_FLAGS -Wno-unused-command-line-argument) # adding this flag as an example
+  endif()
   CPMAddPackage(
     NAME Boost
-    VERSION 1.85.0
-    URL https://github.com/boostorg/boost/releases/download/boost-1.85.0/boost-1.85.0-cmake.tar.xz
-    URL_HASH SHA256=0a9cc56ceae46986f5f4d43fe0311d90cf6d2fa9028258a95cab49ffdacf92ad
+    VERSION 1.86.0 # Versions less than 1.85.0 may need patches for installation targets.
+    URL "${PROJECT_SOURCE_DIR}/_deps/boost-1.86.0-cmake.tar.xz"
+    URL_HASH SHA256=2c5ec5edcdff47ff55e27ed9560b0a0b94b07bd07ed9928b476150e16b0efc57
     OPTIONS 
-      "Boost_USE_STATIC_LIBS ON" 
-      "Boost_ENABLE_CMAKE ON" 
-      "BOOST_INCLUDE_LIBRARIES chrono\\\;context\\\;coroutine\\\;multiprecision\\\;json\\\;thread\\\;atomic\\\;program_options" 
-      # "BOOST_TOOLSET clangw"  # Specify Windows Clang toolset
+      "BOOST_ENABLE_CMAKE ON"
+      "BOOST_SKIP_INSTALL_RULES ON" # Set `OFF` for installation
+      "BOOST_USE_STATIC_LIBS ON"
+      "BOOST_INSTALL_LAYOUT system"
+      "BOOST_INCLUDE_LIBRARIES chrono\\\;context\\\;coroutine\\\;multiprecision\\\;json\\\;thread\\\;atomic\\\;program_options"
+      "${BOOST_TOOLSET_OPTS}"  # Specify Clang toolset
       # ${CPM_COMPILER}  
       # "CMAKE_CXX_FLAGS /DCLANG_COMPILER=1 /fms-compatibility"
     # Maintain build compatibility between find_package and CMakeLists.txt variants
@@ -350,7 +432,33 @@ else()
 endif()
 
 # This is universal regardless of how wheter we compiled or found Boost
-set(TNN_BOOST_LIBS Boost::chrono Boost::context Boost::coroutine Boost::thread Boost::multiprecision Boost::json Boost::atomic Boost::program_options)
+#set(TNN_BOOST_LIBS Boost::chrono Boost::context Boost::coroutine Boost::thread Boost::json Boost::atomic Boost::program_options Boost::asio)
+set(TNN_BOOST_LIBS Boost::atomic Boost::context Boost::chrono Boost::json Boost::program_options Boost::thread) #@Boost::beast Boost::bind Boost::json Boost::chrono Boost::thread Boost::atomic Boost::program_options )
+
+set(WINSDK_DIR "${PROJECT_SOURCE_DIR}/wincross/winsdk")
+if(WIN_CROSS)
+#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -target x86_64-pc-windows-msvc")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -target x86_64-pc-windows-msvc")
+  set(CMAKE_SKIP_RPATH TRUE)
+  #set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=ld.lld-${CXX_MAJOR_VERSION} -target x86_64-pc-windows-msvc") # -Wl,-machine:x64")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld-link-${CXX_MAJOR_VERSION} -v -target x86_64-pc-windows-msvc") # -Wl,-machine:x64")
+  #link_directories("${WINSDK_DIR}/crt/lib/x64" "${WINSDK_DIR}/sdk/lib/ucrt/x64" "${WINSDK_DIR}/sdk/lib/um/x64")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L${WINSDK_DIR}/../clang64/lib")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L${WINSDK_DIR}/crt/lib/x64")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L${WINSDK_DIR}/sdk/lib/ucrt/x64")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L${WINSDK_DIR}/sdk/lib/um/x64")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L${TNN_BOOST_LIBDIRS}")
+  #set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Xlinker /force")
+  set(LINK_OPTIONS "${CMAKE_EXE_LINKER_FLAGS}")
+elseif(CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin" OR USE_GCC)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lc++ -fuse-ld=ld")
+elseif (CMAKE_HOST_SYSTEM_NAME MATCHES "Linux")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -v -fuse-ld=lld-${CXX_MAJOR_VERSION}")
+elseif (CMAKE_HOST_SYSTEM_NAME MATCHES "Windows")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=C:/mingw64/bin/ld.lld.exe")
+  #set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld-link")
+endif()
+cmake_print_variables(CMAKE_EXE_LINKER_FLAGS)
 
 if(APPLE OR WITH_HIP)
 CPMAddPackage(
@@ -383,6 +491,15 @@ include_directories(
   "${PROJECT_SOURCE_DIR}/lib"
   "${PROJECT_SOURCE_DIR}/extern"
 )
+if(WIN_CROSS)
+  include_directories(
+    "${WINSDK_DIR}/../clang64/include"
+    "${WINSDK_DIR}/crt/include"
+    "${WINSDK_DIR}/sdk/Include/ucrt"
+    "${WINSDK_DIR}/sdk/Include/shared"
+    "${WINSDK_DIR}/sdk/Include/um"
+  )
+endif()
 
 file(GLOB_RECURSE SOURCES_CORE
   "${PROJECT_SOURCE_DIR}/include/libkeccak/*.c"

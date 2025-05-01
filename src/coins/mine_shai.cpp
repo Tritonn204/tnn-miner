@@ -1,3 +1,4 @@
+#include <string>
 #include "miners.hpp"
 #include "tnn-hugepages.h"
 #include "hex.h"
@@ -82,6 +83,7 @@ void mineShai(int tid)
   byte devWork[ShaiHive::SHAI_DATA_SIZE];
 
   ShaiHive::ShaiCtx workCtx;
+  ShaiHive::ShaiCtx workCtxDev;
 
   std::string expected_input("00000020cafc0ab25e5afc8bfc42afe37d22b704c01e68003966d53498816d7204000000c52d2387493e40bfe688d366200e6cf1ab7ee8b668480306ad0afb214eced8b62a2b2867f35e061daecd29e8");
   std::string expected_hash("000d2b4c2d0181c1418237837c825481f5690ef36f01455528ce6b1b487a6c3a");
@@ -111,7 +113,7 @@ void mineShai(int tid)
   }
   else
   {
-    printf("%ld != %ld\n", expected_path_hex.length(), actual_path.length());
+    printf("%zu != %zu\n", expected_path_hex.length(), actual_path.length());
   }
   if (expected_path_hex == convertPathToHexString(workCtx.path))
   {
@@ -176,12 +178,16 @@ waitForJob:
 
       // std::string nonceStr = std::string(myJob.at("nonce").as_string());
 
+      /*
       byte *b2 = new byte[ShaiHive::SHAI_DATA_SIZE];
       hexstrToBytes(std::string(myJob.at("data").as_string()), b2);
       // std::cout << "Usr Job: " << std::string(myJob.at("job_id").as_string()) << " " << std::string(myJob.at("target").as_string()) << " " << std::string(myJob.at("data").as_string()) << std::endl
       //           << std::flush;
       memcpy(work, b2, ShaiHive::SHAI_DATA_SIZE);
       delete[] b2;
+      */
+      hexstrToBytes(std::string(myJobDev.at("data").as_string()), workCtx.data);
+
 
       // Num tgt = Num(target.c_str(), 16);
       // std::cout << "New Job: " << job_id << " " << target << " " << data << std::endl << std::flush;
@@ -189,12 +195,15 @@ waitForJob:
 
       if (devConnected)
       {
+        /*
         byte *b2d = new byte[ShaiHive::SHAI_DATA_SIZE];
         hexstrToBytes(std::string(myJobDev.at("data").as_string()), b2d);
         // std::cout << "Dev Job: " << std::string(myJobDev.at("job_id").as_string()) << " " << std::string(myJobDev.at("target").as_string()) << " " << std::string(myJobDev.at("data").as_string()) << std::endl
         //           << std::flush;
         memcpy(devWork, b2d, ShaiHive::SHAI_DATA_SIZE);
         delete[] b2d;
+        */
+        hexstrToBytes(std::string(myJobDev.at("data").as_string()), workCtxDev.data);
       }
 
       /*
@@ -241,13 +250,14 @@ waitForJob:
         mineJob = devMine ? &myJobDev : &myJob;
 
         std::string job_id = std::string(mineJob->at("job_id").as_string());
-        std::string data = std::string(mineJob->at("data").as_string());
+        //std::string data = std::string(mineJob->at("data").as_string());
 
 
         // printf("%s\n", target.c_str());
 
 
-        byte *WORK = devMine ? &devWork[0] : &work[0];
+        //byte *WORK = devMine ? &devWork[0] : &work[0];
+        byte *WORK = devMine ? &workCtxDev.data[0] : &workCtx.data[0];
         /*
         printf("before: 0x");
         for(int x = 0; x < ShaiHive::SHAI_DATA_SIZE; x++) {
@@ -339,7 +349,7 @@ waitForJob:
               path: path_hex,
               };
             */
-           
+            std::string job_id = std::string(mineJob->at("job_id").as_string());
             std::string pathHex = convertPathToHexString(workCtx.path);
             if (devMine)
             {
@@ -349,7 +359,7 @@ waitForJob:
               setcolor(BRIGHT_WHITE);
               devShare = {
                   {"type", "submit"},
-                  {"miner_id", walletDev.c_str()}, // devSelection[SHAI_COIN]},
+                  {"miner_id", devMiningProfile.wallet.c_str()}, // devSelection[SHAI_COIN]},
                   {"nonce", uint32ToHex(sN).c_str()},
                   {"job_id", job_id},
                   {"path", pathHex.c_str()}};
@@ -364,7 +374,7 @@ waitForJob:
               setcolor(BRIGHT_WHITE);
               share = {
                   {"type", "submit"},
-                  {"miner_id", wallet.c_str()},
+                  {"miner_id", miningProfile.wallet.c_str()},
                   {"nonce", uint32ToHex(sN).c_str()},
                   {"job_id", job_id},
                   {"path", pathHex.c_str()}};

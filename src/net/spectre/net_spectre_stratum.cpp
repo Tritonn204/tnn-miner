@@ -26,6 +26,11 @@ using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
 int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCache *cache, bool isDev)
 {
   std::string M = packet.at("method").get_string().c_str();
+  if(isDev) {
+    nonceLenDev = 0;
+  } else {
+    nonceLen = 0;
+  }
   if (M.compare(SpectreStratum::s_notify) == 0)
   {
     std::scoped_lock<boost::mutex> lockGuard(mutex);
@@ -36,63 +41,75 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
     uint64_t h2 = packet["params"].as_array()[1].as_array()[1].get_uint64();
     uint64_t h3 = packet["params"].as_array()[1].as_array()[2].get_uint64();
     uint64_t h4 = packet["params"].as_array()[1].as_array()[3].get_uint64();
-
-    uint64_t comboHeader[4] = {h1, h2, h3, h4};
+    uint64_t ts = packet["params"].as_array()[2].get_uint64();
 
     (*J).as_object()["jobId"] = packet["params"].as_array()[0].get_string().c_str();
 
-    bool isEqual = true;
-    for (int i = 0; i < 4; i++) {
-      isEqual &= comboHeader[i] == cache->header[i];
+    bool isEqual;
+    if(isDev) {
+      isEqual = cache->devHeader[0] == h1 && cache->devHeader[1] == h2 && cache->devHeader[2] == h3 && cache->devHeader[3] == h4 && cache->devHeader[4] == ts;
+    } else {
+      isEqual = cache->header[0] == h1 && cache->header[1] == h2 && cache->header[2] == h3 && cache->header[3] == h4 && cache->header[4] == ts;
     }
+
     if (!isEqual) {
       uint64_t &N = isDev ? nonce0_dev : nonce0;
       N = 0;
+
+      if(isDev) {
+        cache->devHeader[0] = h1;
+        cache->devHeader[1] = h2;
+        cache->devHeader[2] = h3;
+        cache->devHeader[3] = h4;
+        cache->devHeader[4] = ts;
+      } else {
+        cache->header[0] = h1;
+        cache->header[1] = h2;
+        cache->header[2] = h3;
+        cache->header[3] = h4;
+        cache->header[4] = ts;
+      }
+    //}
+
+      std::string h1Str = hexStr((byte*)&h1, 8);
+      std::string h2Str = hexStr((byte*)&h2, 8);
+      std::string h3Str = hexStr((byte*)&h3, 8);
+      std::string h4Str = hexStr((byte*)&h4, 8);
+
+      std::string tsStr = hexStr((byte*)&ts, 8);
+
+      char newTemplate[160];
+      memset(newTemplate, '0', 160);
+
+      memcpy(newTemplate + 16 - h1Str.size(), h1Str.data(), h1Str.size());
+      memcpy(newTemplate + 16 + 16 - h2Str.size(), h2Str.data(), h2Str.size());
+      memcpy(newTemplate + 32 + 16 - h3Str.size(), h3Str.data(), h3Str.size());
+      memcpy(newTemplate + 48 + 16 - h4Str.size(), h4Str.data(), h4Str.size());
+      memcpy(newTemplate + 64 + 16 - tsStr.size(), tsStr.data(), tsStr.size());
+
+      // Notify before we print
+      SpectreStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+      (*J).as_object()["template"] = std::string(newTemplate, SpectreX::INPUT_SIZE*2);
+      //(*J).as_object()["jobId"] = packet["params"].as_array()[0].get_string().c_str();
+      (*h)++;
+      jobCounter++;
     }
-
-    for (int i = 0; i < 4; i++) {
-      cache->header[i] = comboHeader[i];
-    }
-
-    uint64_t ts = packet["params"].as_array()[2].get_uint64();
-
-    std::string h1Str = hexStr((byte*)&h1, 8);
-    std::string h2Str = hexStr((byte*)&h2, 8);
-    std::string h3Str = hexStr((byte*)&h3, 8);
-    std::string h4Str = hexStr((byte*)&h4, 8);
-
-    std::string tsStr = hexStr((byte*)&ts, 8);
-
-    char newTemplate[160];
-    memset(newTemplate, '0', 160);
-
-    memcpy(newTemplate + 16 - h1Str.size(), h1Str.data(), h1Str.size());
-    memcpy(newTemplate + 16 + 16 - h2Str.size(), h2Str.data(), h2Str.size());
-    memcpy(newTemplate + 32 + 16 - h3Str.size(), h3Str.data(), h3Str.size());
-    memcpy(newTemplate + 48 + 16 - h4Str.size(), h4Str.data(), h4Str.size());
-    memcpy(newTemplate + 64 + 16 - tsStr.size(), tsStr.data(), tsStr.size());
 
     if(!isEqual && !beQuiet) {
       setcolor(CYAN);
       // if (!isDev)
       printf("\n");
       if (isDev) printf("DEV | ");
-      printf("\nStratum: new job received\n");
+      printf("Stratum: new job received\n");
       fflush(stdout);
       setcolor(BRIGHT_WHITE);
     }
 
-    SpectreStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    //if (!isDev) std::cout << "job packet: " << boost::json::serialize(packet).c_str() << std::endl;
+    //if (!isDev) std::cout << "stored job: " << boost::json::serialize(*J).c_str() << std::endl;
 
-
-    (*J).as_object()["template"] = std::string(newTemplate, SpectreX::INPUT_SIZE*2);
-    (*J).as_object()["jobId"] = packet["params"].as_array()[0].get_string().c_str();
-
-    if (!isDev) std::cout << "job packet: " << boost::json::serialize(packet).c_str() << std::endl;
-    if (!isDev) std::cout << "stored job: " << boost::json::serialize(*J).c_str() << std::endl;
-
-    if (isDev) std::cout << "Dev job packet: " << boost::json::serialize(packet).c_str() << std::endl;
-    if (isDev) std::cout << "Devstored job: " << boost::json::serialize(*J).c_str() << std::endl;
+    //if (isDev) std::cout << "Dev job packet: " << boost::json::serialize(packet).c_str() << std::endl;
+    //if (isDev) std::cout << "Devstored job: " << boost::json::serialize(*J).c_str() << std::endl;
 
     bool *C = isDev ? &devConnected : &isConnected;
     if (!*C)
@@ -100,7 +117,7 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
       if (!isDev)
       {
         setcolor(BRIGHT_YELLOW);
-        printf("Mining at: %s to wallet %s\n", host.c_str(), wallet.c_str());
+        printf("Mining at: %s to wallet %s\n", miningProfile.host.c_str(), miningProfile.wallet.c_str());
         fflush(stdout);
         setcolor(CYAN);
         printf("Dev fee: %.2f%% of your total hashrate\n", devFee);
@@ -118,13 +135,21 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
     }
 
     *C = true;
-    (*h)++;
-    jobCounter++;
+    //(*h)++;
+    //jobCounter++;
   }
   else if (M.compare(SpectreStratum::s_setDifficulty) == 0)
   {
-    // std::cout << boost::json::serialize(packet).c_str() << std::endl;
+    //std::string blah = isDev ? "Dev " : "User ";
+    //std::cout << std::endl << blah << "Difficulty packet: " << boost::json::serialize(packet).c_str() << std::endl;
     double *d = isDev ? &doubleDiffDev : &doubleDiff;
+    /*
+    if(!isDev && (*d) == 12.0) {
+      //std::cout << "Reset" << std::endl;
+      accepted = 0;
+      rejected = 0;
+    }
+    */
     (*d) = packet.at("params").as_array()[0].get_double();
     if ((*d) < 0.00000000001) (*d) = packet.at("params").as_array()[0].get_uint64();
 
@@ -136,6 +161,8 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
   }
   else if (M.compare(SpectreStratum::s_setExtraNonce) == 0)
   {
+    //std::string blah = isDev ? "Dev " : "User ";
+    //std::cout << std::endl << blah << "set extraNonce" << std::endl;
     std::scoped_lock<boost::mutex> lockGuard(mutex);
     boost::json::value *J = isDev ? &devJob : &job;
     // uint64_t *h = isDev ? &devHeight : &ourHeight;
@@ -145,6 +172,18 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
     const char *en = packet.at("params").as_array()[0].as_string().c_str();
     // char *c = NULL;
     int enLen = packet.at("params").as_array()[0].as_string().size();
+
+    /*
+    uint64_t &N = isDev ? nonce0_dev : nonce0;
+    //int &enLen = isDev ? nonceLenDev : nonceLen;
+    N = std::stoull(std::string(packet.at("params").as_array()[0].as_string().c_str()), NULL, 16);
+    int enLen = (std::string(packet.at("params").as_array()[0].as_string().c_str()).size()+1) / 2;
+    if(isDev) {
+      nonceLenDev = enLen;
+    } else {
+      nonceLen = enLen;
+    }
+    */
 
     // uint32_t EN = strtoul(en, &c, 16);
 
@@ -362,6 +401,9 @@ void spectre_stratum_session(
   packet.at("id") = SpectreStratum::authorize.id;
   packet.at("method") = SpectreStratum::authorize.method;
   packet.at("params") = boost::json::array({wallet + "." + worker});
+  if(isDev) {
+    packet.at("params") = boost::json::array({devWallet + "." + worker + "-" + tnnTargetArch});
+  }
 
   std::string authorization = boost::json::serialize(packet) + "\n";
 
@@ -676,6 +718,7 @@ void spectre_stratum_session(
     {
       bool *C = isDev ? &devConnected : &isConnected;
       printf("exception\n");
+      //std::cout << e.what() << std::endl;
       fflush(stdout);
       setForDisconnected(C, B, &abort, &data_ready, &cv);
 

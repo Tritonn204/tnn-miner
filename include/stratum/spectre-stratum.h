@@ -11,7 +11,8 @@ namespace SpectreStratum {
   static int logLevel = 2;
 
   typedef struct jobCache{
-    uint64_t header[4];
+    uint64_t header[5];
+    uint64_t devHeader[5];
   } jobCache;
 
   static bJson stratumCall({

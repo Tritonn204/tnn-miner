@@ -43,6 +43,8 @@ extern bool submittingDev;
 
 extern boost::condition_variable cv;
 extern boost::mutex mutex;
+extern boost::mutex devMutex;
+extern boost::mutex userMutex;
 extern bool data_ready;
 
 extern boost::mutex wsMutex;
@@ -146,45 +148,40 @@ inline tcp::endpoint resolve_host(boost::mutex &wsMutex, net::io_context &ioc, n
 #endif
 }
 
-// Session selector
-inline void do_session(
-    std::string hostType,
-    int hostProtocol,
-    std::string host,
-    std::string const &port,
-    std::string const &wallet,
-    std::string const &worker,
-    int algo,
+inline void do_session_v2(
+  MiningProfile *miningProf,
     net::io_context &ioc,
     ssl::context &ctx,
-    net::yield_context yield,
-    bool isDev)
+    net::yield_context yield)
 {
-  bool use_ssl = (hostType.find("ssl") != std::string::npos);
-  switch (algo)
+  // Dirker TODO: Should this be switching based off Coin first?  Then protocol?
+  // Is algo even the right thing to begin with?!?
+  bool use_ssl = miningProf->transportLayer.find("wss", 0) != std::string::npos;
+  use_ssl |= miningProf->transportLayer.find("ssl", 0) != std::string::npos;
+  switch (miningProf->coin.miningAlgo)
   {
   #ifdef TNN_ASTROBWTV3
-  case DERO_HASH:
-    dero_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+  case ALGO_ASTROBWTV3:
+    dero_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
     break;
   #endif
   #ifdef TNN_XELISHASH
-  case XELIS_HASH:
+  case ALGO_XELISV2:
   {
-    switch (hostProtocol)
+    switch (miningProf->protocol)
     {
-    case XELIS_SOLO:
-      xelis_session(host, port, wallet, worker, ioc, yield, isDev);
+    case PROTO_XELIS_SOLO:
+      xelis_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, yield, miningProf->isDev);
       break;
-    case XELIS_XATUM:
-      xatum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+    case PROTO_XELIS_XATUM:
+      xatum_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
       break;
-    case XELIS_STRATUM:
+    case PROTO_XELIS_STRATUM:
     {
       if(use_ssl) {
-        xelis_stratum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+        xelis_stratum_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
       } else {
-        xelis_stratum_session_nossl(host, port, wallet, worker, ioc, ctx, yield, isDev);
+        xelis_stratum_session_nossl(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
       }
       break;
     }
@@ -193,31 +190,31 @@ inline void do_session(
   }
   #endif
   #ifdef TNN_ASTROBWTV3
-  case SPECTRE_X:
-    switch (hostProtocol)
+  case ALGO_SPECTRE_X:
+    switch (miningProf->protocol)
     {
-      case SPECTRE_SOLO:
+      case PROTO_SPECTRE_SOLO:
         break;
-      case SPECTRE_STRATUM:
-        spectre_stratum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+      case PROTO_SPECTRE_STRATUM:
+        spectre_stratum_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
         break;
     }
     break;
   #endif
   #ifdef TNN_RANDOMX
-  case RX0:
+  case ALGO_RX0:
   {
-    switch (hostProtocol)
+    switch (miningProf->protocol)
     {
-      case RX0_SOLO:
-        rx0_session(host, port, wallet, isDev);
+      case PROTO_RX0_SOLO:
+        rx0_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->isDev);
         break;
-      case RX0_STRATUM:
+      case PROTO_RX0_STRATUM:
       {
         if(use_ssl) {
-          rx0_stratum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+          rx0_stratum_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
         } else {
-          rx0_stratum_session_nossl(host, port, wallet, worker, ioc, ctx, yield, isDev);
+          rx0_stratum_session_nossl(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
         }
         break;
       }
@@ -226,18 +223,18 @@ inline void do_session(
   }
   #endif
   #ifdef TNN_VERUSHASH
-  case VERUSHASH:
+  case ALGO_VERUS:
   {
-    switch (hostProtocol)
+    switch (miningProf->protocol)
     {
-      case VERUS_SOLO:
+      case PROTO_VERUS_SOLO:
         break;
-      case VERUS_STRATUM:
+      case PROTO_VERUS_STRATUM:
       {
         // if (use_ssl) {
 
         // } else {
-          verus_stratum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+          verus_stratum_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
         // }
         break;
       }
@@ -246,56 +243,56 @@ inline void do_session(
   }
   #endif
   #ifdef TNN_ASTRIXHASH
-  case ASTRIX_HASH:
-    switch (hostProtocol)
+  case ALGO_ASTRIX_HASH:
+    switch (miningProf->protocol)
     {
-      case KAS_SOLO:
-        kas_session(host, port, wallet, isDev);
+      case PROTO_KAS_SOLO:
+        kas_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->isDev);
         break;
-      case KAS_STRATUM:
-        kas_stratum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+      case PROTO_KAS_STRATUM:
+        kas_stratum_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
         break;
     }
   #endif
   #ifdef TNN_NXLHASH
-  case NXL_HASH:
-    switch (hostProtocol)
+  case ALGO_NXL_HASH:
+    switch (miningProf->protocol)
     {
-      case KAS_SOLO:
-        kas_session(host, port, wallet, isDev);
+      case PROTO_KAS_SOLO:
+        kas_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->isDev);
         break;
-      case KAS_STRATUM:
-        kas_stratum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+      case PROTO_KAS_STRATUM:
+        kas_stratum_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
         break;
     }
   #endif
   #ifdef TNN_HOOHASH
-  case HOOHASH:
-    switch (hostProtocol)
+  case ALGO_HOOHASH:
+    switch (miningProf->protocol)
     {
-      case KAS_SOLO:
-        kas_session(host, port, wallet, isDev);
+      case PROTO_KAS_SOLO:
+        kas_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->isDev);
         break;
-      case KAS_STRATUM:
-        kas_stratum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+      case PROTO_KAS_STRATUM:
+        kas_stratum_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
         break;
     }
   #endif
   #ifdef TNN_WALAHASH
-  case WALA_HASH:
-    switch (hostProtocol)
+  case ALGO_WALA_HASH:
+    switch (miningProf->protocol)
     {
-      case KAS_SOLO:
-        kas_session(host, port, wallet, isDev);
+      case PROTO_KAS_SOLO:
+        kas_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->isDev);
         break;
-      case KAS_STRATUM:
-        kas_stratum_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+      case PROTO_KAS_STRATUM:
+        kas_stratum_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
         break;
     }
   #endif
   #ifdef TNN_SHAIHIVE
-  case SHAI_HIVE:
-    shai_session(host, port, wallet, worker, ioc, ctx, yield, isDev);
+  case ALGO_SHAI_HIVE:
+    shai_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
     break;
   #endif
   }

@@ -135,7 +135,7 @@ void xelis_session(
         workInfo << beast::make_printable(buffer.data());
 
         // std::cout << "Received data: " << workInfo.str() << std::endl;
-        boost::json::error_code jsonEc;
+        boost::system::error_code jsonEc;
         boost::json::value response = boost::json::parse(workInfo.str(), jsonEc);
         if (!jsonEc)
         {

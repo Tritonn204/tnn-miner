@@ -6,7 +6,7 @@
 #include <memory.h>
 
 __attribute__((target("avx512f,avx512dq,avx512bw")))
-inline void PartialXor(const __m512i val, uint8_t* Src, uint8_t* Dest, uint64_t Size)
+static inline void PartialXor(const __m512i val, uint8_t* Src, uint8_t* Dest, uint64_t Size)
 {
 	_Alignas(64) uint8_t BuffForPartialOp[64];
 	memcpy(BuffForPartialOp, Src, Size);
@@ -15,7 +15,7 @@ inline void PartialXor(const __m512i val, uint8_t* Src, uint8_t* Dest, uint64_t 
 }
 
 __attribute__((target("avx512f,avx512dq,avx512bw")))
-inline void PartialStore(const __m512i val, uint8_t* Dest, uint64_t Size)
+static inline void PartialStore(const __m512i val, uint8_t* Dest, uint64_t Size)
 {
 	_Alignas(64) uint8_t BuffForPartialOp[64];
 	_mm512_storeu_si512((__m512i*)(BuffForPartialOp), val);

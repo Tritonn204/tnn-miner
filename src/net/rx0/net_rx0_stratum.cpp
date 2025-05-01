@@ -154,7 +154,7 @@ int handleRandomXStratumResponse(boost::json::object packet, bool isDev)
       {
         difficulty = rx_targetToDifficulty(newJob.at("target").as_string().c_str());
         setcolor(BRIGHT_YELLOW);
-        printf("Mining at: %s to wallet %s\n", host.c_str(), wallet.c_str());
+        printf("Mining at: %s to wallet %s\n", miningProfile.host.c_str(), miningProfile.wallet.c_str());
         fflush(stdout);
         setcolor(CYAN);
         printf("Dev fee: %.2f%% of your total hashrate\n", devFee);

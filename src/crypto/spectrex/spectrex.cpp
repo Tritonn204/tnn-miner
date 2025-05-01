@@ -158,17 +158,19 @@ namespace SpectreX
     const char *bwt_expected = "271bd27bf393fc8854e4ada0f255cef19c0e86c9b7245088bdafc01318172dc5";
     printf("BWT hash: %s\n", hexStr(w->astrobwtv3Hash, 32).c_str());
     printf("WANT    : %s\n\n", bwt_expected);
+    if(memcmp(hexStr(w->astrobwtv3Hash, 32).c_str(), bwt_expected, 32) != 0) {
+      printf("Failed\n");
+      pieces_failed += 1;
+    }
 
     const char *heavy_expected = "f50e05324f82cc8bd4c122eedc6f02eaa0b0b2e4faec4ff79e9b350d8ac3680b";
     printf("Heavy hash: %s\n", hexStr(w->scratchData, 32).c_str());
     printf("WANT      : %s\n\n", heavy_expected);
-
-    if(memcmp(hexStr(w->astrobwtv3Hash, 32).c_str(), bwt_expected, 32) != 0) {
-      pieces_failed += 1;
-    }
     if(memcmp(hexStr(w->scratchData, 32).c_str(), heavy_expected, 32) != 0) {
+      printf("Failed\n");
       pieces_failed += 1;
     }
+
     return pieces_failed;
   }
 }

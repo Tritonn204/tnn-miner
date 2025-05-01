@@ -42,3 +42,14 @@ blankfunc(mineHoosat);
 #ifndef TNN_WALAHASH
 blankfunc(mineWaglayla);
 #endif
+
+// Shai
+#ifndef TNN_SHAIHIVE
+blankfunc(mineShai);
+#endif
+
+#ifndef TNN_HIP
+blankfunc(mineAstrix_hip);
+blankfunc(mineNexellia_hip);
+blankfunc(mineWaglayla_hip);
+#endif

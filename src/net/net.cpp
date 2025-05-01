@@ -36,4 +36,5 @@ bool submitting = false;
 bool submittingDev = false;
 boost::condition_variable cv;
 bool data_ready = false;
+bool doShutdown = false;
 /* End definitions from net.hpp */

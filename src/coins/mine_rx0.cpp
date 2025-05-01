@@ -130,7 +130,8 @@ void randomx_set_flags(bool autoFlags) {
   setcolor(BRIGHT_WHITE);
 }
 
-void rxRPCTest() {
+int rxRPCTest() {
+  int toRet = 0;
   const char* expected = "2b21c0534efc99db149d3fdb6e2f2938958f85229157f7da1586da641c041004";
   const char* seedHash = "78a2c61c1cac2577a9a65287a27e933ab56929c1bf428a6e1768636bdfdc9989";
 
@@ -174,14 +175,21 @@ void rxRPCTest() {
   hexstrToBytes(blob, work);
   hexstrToBytes(nonceHex, &work[39]);
 
-  printf("%s | work\n%s: | daemonWork\n", 
+  printf("%s | work\n%s | daemonWork\n", 
     hexStr(work, std::string(blob).size()/2).c_str(), daemonBlob
   );
+  if(memcmp(hexStr(work, std::string(blob).size()/2).c_str(), daemonBlob, 200) != 0) {
+    toRet += 1;
+  }
 
   randomx_calculate_hash(vm, work, std::string(blob).size()/2, powHash);
   randomx_calculate_hash(vm, work, std::string(blob).size()/2, powHash);
 
   printf("%s | powHash\n%s | expected\n", hexStr(powHash, 32).c_str(), expected);
+  if(memcmp(hexStr(powHash, 32).c_str(), expected, 64) != 0) {
+    toRet += 1;
+  }
+  return toRet;
 }
 
 void mineRx0(int tid){
@@ -364,8 +372,8 @@ waitForJob:
             std::cout << "\nThread " << tid << " found a nonce!\n" << std::flush;
             setcolor(BRIGHT_WHITE);
                       
-            switch(protocol) {
-              case RX0_SOLO:
+            switch (miningProfile.protocol) {
+              case PROTO_RX0_SOLO:
               {
                 int fbSize = myJob.at("template").as_string().size() / 2;
                 byte *fullBlob = new byte[fbSize];
@@ -381,7 +389,7 @@ waitForJob:
                 delete[] fullBlob;
                 break;
               }
-              case RX0_STRATUM:
+              case PROTO_RX0_STRATUM:
               {
                 N = __builtin_bswap32(N);
                 share = {

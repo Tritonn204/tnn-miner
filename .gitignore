@@ -1,3 +1,6 @@
+wincross/*
+export/*
+build/*
 # Prerequisites
 **.d
 
@@ -29,7 +32,7 @@
 /config
 /.vscode
 /cpp_modules
-/build
+/build*
 /tests
 /boost-1.82.0/**
 /.cache
@@ -37,6 +40,8 @@
 /src/astrobwtv3/build
 /src/astrobwtv3/export
 /lib/astrospsa/
+/export/
+/_deps/
 
 # Xelis rust resources
 /src/xelis-hash/**.rs

@@ -10,6 +10,7 @@ namespace BroadcastServer
   int *accepted_ptr;
   int *rejected_ptr;
   int interval;
+  const char *algo_b;
   const char *version_b;
 
   void handleRequest(http::request<http::string_body> &req, http::response<http::string_body> &res)
@@ -30,6 +31,7 @@ namespace BroadcastServer
       auto uptime = std::chrono::duration_cast<std::chrono::seconds>(currentTime - startTimePoint).count();
       jsonData["uptime"] = uptime;
 
+      jsonData["algo"] = algo_b;
       jsonData["version"] = version_b;
 
       // Set the response headers and body
@@ -84,7 +86,7 @@ namespace BroadcastServer
     }
   }
 
-  void serverThread(std::vector<int64_t> *HR30, int *accepted, int *rejected, const char *version, int rinterval)
+  void serverThread(std::vector<int64_t> *HR30, int *accepted, int *rejected, const char *algo, const char *version, int rinterval)
   {
     interval = rinterval;
     startTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -96,6 +98,7 @@ namespace BroadcastServer
     accepted_ptr = accepted;
     rejected_ptr = rejected;
 
+    algo_b = algo;
     version_b = version;
 
     while (true)

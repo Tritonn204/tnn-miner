@@ -97,6 +97,7 @@ int update_handler(const boost::system::error_code& error)
     unitIdx++;
     hashrate /= 1000.0;
   }
+  latest_hashrate = hashrate;
 
   if (reportCounter >= reportInterval) {
     setcolor(BRIGHT_WHITE);
@@ -112,26 +113,22 @@ int update_handler(const boost::system::error_code& error)
                   std::to_string(secondsUp) + "s >> ";
 
     double dPrint;
-    //printf("miningAlgo %d %s %ld\n", miningAlgo, (miningAlgo == SHAI_HIVE ? "true" : "false"), difficulty);
+    //printf("miningAlgo %d %s %ld\n", miningAlgo, (miningAlgo == ALGO_SHAI_HIVE ? "true" : "false"), difficulty);
     //fflush(stdout);
 
-    switch(miningAlgo) {
-      case DERO_HASH:
-      case XELIS_HASH:
-      case SHAI_HIVE:
+    switch(miningProfile.coin.miningAlgo) {
+      case ALGO_ASTROBWTV3:
+      case ALGO_XELISV2:
+      case ALGO_RX0:
+      case ALGO_VERUS:
+      case ALGO_SHAI_HIVE:
         dPrint = difficulty;
         break;
-      case SPECTRE_X:
-        dPrint = doubleDiff;
-        break;
-      case RX0:
-      case VERUSHASH:
-        dPrint = difficulty;
-        break;
-      case ASTRIX_HASH:
-      case NXL_HASH:
-      case HOOHASH:
-      case WALA_HASH:
+      case ALGO_SPECTRE_X:
+      case ALGO_ASTRIX_HASH:
+      case ALGO_NXL_HASH:
+      case ALGO_HOOHASH:
+      case ALGO_WALA_HASH:
         dPrint = doubleDiff;
         break;
     }

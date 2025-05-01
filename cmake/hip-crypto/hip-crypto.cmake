@@ -3,6 +3,9 @@ if (WITH_HIP)
   message(STATUS "Building with HIP GPU support")
   cmake_minimum_required(VERSION 3.28) # TNN HIP language support requires 3.28
 
+  if(NOT DEFINED HIP_PLATFORM)
+    set(HIP_PLATFORM "amd")
+  endif()
   # set(HIP_PLATFORM "amd" CACHE STRING "Specify HIP platform (amd or nvidia)")
 
   # if(HIP_PLATFORM MATCHES "amd")
@@ -43,7 +46,7 @@ if (WITH_HIP)
   #   DESTINATION ${CMAKE_INSTALL_PREFIX}
   # )
 
-  if (HIP_PLATFORM MATCHES nvidia OR HIP_PLATFORM MATCHES nvcc)
+  if (HIP_PLATFORM MATCHES "nvidia" OR HIP_PLATFORM MATCHES "nvcc")
     # set(TNN_RDC "-rdc=false")
   else()
     set(TNN_RDC "-fno-gpu-rdc")

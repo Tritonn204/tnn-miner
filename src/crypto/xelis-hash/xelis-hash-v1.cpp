@@ -805,14 +805,14 @@ void xelis_benchmark_cpu_hash()
   alignas(64) workerData_xelis worker;
   alignas(64) byte hash_result[XELIS_HASH_SIZE] = {0};
 
-  auto start = std::chrono::high_resolution_clock::now();
+  auto start = std::chrono::steady_clock::now();
   for (uint32_t i = 0; i < ITERATIONS; ++i)
   {
     input[0] = i & 0xFF;
     input[1] = (i >> 8) & 0xFF;
     xelis_hash(input, worker, hash_result);
   }
-  auto end = std::chrono::high_resolution_clock::now();
+  auto end = std::chrono::steady_clock::now();
 
   std::chrono::duration<double, std::milli> elapsed = end - start;
   std::cout << "Time took: " << elapsed.count() << " ms" << std::endl;

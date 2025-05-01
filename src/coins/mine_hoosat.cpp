@@ -55,12 +55,12 @@ waitForJob:
       if (ourHeight == 0 || localOurHeight != ourHeight)
       {
         byte *b2 = new byte[HooHash::INPUT_SIZE];
-        switch (protocol)
+        switch (miningProfile.protocol)
         {
-        case KAS_SOLO:
+        case PROTO_KAS_SOLO:
           hexstrToBytes(std::string(myJob.at("template").as_string()), b2);
           break;
-        case KAS_STRATUM:
+        case PROTO_KAS_STRATUM:
           hexstrToBytes(std::string(myJob.at("template").as_string()), b2);
           break;
         }
@@ -78,12 +78,12 @@ waitForJob:
         if (devHeight == 0 || localDevHeight != devHeight)
         {
           byte *b2d = new byte[HooHash::INPUT_SIZE];
-          switch (protocol)
+          switch (devMiningProfile.protocol)
           {
-          case KAS_SOLO:
+          case PROTO_KAS_SOLO:
             hexstrToBytes(std::string(myJobDev.at("template").as_string()), b2d);
             break;
-          case KAS_STRATUM:
+          case PROTO_KAS_STRATUM:
             hexstrToBytes(std::string(myJobDev.at("template").as_string()), b2d);
             break;
           }
@@ -225,12 +225,12 @@ waitForJob:
             setcolor(CYAN);
             std::cout << "\n(DEV) Thread " << tid << " found a dev share\n" << std::flush;
             setcolor(BRIGHT_WHITE);
-            switch (protocol)
+            switch (devMiningProfile.protocol)
             {
-            case KAS_SOLO:
+            case PROTO_KAS_SOLO:
               devShare = {{"block_template", hexStr(&WORK[0], HooHash::INPUT_SIZE).c_str()}};
               break;
-            case KAS_STRATUM:
+            case PROTO_KAS_STRATUM:
               std::vector<char> nonceStr;
               // Num(std::to_string((n << enLen*8) >> enLen*8).c_str(),10).print(nonceStr, 16);
               Num(std::to_string(n).c_str(),10).print(nonceStr, 16);
@@ -257,12 +257,12 @@ waitForJob:
             setcolor(BRIGHT_YELLOW);
             std::cout << "\nThread " << tid << " found a nonce!\n" << std::flush;
             setcolor(BRIGHT_WHITE);
-            switch (protocol)
+            switch (miningProfile.protocol)
             {
-            case KAS_SOLO:
+            case PROTO_KAS_SOLO:
               share = {{"block_template", hexStr(&WORK[0], HooHash::INPUT_SIZE).c_str()}};
               break;
-            case KAS_STRATUM:
+            case PROTO_KAS_STRATUM:
               std::vector<char> nonceStr;
               // Num(std::to_string((n << enLen*8) >> enLen*8).c_str(),10).print(nonceStr, 16);
               Num(std::to_string(n).c_str(),10).print(nonceStr, 16);

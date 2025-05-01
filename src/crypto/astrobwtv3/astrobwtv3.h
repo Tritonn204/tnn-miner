@@ -2,7 +2,6 @@
 #define astrobwtv3
 
 #include "astroworker.h"
-#include "tnn-hugepages.h"
 
 #ifdef _MSC_VER
 #define NOMINMAX // Disable Windows macros for min and max
@@ -35,6 +34,7 @@
 #else
 #include <arpa/inet.h>
 #endif
+#include "tnn-hugepages.h"
 
 #include <atomic>
 #include <libcubwt.cuh>

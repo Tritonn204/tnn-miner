@@ -47,6 +47,21 @@ elseif(TNN_OS_UNIX)
     endif()
 endif()
 
+set(WINSDK_DIR "${PROJECT_SOURCE_DIR}/wincross/winsdk")
+# TODO: Rename this to something else
+if(WIN_CROSS)
+  set(WIN_CROSS_OPTS "${WIN_CROSS_OPTS} --target=x86_64-pc-windows-msvc")
+  set(WIN_CROSS_OPTS "${WIN_CROSS_OPTS} \
+  -I${WINSDK_DIR}/../clang64/include \
+  -I${WINSDK_DIR}/crt/include \
+  -I${WINSDK_DIR}/sdk/Include/ucrt \
+  -I${WINSDK_DIR}/sdk/Include/shared \
+  -I${WINSDK_DIR}/sdk/Include/um")
+endif()
+
+set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} ${WIN_CROSS_OPTS}")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${WIN_CROSS_OPTS}")
+
 if (WITH_SECURE_JIT)
     add_definitions(-DTNN_SECURE_JIT)
 endif()

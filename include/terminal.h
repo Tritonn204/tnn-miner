@@ -17,6 +17,7 @@ namespace po = boost::program_options;  // from <boost/program_options.hpp>
 
 static const char *versionString = XSTR(TNN_VERSION);
 static const char *consoleLine = " TNN-MINER ";
+static const char *targetArch = XSTR(CPU_ARCHTARGET);
 static const char *TNN = R"(
   
                                                             YB&&@5
@@ -215,6 +216,7 @@ inline po::options_description get_prog_opts()
     ("tune-warmup", po::value<int>()->default_value(1), "Number of seconds to warmup the CPU before starting the AstroBWTv3 tuning")
     ("tune-duration", po::value<int>()->default_value(2), "Number of seconds to tune *each* AstroBWTv3 algorithm. There will 3 or 4 algorithms depending on supported CPU features")
     ("no-tune", po::value<std::string>(), "<branch|lookup|avx2|wolf|aarch64> Use the specified AstroBWTv3 algorithm and skip tuning")
+    ("mine-time", po::value<int>()->default_value(0), "Mine for a given number of seconds and then exit")
   ;
 
   po::options_description debug("DEBUG", col_width);

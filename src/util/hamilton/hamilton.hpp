@@ -16,7 +16,7 @@
 
 namespace HamiltonGraph
 {
-  extern std::chrono::time_point<std::chrono::_V2::steady_clock, std::chrono::duration<long long int, std::ratio<1, 1000000000>>> start_time;
+  extern std::chrono::time_point<std::chrono::steady_clock, std::chrono::duration<long long int, std::ratio<1, 1000000000>>> start_time;
 
   typedef struct alignas(32) Node
   {
