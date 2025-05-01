@@ -49,18 +49,18 @@ waitForJob:
       if (ourHeight == 0 || localOurHeight != ourHeight)
       {
         byte *b2 = new byte[XELIS_TEMPLATE_SIZE];
-        switch (protocol)
+        switch (miningProfile.protocol)
         {
-        case XELIS_SOLO:
+        case PROTO_XELIS_SOLO:
           hexstrToBytes(std::string(myJob.at("template").as_string()), b2);
           break;
-        case XELIS_XATUM:
+        case PROTO_XELIS_XATUM:
         {
           std::string b64 = base64::from_base64(std::string(myJob.at("template").as_string().c_str()));
           memcpy(b2, b64.data(), b64.size());
           break;
         }
-        case XELIS_STRATUM:
+        case PROTO_XELIS_STRATUM:
           hexstrToBytes(std::string(myJob.at("template").as_string()), b2);
           break;
         }
@@ -75,18 +75,18 @@ waitForJob:
         if (devHeight == 0 || localDevHeight != devHeight)
         {
           byte *b2d = new byte[XELIS_TEMPLATE_SIZE];
-          switch (protocol)
+          switch (devMiningProfile.protocol)
           {
-          case XELIS_SOLO:
+          case PROTO_XELIS_SOLO:
             hexstrToBytes(std::string(myJobDev.at("template").as_string()), b2d);
             break;
-          case XELIS_XATUM:
+          case PROTO_XELIS_XATUM:
           {
             std::string b64 = base64::from_base64(std::string(myJobDev.at("template").as_string().c_str()));
             memcpy(b2d, b64.data(), b64.size());
             break;
           }
-          case XELIS_STRATUM:
+          case PROTO_XELIS_STRATUM:
             hexstrToBytes(std::string(myJobDev.at("template").as_string()), b2d);
             break;
           }
@@ -111,7 +111,7 @@ waitForJob:
         DIFF = devMine ? difficultyDev : difficulty;
         if (DIFF == 0)
           continue;
-        cmpDiff = ConvertDifficultyToBig(DIFF, XELIS_HASH);
+        cmpDiff = ConvertDifficultyToBig(DIFF, ALGO_XELISV2);
 
         uint64_t *nonce = devMine ? &i_dev : &i;
         (*nonce)++;
@@ -150,7 +150,7 @@ waitForJob:
         if (localJobCounter != jobCounter || localOurHeight != ourHeight)
           break;
 
-        if (CheckHash(powHash, cmpDiff, XELIS_HASH))
+        if (CheckHash(powHash, cmpDiff, ALGO_XELISV2))
         {
           if (!submit) {
             for(;;) {
@@ -160,7 +160,7 @@ waitForJob:
               boost::this_thread::yield();
             }
           }
-          if (protocol == XELIS_XATUM && littleEndian())
+          if (miningProfile.protocol == PROTO_XELIS_XATUM && littleEndian())
           {
             std::reverse(powHash, powHash + 32);
           }
@@ -184,18 +184,18 @@ waitForJob:
             setcolor(CYAN);
             std::cout << "\n(DEV) Thread " << tid << " found a dev share\n" << std::flush;
             setcolor(BRIGHT_WHITE);
-            switch (protocol)
+            switch (devMiningProfile.protocol)
             {
-            case XELIS_SOLO:
+            case PROTO_XELIS_SOLO:
               devShare = {{"block_template", hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str()}};
               break;
-            case XELIS_XATUM:
+            case PROTO_XELIS_XATUM:
               devShare = {
                   {"data", b64.c_str()},
                   {"hash", hexStr(&powHash[0], 32).c_str()},
               };
               break;
-            case XELIS_STRATUM:
+            case PROTO_XELIS_STRATUM:
               devShare = {{{"id", XelisStratum::submitID},
                            {"method", XelisStratum::submit.method.c_str()},
                            {"params", {devWorkerName,                                 // WORKER
@@ -218,18 +218,18 @@ waitForJob:
             setcolor(BRIGHT_YELLOW);
             std::cout << "\nThread " << tid << " found a nonce!\n" << std::flush;
             setcolor(BRIGHT_WHITE);
-            switch (protocol)
+            switch (miningProfile.protocol)
             {
-            case XELIS_SOLO:
+            case PROTO_XELIS_SOLO:
               share = {{"block_template", hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str()}};
               break;
-            case XELIS_XATUM:
+            case PROTO_XELIS_XATUM:
               share = {
                   {"data", b64.c_str()},
                   {"hash", hexStr(&powHash[0], 32).c_str()},
               };
               break;
-            case XELIS_STRATUM:
+            case PROTO_XELIS_STRATUM:
               share = {{{"id", XelisStratum::submitID},
                         {"method", XelisStratum::submit.method.c_str()},
                         {"params", {workerName,                                   // WORKER
@@ -320,18 +320,18 @@ waitForJob:
       if (ourHeight == 0 || localOurHeight != ourHeight)
       {
         byte *b2 = new byte[XELIS_TEMPLATE_SIZE];
-        switch (protocol)
+        switch (miningProfile.protocol)
         {
-        case XELIS_SOLO:
+        case PROTO_XELIS_SOLO:
           hexstrToBytes(std::string(myJob.at("miner_work").as_string()), b2);
           break;
-        case XELIS_XATUM:
+        case PROTO_XELIS_XATUM:
         {
           std::string b64 = base64::from_base64(std::string(myJob.at("miner_work").as_string().c_str()));
           memcpy(b2, b64.data(), b64.size());
           break;
         }
-        case XELIS_STRATUM:
+        case PROTO_XELIS_STRATUM:
           hexstrToBytes(std::string(myJob.at("miner_work").as_string()), b2);
           break;
         }
@@ -346,18 +346,18 @@ waitForJob:
         if (devHeight == 0 || localDevHeight != devHeight)
         {
           byte *b2d = new byte[XELIS_TEMPLATE_SIZE];
-          switch (protocol)
+          switch (devMiningProfile.protocol)
           {
-          case XELIS_SOLO:
+          case PROTO_XELIS_SOLO:
             hexstrToBytes(std::string(myJobDev.at("miner_work").as_string()), b2d);
             break;
-          case XELIS_XATUM:
+          case PROTO_XELIS_XATUM:
           {
             std::string b64 = base64::from_base64(std::string(myJobDev.at("miner_work").as_string().c_str()));
             memcpy(b2d, b64.data(), b64.size());
             break;
           }
-          case XELIS_STRATUM:
+          case PROTO_XELIS_STRATUM:
             hexstrToBytes(std::string(myJobDev.at("miner_work").as_string()), b2d);
             break;
           }
@@ -381,7 +381,7 @@ waitForJob:
         DIFF = devMine ? difficultyDev : difficulty;
         if (DIFF == 0)
           continue;
-        cmpDiff = ConvertDifficultyToBig(DIFF, XELIS_HASH);
+        cmpDiff = ConvertDifficultyToBig(DIFF, ALGO_XELISV2);
 
         uint64_t *nonce = devMine ? &i_dev : &i;
         (*nonce)++;
@@ -419,7 +419,7 @@ waitForJob:
         if (localJobCounter != jobCounter || localOurHeight != ourHeight)
           break;
 
-        if (CheckHash(powHash, cmpDiff, XELIS_HASH))
+        if (CheckHash(powHash, cmpDiff, ALGO_XELISV2))
         {
           if (!submit) {
             for(;;) {
@@ -429,11 +429,11 @@ waitForJob:
               boost::this_thread::yield();
             }
           }
-          if (protocol == XELIS_XATUM && littleEndian())
+          if (miningProfile.protocol == PROTO_XELIS_XATUM && littleEndian())
           {
             std::reverse(powHash, powHash + 32);
           }
-          // if (protocol == XELIS_STRATUM && littleEndian())
+          // if (miningProfile.protocol == PROTO_XELIS_STRATUM && littleEndian())
           // {
           //   std::reverse((byte*)&n, (byte*)n + 8);
           // }
@@ -453,18 +453,18 @@ waitForJob:
             setcolor(CYAN);
             std::cout << "\n(DEV) Thread " << tid << " found a dev share\n" << std::flush;
             setcolor(BRIGHT_WHITE);
-            switch (protocol)
+            switch (devMiningProfile.protocol)
             {
-            case XELIS_SOLO:
+            case PROTO_XELIS_SOLO:
               devShare = {{"block_template", hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str()}};
               break;
-            case XELIS_XATUM:
+            case PROTO_XELIS_XATUM:
               devShare = {
                   {"data", b64.c_str()},
                   {"hash", hexStr(&powHash[0], 32).c_str()},
               };
               break;
-            case XELIS_STRATUM:
+            case PROTO_XELIS_STRATUM:
               devShare = {{{"id", XelisStratum::submitID},
                            {"method", XelisStratum::submit.method.c_str()},
                            {"params", {devWorkerName,                                 // WORKER
@@ -487,18 +487,18 @@ waitForJob:
             setcolor(BRIGHT_YELLOW);
             std::cout << "\nThread " << tid << " found a nonce!\n" << std::flush;
             setcolor(BRIGHT_WHITE);
-            switch (protocol)
+            switch (miningProfile.protocol)
             {
-            case XELIS_SOLO:
+            case PROTO_XELIS_SOLO:
               share = {{"block_template", hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str()}};
               break;
-            case XELIS_XATUM:
+            case PROTO_XELIS_XATUM:
               share = {
                   {"data", b64.c_str()},
                   {"hash", hexStr(&powHash[0], 32).c_str()},
               };
               break;
-            case XELIS_STRATUM:
+            case PROTO_XELIS_STRATUM:
               share = {{{"id", XelisStratum::submitID},
                         {"method", XelisStratum::submit.method.c_str()},
                         {"params", {workerName,                                   // WORKER

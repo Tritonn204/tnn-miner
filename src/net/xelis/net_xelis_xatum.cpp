@@ -126,7 +126,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
       {
         // mutex.lock();
         setcolor(BRIGHT_YELLOW);
-        printf("Mining at: %s to wallet %s\n", host.c_str(), wallet.c_str());
+        printf("Mining at: %s to wallet %s\n", miningProfile.host.c_str(), miningProfile.wallet.c_str());
         fflush(stdout);
         setcolor(CYAN);
         printf("Dev fee: %.2f%% of your total hashrate\n", devFee);
@@ -139,7 +139,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
       {
         // mutex.lock();
         setcolor(CYAN);
-        printf("Connected to dev node: %s\n", host.c_str());
+        printf("Connected to dev node: %s\n", devMiningProfile.host.c_str());
         fflush(stdout);
         setcolor(BRIGHT_WHITE);
         // mutex.unlock();

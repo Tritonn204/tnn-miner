@@ -34,11 +34,7 @@ DWORD prev_mode;
 
 const int workerThreads = 2;
 
-std::string symbol = nullArg;
-std::string port = nullArg;
 std::string password = "x";
-
-bool useStratum = false;
 
 int threads = 0;
 int testOp = -1;
@@ -53,118 +49,11 @@ int tuneDurationSec;
 int cudaMemNumerator = 1000;
 int cudaMemDenominator = 750; //Kilobytes per worker in VRAM
 
-std::string defaultHost[] = {
-  "dero-node-sk.mysrv.cloud",
-  "fr.vipor.net", // xel
-  "fr.vipor.net",
-  "spectre.cedric-crispin.com", // spr
-  "monerohash.com", // rx0
-  "monerohash.com",
-  "monerohash.com",
-  "monerohash.com",
-  "monerohash.com",
-  "monerohash.com",
-  "monerohash.com",
-  "", // verus
-  "",
-  "na.mining4people.com", // aix
-  "178.16.131.178", // nxl
-  "na.mining4people.com", // htn
-  "wala.gogpool.eu", // wala
-  "shaicoin.viporlab.net" // shai
-};
-
-std::string devPort[] = {
-  "10300", // dero
-  "5177", // xel
-  "5177",
-  "4364", // spr
-  "2222", // rx0
-  "2222",
-  "2222",
-  "2222",
-  "2222",
-  "2222",
-  "2222",
-  "", // verus
-  "",
-  "3394", // aix
-  "5555", // nxl
-  "3390", // htn
-  "4633", // wala
-  "3333" // shai
-};
-// @ tritonn on Dero Name Service
-std::string devWallet[] = {
-  "dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw4wjqqp6y2n7",
-  "xel:xz9574c80c4xegnvurazpmxhw5dlg2n0g9qm60uwgt75uqyx3pcsqzzra9m",
-  "xel:xz9574c80c4xegnvurazpmxhw5dlg2n0g9qm60uwgt75uqyx3pcsqzzra9m",
-#if defined(__x86_64__)
-  "spectre:qr5l7q4s6mrfs9r7n0l090nhxrjdkxwacyxgk8lt2wt57ka6xr0ucvr0cmgnf",
-#else
-  "spectre:qqty6rrlsxwzcwdx7ge60256cw7r2adu7c8nqtsqxjmkt2c83h3kss3uqeay0",
-#endif
-  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
-  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
-  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
-  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
-  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
-  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
-  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
-  "", //verus
-  "", //verus
-  "astrix:qz2mzpga6qv9uvnpueau7gs29vgu3ynj80xmd2dmja2kelzh6cssymsk3shjx",
-  "nexellia:qqq3lwqrnh6alujup2me8gkedvp4w4d8zkjxdzmlrzpju2npdvvmctwl649xr",
-  "hoosat:qr03chtq640d6p9r5p95kw4t4txcrt9x2cyfjf5w6wpfqwugs35yy472wq6hu",
-  "waglayla:qr6h2tqwx8ad57nkte9kvcd9cqyjfgk30gznnza9jte7qzfa6gu0xy5n3evj5",
-  // "sh1qxgw0wx3s6gyqjcdqpvpxedvrklth852lv5njxx" // Dirker
-  "sh1qvee0lejv22n7s43q3asw4uzap8d9t32k95cznj"
-};
-
-std::string testDevWallet[] = {
-  "dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw4wjqqp6y2n7",
-  "xet:5zwxjesmz6gtpg3c6zt20n9nevsyeewavpx6nwmv08z2hu2dpp3sq8w8ue6",
-  "xet:5zwxjesmz6gtpg3c6zt20n9nevsyeewavpx6nwmv08z2hu2dpp3sq8w8ue6",
-  "spectredev:qqhh8ul66g7t6aj5ggzl473cpan25tv6yjm0cl4hffprgtqfvmyaq8q28m4z8",
-  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
-  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
-  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
-  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
-  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
-  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
-  "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe",
-  "", //verus
-  "", //verus
-  "astrix:qz2mzpga6qv9uvnpueau7gs29vgu3ynj80xmd2dmja2kelzh6cssymsk3shjx",
-  "nexellia:qqq3lwqrnh6alujup2me8gkedvp4w4d8zkjxdzmlrzpju2npdvvmctwl649xr",
-  "hoosat:qr03chtq640d6p9r5p95kw4t4txcrt9x2cyfjf5w6wpfqwugs35yy472wq6hu",
-  "waglayla:qr6h2tqwx8ad57nkte9kvcd9cqyjfgk30gznnza9jte7qzfa6gu0xy5n3evj5",
-  // "sh1qxgw0wx3s6gyqjcdqpvpxedvrklth852lv5njxx" // Dirker
-  "sh1qvee0lejv22n7s43q3asw4uzap8d9t32k95cznj"
-};
-
-std::string *devSelection = devWallet;
-
-std::unordered_map<std::string, int> coinSelector = {
-  {"DERO", DERO_HASH},
-  {"XEL", XELIS_HASH},
-  {"SPR", SPECTRE_X},
-  {"RX0", RX0},
-  {"XMR", RX0},
-  {"SAL", RX0},
-  {"ZEPH", RX0},
-  {"AIX", ASTRIX_HASH},
-  {"NXL", NXL_HASH},
-  {"HTN", HOOHASH},
-  {"WALA", WALA_HASH},
-  {"SHAI", SHAI_HIVE}
-};
-
-void getWork(bool isDev, int algo);
+void getWork_v2(MiningProfile *miningProf);
 void sendWork();
 void devWork();
 
-void mine(int tid, int algo = DERO_HASH);
+void mine(int tid, int algo = ALGO_ASTROBWTV3);
 void cudaMine();
 
 void benchmark(int i);
@@ -197,11 +86,11 @@ inline Num ConvertDifficultyToBig(int64_t d, int algo)
 {
   Num difficulty = Num(std::to_string(d).c_str(), 10);
   switch(algo) {
-    case DERO_HASH:
+    case ALGO_ASTROBWTV3:
       return oneLsh256 / difficulty;
-    case XELIS_HASH:
+    case ALGO_XELISV2:
       return maxU256 / difficulty;
-    case SPECTRE_X:
+    case ALGO_SPECTRE_X:
       return (oneLsh256-1) / difficulty;
     default:
       return 0;

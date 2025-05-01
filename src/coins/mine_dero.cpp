@@ -102,7 +102,7 @@ waitForJob:
 
         // printf("Difficulty: %" PRIx64 "\n", DIFF);
 
-        cmpDiff = ConvertDifficultyToBig(DIFF, DERO_HASH);
+        cmpDiff = ConvertDifficultyToBig(DIFF, ALGO_ASTROBWTV3);
         nonce += DERO_BATCH;
         byte *WORK = devMine ? &devWork[0] : &work[0];
 
@@ -138,7 +138,7 @@ waitForJob:
 
         for (int i = 0; i < DERO_BATCH; i++) {
           byte *currHash = &powHash[32*i];
-          if (CheckHash(currHash, cmpDiff, DERO_HASH))
+          if (CheckHash(currHash, cmpDiff, ALGO_ASTROBWTV3))
           {
             if (!submit) {
               for(;;) {

@@ -16,8 +16,8 @@
 
 #include <fnv1a.h>
 #include <xxhash64.h>
-#include "tnn-hugepages.h"
 #include "astrobwtv3.h"
+#include "tnn-hugepages.h"
 #include "astrotest.hpp"
 #include "branched_AVX2.h"
 
@@ -610,9 +610,16 @@ void AstroBWTv3_batch(byte *input, int inputLen, byte *outputhash, workerData &w
       // auto start = std::chrono::steady_clock::now();
       // divsufsort(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.sa, worker.data_len, worker.bA, worker.bB);
       #if defined(USE_ASTRO_SPSA)
-        SPSA(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.data_len, worker);
+        if(SPSA(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.data_len, worker)) {
+          memcpy(outputhash, worker.padding, 32);
+        } else {
+          byte *B = reinterpret_cast<byte *>(worker.sa);
+          hashSHA256(worker.sha256, B, (outputhash + 32*i), worker.data_len*4);
+        }
       #else
         divsufsort(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.sa, worker.data_len, worker.bA, worker.bB);
+        byte *B = reinterpret_cast<byte *>(worker.sa);
+        hashSHA256(worker.sha256, B, (outputhash + 32*i), worker.data_len*4);
       #endif
       // auto end = std::chrono::steady_clock::now();
       // auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
@@ -621,8 +628,8 @@ void AstroBWTv3_batch(byte *input, int inputLen, byte *outputhash, workerData &w
       // if (i == DERO_BATCH - 1) printf("divsufsort section #%d section took %dns\n", i+1, time.count());
     //  if (littleEndian())
     //  {
-        byte *B = reinterpret_cast<byte *>(worker.sa);
-        hashSHA256(worker.sha256, B, (outputhash + 32*i), worker.data_len*4);
+        //byte *B = reinterpret_cast<byte *>(worker.sa);
+        //hashSHA256(worker.sha256, B, (outputhash + 32*i), worker.data_len*4);
     //  } else {
     //    byte s[MAX_LENGTH * 4];
     //    for (int i = 0; i < worker.data_len; i++)
@@ -761,9 +768,18 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     // auto start = std::chrono::steady_clock::now();
     // divsufsort(worker.sData, worker.sa, worker.data_len, worker.bA, worker.bB);
     #if defined(USE_ASTRO_SPSA)
-      SPSA(worker.sData, worker.data_len, worker);
+      bool alreadySha = SPSA(worker.sData, worker.data_len, worker);
+      if(alreadySha) {
+        //printf("alreadySha\n");
+        memcpy(outputhash, worker.padding, 32);
+      } else {
+        byte *B = reinterpret_cast<byte *>(worker.sa);
+        hashSHA256(worker.sha256, B, outputhash, worker.data_len*4);
+      }
     #else
       divsufsort(worker.sData, worker.sa, worker.data_len, worker.bA, worker.bB);
+      byte *B = reinterpret_cast<byte *>(worker.sa);
+      hashSHA256(worker.sha256, B, outputhash, worker.data_len*4);
     #endif
     // auto end = std::chrono::steady_clock::now();
     // auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start);
@@ -782,8 +798,21 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
 
     // if (littleEndian())
     // {
-      byte *B = reinterpret_cast<byte *>(worker.sa);
-      hashSHA256(worker.sha256, B, outputhash, worker.data_len*4);
+/*
+byte *B = reinterpret_cast<byte *>(worker.sa);
+	int total_length = worker.data_len*4;
+        printf("hashLen: %d\n", total_length);
+        printf("added byte(astro): %d(%d) ", worker.data_len, total_length);
+        for(int x = total_length-20; x < total_length; x++) {
+          printf("%02x ", B[x]);
+          //printf("%02x ", (byte*)worker.sa[(x/4)]);
+        }
+        printf("\n");
+        */
+      //byte *B = reinterpret_cast<byte *>(worker.sa);
+      //hashSHA256(worker.sha256, B, outputhash, worker.data_len*4);
+
+	     //memcpy(outputhash, worker.padding, 32);
       // aoclSHA256(B, worker.data_len*4, worker.sHash);
       // worker.sHash = nHash;
     // }
@@ -824,7 +853,9 @@ void branchComputeCPU(workerData &worker, bool isTest, int wIndex)
 
     } else {
       worker.tries[wIndex]++;
-      if (debugOpOrder) printf("t: 0x%hx p: 0x%lx l: 0x%lx\n", worker.tries[wIndex], worker.prev_lhash, worker.lhash);
+      #ifdef DEBUG_OP_ORDER
+      if (debugOpOrder) printf("t: 0x%hx p: 0x%llx l: 0x%llx\n", worker.tries[wIndex], worker.prev_lhash, worker.lhash);
+      #endif
       worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries[wIndex];
       // __builtin_prefetch(&worker.random_switcher,0,3);
       // printf("%d worker.random_switcher %d %08jx\n", worker.tries[wIndex], worker.random_switcher, worker.random_switcher);
@@ -853,7 +884,9 @@ void branchComputeCPU(workerData &worker, bool isTest, int wIndex)
       }
 
       worker.chunk = &worker.sData[wIndex * ASTRO_SCRATCH_SIZE + (worker.tries[wIndex] - 1) * 256];
+      #ifdef DEBUG_OP_ORDER
       if (debugOpOrder) printf("worker.op: %03d p1: %03d p2: %03d\n", worker.op, worker.pos1, worker.pos2);
+      #endif
 
       if (worker.tries[wIndex] == 1) {
         worker.prev_chunk = worker.chunk;
@@ -861,6 +894,7 @@ void branchComputeCPU(workerData &worker, bool isTest, int wIndex)
         worker.prev_chunk = &worker.sData[wIndex * ASTRO_SCRATCH_SIZE + (worker.tries[wIndex] - 2) * 256];
       }
 
+      #ifdef DEBUG_OP_ORDER
       if (debugOpOrder) {
         printf("tries: %03hu chunk_before[  0->%03d]: ", worker.tries[wIndex], worker.pos2);
         for (int x = 0; x <= worker.pos2+16 && worker.pos2+16 < 256; x++) {
@@ -868,8 +902,10 @@ void branchComputeCPU(workerData &worker, bool isTest, int wIndex)
         }
         printf("\n");
       }
+      #endif
 
       memcpy(worker.chunk, worker.prev_chunk, 256);
+      #ifdef DEBUG_OP_ORDER
       if (debugOpOrder) {
         printf("tries: %03hu  chunk_fixed[  0->%03d]: ", worker.tries[wIndex], worker.pos2);
         for (int x = 0; x <= worker.pos2+16 && worker.pos2+16 < 256; x++) {
@@ -878,6 +914,7 @@ void branchComputeCPU(workerData &worker, bool isTest, int wIndex)
         }
         printf("\n");
       }
+      #endif
     }
 
     switch (worker.op)
@@ -3985,11 +4022,15 @@ void branchComputeCPU(workerData &worker, bool isTest, int wIndex)
     worker.A = (worker.chunk[worker.pos1] - worker.chunk[worker.pos2]);
     worker.A = (256 + (worker.A % 256)) % 256;
 
+    #ifdef DEBUG_OP_ORDER
     if (debugOpOrder){printf("worker.A: %02X\n", worker.A);}
+    #endif
 
     if (worker.A < 0x10)
     { // 6.25 % probability
+      #ifdef DEBUG_OP_ORDER
       if (debugOpOrder){printf("A\n");}
+      #endif
       __builtin_prefetch(worker.chunk, 0, 0);
       worker.prev_lhash = worker.lhash + worker.prev_lhash;
       worker.lhash = XXHash64::hash(worker.chunk, worker.pos2, 0);
@@ -3998,7 +4039,9 @@ void branchComputeCPU(workerData &worker, bool isTest, int wIndex)
 
     if (worker.A < 0x20)
     { // 12.5 % probability
+      #ifdef DEBUG_OP_ORDER
       if (debugOpOrder){printf("B\n");}
+      #endif
       __builtin_prefetch(worker.chunk, 0, 0);
       worker.prev_lhash = worker.lhash + worker.prev_lhash;
       worker.lhash = hash_64_fnv1a(worker.chunk, worker.pos2);
@@ -4008,7 +4051,9 @@ void branchComputeCPU(workerData &worker, bool isTest, int wIndex)
     if (worker.A < 0x30)
     { // 18.75 % probability
       // std::copy(worker.chunk, worker.chunk + worker.pos2, s3);
-        if (debugOpOrder){printf("C\n");}
+      #ifdef DEBUG_OP_ORDER
+      if (debugOpOrder){printf("C\n");}
+      #endif
       __builtin_prefetch(worker.chunk, 0, 0);
       worker.prev_lhash = worker.lhash + worker.prev_lhash;
       HH_ALIGNAS(16)
@@ -4025,7 +4070,9 @@ void branchComputeCPU(workerData &worker, bool isTest, int wIndex)
       //     printf("%d, ", worker.key.data[i]);
       //   }
       // }
-        if (debugOpOrder){printf("D\n");}
+      #ifdef DEBUG_OP_ORDER
+      if (debugOpOrder){printf("D\n");}
+      #endif
       __builtin_prefetch(&worker.key[wIndex], 0, 0);
       RC4(&worker.key[wIndex], 256, worker.chunk,  worker.chunk);
       if (255 - pushPos2 < MINPREFLEN)
@@ -4065,7 +4112,7 @@ void branchComputeCPU(workerData &worker, bool isTest, int wIndex)
     prefetch(worker.chunk, 256, 1);
     memcpy(&worker.sData[(worker.tries[wIndex] - 1) * 256], worker.chunk, 256);
 
-    
+    #ifdef DEBUG_OP_ORDER
     if (debugOpOrder && worker.op == sus_op) {
       printf("op %d result:\n", worker.op);
       for (int i = 0; i < 256; i++) {
@@ -4073,6 +4120,7 @@ void branchComputeCPU(workerData &worker, bool isTest, int wIndex)
       } 
       printf("\n");
     }
+    #endif
     // std::copy(worker.chunk, worker.chunk + 256, &worker.sData[(worker.tries[wIndex] - 1) * 256]);
 
     // memcpy(&worker->data.data()[(worker.tries[wIndex] - 1) * 256], worker.chunk, 256);
@@ -7822,7 +7870,9 @@ void branchComputeCPU_avx2(workerData &worker, bool isTest, int wIndex)
       worker.lhash = XXHash64::hash(worker.chunk, worker.pos2, 0);
 
       // uint64_t test = XXHash64::hash(worker.chunk, worker.pos2, 0);
+      #ifdef DEBUG_OP_ORDER
       if (worker.op == sus_op && debugOpOrder) printf("SIMD: A: new worker.lhash: %08jx\n", worker.lhash);
+      #endif
     }
 
     if (worker.A < 0x20)
@@ -7831,7 +7881,9 @@ void branchComputeCPU_avx2(workerData &worker, bool isTest, int wIndex)
       worker.lhash = hash_64_fnv1a(worker.chunk, worker.pos2);
 
       // uint64_t test = hash_64_fnv1a(worker.chunk, worker.pos2);
+      #ifdef DEBUG_OP_ORDER
       if (worker.op == sus_op && debugOpOrder) printf("SIMD: B: new worker.lhash: %08jx\n", worker.lhash);
+      #endif
     }
 
     if (worker.A < 0x30)
@@ -8108,7 +8160,9 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest, int wInde
       worker.lhash = XXHash64::hash(worker.chunk, worker.pos2, 0);
 
       // uint64_t test = XXHash64::hash(worker.chunk, worker.pos2, 0);
+      #ifdef DEBUG_OP_ORDER
       if (worker.op == sus_op && debugOpOrder) printf("SIMD: A: new worker.lhash: %08jx\n", worker.lhash);
+      #endif
     }
 
     if (worker.A < 0x20)
@@ -8117,7 +8171,9 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest, int wInde
       worker.lhash = hash_64_fnv1a(worker.chunk, worker.pos2);
 
       // uint64_t test = hash_64_fnv1a(worker.chunk, worker.pos2);
+      #ifdef DEBUG_OP_ORDER
       if (worker.op == sus_op && debugOpOrder) printf("SIMD: B: new worker.lhash: %08jx\n", worker.lhash);
+      #endif
     }
 
     if (worker.A < 0x30)
@@ -8128,7 +8184,9 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest, int wInde
       worker.lhash = highwayhash::SipHash(key2, (char*)worker.chunk, worker.pos2); // more deviations
 
       // uint64_t test = highwayhash::SipHash(key2, (char*)worker.chunk, worker.pos2); // more deviations
+      #ifdef DEBUG_OP_ORDER
       if (worker.op == sus_op && debugOpOrder) printf("SIMD: C: new worker.lhash: %08jx\n", worker.lhash);
+      #endif
     }
 
     if (worker.A <= 0x40)
@@ -8376,7 +8434,8 @@ void wolfCompute(workerData &worker, bool isTest, int wIndex)
       } else {
         worker.prev_chunk = &worker.sData[wIndex * ASTRO_SCRATCH_SIZE + (worker.tries[wIndex] - 2) * 256];
   
-        copyChunkData(worker, 0, 256);
+        //copyChunkData(worker, 0, 256);
+        memcpy(worker.chunk, worker.prev_chunk, 256);
         // worker.chunk[worker.pos2] = worker.chunk[worker.pos2];
 
         // copyChunkData(worker, worker.pos1, 256);
@@ -8409,7 +8468,7 @@ void wolfCompute(workerData &worker, bool isTest, int wIndex)
     #if defined(__AVX2__)
 
     __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
-    __m256i old = data;
+    //__m256i old = data;
     if (!isTest && !worker.isSame) {
       __m256i cmp = _mm256_cmpeq_epi8(data, _mm256_set1_epi8(worker.prev_chunk[worker.pos1]));
       uint32_t mask = (1 << (worker.pos2 - worker.pos1)) - 1;
@@ -8535,7 +8594,9 @@ after:
       worker.lhash = XXHash64::hash(worker.chunk, worker.pos2, 0);
 
       // uint64_t test = XXHash64::hash(worker.chunk, worker.pos2, 0);
+      #ifdef DEBUG_OP_ORDER
       if (worker.op == sus_op && debugOpOrder)  printf("Wolf: A: new worker.lhash: %08jx\n", worker.lhash);
+      #endif
     }
 
     if (worker.A < 0x20)
@@ -8545,7 +8606,9 @@ after:
       worker.lhash = hash_64_fnv1a(worker.chunk, worker.pos2);
 
       // uint64_t test = hash_64_fnv1a(worker.chunk, worker.pos2);
+      #ifdef DEBUG_OP_ORDER
       if (worker.op == sus_op && debugOpOrder)  printf("Wolf: B: new worker.lhash: %08jx\n", worker.lhash);
+      #endif
     }
 
     if (worker.A < 0x30)
@@ -8558,7 +8621,9 @@ after:
       worker.lhash = highwayhash::SipHash(key2, (char*)worker.chunk, worker.pos2); // more deviations
 
       // uint64_t test = highwayhash::SipHash(key2, (char*)worker.chunk, worker.pos2); // more deviations
+      #ifdef DEBUG_OP_ORDER
       if (worker.op == sus_op && debugOpOrder)  printf("Wolf: C: new worker.lhash: %08jx\n", worker.lhash);
+      #endif
     }
 
     if (worker.A <= 0x40)
@@ -8606,6 +8671,7 @@ after:
     if (pushPos1 < MINPREFLEN)
       pushPos1 = 0;
 
+    #ifdef DEBUG_OP_ORDER
     if (debugOpOrder && worker.op == sus_op) {
       printf("Wolf op %d result:\n", worker.op);
       for (int i = 0; i < 256; i++) {
@@ -8613,6 +8679,7 @@ after:
       } 
       printf("\n");
     }
+    #endif
 
     // memcpy(&worker.sData[(worker.tries[wIndex] - 1) * 256], worker.chunk, 256);
     
@@ -8668,7 +8735,9 @@ void lookupCompute(workerData &worker, bool isTest, int wIndex)
       // printf("%d worker.random_switcher %d %08jx\n", worker.tries[wIndex], worker.random_switcher, worker.random_switcher);
 
       worker.op = static_cast<byte>(worker.random_switcher);
+      #ifdef DEBUG_OP_ORDER
       if (debugOpOrder) worker.opsB.push_back(worker.op);
+      #endif
 
       // printf("op: %d\n", worker.op);
 
@@ -8737,6 +8806,7 @@ void lookupCompute(workerData &worker, bool isTest, int wIndex)
         #endif
       }
 
+      #ifdef DEBUG_OP_ORDER
       if (debugOpOrder && worker.op == sus_op) {
         printf("Lookup pre op %d, pos1: %d, pos2: %d::\n", worker.op, worker.pos1, worker.pos2);
         for (int i = 0; i < 256; i++) {
@@ -8744,6 +8814,7 @@ void lookupCompute(workerData &worker, bool isTest, int wIndex)
         } 
         printf("\n");
       }
+      #endif
     }
     // fmt::printf("op: %d, ", worker.op);
     // fmt::printf("worker.pos1: %d, worker.pos2: %d\n", worker.pos1, worker.pos2);
@@ -8925,7 +8996,9 @@ after:
       worker.lhash = XXHash64::hash(worker.chunk, worker.pos2, 0);
 
       // uint64_t test = XXHash64::hash(worker.chunk, worker.pos2, 0);
+      #ifdef DEBUG_OP_ORDER
       if (worker.op == sus_op && debugOpOrder)  printf("Lookup: A: new worker.lhash: %08jx\n", worker.lhash);
+      #endif
     }
 
     if (worker.A < 0x20)
@@ -8935,7 +9008,9 @@ after:
       worker.lhash = hash_64_fnv1a(worker.chunk, worker.pos2);
 
       // uint64_t test = hash_64_fnv1a(worker.chunk, worker.pos2);
+      #ifdef DEBUG_OP_ORDER
       if (worker.op == sus_op && debugOpOrder)  printf("Lookup: B: new worker.lhash: %08jx\n", worker.lhash);
+      #endif
     }
 
     if (worker.A < 0x30)
@@ -8948,7 +9023,9 @@ after:
       worker.lhash = highwayhash::SipHash(key2, (char*)worker.chunk, worker.pos2); // more deviations
 
       // uint64_t test = highwayhash::SipHash(key2, (char*)worker.chunk, worker.pos2); // more deviations
+      #ifdef DEBUG_OP_ORDER
       if (worker.op == sus_op && debugOpOrder)  printf("Lookup: C: new worker.lhash: %08jx\n", worker.lhash);
+      #endif
     }
 
     if (worker.A <= 0x40)
@@ -8995,6 +9072,7 @@ after:
     if (pushPos1 < MINPREFLEN)
       pushPos1 = 0;
 
+    #ifdef DEBUG_OP_ORDER
     if (debugOpOrder && worker.op == sus_op) {
       printf("Lookup op %d result:\n", worker.op);
       for (int i = 0; i < 256; i++) {
@@ -9002,6 +9080,7 @@ after:
       } 
       printf("\n");
     }
+    #endif
 
     // memcpy(&worker.sData[(worker.tries[wIndex] - 1) * 256], worker.chunk, 256);
     

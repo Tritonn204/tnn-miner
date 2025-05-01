@@ -146,9 +146,9 @@ int DeroTesting(int testOp, int testLen, bool useLookup) {
   int failedTests = 0;
   Num diffTest("1234567890123456789", 10);
 
+#if defined(__AVX2__)
   int scale = 32-18;
 
-#if defined(__x86_64__)
   uint32_t a = ~(scale > 28 ? 0xFFFFFFFF >> (std::max(4-(scale - 28), 0)*8) : 0);  
   uint32_t b = ~(scale > 24 ? 0xFFFFFFFF >> (std::max(4-(scale - 24), 0)*8) : 0);  
   uint32_t c = ~(scale > 20 ? 0xFFFFFFFF >> (std::max(4-(scale - 20), 0)*8) : 0);  
@@ -424,7 +424,7 @@ int runDeroOpTests(int testOp, int dataLen) {
     if(testWorker->opt[op]) {
       isOpt = '*';
     }
-    printf(" %cOp: %3d - %7ld / %7ld = %7.2f %% - %s | %7ld / %7ld = %7.2f %% - %s\n", isOpt, op, 
+    printf(" %cOp: %3d - %7lld / %7lld = %7.2f %% - %s | %7lld / %7lld = %7.2f %% - %s\n", isOpt, op, 
       controlResult->duration_ns.count(), testResult->duration_ns.count(), percent_speedup, valid ? "true" : "false",
       controlResult->duration_ns.count(), z_testResult->duration_ns.count(), z_percent_speedup, z_valid ? "true" : "false");
     if(!valid) {
@@ -3812,7 +3812,7 @@ void optest_ref(int op, workerData &worker, byte testData[32], OpTestResult &tes
     for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
       printf("%02x ", worker.step_3[i]);
     }
-    printf("\n took %ld ns\n---------------\n", time.count());
+    printf("\n took %lld ns\n---------------\n", time.count());
   }
 }
 
@@ -3853,7 +3853,7 @@ void optest_branchcpu(int op, workerData &worker, byte testData[32], OpTestResul
     for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
       printf("%02x ", worker.chunk[i]);
     }
-    printf("\n took %ld ns\n---------------\n", test_time.count());
+    printf("\n took %lld ns\n---------------\n", test_time.count());
   }
   return; 
 }
@@ -3894,7 +3894,7 @@ void optest_lookup(int op, workerData &worker, byte testData[32], OpTestResult &
     for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
       printf("%02x ", worker.chunk[i]);
     }
-    printf("\n took %ld ns\n---------------\n", test_time.count());
+    printf("\n took %lld ns\n---------------\n", test_time.count());
   }
   return; 
 }
@@ -3935,7 +3935,7 @@ void optest_wolf(int op, workerData &worker, byte testData[32], OpTestResult &te
     for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
       printf("%02x ", worker.chunk[i]);
     }
-    printf("\n took %ld ns\n---------------\n", test_time.count());
+    printf("\n took %lld ns\n---------------\n", test_time.count());
   }
   return; 
 }
@@ -3977,7 +3977,7 @@ void optest_avx2(int op, workerData &worker, byte testData[32], OpTestResult &te
     for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
       printf("%02x ", worker.chunk[i]);
     }
-    printf("\n took %ld ns\n---------------\n", test_time.count());
+    printf("\n took %lld ns\n---------------\n", test_time.count());
   }
   return; 
 }

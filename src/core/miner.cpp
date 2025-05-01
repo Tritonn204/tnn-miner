@@ -55,17 +55,25 @@
 #include "reporter.hpp"
 
 #include <coins/miners.hpp>
-#include <tnn_hip/coins/miners.hip.hpp>
 #include <tnn_hip/core/devInfo.hip.h>
+#include <boost/algorithm/string.hpp>
+
+#if defined(USE_ASTRO_SPSA)
+  #include "spsa.hpp"
+#endif
 
 // INITIALIZE COMMON STUFF
-int miningAlgo = DERO_HASH;
 int reportCounter = 0;
 int reportInterval = 3;
 
 bool ABORT_MINER = false;
+const char *tnnTargetArch = XSTR(CPU_ARCHTARGET);
+double latest_hashrate = 0.0;
 
 bool gpuMine = false;
+bool printHashrateOnExit = false;
+std::string wallet = "NULL";
+std::string devWallet = "NULL";
 
 int HIP_deviceCount = 0;
 
@@ -89,6 +97,8 @@ std::atomic<int64_t> benchCounter = 0;
 boost::asio::io_context my_context;
 boost::asio::steady_timer update_timer = boost::asio::steady_timer(my_context);
 std::chrono::time_point<std::chrono::steady_clock> g_start_time = std::chrono::steady_clock::now();
+int mine_time = 0;
+boost::asio::steady_timer mine_duration_timer = boost::asio::steady_timer(my_context);
 bool printHugepagesError = true;
 
 Num oneLsh256 = Num(1) << 256;
@@ -97,12 +107,9 @@ Num maxU256 = Num(2).pow(256) - 1;
 const auto processor_count = std::thread::hardware_concurrency();
 
 /* Start definitions from tnn-common.hpp */
-int protocol = XELIS_SOLO;
 
-std::string daemonType = "";
-std::string host = "NULL";
-std::string wallet = "NULL";
-std::string walletDev = "NULL";
+MiningProfile miningProfile = MiningProfile();
+MiningProfile devMiningProfile = MiningProfile();
 
 // Dev fee config
 // Dev fee is a % of hashrate
@@ -123,6 +130,9 @@ int accepted;
 //uint64_t hashrate;
 int64_t ourHeight;
 int64_t devHeight;
+
+int nonceLen;
+int nonceLenDev;
 
 int64_t difficulty;
 int64_t difficultyDev;
@@ -201,38 +211,85 @@ void initializeExterns() {
 }
 #endif
 
+int enhanceWallet(MiningProfile *currentProfile, bool checkWallet) {
+  if(checkWallet) {
+    if (currentProfile->coin.miningAlgo == ALGO_ASTROBWTV3 && !(currentProfile->wallet.find("der") == std::string::npos || currentProfile->wallet.find("det") == std::string::npos))
+    {
+      std::cout << "Provided wallet address is not valid for Dero" << std::endl;
+      return EXIT_FAILURE;
+    }
+    if (currentProfile->coin.miningAlgo == ALGO_XELISV2 && !(currentProfile->wallet.find("xel") == std::string::npos || currentProfile->wallet.find("xet") == std::string::npos || currentProfile->wallet.find("Kr") == std::string::npos))
+    {
+      std::cout << "Provided wallet address is not valid for Xelis" << std::endl;
+      return EXIT_FAILURE;
+    }
+    if (currentProfile->coin.miningAlgo == ALGO_SHAI_HIVE && !(currentProfile->wallet.find("sh1") == std::string::npos))
+    {
+      std::cout << "Provided wallet address is not valid for Shai" << std::endl;
+      return EXIT_FAILURE;
+    }
+  }
+
+  if(currentProfile->wallet.find("dero", 0) != std::string::npos) {
+    currentProfile->coin = coins[COIN_DERO];
+  }
+  if(currentProfile->wallet.find("xel:", 0) != std::string::npos || currentProfile->wallet.find("xet:", 0) != std::string::npos) {
+    currentProfile->coin = coins[COIN_XELIS];
+  }
+  if(currentProfile->wallet.find("spectre", 0) != std::string::npos) {
+    currentProfile->coin = coins[COIN_SPECTRE];
+    currentProfile->protocol = PROTO_SPECTRE_STRATUM;
+  }
+  return EXIT_SUCCESS;
+}
+
+
 void hipKill() {
   #ifdef TNN_HIP
   hipDeviceReset_wrapper();
   #endif
 }
 
-void beginExit() {
+void onExit() {
   hipKill();
   ABORT_MINER = true;
+  setcolor(BRIGHT_WHITE);
+  if(printHashrateOnExit) {
+    printf("\n\n%s: %d threads @ %2.2f with %d shares accepted (built with ", miningProfile.coin.coinPrettyName.c_str(), threads, latest_hashrate, accepted);
+#ifdef __clang__
+    std::cout << "Clang "
+              << __clang_major__ << "."
+              << __clang_minor__ << "."
+              << __clang_patchlevel__ << ")" << std::endl;
+#elif defined(__GNUC__)
+    std::cout << "GCC "
+              << __GNUC__ << "."
+              << __GNUC_MINOR__ << "."
+              << __GNUC_PATCHLEVEL__ << ")" << std::endl;
+#else
+    std::cout << "Unknown compiler" << std::endl;
+#endif
+  }
 
-  boost::this_thread::sleep_for(boost::chrono::seconds(1));
+  printf("\nExiting Miner...\n");
   fflush(stdout);
+
+  //boost::this_thread::sleep_for(boost::chrono::seconds(1));
+  //fflush(stdout);
 
 #if defined(_WIN32)
   SetConsoleMode(hInput, ENABLE_EXTENDED_FLAGS | (prev_mode));
 #endif
 }
 
-void onExit() {
-  setcolor(BRIGHT_WHITE);
-  printf("\n\nExiting Miner...\n");
-  fflush(stdout);
-}
-
 void sigterm(int signum) {
-  std::cout << "\n\nTerminate signal (" << signum << ") received.\n" << std::flush;
-  beginExit();
+  std::cout << "\n\nTerminate signal (" << signum << ") received." << std::flush;
+  exit(signum);
 }
 
 void sigint(int signum) {
-  std::cout << "\n\nInterrupt signal (" << signum << ") received.\n" << std::flush;
-  beginExit();
+  std::cout << "\n\nInterrupt signal (" << signum << ") received." << std::flush;
+  exit(signum);
 }
 
 int main(int argc, char **argv)
@@ -240,7 +297,7 @@ int main(int argc, char **argv)
   // test_cshake256();
 
   // GPUTest();
-  printf("pre test\n");
+  //printf("pre test\n");
   #ifdef TNN_HIP
   GPUTest();
   if (reportInterval == 3) reportInterval = 5;
@@ -250,7 +307,7 @@ int main(int argc, char **argv)
     HIP_pcieID[i] = getPCIBusId(i);
   }
   #endif
-  printf("post test\n");
+  //printf("post test\n");
 
   std::atexit(onExit);
   signal(SIGTERM, sigterm);
@@ -263,7 +320,7 @@ int main(int argc, char **argv)
   initWolfLUT();
   initializeExterns();
   #endif
-  printf("post wolf\n");
+  //printf("post wolf\n");
 
   // Check command line arguments.
   lookup2D_global = (uint16_t *)malloc_huge_pages(regOps_size * (256 * 256) * sizeof(uint16_t));
@@ -283,7 +340,7 @@ int main(int argc, char **argv)
   }
   catch (std::exception &e)
   {
-    printf("%s v%s\n", consoleLine, versionString);
+    printf("%s v%s %s\n", consoleLine, versionString, targetArch);
     std::cerr << "Error: " << e.what() << "\n";
     std::cerr << "Remember: Long options now use a double-dash -- instead of a single-dash -\n";
     return -1;
@@ -301,7 +358,8 @@ int main(int argc, char **argv)
   SetConsoleMode(hInput, ENABLE_EXTENDED_FLAGS | (prev_mode & ~ENABLE_QUICK_EDIT_MODE));
 #endif
   setcolor(BRIGHT_WHITE);
-  printf("%s v%s\n", consoleLine, versionString);
+  printf("%s v%s %s\n", consoleLine, versionString, targetArch);
+  printf("Compiled with %s\n", __VERSION__);
   if(vm.count("quiet")) {
     beQuiet = true;
   } else {
@@ -330,10 +388,10 @@ int main(int argc, char **argv)
   if (vm.count("dero"))
   {
     #if defined(TNN_ASTROBWTV3)
-    symbol = "DERO";
+    miningProfile.coin = coins[COIN_DERO];
     #else
     setcolor(RED);
-    printf(unsupported_astro);
+    printf("%s", unsupported_astro);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -343,10 +401,10 @@ int main(int argc, char **argv)
   if (vm.count("xelis"))
   {
     #if defined(TNN_XELISHASH)
-    symbol = "XEL";
+    miningProfile.coin = coins[COIN_XELIS];
     #else
     setcolor(RED);
-    printf(unsupported_xelishash);
+    printf("%s", unsupported_xelishash);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -356,11 +414,11 @@ int main(int argc, char **argv)
   if (vm.count("spectre"))
   {
     #if defined(TNN_ASTROBWTV3)
-    symbol = "SPR";
-    protocol = SPECTRE_STRATUM;
+    miningProfile.coin = coins[COIN_SPECTRE];
+    miningProfile.protocol = PROTO_SPECTRE_STRATUM;
     #else
     setcolor(RED);
-    printf(unsupported_astro);
+    printf("%s", unsupported_astro);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -370,11 +428,11 @@ int main(int argc, char **argv)
   if (vm.count("astrix"))
   {
     #if defined(TNN_ASTRIXHASH)
-    symbol = "AIX";
-    protocol = KAS_STRATUM;
+    miningProfile.coin = coins[COIN_AIX];
+    miningProfile.protocol = PROTO_KAS_STRATUM;
     #else
     setcolor(RED);
-    printf(unsupported_astrix);
+    printf("%s", unsupported_astrix);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -384,11 +442,11 @@ int main(int argc, char **argv)
   if (vm.count("nexellia"))
   {
     #if defined(TNN_ASTRIXHASH)
-    symbol = "NXL";
-    protocol = KAS_STRATUM;
+    miningProfile.coin = coins[COIN_NXL];
+    miningProfile.protocol = PROTO_KAS_STRATUM;
     #else
     setcolor(RED);
-    printf(unsupported_astrix);
+    printf("%s", unsupported_astrix);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -398,11 +456,11 @@ int main(int argc, char **argv)
   if (vm.count("hoosat"))
   {
     #if defined(TNN_HOOHASH)
-    symbol = "HTN";
-    protocol = KAS_STRATUM;
+    miningProfile.coin = coins[COIN_HTN];
+    miningProfile.protocol = PROTO_KAS_STRATUM;
     #else
     setcolor(RED);
-    printf(unsupported_hoohash);
+    printf("%s", unsupported_hoohash);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -412,11 +470,11 @@ int main(int argc, char **argv)
   if (vm.count("waglayla"))
   {
     #if defined(TNN_WALAHASH)
-    symbol = "WALA";
-    protocol = KAS_STRATUM;
+    miningProfile.coin = coins[COIN_WALA];
+    miningProfile.protocol = PROTO_KAS_STRATUM;
     #else
     setcolor(RED);
-    printf(unsupported_waglayla);
+    printf("%s", unsupported_waglayla);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -427,44 +485,31 @@ int main(int argc, char **argv)
   {
     fflush(stdout);
     #if defined(TNN_RANDOMX)
-    symbol = "RX0";
-    protocol = RX0_SOLO; // Solo minin unsupported for now, so default to stratum instead
+    miningProfile.coin = coins[COIN_RX0];
+    miningProfile.protocol = PROTO_RX0_SOLO; // Solo minin unsupported for now, so default to stratum instead
     #else
     setcolor(RED);
-    printf(unsupported_randomx);
+    printf("%s", unsupported_randomx);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
     #endif
   }
 
-  if (vm.count("shai"))
-  {
-    fflush(stdout);
-    #if defined(TNN_SHAIHIVE)
-    symbol = "SHAI";
-    //protocol = RX0_SOLO; // Solo minin unsupported for now, so default to stratum instead
-    #else
-    setcolor(RED);
-    printf(unsupported_shai);
-    fflush(stdout);
-    setcolor(BRIGHT_WHITE);
-    return 1;
-    #endif
-  }
+  miningProfile.protocol = vm.count("xatum") ? PROTO_XELIS_XATUM : miningProfile.protocol;
 
-  protocol = vm.count("xatum") ? XELIS_XATUM : protocol;
-
-  useStratum |= vm.count("stratum");
-  devSelection = vm.count("testnet") ? testDevWallet : devSelection;
+  miningProfile.useStratum |= vm.count("stratum");
 
   if (vm.count("test-spectre"))
   {
     #if defined(TNN_ASTROBWTV3)
+    #if defined(USE_ASTRO_SPSA)
+      initSPSA();
+    #endif
     return SpectreX::test();
     #else
     setcolor(RED);
-    printf(unsupported_astro);
+    printf("%s", unsupported_astro);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -478,7 +523,7 @@ int main(int argc, char **argv)
     return rc;
     #else
     setcolor(RED);
-    printf(unsupported_xelishash);
+    printf("%s", unsupported_xelishash);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -488,12 +533,12 @@ int main(int argc, char **argv)
   if (vm.count("test-randomx"))
   {
     #if defined(TNN_RANDOMX)
-    RandomXTest();
-    rxRPCTest();
-    return 0;
+    int rc = RandomXTest();
+    rc += rxRPCTest();
+    return rc;
     #else
     setcolor(RED);
-    printf(unsupported_randomx);
+    printf("%s", unsupported_randomx);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -506,7 +551,7 @@ int main(int argc, char **argv)
     return AstrixHash::test();
     #else
     setcolor(RED);
-    printf(unsupported_astrix);
+    printf("%s", unsupported_astrix);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -519,7 +564,7 @@ int main(int argc, char **argv)
     return NxlHash::test();
     #else
     setcolor(RED);
-    printf(unsupported_nexellia);
+    printf("%s", unsupported_nexellia);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -532,7 +577,7 @@ int main(int argc, char **argv)
     return HooHash::test();
     #else
     setcolor(RED);
-    printf(unsupported_hoohash);
+    printf("%s", unsupported_hoohash);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -545,7 +590,7 @@ int main(int argc, char **argv)
     return WalaHash::test();
     #else
     setcolor(RED);
-    printf(unsupported_waglayla);
+    printf("%s", unsupported_waglayla);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -555,11 +600,10 @@ int main(int argc, char **argv)
   if (vm.count("test-shai"))
   {
     #if defined(TNN_SHAIHIVE)
-    ShaiHive::test();
-    return 0;
+    return ShaiHive::test();
     #else
     setcolor(RED);
-    printf(unsupported_shai);
+    printf("%s", unsupported_shai);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -575,7 +619,7 @@ int main(int argc, char **argv)
     return 0;
     #else
     setcolor(RED);
-    printf(unsupported_xelishash);
+    printf("%s", unsupported_xelishash);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -589,7 +633,7 @@ int main(int argc, char **argv)
     return 0;
     #else
     setcolor(RED);
-    printf(unsupported_astro);
+    printf("%s", unsupported_astro);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     #endif
@@ -597,83 +641,55 @@ int main(int argc, char **argv)
 
   if (vm.count("daemon-address"))
   {
-    host = vm["daemon-address"].as<std::string>();
-    boost::char_separator<char> sep(":");
-    boost::tokenizer<boost::char_separator<char>> tok(host, sep);
-    std::vector<std::string> tokens;
-    std::copy(tok.begin(), tok.end(), std::back_inserter<std::vector<std::string> >(tokens));
-    if(tokens.size() == 2) {
-      host = tokens[0];
-      try
-      {
-        // given host:port
-        const int i{std::stoi(tokens[1])};
-        port = tokens[1];
-      }
-      catch (...)
-      {
-        // protocol:host
-        daemonType = tokens[0];
-        host = tokens[1];
-      }
-    } else if(tokens.size() == 3) {
-      daemonType = tokens[0];  // wss, stratum+tcp, stratum+ssl, et al
-      host = tokens[1];
-      port = tokens[2];
-    }
-    boost::replace_all(host, "/", "");
-    if (daemonType.size() > 0) {
-      if (daemonType.find("stratum") != std::string::npos) useStratum = true;
-      if (daemonType.find("xatum") != std::string::npos) protocol = XELIS_XATUM;
-    }
+    miningProfile.setPoolAddress(vm["daemon-address"].as<std::string>());
   }
 
   if (vm.count("port"))
   {
-    port = std::to_string(vm["port"].as<int>());
+    miningProfile.port = std::to_string(vm["port"].as<int>());
     try {
-      const int i{std::stoi(port)};
+      const int i{std::stoi(miningProfile.port)};
     } catch (...) {
-      printf("ERROR: provided port is invalid: %s\n", port.c_str());
+      printf("ERROR: provided port is invalid: %s\n", miningProfile.port.c_str());
       return 1;
     }
   }
   if (vm.count("wallet"))
   {
-    wallet = vm["wallet"].as<std::string>();
-    if(wallet.find("dero", 0) != std::string::npos) {
-      symbol = "DERO";
+    miningProfile.wallet = vm["wallet"].as<std::string>();
+    if(miningProfile.wallet.find("dero", 0) != std::string::npos) {
+      miningProfile.coin = coins[COIN_DERO];
     }
-    if(wallet.find("xel:", 0) != std::string::npos || wallet.find("xet:", 0) != std::string::npos) {
-      symbol = "XEL";
+    if(miningProfile.wallet.find("xel:", 0) != std::string::npos || miningProfile.wallet.find("xet:", 0) != std::string::npos) {
+      miningProfile.coin = coins[COIN_XELIS];
     }
-    if(wallet.find("spectre", 0) != std::string::npos || wallet.find("spectretest", 0) != std::string::npos) {
-      symbol = "SPR";
-      protocol = SPECTRE_STRATUM;
+    if(miningProfile.wallet.find("spectre", 0) != std::string::npos || miningProfile.wallet.find("spectretest", 0) != std::string::npos) {
+      miningProfile.coin = coins[COIN_SPECTRE];
+      miningProfile.protocol = PROTO_SPECTRE_STRATUM;
     }
-    if(wallet.find("astrix", 0) != std::string::npos || wallet.find("astrixtest", 0) != std::string::npos) {
-      symbol = "AIX";
-      protocol = KAS_STRATUM;
+    if(miningProfile.wallet.find("astrix", 0) != std::string::npos || miningProfile.wallet.find("astrixtest", 0) != std::string::npos) {
+      miningProfile.coin = coins[COIN_AIX];
+      miningProfile.protocol = PROTO_KAS_STRATUM;
     }
-    if(wallet.find("nexellia", 0) != std::string::npos || wallet.find("nexelliatest", 0) != std::string::npos) {
-      symbol = "NXL";
-      protocol = KAS_STRATUM;
+    if(miningProfile.wallet.find("nexellia", 0) != std::string::npos || miningProfile.wallet.find("nexelliatest", 0) != std::string::npos) {
+      miningProfile.coin = coins[COIN_NXL];
+      miningProfile.protocol = PROTO_KAS_STRATUM;
     }
-    if(wallet.find("hoosat", 0) != std::string::npos || wallet.find("hoosattest", 0) != std::string::npos) {
-      symbol = "HTN";
-      protocol = KAS_STRATUM;
+    if(miningProfile.wallet.find("hoosat", 0) != std::string::npos || miningProfile.wallet.find("hoosattest", 0) != std::string::npos) {
+      miningProfile.coin = coins[COIN_HTN];
+      miningProfile.protocol = PROTO_KAS_STRATUM;
     }
-    if(wallet.find("ZEPHYR", 0) != std::string::npos) {
-      symbol = "ZEPH";
-      protocol = RX0_SOLO;
+    if(miningProfile.wallet.find("ZEPHYR", 0) != std::string::npos) {
+      miningProfile.coin = coins[COIN_ZEPH];
+      miningProfile.protocol = PROTO_RX0_SOLO;
     }
 
     boost::char_separator<char> sep(".");
-    boost::tokenizer<boost::char_separator<char>> tok(wallet, sep);
+    boost::tokenizer<boost::char_separator<char>> tok(miningProfile.wallet, sep);
     std::vector<std::string> tokens;
     std::copy(tok.begin(), tok.end(), std::back_inserter<std::vector<std::string> >(tokens));
     if(tokens.size() == 2) {
-      wallet = tokens[0];
+      miningProfile.wallet = tokens[0];
       workerNameFromWallet = tokens[1];
     }
   }
@@ -693,6 +709,7 @@ int main(int argc, char **argv)
       workerName = boost::asio::ip::host_name();
     }
   }
+  miningProfile.workerName = workerName;
   if (vm.count("threads"))
   {
     threads = vm["threads"].as<int>();
@@ -766,6 +783,8 @@ int main(int argc, char **argv)
   tuneWarmupSec = vm["tune-warmup"].as<int>();
   tuneDurationSec = vm["tune-duration"].as<int>();
 
+  mine_time = vm["mine-time"].as<int>();
+
   // Ensure we capture *all* of the other options before we start using goto
   if (vm.count("test-dero"))
   {
@@ -774,6 +793,9 @@ int main(int argc, char **argv)
     mapZeroes();
     // end of temporary section
 
+    #if defined(USE_ASTRO_SPSA)
+      initSPSA();
+    #endif
     int rc = DeroTesting(testOp, testLen, useLookupMine);
     if(rc > 255) {
       rc = 1;
@@ -781,7 +803,7 @@ int main(int argc, char **argv)
     return rc;
     #else 
     setcolor(RED);
-    printf(unsupported_astro);
+    printf("%s", unsupported_astro);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -799,7 +821,8 @@ int main(int argc, char **argv)
 
 fillBlanks:
 {
-  if (symbol == nullArg)
+  std::string localSymbol;
+  if (miningProfile.coin.coinId == unknownCoin.coinId)
   {
     setcolor(CYAN);
     printf("%s\n", coinPrompt);
@@ -810,12 +833,12 @@ fillBlanks:
     std::getline(std::cin, cmdLine);
     if (cmdLine != "" && cmdLine.find_first_not_of(' ') != std::string::npos)
     {
-      symbol = cmdLine;
-      std::transform(symbol.begin(), symbol.end(), symbol.begin(), ::toupper);
+      localSymbol = cmdLine;
+      std::transform(localSymbol.begin(), localSymbol.end(), localSymbol.begin(), ::toupper);
     }
     else
     {
-      symbol = "DERO";
+      localSymbol = "DERO";
       setcolor(BRIGHT_YELLOW);
       printf("Default value will be used: %s\n\n", "DERO");
       fflush(stdout);
@@ -823,36 +846,35 @@ fillBlanks:
     }
   }
 
-  auto it = coinSelector.find(symbol);
-  if (it != coinSelector.end())
-  {
-    miningAlgo = it->second;
+  for(int x = 0; x < COIN_COUNT; x++) {
+    if(boost::iequals(coins[x].coinSymbol, localSymbol)) {
+      miningProfile.coin = coins[x];
+    }
   }
-  else
+  if(miningProfile.coin.coinId == unknownCoin.coinId)
   {
     setcolor(RED);
-    std::cout << "ERROR: Invalid coin symbol: " << symbol << std::endl << std::flush;
+    std::cout << "ERROR: Invalid coin symbol: " << localSymbol << std::endl << std::flush;
     setcolor(BRIGHT_YELLOW);
-    it = coinSelector.begin();
     printf("Supported symbols are:\n");
-    while (it != coinSelector.end())
-    {
-      printf("%s\n", it->first.c_str());
-      it++;
+    for(int x = 0; x < COIN_COUNT; x++) {
+      printf("%s\n", coins[x].coinSymbol.c_str());
     }
     printf("\n");
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
-    symbol = nullArg;
+    miningProfile.coin = unknownCoin;
     goto fillBlanks;
   }
 
   // necessary as long as the bridge is a thing
-  if (miningAlgo == SPECTRE_X) useStratum = true;
+  if (miningProfile.coin.miningAlgo == ALGO_SPECTRE_X) miningProfile.useStratum = true;
 
   int i = 0;
-  std::vector<std::string *> stringParams = {&host, &port, &wallet};
-  std::vector<const char *> stringDefaults = {defaultHost[miningAlgo].c_str(), devPort[miningAlgo].c_str(), devSelection[miningAlgo].c_str()};
+  std::vector<std::string *> stringParams = {&miningProfile.host, &miningProfile.port, &miningProfile.wallet};
+  std::vector<const char *> stringDefaults = {devInfo[miningProfile.coin.coinId].devHost.c_str(),
+                                              devInfo[miningProfile.coin.coinId].devPort.c_str(),
+                                              devInfo[miningProfile.coin.coinId].devWallet.c_str()};
   std::vector<const char *> stringPrompts = {daemonPrompt, portPrompt, walletPrompt};
   for (std::string *param : stringParams)
   {
@@ -878,52 +900,25 @@ fillBlanks:
         setcolor(BRIGHT_WHITE);
       }
 
-      if (param == &host) {
-        boost::char_separator<char> sep(":");
-        boost::tokenizer<boost::char_separator<char>> tok(host, sep);
-        std::vector<std::string> tokens;
-        std::copy(tok.begin(), tok.end(), std::back_inserter<std::vector<std::string> >(tokens));
-        if(tokens.size() == 2) {
-          host = tokens[0];
-          try
-          {
-            // given host:port
-            const int i{std::stoi(tokens[1])};
-            port = tokens[1];
-          }
-          catch (...)
-          {
-            // protocol:host
-            daemonType = tokens[0];
-            host = tokens[1];
-          }
-        } else if(tokens.size() == 3) {
-          daemonType = tokens[0];  // wss, stratum+tcp, stratum+ssl, et al
-          host = tokens[1];
-          port = tokens[2];
-        }
-        boost::replace_all(host, "/", "");
-        if (daemonType.size() > 0) {
-          if (daemonType.find("stratum") != std::string::npos) useStratum = true;
-          if (daemonType.find("xatum") != std::string::npos) protocol = XELIS_XATUM;
-        }
+      if (param == &miningProfile.host) {
+        miningProfile.setPoolAddress(miningProfile.host);
       }
     }
     i++;
   }
 
-  if (useStratum)
+  if (miningProfile.useStratum)
   {
-    switch (miningAlgo)
+    switch (miningProfile.coin.miningAlgo)
     {
-      case XELIS_HASH:
-        protocol = XELIS_STRATUM;
+      case ALGO_XELISV2:
+        miningProfile.protocol = PROTO_XELIS_STRATUM;
         break;
-      case SPECTRE_X:
-        protocol = SPECTRE_STRATUM;
+      case ALGO_SPECTRE_X:
+        miningProfile.protocol = PROTO_SPECTRE_STRATUM;
         break;
-      case RX0:
-        protocol = RX0_STRATUM;
+      case ALGO_RX0:
+        miningProfile.protocol = PROTO_RX0_STRATUM;
         break;
     }
   }
@@ -940,7 +935,7 @@ fillBlanks:
   setcolor(BRIGHT_YELLOW);
 
   #ifdef TNN_ASTROBWTV3
-  if (miningAlgo == DERO_HASH || miningAlgo == SPECTRE_X) {
+  if (miningProfile.coin.miningAlgo == ALGO_ASTROBWTV3 || miningProfile.coin.miningAlgo == ALGO_SPECTRE_X) {
     if (vm.count("no-tune")) {
       std::string noTune = vm["no-tune"].as<std::string>();
       if(!setAstroAlgo(noTune)) {
@@ -955,7 +950,7 @@ fillBlanks:
   #endif
 
   #ifdef TNN_SHAIHIVE
-  if (miningAlgo == SHAI_HIVE) {
+  if (miningProfile.coin.miningAlgo == ALGO_SHAI_HIVE) {
     ShaiHive::tuneTimeLimit();
   }
   fflush(stdout);
@@ -1053,6 +1048,7 @@ fillBlanks:
 
 Mining:
 {
+  printHashrateOnExit = true;
  //  mutex.lock();
   #ifndef TNN_HIP
     printSupported();
@@ -1060,40 +1056,27 @@ Mining:
     gpuMine = true;
   #endif
  //  mutex.unlock();1
-
-  if (checkWallet) {
-    if (miningAlgo == DERO_HASH && (wallet.find("der", 0) == std::string::npos && wallet.find("det", 0) == std::string::npos))
-    {
-      std::cout << "Provided wallet address is not valid for Dero" << std::endl;
-      return EXIT_FAILURE;
-    }
-    if (miningAlgo == XELIS_HASH && (wallet.find("xel", 0) == std::string::npos && wallet.find("xet") == std::string::npos && wallet.find("Kr", 0) == std::string::npos))
-    {
-      std::cout << "Provided wallet address is not valid for Xelis" << std::endl;
-      return EXIT_FAILURE;
-    }
-    if (miningAlgo == SPECTRE_X && (wallet.find("spectre", 0) == std::string::npos)) {
-      std::cout << "Provided wallet address is not valid for Spectre" << std::endl;
-      return EXIT_FAILURE;
-    }
-    if (miningAlgo == SHAI_HIVE && (wallet.find("sh1", 0) == std::string::npos))
-    {
-      std::cout << "Provided wallet address is not valid for Shai" << std::endl;
-      return EXIT_FAILURE;
-    }
+  int rc = enhanceWallet(&miningProfile, checkWallet);
+  if(rc != 0) {
+    return rc;
   }
+  #if defined(USE_ASTRO_SPSA)
+    initSPSA();
+  #endif
 
-  boost::thread GETWORK(getWork, false, miningAlgo);
+  boost::thread GETWORK(getWork_v2, &miningProfile);
   // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
-  boost::thread DEVWORK(getWork, true, miningAlgo);
+  devMiningProfile = miningProfile;
+  devMiningProfile.setDev(vm.count("testnet"));
+  boost::thread DEVWORK(getWork_v2, &devMiningProfile);
   // setPriority(DEVWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
   unsigned int n = std::thread::hardware_concurrency();
 
   #ifdef TNN_RANDOMX
 
-  if (miningAlgo == RX0) {
+  if (miningProfile.coin.miningAlgo == ALGO_RX0) {
     rx_hugePages = vm.count("rx-hugepages");
     randomx_set_flags(true);
     fflush(stdout);
@@ -1109,7 +1092,7 @@ Mining:
     threads = 0;
     #ifdef TNN_HIP
     std::cout << "Starting GPU worker.." << std::endl;
-    boost::thread t(POW_HIP[miningAlgo]);
+    boost::thread t(getMiningFunc(miningProfile.coin.miningAlgo, true), 0);
     #else
     printf("Please use a GPU TNN Miner binary...\n");
     return -1;
@@ -1118,7 +1101,7 @@ Mining:
     std::cout << "Starting threads: ";
     for (int i = 0; i < threads; i++)
     {
-      minerThreads[i] = boost::thread(POW[miningAlgo], i + 1);
+      minerThreads[i] = boost::thread(getMiningFunc(miningProfile.coin.miningAlgo, false), i + 1);
 
       if (lockThreads)
       {
@@ -1138,12 +1121,27 @@ Mining:
   g_start_time = std::chrono::steady_clock::now();
   if (broadcastStats)
   {
-    boost::thread BROADCAST(BroadcastServer::serverThread, &rate30sec, &accepted, &rejected, versionString, reportInterval);
+    boost::thread BROADCAST(BroadcastServer::serverThread, &rate30sec, &accepted, &rejected, miningProfile.coin.coinPrettyName.c_str(), versionString, reportInterval);
   }
 
   while (!isConnected)
   {
     boost::this_thread::yield();
+  }
+
+  if(mine_time > 5) {
+    mine_duration_timer.expires_after(std::chrono::seconds(mine_time));
+    std::cout << "Will mine for " << mine_time << " seconds" << std::endl;
+    mine_duration_timer.async_wait([&](const boost::system::error_code &ec)
+      {
+        ABORT_MINER = true;
+        std::cout << std::endl << "Mined for " << mine_time << " seconds" << std::endl;
+        update_timer.cancel();
+        mine_duration_timer.cancel();
+        // Stop all the io_context. So we can actually leave!
+        my_context.stop();
+        CHECK_CLOSE;
+      });
   }
 
   // boost::thread reportThread([&]() {
@@ -1159,6 +1157,10 @@ Mining:
   while(!ABORT_MINER) {
     std::this_thread::yield();
   }
+  //ioc.reset();
+  GETWORK.interrupt();
+  DEVWORK.interrupt();
+  std::cout << "Interrupting all threads...\n";
   for (unsigned i = 0; i < threads; ++i) {
     minerThreads[i].interrupt();
     minerThreads[i].join();
@@ -1275,7 +1277,7 @@ void setPriority(boost::thread::native_handle_type t, int priority)
 #endif
 }
 
-void getWork(bool isDev, int algo)
+void getWork_v2(MiningProfile *miningProf)
 {
   net::io_context ioc;
   ssl::context ctx = ssl::context{ssl::context::tlsv12_client};
@@ -1285,108 +1287,42 @@ void getWork(bool isDev, int algo)
 
 connectionAttempt:
   CHECK_CLOSE;
-  bool *B = isDev ? &devConnected : &isConnected;
+  bool *B = miningProf->isDev ? &devConnected : &isConnected;
   *B = false;
- //  mutex.lock();
   setcolor(BRIGHT_YELLOW);
-  std::cout << "Connecting...\n" << std::flush;
+  std::cout << (miningProf->isDev ? "Dev " : "") << "Connecting...\n";
   setcolor(BRIGHT_WHITE);
- //  mutex.unlock();
   try
   {
     // Launch the asynchronous operation
     bool err = false;
-    if (isDev)
+    if (miningProf->isDev)
     {
-      std::string DAEMONTYPE, HOST, WORKER, PORT;
-      int DAEMONPROTOCOL;
-
-      switch (algo)
+      switch (miningProf->coin.miningAlgo)
       {
-        case DERO_HASH:
+        case ALGO_ASTROBWTV3:
         {
-          DAEMONTYPE = "";
-          DAEMONPROTOCOL = protocol;
-          HOST = defaultHost[DERO_HASH];
-          WORKER = devWorkerName;
-          PORT = devPort[DERO_HASH];
+          miningProf->workerName = workerName;
           break;
         }
-        case XELIS_HASH:
+        case ALGO_XELISV2:
+        case ALGO_SPECTRE_X:
         {
-          DAEMONTYPE = "ssl";
-          DAEMONPROTOCOL = XELIS_STRATUM;
-          HOST = defaultHost[XELIS_HASH];
-          WORKER = devWorkerName;
-          PORT = devPort[XELIS_HASH];
+          miningProf->workerName = "tnn-dev";
           break;
         }
-        case SPECTRE_X:
+        case ALGO_RX0:
+        case ALGO_VERUS:
+        case ALGO_ASTRIX_HASH:
+        case ALGO_NXL_HASH:
+        case ALGO_HOOHASH:
+        case ALGO_WALA_HASH:
         {
-          DAEMONTYPE = "";
-          DAEMONPROTOCOL = SPECTRE_STRATUM;
-          HOST = defaultHost[SPECTRE_X];
-          WORKER = devWorkerName;
-          PORT = devPort[SPECTRE_X];
-          break;
-        }
-        case RX0:
-        {
-          DAEMONTYPE = "";
-          DAEMONPROTOCOL = RX0_STRATUM;
-          HOST = defaultHost[RX0];
-          WORKER = devWorkerName;
-          PORT = devPort[RX0];
-          break;
-        }
-        case ASTRIX_HASH:
-        {
-          DAEMONTYPE = "";
-          DAEMONPROTOCOL = KAS_STRATUM;
-          HOST = defaultHost[ASTRIX_HASH];
-          WORKER = devWorkerName;
-          PORT = devPort[ASTRIX_HASH];
-          break;
-        }
-        case NXL_HASH:
-        {
-          DAEMONTYPE = daemonType;
-          DAEMONPROTOCOL = protocol;
-          HOST = host;
-          WORKER = devWorkerName;
-          PORT = port;
-          break;
-        }
-        case HOOHASH:
-        {
-          DAEMONTYPE = "";
-          DAEMONPROTOCOL = KAS_STRATUM;
-          HOST = defaultHost[HOOHASH];
-          WORKER = devWorkerName;
-          PORT = devPort[HOOHASH];
-          break;
-        }
-        case WALA_HASH:
-        {
-          DAEMONTYPE = "";
-          DAEMONPROTOCOL = protocol;
-          HOST = host;
-          WORKER = devWorkerName;
-          PORT = port;
-          break;
-        }
-        case SHAI_HIVE:
-        {
-          DAEMONTYPE = "";
-          DAEMONPROTOCOL = protocol;
-          HOST = host;
-          WORKER = devWorkerName;
-          PORT = port;
+          miningProf->workerName = devWorkerName;
           break;
         }
       }
-      walletDev = devSelection[algo];
-      boost::asio::spawn(ioc, std::bind(&do_session, DAEMONTYPE, DAEMONPROTOCOL, HOST, PORT, devSelection[algo], WORKER, algo, std::ref(ioc), std::ref(ctx), std::placeholders::_1, true),
+      boost::asio::spawn(ioc, std::bind(&do_session_v2, miningProf, std::ref(ioc), std::ref(ctx), std::placeholders::_1),
                          // on completion, spawn will call this function
                          [&](std::exception_ptr ex)
                          {
@@ -1398,7 +1334,8 @@ connectionAttempt:
                          });
     }
     else
-      boost::asio::spawn(ioc, std::bind(&do_session, daemonType, protocol, host, port, wallet, workerName, algo, std::ref(ioc), std::ref(ctx), std::placeholders::_1, false),
+    {
+      boost::asio::spawn(ioc, std::bind(&do_session_v2, miningProf, std::ref(ioc), std::ref(ctx), std::placeholders::_1),
                          // on completion, spawn will call this function
                          [&](std::exception_ptr ex)
                          {
@@ -1408,21 +1345,22 @@ connectionAttempt:
                              err = true;
                            }
                          });
+    }
     ioc.run();
 
     if (err)
     {
-      if (!isDev)
+      if (!miningProf->isDev)
       {
        //  mutex.lock();
         setcolor(RED);
         std::cerr << "\nError establishing connections" << std::endl
-                  << "Will try again in 10 seconds...\n\n" << std::flush;
+                  << "Will try again in about 10 seconds...\n\n" << std::flush;
         setcolor(BRIGHT_WHITE);
        //  mutex.unlock();
       }
-      boost::this_thread::sleep_for(boost::chrono::milliseconds(10000));
-      ioc.reset();
+      boost::this_thread::sleep_for(boost::chrono::milliseconds(randomSleepTimeMs()));
+      ioc.restart();
       goto connectionAttempt;
     }
     else
@@ -1430,14 +1368,21 @@ connectionAttempt:
       caughtDisconnect = false;
     }
   }
+  catch (boost::thread_interrupted&) {
+    //std::cout << "Thread was interrupted!" << std::endl;
+    ioc.restart();
+    return;
+  }
   catch (...)
   {
-    if (!isDev)
+    CHECK_CLOSE;
+    // std::cerr << boost::current_exception_diagnostic_information() << std::endl;
+    if (!miningProf->isDev)
     {
      //  mutex.lock();
       setcolor(RED);
       std::cerr << "\nError establishing connections" << std::endl
-                << "Will try again in 10 seconds...\n\n" << std::flush;
+                << "Will try again in about 10 seconds...\n\n" << std::flush;
       setcolor(BRIGHT_WHITE);
      //  mutex.unlock();
     }
@@ -1449,8 +1394,8 @@ connectionAttempt:
       setcolor(BRIGHT_WHITE);
      //  mutex.unlock();
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(10000));
-    ioc.reset();
+    boost::this_thread::sleep_for(boost::chrono::milliseconds(randomSleepTimeMs()));
+    ioc.restart();
     goto connectionAttempt;
   }
   while (*B)
@@ -1459,16 +1404,16 @@ connectionAttempt:
     boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
   }
   CHECK_CLOSE;
-  if (!isDev)
+  if (!miningProf->isDev)
   {
    //  mutex.lock();
     setcolor(RED);
     if (!caughtDisconnect)
       std::cerr << "\nERROR: lost connection" << std::endl
-                << "Will try to reconnect in 10 seconds...\n\n";
+                << "Will try to reconnect in about 10 seconds...\n\n";
     else
       std::cerr << "\nError establishing connection" << std::endl
-                << "Will try again in 10 seconds...\n\n";
+                << "Will try again in about 10 seconds...\n\n";
 
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
@@ -1482,10 +1427,10 @@ connectionAttempt:
     setcolor(RED);
     if (!caughtDisconnect)
       std::cerr << "\nERROR: lost connection to dev node (mining will continue)" << std::endl
-                << "Will try to reconnect in 10 seconds...\n\n";
+                << "Will try to reconnect in about 10 seconds...\n\n";
     else
       std::cerr << "\nError establishing connection to dev node" << std::endl
-                << "Will try again in 10 seconds...\n\n";
+                << "Will try again in about 10 seconds...\n\n";
 
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
@@ -1493,7 +1438,7 @@ connectionAttempt:
   }
   caughtDisconnect = true;
   CHECK_CLOSE;
-  boost::this_thread::sleep_for(boost::chrono::milliseconds(10000));
-  ioc.reset();
+  boost::this_thread::sleep_for(boost::chrono::milliseconds(randomSleepTimeMs()));
+  ioc.restart();
   goto connectionAttempt;
 }

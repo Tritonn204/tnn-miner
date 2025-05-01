@@ -47,5 +47,5 @@ namespace ShaiHive {
 
   void tuneTimeLimit();
   bool hash(ShaiCtx &ctx, uint8_t *data);
-  void test();
+  int test();
 }

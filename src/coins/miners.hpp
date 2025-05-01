@@ -1,6 +1,6 @@
 #pragma once
 
-#include <tnn-common.hpp>
+#include "tnn-common.hpp"
 #include <net.hpp>
 #include <num.h>
 #include <hex.h>
@@ -14,11 +14,11 @@ extern bool rx_hugePages;
 inline Num ConvertDifficultyToBig(Num d, int algo)
 {
   switch(algo) {
-    case DERO_HASH:
+    case ALGO_ASTROBWTV3:
       return oneLsh256 / d;
-    case XELIS_HASH:
+    case ALGO_XELISV2:
       return maxU256 / d;
-    case SPECTRE_X:
+    case ALGO_SPECTRE_X:
       return oneLsh256 / (d+1);
     default:
       return 0;
@@ -51,6 +51,10 @@ static inline void unsupportedCPU(int tid) {
   printf("This coin is not supported on CPUs\n");
 }
 
+static inline void unsupportedGpu(int tid) {
+  printf("This coin is not supported on GPUs\n");
+}
+
 void mineDero(int tid);
 
 void mineXelis(int tid);
@@ -61,7 +65,7 @@ uint32_t rx_targetToDifficulty(const char* target);
 void randomx_init_extern();
 void randomx_init_intern(int threads);
 void randomx_set_flags(bool autoFlags);
-void rxRPCTest();
+int rxRPCTest();
 void mineRx0(int tid);
 
 void mineVerus(int tid);
@@ -76,25 +80,61 @@ void mineWaglayla(int tid);
 
 void mineShai(int tid);
 
-typedef void (*mineFunc)(int);
-const mineFunc POW[] = {
-  mineDero, // 0
-  mineXelis, 
-  mineXelis, 
-  mineSpectre,
-  mineRx0,
-  mineRx0,
-  mineRx0, // 5
-  mineRx0,
-  mineRx0,
-  mineRx0,
-  mineRx0,
-  mineVerus, // 10
-  mineVerus,
-  mineAstrix,
-  mineNexellia,
-  mineHoosat,
-  mineWaglayla,
-  mineShai
-};
+void mineAstrix_hip(int tid);
+void mineNexellia_hip(int tid);
+void mineWaglayla_hip(int tid);
 
+typedef void (*mineFunc)(int);
+inline mineFunc getMiningFunc(int algoNum, bool gpu) {
+  if(gpu) {
+    switch(algoNum) {
+      case ALGO_ASTRIX_HASH:
+        return mineAstrix_hip;
+        break;
+      case ALGO_NXL_HASH:
+        return mineNexellia_hip;
+        break;
+      case ALGO_WALA_HASH:
+        return mineWaglayla_hip;
+        break;
+      default:
+        return unsupportedGpu;
+        break;
+    }
+  }
+  switch(algoNum) {
+    case ALGO_ASTROBWTV3:
+      return mineDero;
+      break;
+    case ALGO_XELISV2:
+      return mineXelis;
+      break;
+    case ALGO_SPECTRE_X:
+      return mineSpectre;
+      break;
+    case ALGO_RX0:
+      return mineRx0;
+      break;
+    case ALGO_VERUS:
+      return mineVerus;
+      break;
+    case ALGO_ASTRIX_HASH:
+      return mineAstrix;
+      break;
+    case ALGO_NXL_HASH:
+      return mineNexellia;
+      break;
+    case ALGO_HOOHASH:
+      return mineHoosat;
+      break;
+    case ALGO_WALA_HASH:
+      return mineWaglayla;
+      break;
+    case ALGO_SHAI_HIVE:
+      return mineShai;
+      break;
+    default:
+      return unsupportedCPU;
+      break;
+  }
+}

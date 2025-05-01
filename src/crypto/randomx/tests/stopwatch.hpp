@@ -45,18 +45,18 @@ public:
 	}
 	void start() {
 		if (!isRunning) {
-			startMark = std::chrono::high_resolution_clock::now();
+			startMark = std::chrono::steady_clock::now();
 			isRunning = true;
 		}
 	}
 	void restart() {
-		startMark = std::chrono::high_resolution_clock::now();
+		startMark = std::chrono::steady_clock::now();
 		isRunning = true;
 		elapsed = 0;
 	}
 	void stop() {
 		if (isRunning) {
-			chrono_t endMark = std::chrono::high_resolution_clock::now();
+			chrono_t endMark = std::chrono::steady_clock::now();
 			uint64_t ns = std::chrono::duration_cast<sw_unit>(endMark - startMark).count();
 			elapsed += ns;
 			isRunning = false;
@@ -66,7 +66,7 @@ public:
 		return getElapsedNanosec() / 1e+9;
 	}
 private:
-	using chrono_t = std::chrono::high_resolution_clock::time_point;
+	using chrono_t = std::chrono::steady_clock::time_point;
 	using sw_unit = std::chrono::nanoseconds;
 	chrono_t startMark;
 	uint64_t elapsed;
@@ -75,7 +75,7 @@ private:
 	uint64_t getElapsedNanosec() const {
 		uint64_t elns = elapsed;
 		if (isRunning) {
-			chrono_t endMark = std::chrono::high_resolution_clock::now();
+			chrono_t endMark = std::chrono::steady_clock::now();
 			uint64_t ns = std::chrono::duration_cast<sw_unit>(endMark - startMark).count();
 			elns += ns;
 		}

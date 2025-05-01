@@ -5,11 +5,10 @@ stages:
   - release
 
 variables:
-  RUNNER_SCRIPT_TIMEOUT: 30m
+  RUNNER_SCRIPT_TIMEOUT: 40m
   DOCKER_TLS_CERTDIR: "/certs"
   TNN_BUILD_MAC: false
   TNN_BUILD_WIN: true
-  AMD64_TARGET_LEVEL: x86-64-v3
   PACKAGE_VERSION: "0.0.1"
   CMAKE_ARGS: "-DWITH_HIP=OFF"
   LINUX_AMD64_TGZ: "Tnn-miner-amd64-${PACKAGE_VERSION}.tar.gz"
@@ -26,6 +25,7 @@ workflow:
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_BRANCH == "dev"
+    - if: $CI_COMMIT_BRANCH == "cross_compile"
     # if the pipeline is executing because of a tag, then change the variables for a 
     - if: $CI_COMMIT_TAG
       variables:
@@ -56,15 +56,22 @@ workflow:
     - echo "started by ${GITLAB_USER_NAME} / @${GITLAB_USER_LOGIN}"
 
 build-linux-amd64:
-  image: docker:24.0.5
+  image: docker:28
   stage: build
   tags:
     - linux
     - amd64
+  variables:
+    CMAKE_ARGS: "${CMAKE_ARGS}"
+    TARGZ_FILE: "${LINUX_AMD64_TGZ}"
   before_script:
     - until docker info; do sleep 1; done
+    - chmod +x *.sh
+    - ls -la *.sh
+    - apk add bash
   script:
-    - docker buildx build --platform=linux/amd64 --build-arg PACKAGE_VERSION=${PACKAGE_VERSION} --build-arg TARGZ_FILE=${LINUX_AMD64_TGZ} --build-arg CMAKE_ARGS=${CMAKE_ARGS} -f docker/Dockerfile.ubu . --output ./
+    #- docker buildx build --platform=linux/amd64 --build-arg PACKAGE_VERSION=${PACKAGE_VERSION} --build-arg TARGZ_FILE=${LINUX_AMD64_TGZ} --build-arg CMAKE_ARGS=${CMAKE_ARGS} -f docker/Dockerfile.ubu . --output ./
+    - bash -c "./go-docker.sh amd64"
     - export HIVEOS_MMPOS_AMD64_TGZ="tnn-miner-hiveos_mmpos_amd64_${PACKAGE_VERSION//-/.}.tar.gz"
     - echo "HIVEOS_MMPOS_AMD64_TGZ=$HIVEOS_MMPOS_AMD64_TGZ" >> linux-amd64-job.env
   after_script:
@@ -133,7 +140,7 @@ build-macos:
 
 build-windows:
   rules:
-    - if: $CI_COMMIT_TAG || ($TNN_BUILD_WIN == "true" && $CI_COMMIT_MESSAGE =~ /windows\|Windows/)                # Run this job when a tag is created
+    - if: $CI_COMMIT_TAG || $TNN_BUILD_WIN == "true" || ($CI_COMMIT_MESSAGE =~ /windows\|Windows/)                # Run this job when a tag is created
   extends:
     - .windows_job
   stage: build
@@ -158,16 +165,23 @@ build-windows:
 
 
 build-linux-aarch64:
-  image: docker:24.0.5
+  image: docker:28
   stage: build
   tags:
     - linux
     - aarch64
+  variables:
+    CMAKE_ARGS: "${CMAKE_ARGS}"
+    TARGZ_FILE: "${LINUX_ARM64_TGZ}"
   before_script:
     - until docker info; do sleep 1; done
+    - chmod +x *.sh
+    - ls -la *.sh
+    - apk add bash
   script:
     - docker buildx ls
-    - docker buildx build --platform=linux/arm64 --build-arg PACKAGE_VERSION=${PACKAGE_VERSION} --build-arg TARGZ_FILE=${LINUX_ARM64_TGZ} --build-arg CMAKE_ARGS=${CMAKE_ARGS} -f docker/Dockerfile.ubu . --output ./
+    #- docker buildx build --platform=linux/arm64 --build-arg PACKAGE_VERSION=${PACKAGE_VERSION} --build-arg TARGZ_FILE=${LINUX_ARM64_TGZ} --build-arg CMAKE_ARGS=${CMAKE_ARGS} -f docker/Dockerfile.ubu . --output ./
+    - bash -c "./go-docker.sh arm64"
   after_script:
     - echo "LINUX_ARM64_BUILD_JOB_ID=$CI_JOB_ID" >> linux-arm64-job.env
   artifacts:

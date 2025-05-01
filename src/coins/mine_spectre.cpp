@@ -15,9 +15,6 @@ void mineSpectre(int tid)
   byte work[SpectreX::INPUT_SIZE] = {0};
   byte devWork[SpectreX::INPUT_SIZE] = {0};
 
-  std::string diffHex;
-  std::string diffHex_dev;
-
   byte diffBytes[32];
   byte diffBytes_dev[32];
 
@@ -63,43 +60,16 @@ waitForJob:
 
       if (ourHeight == 0 || localOurHeight != ourHeight)
       {
-        byte *b2 = new byte[SpectreX::INPUT_SIZE];
-        switch (protocol)
-        {
-        case SPECTRE_SOLO:
-          hexstrToBytes(std::string(myJob.at("template").as_string()), b2);
-          break;
-        case SPECTRE_STRATUM:
-          hexstrToBytes(std::string(myJob.at("template").as_string()), b2);
-          break;
-        }
-        memcpy(work, b2, SpectreX::INPUT_SIZE);
+        hexstrToBytes(std::string(myJob.at("template").as_string()), work);
         SpectreX::newMatrix(work, worker->matBuffer, *worker);
-        // SpectreX::genPrePowHash(b2, *worker);/
-        // SpectreX::newMatrix(b2, worker->mat);
-        delete[] b2;
         localOurHeight = ourHeight;
       }
-
       if (devConnected && myJobDev.at("template").is_string())
       {
         if (devHeight == 0 || localDevHeight != devHeight)
         {
-          byte *b2d = new byte[SpectreX::INPUT_SIZE];
-          switch (protocol)
-          {
-          case SPECTRE_SOLO:
-            hexstrToBytes(std::string(myJobDev.at("template").as_string()), b2d);
-            break;
-          case SPECTRE_STRATUM:
-            hexstrToBytes(std::string(myJobDev.at("template").as_string()), b2d);
-            break;
-          }
-          memcpy(devWork, b2d, SpectreX::INPUT_SIZE);
+          hexstrToBytes(std::string(myJobDev.at("template").as_string()), devWork);
           SpectreX::newMatrix(devWork, devWorker->matBuffer, *devWorker);
-          // SpectreX::genPrePowHash(b2d, *devWorker);
-          // SpectreX::newMatrix(b2d, devWorker->mat);
-          delete[] b2d;
           localDevHeight = devHeight;
         }
       }
@@ -108,11 +78,6 @@ waitForJob:
       double which;
       bool submit = false;
       double DIFF = 1;
-      diffHex.clear();
-      diffHex_dev.clear();
-
-      diffHex = cpp_int_toHex(bigDiff);
-      diffHex_dev = cpp_int_toHex(bigDiff_dev);
 
       cpp_int_to_byte_array(bigDiff, diffBytes);
       cpp_int_to_byte_array(bigDiff_dev, diffBytes_dev);
@@ -120,7 +85,7 @@ waitForJob:
       // printf("end of job application\n");
       while (localJobCounter == jobCounter)
       {
-        // CHECK_CLOSE;
+        CHECK_CLOSE;
         which = (double)(rand() % 10000);
         devMine = (devConnected && devHeight > 0 && which < devFee * 100.0);
         DIFF = devMine ? doubleDiffDev : doubleDiff;
@@ -158,6 +123,49 @@ waitForJob:
           // printf("thread %d updating job before hash\n", tid);
           break;
         }
+
+        /*
+        double which = (double)(rand() % 10000);
+        bool devMine = (devConnected && devHeight > 0 && which < devFee * 100.0);
+  
+        byte* cmpDiff = devMine ? diffBytes_dev : diffBytes;
+        uint64_t *nonce = devMine ? &nonce0_dev : &nonce0;
+        (*nonce)++;
+        byte *WORK = (devMine && devConnected) ? &devWork[0] : &work[0];
+        uint64_t *n = (uint64_t*)&WORK[72];
+
+        int enLen = devMine ? nonceLenDev : nonceLen;
+        if(enLen <= 0) {
+          (*n) = ((tid - 1) % (256 * 256)) | ((rand() % 256) << 16) | ((*nonce) << 24);
+          //nonceBytes[0] = (byte)&n; //((tid - 1) % (256 * 256)) | ((rand() % 256) << 16) | ((*nonce) << 24);
+          /
+          //memcpy(nonceBytes, (byte *)&n, 8);
+          nonceBytes[0] = ((tid - 1) % (256 * 256)) & 0xFF;
+          nonceBytes[1] = ((tid - 1) % (256 * 256) >> 8) & 0xFF;
+          
+          nonceBytes[2] = (myRand % 256) & 0xFF;
+          //nonceBytes[3] = (myRand >> 8) & 0xFF;
+          
+          nonceBytes[3] = (*nonce) & 0xFF;
+          nonceBytes[4] = ((*nonce) >> 8) & 0xFF;
+          nonceBytes[5] = ((*nonce) >> 16) & 0xFF;
+          nonceBytes[6] = ((*nonce) >> 24) & 0xFF;
+          nonceBytes[7] = ((*nonce) >> 32) & 0xFF;
+          /
+        } else {
+          uint64_t &eN = devMine ? nonce0_dev : nonce0;
+          int offset = (64 - enLen*8);
+          (*n) = ((tid - 1) % (256 * 256)) | (((*nonce) << 16) & ((1ULL << offset)-1)) | (eN << offset);
+        }
+        //memcpy(nonceBytes, (byte *)&n, 8);
+
+        // printf("after nonce: %s\n", hexStr(WORK, SpectreX::INPUT_SIZE).c_str());
+
+        //if (localJobCounter != jobCounter) {
+        //  // printf("thread %d updating job before hash\n", tid);
+        //  break;
+        //}
+        */
 
         SpectreX::worker &usedWorker = devMine ? *devWorker : *worker;
         SpectreX::hash(usedWorker, WORK, SpectreX::INPUT_SIZE, powHash);
@@ -213,18 +221,20 @@ waitForJob:
             setcolor(CYAN);
             std::cout << "\n(DEV) Thread " << tid << " found a dev share\n" << std::flush;
             setcolor(BRIGHT_WHITE);
-            switch (protocol)
+            switch (devMiningProfile.protocol)
             {
-            case SPECTRE_SOLO:
+            case PROTO_SPECTRE_SOLO:
               devShare = {{"block_template", hexStr(&WORK[0], SpectreX::INPUT_SIZE).c_str()}};
               break;
-            case SPECTRE_STRATUM:
+            case PROTO_SPECTRE_STRATUM:
               std::vector<char> nonceStr;
               // Num(std::to_string((n << enLen*8) >> enLen*8).c_str(),10).print(nonceStr, 16);
               Num(std::to_string(n).c_str(),10).print(nonceStr, 16);
+              std::string fullWorkerName = std::string(devWorkerName);
+              fullWorkerName += "-" + std::string(tnnTargetArch);
               devShare = {{{"id", SpectreStratum::submitID},
                         {"method", SpectreStratum::submit.method.c_str()},
-                        {"params", {devWorkerName,                                   // WORKER
+                        {"params", {fullWorkerName.c_str(), // WORKER
                                     myJobDev.at("jobId").as_string().c_str(), // JOB ID
                                     std::string(nonceStr.data()).c_str()}}}};
 
@@ -243,12 +253,12 @@ waitForJob:
             setcolor(BRIGHT_YELLOW);
             std::cout << "\nThread " << tid << " found a nonce!\n" << std::flush;
             setcolor(BRIGHT_WHITE);
-            switch (protocol)
+            switch (miningProfile.protocol)
             {
-            case SPECTRE_SOLO:
+            case PROTO_SPECTRE_SOLO:
               share = {{"block_template", hexStr(&WORK[0], SpectreX::INPUT_SIZE).c_str()}};
               break;
-            case SPECTRE_STRATUM:
+            case PROTO_SPECTRE_STRATUM:
               std::vector<char> nonceStr;
               // Num(std::to_string((n << enLen*8) >> enLen*8).c_str(),10).print(nonceStr, 16);
               Num(std::to_string(n).c_str(),10).print(nonceStr, 16);

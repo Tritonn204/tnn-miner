@@ -1,7 +1,20 @@
 # syntax=docker/dockerfile:1.4
 
-FROM docker.io/ubuntu:noble as base
+FROM docker.io/ubuntu:noble AS ubuntu24-base
+ARG APT_PACKAGES="gpg git wget build-essential cmake clang libssl-dev libudns-dev libc++-dev lld libsodium-dev"
 
 # Set environment variable to avoid interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt update && apt install -y git wget build-essential cmake clang libssl-dev libudns-dev libc++-dev lld libsodium-dev && rm -rf /var/lib/apt
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt update && apt install -y ${APT_PACKAGES} && rm -rf /var/lib/apt
+
+# https://rocm.docs.amd.com/projects/install-on-linux/en/latest/install/native-install/ubuntu.html
+#FROM rocm/dev-ubuntu-24.04:6.2-complete AS ubuntu24-rocm
+FROM rocm/dev-ubuntu-24.04:6.2.4 AS ubuntu24-rocm
+ARG APT_PACKAGES="gpg git wget build-essential cmake clang libssl-dev libudns-dev libc++-dev lld libsodium-dev"
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt update && apt install -y ${APT_PACKAGES} && rm -rf /var/lib/apt

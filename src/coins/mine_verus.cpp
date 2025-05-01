@@ -62,12 +62,12 @@ void mineVerus(int tid)
 //       if (ourHeight == 0 || localOurHeight != ourHeight)
 //       {
 //         byte *b2 = new byte[SpectreX::INPUT_SIZE];
-//         switch (protocol)
+//         switch (miningProfile.protocol)
 //         {
-//         case SPECTRE_SOLO:
+//         case PROTO_SPECTRE_SOLO:
 //           hexstrToBytes(std::string(myJob.at("template").as_string()), b2);
 //           break;
-//         case SPECTRE_STRATUM:
+//         case PROTO_SPECTRE_STRATUM:
 //           hexstrToBytes(std::string(myJob.at("template").as_string()), b2);
 //           break;
 //         }
@@ -85,12 +85,12 @@ void mineVerus(int tid)
 //         if (devHeight == 0 || localDevHeight != devHeight)
 //         {
 //           byte *b2d = new byte[SpectreX::INPUT_SIZE];
-//           switch (protocol)
+//           switch (devMiningProfile.protocol)
 //           {
-//           case SPECTRE_SOLO:
+//           case PROTO_SPECTRE_SOLO:
 //             hexstrToBytes(std::string(myJobDev.at("template").as_string()), b2d);
 //             break;
-//           case SPECTRE_STRATUM:
+//           case PROTO_SPECTRE_STRATUM:
 //             hexstrToBytes(std::string(myJobDev.at("template").as_string()), b2d);
 //             break;
 //           }
@@ -200,12 +200,12 @@ void mineVerus(int tid)
 //             setcolor(CYAN);
 //             std::cout << "\n(DEV) Thread " << tid << " found a dev share\n" << std::flush;
 //             setcolor(BRIGHT_WHITE);
-//             switch (protocol)
+//             switch (devMiningProfile.protocol)
 //             {
-//             case SPECTRE_SOLO:
+//             case PROTO_SPECTRE_SOLO:
 //               devShare = {{"block_template", hexStr(&WORK[0], SpectreX::INPUT_SIZE).c_str()}};
 //               break;
-//             case SPECTRE_STRATUM:
+//             case PROTO_SPECTRE_STRATUM:
 //               std::vector<char> nonceStr;
 //               // Num(std::to_string((n << enLen*8) >> enLen*8).c_str(),10).print(nonceStr, 16);
 //               Num(std::to_string(n).c_str(),10).print(nonceStr, 16);
@@ -230,12 +230,12 @@ void mineVerus(int tid)
 //             setcolor(BRIGHT_YELLOW);
 //             std::cout << "\nThread " << tid << " found a nonce!\n" << std::flush;
 //             setcolor(BRIGHT_WHITE);
-//             switch (protocol)
+//             switch (miningProfile.protocol)
 //             {
-//             case SPECTRE_SOLO:
+//             case PROTO_SPECTRE_SOLO:
 //               share = {{"block_template", hexStr(&WORK[0], SpectreX::INPUT_SIZE).c_str()}};
 //               break;
-//             case SPECTRE_STRATUM:
+//             case PROTO_SPECTRE_STRATUM:
 //               std::vector<char> nonceStr;
 //               // Num(std::to_string((n << enLen*8) >> enLen*8).c_str(),10).print(nonceStr, 16);
 //               Num(std::to_string(n).c_str(),10).print(nonceStr, 16);

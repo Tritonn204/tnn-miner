@@ -1,4 +1,5 @@
-#include <tnn_hip/coins/miners.hip.hpp>
+// The order is important here for WIN32 builds: https://stackoverflow.com/a/16288859
+#include <coins/miners.hpp>
 #include "tnn-hugepages.h"
 #include <stratum/stratum.h>
 
@@ -99,11 +100,11 @@ void jobThread(
         if (devMine)
         {
           submittingDev = true;
-          switch (protocol)
+          switch (devMiningProfile.protocol)
           {
-          case KAS_SOLO:
+          case PROTO_KAS_SOLO:
             break;
-          case KAS_STRATUM:
+          case PROTO_KAS_STRATUM:
             std::vector<char> nonceStr;
             Num(std::to_string(nonce).c_str(),10).print(nonceStr, 16);
             devShare = {{{"id", SpectreStratum::submitID},
@@ -120,11 +121,11 @@ void jobThread(
         else
         {
           submitting = true;
-          switch (protocol)
+          switch (miningProfile.protocol)
           {
-          case KAS_SOLO:
+          case PROTO_KAS_SOLO:
             break;
-          case KAS_STRATUM:
+          case PROTO_KAS_STRATUM:
             std::vector<char> nonceStr;
             Num(std::to_string(nonce).c_str(),10).print(nonceStr, 16);
             share = {{{"id", SpectreStratum::submitID},
@@ -149,7 +150,7 @@ void jobThread(
   }
 }
 
-void mineWaglayla_hip()
+void mineWaglayla_hip(int tid)
 {
   int d = 0;
 
@@ -203,12 +204,12 @@ waitForJob:
       if (ourHeight == 0 || localOurHeight != ourHeight)
       {
         byte *b2 = new byte[Wala_HIP::INPUT_SIZE];
-        switch (protocol)
+        switch (miningProfile.protocol)
         {
-        case KAS_SOLO:
+        case PROTO_KAS_SOLO:
           hexstrToBytes(std::string(myJob.at("template").as_string()), b2);
           break;
-        case KAS_STRATUM:
+        case PROTO_KAS_STRATUM:
           hexstrToBytes(std::string(myJob.at("template").as_string()), b2);
           break;
         }
@@ -230,12 +231,12 @@ waitForJob:
         if (devHeight == 0 || localDevHeight != devHeight)
         {
           byte *b2d = new byte[Wala_HIP::INPUT_SIZE];
-          switch (protocol)
+          switch (devMiningProfile.protocol)
           {
-          case KAS_SOLO:
+          case PROTO_KAS_SOLO:
             hexstrToBytes(std::string(myJobDev.at("template").as_string()), b2d);
             break;
-          case KAS_STRATUM:
+          case PROTO_KAS_STRATUM:
             hexstrToBytes(std::string(myJobDev.at("template").as_string()), b2d);
             break;
           }

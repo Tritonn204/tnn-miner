@@ -32,7 +32,7 @@ void ChaCha20EncryptBytes(uint8_t * state, uint8_t * In, uint8_t * Out, const ui
 
 void ChaCha20IncrementNonce(uint8_t * state);
 
-inline void ChaCha20AddCounter(uint8_t* ChaCha, const uint32_t value_to_add)
+static inline void ChaCha20AddCounter(uint8_t* ChaCha, const uint32_t value_to_add)
 {
 	uint32_t* State32bits = (uint32_t*)ChaCha;
 	State32bits[8]+=value_to_add;

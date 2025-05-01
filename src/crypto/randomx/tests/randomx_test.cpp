@@ -72,7 +72,7 @@ void runTest(const char* name, bool condition, FUNC f) {
 	}
 }
 
-void RandomXTest() {
+int RandomXTest() {
 	char testHash[32];
 
 	//std::cout << "Allocating randomx_cache..." << std::endl;
@@ -1117,4 +1117,5 @@ void RandomXTest() {
 	if (skipped) {
 		std::cout << skipped << " tests were SKIPPED due to incompatible configuration (see above)" << std::endl;
 	}
+	return 0;
 }

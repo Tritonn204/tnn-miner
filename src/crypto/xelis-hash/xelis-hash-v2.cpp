@@ -23,7 +23,7 @@
 #include <cassert>
 #include <chrono>
 
-#include <sodium.h>
+//#include <sodium.h>
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -617,7 +617,7 @@ void xelis_benchmark_cpu_hash_v2()
 
   printf("v2 bench\n");
 
-  auto start = std::chrono::high_resolution_clock::now();
+  auto start = std::chrono::steady_clock::now();
   for (uint32_t i = 0; i < ITERATIONS; ++i)
   {
     // input[0] = i & 0xFF;
@@ -625,7 +625,7 @@ void xelis_benchmark_cpu_hash_v2()
     memset(worker.scratchPad, 0, XELIS_MEMORY_SIZE_V2*8);
     xelis_hash_v2(input, worker, hash_result);
   }
-  auto end = std::chrono::high_resolution_clock::now();
+  auto end = std::chrono::steady_clock::now();
 
   std::chrono::duration<double, std::milli> elapsed = end - start;
   std::cout << "Time took: " << elapsed.count() << " ms" << std::endl;

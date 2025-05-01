@@ -99,7 +99,7 @@ void dero_session(
   // This buffer will hold the incoming message
   beast::flat_buffer buffer;
   std::stringstream workInfo;
-  boost::json::error_code jsonEc;
+  boost::system::error_code jsonEc;
   boost::json::value workData;
 
   bool submitThread = false;

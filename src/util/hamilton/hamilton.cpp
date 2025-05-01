@@ -13,7 +13,7 @@
 
 namespace HamiltonGraph
 {
-  std::chrono::time_point<std::chrono::_V2::steady_clock, std::chrono::duration<long long int, std::ratio<1, 1000000000>>> start_time = std::chrono::steady_clock::now();
+  std::chrono::time_point<std::chrono::steady_clock, std::chrono::duration<long long int, std::ratio<1, 1000000000>>> start_time = std::chrono::steady_clock::now();
 
 #if defined(__x86_64__)
   __attribute__((target("default"))) bool isSafe(int v,

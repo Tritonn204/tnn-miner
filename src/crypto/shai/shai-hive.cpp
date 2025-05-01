@@ -1,5 +1,6 @@
 #include "shai-hive.h"
 
+#include <numeric>
 #include <string.h>
 #if defined(__x86_64__)
 #include <immintrin.h>
@@ -495,6 +496,28 @@ namespace ShaiHive
   void freevIota (uint16_t *freev) {
     std::iota(freev, &freev[GRAPH_SIZE], 1);
   }
+
+  void generateGraph_packed(const std::string &hash, size_t gridSize, HamiltonGraph::ShaiGraph &G) {
+    G._size = gridSize;
+
+    size_t numEdges = (gridSize * (gridSize - 1)) / 2;
+    size_t bitsNeeded = numEdges; // One bit per edge
+
+    // Extract seed from hash
+    uint64_t seed = extractSeedFromHash(hash);
+
+    // Initialize PRNG with seed
+    std::mt19937_64 prng(seed);
+
+    // Generate bits
+    int bigSize = (bitsNeeded + 31) / 32;
+    uint32_t bitStream[bigSize];
+
+    for (size_t i = 0; i < bitsNeeded; i += 32)
+    {
+      G.d[(i / 32)] = prng();
+    }
+  }
 #endif
 
   static void benchmarkLoop()
@@ -504,7 +527,7 @@ namespace ShaiHive
     uint16_t *nonce = reinterpret_cast<uint16_t *>(ctx.data); // Treat first 2 bytes as nonce
 
     // Start timing
-    auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::steady_clock::now();
 
     for (int i = 0; i < NUM_HASHES; ++i)
     {
@@ -516,7 +539,7 @@ namespace ShaiHive
     }
 
     // End timing
-    auto end = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::steady_clock::now();
 
     // Calculate duration
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -588,7 +611,7 @@ namespace ShaiHive
     // setcolor(BRIGHT_WHITE);
   }
 
-  void test()
+  int test()
   {
     std::string in = "000000203bb93d254cc2e50bd5f7905625984a687b4a314ca805165c9588d74305000000b6238a92a621aec22dbe7449f37bf603aeaef3efcaabc4608c2ca1452c2a353cf6302867577b061d";
     uint8_t DATA[80 + GRAPH_SIZE * 2]{0};
@@ -603,8 +626,15 @@ namespace ShaiHive
     std::reverse(SHA, SHA + 32);
     std::string HASH = hexStr(SHA, 32);
     printf("initial SHA: %s\n", HASH.c_str());
+    if(0 == strcmp("947c0b0fce52de20d6e1eaec85791ecb16ca9eeb8d07690e9537ef16cd410e6e", HASH.c_str())) {
+      printf("Initial Hash is correct\n");
+    } else {
+      printf("Initial hash was incorrect.\n");
+      return 1;
+    }
 
     size_t gridSize = getGridSize(HASH);
+    printf("gridSize = %ld\n", gridSize);
     alignas(64) HamiltonGraph::ShaiGraph graph;
     uint16_t path[GRAPH_SIZE];
     generateGraph_packed(HASH, gridSize, graph);
@@ -635,9 +665,16 @@ namespace ShaiHive
       std::reverse(SHA, SHA + 32);
       HASH = hexStr(SHA, 32);
       printf("final SHA: %s\n", HASH.c_str());
+      if(0 == strcmp("439097b932de6864e0dca529b74dd2085f193f9e9c04164b90b4f8bbf21f8f9e", HASH.c_str())) {
+        printf("final Hash is correct\n");
+      } else {
+        printf(" expected: 439097b932de6864e0dca529b74dd2085f193f9e9c04164b90b4f8bbf21f8f9e\n");
+        return 2;
+      }
     }
 
     benchmarkLoop();
+    return 0;
   }
 
   bool hash(ShaiCtx &ctx, uint8_t *data)

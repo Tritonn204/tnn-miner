@@ -12,7 +12,7 @@
 #include <net.h>
 #include <random>
 
-using Clock = std::chrono::high_resolution_clock;
+using Clock = std::chrono::steady_clock;
 
 class CBlockIndex;
 class CChainParams;

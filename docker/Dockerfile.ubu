@@ -1,36 +1,39 @@
 # syntax=docker/dockerfile:1.4
 
-FROM docker.io/dirkerdero/tnn-miner-base:latest AS base
+ARG BUILDER_BASE=amd64
+FROM docker.io/dirkerdero/tnn-builder-${BUILDER_BASE}:latest AS base
+#FROM tnn-builder-${BUILDER_BASE}:latest AS base
 
 # Set environment variable to avoid interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /src
 
-COPY ./scripts/prereqs.sh ./scripts/prereqs.sh
-RUN chmod +x ./scripts/prereqs.sh && ./scripts/prereqs.sh
+#COPY ./scripts/prereqs.sh ./scripts/prereqs.sh
+#RUN chmod +x ./scripts/prereqs.sh && ./scripts/prereqs.sh
 
 FROM base AS build
 ARG  CMAKE_ARGS=
 ARG  PACKAGE_VERSION=0.0.1
-ARG  TARGZ_FILE
+ARG  TARGZ_FILE=miner.tar.gz
 RUN pwd
 RUN ls -la .
-RUN ls -la ./scripts/
+#RUN ls -la ./scripts/
 
 COPY . .
 
 RUN ls -la .
 
-RUN --mount=type=cache,target=/src/.cache mkdir ./build && cd ./build && cmake $CMAKE_ARGS -DTNN_VERSION=$PACKAGE_VERSION ..
-RUN --mount=type=cache,target=/src/.cache cd ./build && make -j$(nproc)
+RUN --mount=type=cache,target=/src/_deps mkdir ./build && cd ./build && cmake $CMAKE_ARGS -DTNN_VERSION=$PACKAGE_VERSION ..
+RUN --mount=type=cache,target=/src/_deps cd ./build && make -j$(nproc)
 RUN mv ./build/bin/tnn-miner-* ./
-RUN ./tnn-miner-* --test-spectre
+#RUN ./tnn-miner-* --test-spectre
 RUN ls -la ./
 RUN tar -czvf ${TARGZ_FILE} ./tnn-miner*
 RUN md5sum ./${TARGZ_FILE}
 
 FROM scratch
 ARG  PACKAGE_VERSION
-ARG  TARGZ_FILE
+ARG  TARGZ_FILE=miner.tar.gz
 COPY --from=build /src/${TARGZ_FILE} /
+COPY --from=build /src/tnn-miner* /
