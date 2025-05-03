@@ -878,7 +878,7 @@ fillBlanks:
   std::vector<const char *> stringPrompts = {daemonPrompt, portPrompt, walletPrompt};
   for (std::string *param : stringParams)
   {
-    if (*param == nullArg)
+    if (param->empty())
     {
       setcolor(CYAN);
       printf("%s\n", stringPrompts[i]);

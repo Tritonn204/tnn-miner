@@ -45,7 +45,6 @@ extern bool ABORT_MINER;
 
 extern double latest_hashrate;
 
-static const char *nullArg = "NULL";
 static const char* devWorkerName = "tnn-dev";                                      
 
 extern bool devTurn;
@@ -78,7 +77,7 @@ const TnnDevMinerInfo devInfo[COIN_COUNT] = {
   {COIN_XELIS,    "stratum+ssl://usw.vipor.net", "5177",    "xel:xz9574c80c4xegnvurazpmxhw5dlg2n0g9qm60uwgt75uqyx3pcsqzzra9m"},
   //{COIN_SPECTRE,  "51.81.211.69",  "5555",
   //{COIN_SPECTRE,  "localhost",  "5555",
-  {COIN_SPECTRE,  "spectre.cedric-crispin.com",  "4364",
+  {COIN_SPECTRE,  "stratum+tcp://spectre.cedric-crispin.com",  "4364",
   //{COIN_SPECTRE,  "spr.tw-pool.com", "14001",
   //{COIN_SPECTRE,  "spr.mining.st-ips.de", "4364",
   //{COIN_SPECTRE,  "eu.spectre-network.nevermine.io",  "55555",
