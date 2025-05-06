@@ -378,6 +378,22 @@ void buildSuffixArray(const uint8_t* data, int n, int* suffixArray, int* buckets
 }
 
 
+void extendTemplateRange(templateMarker &T, const byte* data, int stampStart) {
+  uint8_t p1 = T.p1;
+  uint8_t p2 = T.p2;
+  
+  while (p1 > 0 && !data[stampStart + p1] && data[stampStart + p1] == data[stampStart + p1 - 1]) {
+      p1--;
+  }
+  
+  while (p2 < 255 && !data[stampStart + p1] && data[stampStart + p2] == data[stampStart + p2 + 1]) {
+      p2++;
+  }
+  
+  T.p1 = p1;
+  T.p2 = p2;
+}
+
 
 #if defined(__AVX2__)
 
@@ -8653,6 +8669,8 @@ after:
         (uint16_t)((firstChunk << 7) | chunkCount)
       };
 
+      // extendTemplateRange(worker.astroTemplate[worker.templateIdx], worker.sData + (wIndex * ASTRO_SCRATCH_SIZE), firstChunk * 256);
+
       pushPos1 = 0;
       pushPos2 = 255;
       worker.templateIdx += (worker.tries[wIndex] > 1);
@@ -8703,10 +8721,12 @@ after:
     worker.astroTemplate[worker.templateIdx] = templateMarker{
       (uint8_t)(chunkCount > 1 ? lp1 : 0),
       (uint8_t)(chunkCount > 1 ? lp2 : 255),
-        (uint16_t)0,
-        (uint16_t)0,
+      (uint16_t)0,
+      (uint16_t)0,
       (uint16_t)((firstChunk << 7) | chunkCount)
     };
+    // extendTemplateRange(worker.astroTemplate[worker.templateIdx], worker.sData + (wIndex * ASTRO_SCRATCH_SIZE), firstChunk * 256);
+
     worker.templateIdx++;
   }
 

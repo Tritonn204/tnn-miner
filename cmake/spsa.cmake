@@ -15,10 +15,10 @@ if(USE_ASTRO_SPSA)
     ## Fetch the static library
     FetchContent_Declare(
         astrospsa
-        #GIT_REPOSITORY https://gitlab.com/Tritonn204/astro-spsa.git
-        #GIT_TAG        643809adc68d5fcf716ec45f5452f6d5c50abac1
-        GIT_REPOSITORY https://gitlab.com/dirkerdero/astro-spsa-dirker.git
-        GIT_TAG        1a2acdd2ed187a9b565c33028dba4052a89f875b
+        GIT_REPOSITORY https://gitlab.com/Tritonn204/astro-spsa.git
+        GIT_TAG        5a030c642418bf5a86899d6a46b3e3f59d602270
+        # GIT_REPOSITORY https://gitlab.com/dirkerdero/astro-spsa-dirker.git
+        # GIT_TAG        1a2acdd2ed187a9b565c33028dba4052a89f875b
     )
     FetchContent_MakeAvailable(astrospsa)
     set(SPSA_LIB_DIR ${astrospsa_SOURCE_DIR})

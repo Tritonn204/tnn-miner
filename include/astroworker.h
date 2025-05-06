@@ -13,6 +13,9 @@
 #define DERO_BATCH 1
 #define MAX_LENGTH ((256 * 277) - 1) // this is the maximum
 #define ASTRO_SCRATCH_SIZE ((MAX_LENGTH + 64))
+#define MAX_RUN_LEN 48
+#define MAX_RUNS_PER_BUCKET 128
+
 
 const int branchedOps_size = 104; // Manually counted size of branchedOps_global
 const int regOps_size = 256-branchedOps_size; // 256 - branchedOps_global.size()
@@ -73,6 +76,12 @@ public:
 
   bool isSame = false;
 
+  int bA[256];
+  int bB[256*256];
+
+  byte sHash[32];
+  byte sha_key[32];
+  byte sha_key2[32];
   byte sData[ASTRO_SCRATCH_SIZE*DERO_BATCH];
 
   byte pos1;
@@ -96,21 +105,17 @@ public:
   // int stampStarts[554] = {0};
   // int modifiedBytes[MODBUFFER] = {0};
   uint8_t stampTemplates[277];
-  uint8_t sBuckets[256];
+
   uint16_t buckets_d[256][256];
   uint32_t bHeads[256][256];
   uint32_t bHeadIdx[256][256];
-  int bucketSort[256];
+  
   // std::bitset<277*256> isIn;
   // std::bitset<277*256> isKey;
 
   std::vector<byte> opsA;
   std::vector<byte> opsB;
 
-  int bA[256];
-  int bB[256*256];
-
   friend std::ostream& operator<<(std::ostream& os, const workerData& wd);
-  byte cachePad[4096*4];
 };
 #endif
