@@ -7,6 +7,7 @@
 
 #include <BLAKE3/c/blake3.h>
 
+#include <byteswap.h>
 #include <chacha20.h>
 
 #if defined(__x86_64__)

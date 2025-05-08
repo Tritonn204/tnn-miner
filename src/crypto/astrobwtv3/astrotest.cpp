@@ -1,69 +1,42 @@
 #include "astrotest.hpp"
+#include "simd_util.hpp"
 #include <fstream>
 
-#if defined(__AVX2__)
-void testPopcnt256_epi8() {
-    __m256i data = _mm256_setzero_si256();
-    __m256i expected = _mm256_setzero_si256();
-
-    // Test all possible byte values
-    for (uint32_t i = 0; i < 256; ++i) {
-        // Set the byte value in the data vector
-        data = _mm256_set1_epi8(static_cast<int8_t>(i));
-
-        // Calculate the expected population count for the byte value
-        uint8_t popcnt = __builtin_popcount(i);
-        expected = _mm256_set1_epi8(static_cast<int8_t>(popcnt));
-
-        // Perform the population count using the function
-        __m256i result = popcnt256_epi8(data);
-
-        // Compare the result with the expected value
-        if (!_mm256_testc_si256(result, expected)) {
-            std::cout << "Test failed for byte value: " << i << std::endl;
-            return;
-        }
-    }
-
-    std::cout << "testPopcnt256_epi8 tests passed" << std::endl;
-}
-#endif
-
 void mapZeroes() {
-  std::vector<std::tuple<int,int,int>> opMap; 
-  std::vector<std::tuple<int,int,int>> noChange; 
+  // std::vector<std::tuple<int,int,int>> opMap; 
+  // std::vector<std::tuple<int,int,int>> noChange; 
 
-  for (int o = 0; o < 256; o++) {
-    for (int i = 0; i < 256; i++) {
-      for (int j = 0; j < 256; j++) {
-        byte r = i;
-        branchResult(r, o, j);
-        if (std::find(branchedOps_global.begin(), branchedOps_global.end(), i) == branchedOps_global.end()) {
-          if (r == 0) opMap.push_back(std::tuple<int,int,int>(o,i,j));
-          if (r == i) noChange.push_back(std::tuple<int,int,int>(o,i,j));
-          break;
-        }
-      }
-    }
-  }
+  // for (int o = 0; o < 256; o++) {
+  //   for (int i = 0; i < 256; i++) {
+  //     for (int j = 0; j < 256; j++) {
+  //       byte r = i;
+  //       branchResult(r, o, j);
+  //       if (std::find(branchedOps_global.begin(), branchedOps_global.end(), i) == branchedOps_global.end()) {
+  //         if (r == 0) opMap.push_back(std::tuple<int,int,int>(o,i,j));
+  //         if (r == i) noChange.push_back(std::tuple<int,int,int>(o,i,j));
+  //         break;
+  //       }
+  //     }
+  //   }
+  // }
 
-  std::ofstream outputFile("unchangedOps.txt");
-  if (outputFile.is_open()) {
-    for (const auto& [op, input, salt] : noChange) {
-      outputFile << "op: " << op << ", input: " << input << ", salt: " << salt << std::endl;
-    }
-  }
-  outputFile.close();
-  std::cout << "Output written to unchangedOps.txt" << std::endl;
+  // std::ofstream outputFile("unchangedOps.txt");
+  // if (outputFile.is_open()) {
+  //   for (const auto& [op, input, salt] : noChange) {
+  //     outputFile << "op: " << op << ", input: " << input << ", salt: " << salt << std::endl;
+  //   }
+  // }
+  // outputFile.close();
+  // std::cout << "Output written to unchangedOps.txt" << std::endl;
 
-  outputFile.open("clippedOps.txt");
-  if (outputFile.is_open()) {
-    for (const auto& [op, input, salt] : opMap) {
-      outputFile << "op: " << op << ", input: " << input << ", salt: " << salt << std::endl;
-    }
-  }
-  outputFile.close();
-  std::cout << "Output written to clippedOps.txt" << std::endl;
+  // outputFile.open("clippedOps.txt");
+  // if (outputFile.is_open()) {
+  //   for (const auto& [op, input, salt] : opMap) {
+  //     outputFile << "op: " << op << ", input: " << input << ", salt: " << salt << std::endl;
+  //   }
+  // }
+  // outputFile.close();
+  // std::cout << "Output written to clippedOps.txt" << std::endl;
 }
 void runDivsufsortBenchmark() {
   std::vector<std::string> snapshotFiles;
@@ -220,20 +193,21 @@ void benchmarkSIMDMath() {
     uint64_t accumulator = 0;
     auto start = std::chrono::steady_clock::now();
 
-    for (uint64_t i = 0; i < NUM_ITERATIONS; ++i) {
-        __m256i data = _mm256_loadu_si256((__m256i*)&prev_chunk[pos1]);
-        __m256i old = data;
+    // FIXME
+    // for (uint64_t i = 0; i < NUM_ITERATIONS; ++i) {
+    //     __m256i data = _mm256_loadu_si256((__m256i*)&prev_chunk[pos1]);
+    //     __m256i old = data;
 
-        data = _mm256_and_si256(data, _mm256_set1_epi8(prev_chunk[pos2]));
-        data = _mm256_xor_si256(data, _mm256_set1_epi8(prev_chunk[pos2]));
-        data = _mm256_xor_si256(data, popcnt256_epi8(data));
-        data = _mm256_sllv_epi8(data, _mm256_and_si256(data, _mm256_set1_epi8(3)));
+    //     data = _mm256_and_si256(data, _mm256_set1_epi8(prev_chunk[pos2]));
+    //     data = _mm256_xor_si256(data, _mm256_set1_epi8(prev_chunk[pos2]));
+    //     data = _mm256_xor_si256(data, popcnt256_epi8(data));
+    //     data = _mm256_sllv_epi8(data, _mm256_and_si256(data, _mm256_set1_epi8(3)));
 
-        data = _mm256_blendv_epi8(old, data, genMask(pos2 - pos1));
-        _mm256_storeu_si256((__m256i*)&chunk[pos1], data);
+    //     data = _mm256_blendv_epi8(old, data, genMask(pos2 - pos1));
+    //     _mm256_storeu_si256((__m256i*)&chunk[pos1], data);
 
-        accumulator += chunk[pos1];
-    }
+    //     accumulator += chunk[pos1];
+    // }
 
     auto end = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
@@ -243,49 +217,49 @@ void benchmarkSIMDMath() {
 }
 
 void benchmarkLoadCompare() {
-    alignas(32) uint8_t prev_chunk[32] = {0};
-    alignas(32) uint8_t chunk[32] = {0};
-    int pos1 = 0;
-    int pos2 = 16;
+    // alignas(32) uint8_t prev_chunk[32] = {0};
+    // alignas(32) uint8_t chunk[32] = {0};
+    // int pos1 = 0;
+    // int pos2 = 16;
 
-    workerData *controlWorker = (workerData*)malloc_huge_pages(sizeof(workerData));
-    initWorker(*controlWorker);
-    lookupGen(*controlWorker, nullptr, nullptr);
+    // workerData *controlWorker = (workerData*)malloc_huge_pages(sizeof(workerData));
+    // initWorker(*controlWorker);
+    // lookupGen(*controlWorker, nullptr, nullptr);
 
-    prev_chunk[pos2] = 29;
+    // prev_chunk[pos2] = 29;
 
-    // Fill the first 15 bytes of prev_chunk with 0x00
-    for (int i = 0; i < pos2; ++i) {
-        prev_chunk[i] = 0;
-    }
+    // // Fill the first 15 bytes of prev_chunk with 0x00
+    // for (int i = 0; i < pos2; ++i) {
+    //     prev_chunk[i] = 0;
+    // }
 
-    // Fill the remaining bytes of prev_chunk with random values
-    srand(0);
-    for (int i = pos2 + 1; i < 32; ++i) {
-        prev_chunk[i] = static_cast<uint8_t>(rand());
-    }
+    // // Fill the remaining bytes of prev_chunk with random values
+    // srand(0);
+    // for (int i = pos2 + 1; i < 32; ++i) {
+    //     prev_chunk[i] = static_cast<uint8_t>(rand());
+    // }
 
-    uint64_t accumulator = 0;
-    auto start = std::chrono::steady_clock::now();
+    // uint64_t accumulator = 0;
+    // auto start = std::chrono::steady_clock::now();
 
-    for (uint64_t i = 0; i < NUM_ITERATIONS; ++i) {
+    // for (uint64_t i = 0; i < NUM_ITERATIONS; ++i) {
 
-        __m256i data = _mm256_loadu_si256((__m256i*)&prev_chunk[pos1]);
-        // if ((result & mask) == mask) {
-          byte newVal = controlWorker->lookup3D[controlWorker->branched_idx[116]*256*256 + prev_chunk[pos2]*256 + prev_chunk[pos1]];
+    //     __m256i data = _mm256_loadu_si256((__m256i*)&prev_chunk[pos1]);
+    //     // if ((result & mask) == mask) {
+    //       byte newVal = controlWorker->lookup3D[controlWorker->branched_idx[116]*256*256 + prev_chunk[pos2]*256 + prev_chunk[pos1]];
 
-          __m256i newVec = _mm256_set1_epi8(newVal);
-          data = _mm256_blendv_epi8(data, newVec, genMask(pos2-pos1));
-          _mm256_storeu_si256((__m256i*)&chunk[pos1], data);
-          accumulator += chunk[pos1];
-        // } 
-    }
+    //       __m256i newVec = _mm256_set1_epi8(newVal);
+    //       data = _mm256_blendv_epi8(data, newVec, genMask(pos2-pos1));
+    //       _mm256_storeu_si256((__m256i*)&chunk[pos1], data);
+    //       accumulator += chunk[pos1];
+    //     // } 
+    // }
 
-    auto end = std::chrono::steady_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+    // auto end = std::chrono::steady_clock::now();
+    // auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
 
-    std::cout << "Load, Compare, Broadcast, Store: " << duration.count() << " nanoseconds" << std::endl;
-    std::cout << "Accumulator: " << accumulator << std::endl;
+    // std::cout << "Load, Compare, Broadcast, Store: " << duration.count() << " nanoseconds" << std::endl;
+    // std::cout << "Accumulator: " << accumulator << std::endl;
 }
 #endif
 
@@ -300,9 +274,6 @@ int runDeroOpTests(int testOp, int dataLen) {
 
   bool useLookup = false;
   int numOpsFailed = 0;
-  #if defined(__AVX2__)
-  testPopcnt256_epi8();
-  #endif
 
   workerData *controlWorker = (workerData*)malloc_huge_pages(sizeof(workerData));
   initWorker(*controlWorker);
@@ -462,9 +433,6 @@ int runDeroOpTests(int testOp, int dataLen) {
 int rakeDeroOpTests(int testOp, int dataLen) {
   bool useLookup = false;
   int numOpsFailed = 0;
-  #if defined(__AVX2__)
-  testPopcnt256_epi8();
-  #endif
 
   workerData *controlWorker = (workerData*)malloc_huge_pages(sizeof(workerData));
   initWorker(*controlWorker);
@@ -3858,46 +3826,46 @@ void optest_branchcpu(int op, workerData &worker, byte testData[32], OpTestResul
   return; 
 }
 
-void optest_lookup(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print) {
-  // Set us up the bomb
-  memset(worker.step_3, 0, 256);
-  memcpy(worker.step_3, testData, 32);
+// void optest_lookup(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print) {
+//   // Set us up the bomb
+//   memset(worker.step_3, 0, 256);
+//   memcpy(worker.step_3, testData, 32);
 
-  // Because lookupCompute references .chunk (which is a pointer)
-  worker.chunk = &worker.step_3[0];
-  worker.prev_chunk = worker.chunk;
-  if (print){
-    printf("Lookup\n");
-    printf("LT Input %3d  : ", op);
-    for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
-      printf("%02X ", worker.chunk[i]);
-    }
-    printf("\n");
-  }
+//   // Because lookupCompute references .chunk (which is a pointer)
+//   worker.chunk = &worker.step_3[0];
+//   worker.prev_chunk = worker.chunk;
+//   if (print){
+//     printf("Lookup\n");
+//     printf("LT Input %3d  : ", op);
+//     for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
+//       printf("%02X ", worker.chunk[i]);
+//     }
+//     printf("\n");
+//   }
 
-  auto start = std::chrono::steady_clock::now();
-  for(int x = 0; x < 256; x++) {
-    worker.op = op;
-    //worker.pos1 = 0; worker.pos2 = 32;
-    worker.chunk = worker.step_3;
-    worker.prev_chunk = worker.chunk;
-    lookupCompute(worker, true, 0);
-  }
+//   auto start = std::chrono::steady_clock::now();
+//   for(int x = 0; x < 256; x++) {
+//     worker.op = op;
+//     //worker.pos1 = 0; worker.pos2 = 32;
+//     worker.chunk = worker.step_3;
+//     worker.prev_chunk = worker.chunk;
+//     lookupCompute(worker, true, 0);
+//   }
 
-  auto test_end = std::chrono::steady_clock::now();
-  auto test_time = std::chrono::duration_cast<std::chrono::nanoseconds>(test_end-start);
-  testRes.duration_ns = test_time;
-  memcpy(testRes.result, worker.chunk, 256);
-  //memcpy(testRes.result, worker.salsaInput, 256);
-  if (print){
-    printf("LT result     : ");
-    for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
-      printf("%02x ", worker.chunk[i]);
-    }
-    printf("\n took %lld ns\n---------------\n", test_time.count());
-  }
-  return; 
-}
+//   auto test_end = std::chrono::steady_clock::now();
+//   auto test_time = std::chrono::duration_cast<std::chrono::nanoseconds>(test_end-start);
+//   testRes.duration_ns = test_time;
+//   memcpy(testRes.result, worker.chunk, 256);
+//   //memcpy(testRes.result, worker.salsaInput, 256);
+//   if (print){
+//     printf("LT result     : ");
+//     for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
+//       printf("%02x ", worker.chunk[i]);
+//     }
+//     printf("\n took %lld ns\n---------------\n", test_time.count());
+//   }
+//   return; 
+// }
 
 void optest_wolf(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print) {
   // Set us up the bomb

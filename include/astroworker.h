@@ -40,19 +40,18 @@ public:
   // For aarch64
   byte aarchFixup[256];
   byte opt[256];
-  byte step_3[256];
-  byte simpleLookup[regOps_size*(256*256)];
-  byte lookup3D[branchedOps_size*256*256];
-  uint16_t lookup2D[regOps_size*(256*256)];
-  std::bitset<256> clippedBytes[regOps_size];
-  std::bitset<256> unchangedBytes[regOps_size];
-  std::bitset<256> isBranched;
+  // byte simpleLookup[regOps_size*(256*256)];
+  // byte lookup3D[branchedOps_size*256*256];
+  // uint16_t lookup2D[regOps_size*(256*256)];
+  // std::bitset<256> clippedBytes[regOps_size];
+  // std::bitset<256> unchangedBytes[regOps_size];
+  // std::bitset<256> isBranched;
 
-  byte branchedOps[branchedOps_size*2];
-  byte regularOps[regOps_size*2];
+  // byte branchedOps[branchedOps_size*2];
+  // byte regularOps[regOps_size*2];
 
-  byte branched_idx[256];
-  byte reg_idx[256];
+  // byte branched_idx[256];
+  // byte reg_idx[256];
 
   int lucky = 0;
 
@@ -82,6 +81,7 @@ public:
   byte sHash[32];
   byte sha_key[32];
   byte sha_key2[32];
+  byte step_3[256];
   byte sData[ASTRO_SCRATCH_SIZE*DERO_BATCH];
 
   byte pos1;
@@ -113,8 +113,8 @@ public:
   // std::bitset<277*256> isIn;
   // std::bitset<277*256> isKey;
 
-  std::vector<byte> opsA;
-  std::vector<byte> opsB;
+  // std::vector<byte> opsA;
+  // std::vector<byte> opsB;
 
   friend std::ostream& operator<<(std::ostream& os, const workerData& wd);
 };

@@ -58,71 +58,11 @@ void initWolfLUT() {
   // printf("%02X\n", CodeLUT_16[0]);
 }
 
-#if defined(__AVX2__)
+#if defined(__x86_64)
 
+__attribute__((target("avx2")))
 void wolfBranch_avx2(__m256i &in, uint8_t pos2val, uint32_t opcode, workerData &worker)
 {
-  // if (!opcode) {
-  //   in = _mm256_set1_epi8(worker.simpleLookup[worker.reg_idx[worker.op] * 256 + worker.prev_chunk[worker.pos1]]);
-  //   return;
-  // }
-  
-  // for (int i = 3; i >= 0; --i)
-  // {
-  //   uint8_t insn = (opcode >> (i << 3)) & 0xFF;
-  //   switch (insn)
-  //   {
-  //   case 0:
-  //     in = _mm256_add_epi8(in, in);
-  //     break;
-  //   case 1:
-  //     in = _mm256_sub_epi8(in, _mm256_xor_si256(in, _mm256_set1_epi8(97)));
-  //     break;
-  //   case 2:
-  //     in = _mm256_mul_epi8(in, in);
-  //     break;
-  //   case 3:
-  //     in = _mm256_xor_si256(in, _mm256_set1_epi8(pos2val));
-  //     break;
-  //   case 4:
-  //     in = _mm256_xor_si256(in, _mm256_set1_epi64x(-1LL));
-  //     break;
-  //   case 5:
-  //     in = _mm256_and_si256(in, _mm256_set1_epi8(pos2val));
-  //     break;
-  //   case 6:
-  //     in = _mm256_sllv_epi8(in,_mm256_and_si256(in,vec_3));
-  //     break;
-  //   case 7:
-  //     in = _mm256_srlv_epi8(in,_mm256_and_si256(in,vec_3));
-  //     break;
-  //   case 8:
-  //     in = _mm256_reverse_epi8(in);
-  //     break;
-  //   case 9:
-  //     in = _mm256_xor_si256(in, popcnt256_epi8(in));
-  //     break;
-  //   case 10:
-  //     in = _mm256_rolv_epi8(in, in);
-  //     break;
-  //   case 11:
-  //     in = _mm256_rol_epi8(in, 1);
-  //     break;
-  //   case 12:
-  //     in = _mm256_xor_si256(in, _mm256_rol_epi8(in, 2));
-  //     break;
-  //   case 13:
-  //     in = _mm256_rol_epi8(in, 3);
-  //     break;
-  //   case 14:
-  //     in = _mm256_xor_si256(in, _mm256_rol_epi8(in, 4));
-  //     break;
-  //   case 15:
-  //     in = _mm256_rol_epi8(in, 5);
-  //     break;
-  //   }  
-  // }
-  
   for (int i = 3; i >= 0; --i)
   {
     uint8_t insn = (opcode >> (i << 2)) & 0xF;
@@ -245,61 +185,34 @@ uint8_t wolfBranch(uint8_t val, uint8_t pos2val, uint32_t opcode)
   return (val);
 }
 
-#if defined(__AVX2__)
-// __attribute__((target("avx2")))
+__attribute__((target("avx512f,avx512bw,avx512vl")))
+void wolfPermute_avx512(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker)
+{
+  uint32_t Opcode = CodeLUT_16[op];
+  
+  __m256i data = _mm256_loadu_si256((__m256i*)&in[pos1]);
+  wolfBranch_avx2(data, in[pos2], Opcode, worker);
+  
+  int bytes_to_update = pos2 - pos1;
+  __mmask32 mask = _cvtu32_mask32((1U << bytes_to_update) - 1);
+  
+  _mm256_mask_storeu_epi8((void*)&out[pos1], mask, data);
+}
+
+__attribute__((target("avx2")))
 void wolfPermute_avx2(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker)
 {
-  // printf("AVX2 WOLF\n");
 	uint32_t Opcode = CodeLUT_16[op];
 
   __m256i data = _mm256_loadu_si256((__m256i*)&in[pos1]);
   __m256i old = data;
 
-  // if (pos2==pos1) {
-  //   _mm256_storeu_si256((__m256i*)&out[pos1], data);
-  //   return;
-  // }
-
   wolfBranch_avx2(data, in[pos2], Opcode, worker);
-  // data = _mm256_blendv_epi8(old, data, _mm256_load_si256((__m256i*)&worker.maskTable_bytes[(pos2 - pos1)*32]));
-  data = _mm256_blendv_epi8(old, data, _mm256_loadu_si256((__m256i*)&worker.maskTable_bytes[(pos2 - pos1)*32]));
-  // data = _mm256_blendv_epi8(old, data, genMask(pos2-pos1));
+  data = _mm256_blendv_epi8(old, data, genMask_avx2(pos2-pos1));
 
   _mm256_storeu_si256((__m256i*)&out[pos1], data);
 }
 
-void wolfSame(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker)
-{
-  // printf("AVX2 WOLF\n");
-
-  __m256i data = _mm256_loadu_si256((__m256i*)&in[pos1]);
-  __m256i old = data;
-
-  if (worker.isBranched[op])
-  {
-    data = _mm256_set1_epi8(worker.lookup3D[worker.branched_idx[worker.op] * 256 * 256 +
-                                            in[worker.pos2] * 256 +
-                                            in[worker.pos1]]);
-  }
-  else
-  {
-    data = _mm256_set1_epi8(worker.simpleLookup[worker.reg_idx[worker.op] * 256 + in[pos1]]);
-  }
-
-  // if (pos2==pos1) {
-  //   _mm256_storeu_si256((__m256i*)&out[pos1], data);
-  //   return;
-  // }
-
-  // data = _mm256_blendv_epi8(old, data, _mm256_load_si256((__m256i*)&worker.maskTable_bytes[(pos2 - pos1)*32]));
-  data = _mm256_blendv_epi8(old, data, _mm256_loadu_si256((__m256i*)&worker.maskTable_bytes[(pos2 - pos1)*32]));
-  // data = _mm256_blendv_epi8(old, data, genMask(pos2-pos1));
-
-  _mm256_storeu_si256((__m256i*)&out[pos1], data);
-}
-
-__attribute__((target("default")))
-#endif
 void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker)
 {
 	uint32_t Opcode = CodeLUT[op];

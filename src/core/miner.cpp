@@ -160,7 +160,7 @@ bool beQuiet = false;
 #if defined(TNN_ASTROBWTV3)
 AstroFunc allAstroFuncs[] = {
   {"branch", branchComputeCPU},
-  {"lookup", lookupCompute},
+  // {"lookup", lookupCompute},
   {"wolf", wolfCompute},
 #if defined(__AVX2__)
   {"avx2z", branchComputeCPU_avx2_zOptimized}
