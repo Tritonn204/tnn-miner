@@ -47,8 +47,8 @@ void runDivsufsortBenchmark() {
   std::vector<std::chrono::duration<double>> times;
   std::vector<std::chrono::duration<double>> times2;
   
-  int32_t *sa = reinterpret_cast<int32_t *>(malloc_huge_pages(MAX_LENGTH*sizeof(int32_t)));
-  byte *buffer = reinterpret_cast<byte *>(malloc_huge_pages(MAX_LENGTH));
+  int32_t *sa = reinterpret_cast<int32_t *>(malloc_huge_pages(ASTRO_MAX_LENGTH*sizeof(int32_t)));
+  byte *buffer = reinterpret_cast<byte *>(malloc_huge_pages(ASTRO_MAX_LENGTH));
   int32_t *bA = reinterpret_cast<int32_t *>(malloc_huge_pages((256)*sizeof(int32_t)));;
   int32_t *bB = reinterpret_cast<int32_t *>(malloc_huge_pages((256*256)*sizeof(int32_t)));
 
@@ -73,7 +73,7 @@ void runDivsufsortBenchmark() {
     times.push_back(time);
   }
 
-  memset(sa, 0, MAX_LENGTH);
+  memset(sa, 0, ASTRO_MAX_LENGTH);
 
   std::cout << "Testing stampsufsort" << std::endl;
   for (const auto& file : snapshotFiles) {
