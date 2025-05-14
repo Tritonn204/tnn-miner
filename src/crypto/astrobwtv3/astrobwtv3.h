@@ -387,6 +387,7 @@ void wolfSame(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2
 uint8_t wolfSingle(uint8_t *in, uint16_t op, uint8_t idx, uint8_t pos2);
 
 void wolfCompute(workerData &worker, bool isTest, int wIndex);
+void wolfCompute_optimized(workerData &worker, bool isTest, int wIndex);
 
 typedef void (*wolfPerm)(uint8_t *, uint8_t *, uint16_t, uint8_t, uint8_t, workerData&);
 

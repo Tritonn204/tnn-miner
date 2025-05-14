@@ -468,12 +468,19 @@ void AstroBWTv3_batch(byte *input, int inputLen, byte *outputhash, workerData &w
       // auto start = std::chrono::steady_clock::now();
       // divsufsort(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.sa, worker.data_len, worker.bA, worker.bB);
       #if defined(USE_ASTRO_SPSA)
-        if(SPSA(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.data_len, worker)) {
-          memcpy(outputhash, worker.padding, 32);
-        } else {
-          byte *B = reinterpret_cast<byte *>(worker.sa);
-          hashSHA256(worker.sha256, B, (outputhash + 32*i), worker.data_len*4);
-        }
+        // if(SPSA(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.data_len, worker)) {
+        SPSA(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.data_len, worker);
+
+        // #ifndef __x86_64__
+        // byte *B = reinterpret_cast<byte *>(worker.sa);
+        // hashSHA256(worker.sha256, B, (outputhash + 32*i), worker.data_len*4);
+        // #else
+        memcpy(outputhash, worker.padding, 32);
+        // } else {
+        //   byte *B = reinterpret_cast<byte *>(worker.sa);
+        //   hashSHA256(worker.sha256, B, (outputhash + 32*i), worker.data_len*4);
+        // }
+        // #endif
       #else
         divsufsort(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.sa, worker.data_len, worker.bA, worker.bB);
         byte *B = reinterpret_cast<byte *>(worker.sa);
@@ -789,205 +796,6 @@ after:
   worker.data_len = static_cast<uint32_t>((worker.tries[wIndex] - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
 }
 
-void wolfCompute_optimized(workerData &worker, bool isTest, int wIndex)
-{
-  byte prevOp;
-  int changeCount = 0;
-
-  worker.templateIdx = 0;
-  uint8_t chunkCount = 1;
-  int firstChunk = 0;
-
-  uint8_t lp1 = 0;
-  uint8_t lp2 = 255;
-
-  for (int it = 0; it < 278; ++it)
-  {
-      worker.tries[wIndex]++;
-      worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries[wIndex];
-
-      prevOp = worker.op;
-      worker.op = static_cast<byte>(worker.random_switcher);
-
-      byte p1 = static_cast<byte>(worker.random_switcher >> 8);
-      byte p2 = static_cast<byte>(worker.random_switcher >> 16);
-
-      // Branchless swap
-      byte shouldSwap = p1 > p2;
-      byte temp = p1;
-      p1 = shouldSwap ? p2 : p1;
-      p2 = shouldSwap ? temp : p2;
-
-      // Simplified clipping
-      if (p2 - p1 > 32)
-      {
-        p2 = p1 + ((p2 - p1) & 0x1f);
-      }
-
-      // Combined min/max update
-      if (worker.tries[wIndex] > 0) {
-        lp1 = (p1 < lp1) ? p1 : lp1;
-        lp2 = (p2 > lp2) ? p2 : lp2;
-      }
-
-      worker.pos1 = p1;
-      worker.pos2 = p2;
-
-      worker.chunk = &worker.sData[wIndex * ASTRO_SCRATCH_SIZE + (worker.tries[wIndex] - 1) * 256];
-
-      if (worker.tries[wIndex] == 1) {
-        worker.prev_chunk = worker.chunk;
-      } else {
-        worker.prev_chunk = &worker.sData[wIndex * ASTRO_SCRATCH_SIZE + (worker.tries[wIndex] - 2) * 256];
-        __builtin_prefetch(worker.prev_chunk+p1,0,1);  // Temporal locality hint
-        __builtin_prefetch(worker.chunk+p1,1,1);
-
-        memcpy(worker.chunk, worker.prev_chunk, 256);
-      }
-
-    if (worker.op == 253)
-    {
-      for (int i = worker.pos1; i < worker.pos2; i++)
-      {
-        // INSERT_RANDOM_CODE_START
-        worker.chunk[i] = rl8(worker.chunk[i], 3);  // rotate  bits by 3
-        worker.chunk[i] ^= rl8(worker.chunk[i], 2); // rotate  bits by 2
-        worker.chunk[i] ^= worker.prev_chunk[worker.pos2];     // XOR
-        worker.chunk[i] = rl8(worker.chunk[i], 3);  // rotate  bits by 3
-        // INSERT_RANDOM_CODE_END
-
-        worker.prev_lhash = worker.lhash + worker.prev_lhash;
-        worker.lhash = XXHash64::hash(worker.chunk, worker.pos2,0);
-      }
-
-      goto after;
-    }
-    if (worker.op >= 254) {
-      RC4_set_key(&worker.key[wIndex], 256,  worker.prev_chunk);
-    }
-    wolfPerms[0](worker.prev_chunk, worker.chunk, worker.op, worker.pos1, worker.pos2, worker);
-
-    if (!worker.op) {
-      if ((worker.pos2-worker.pos1) & 1) { // Simpler odd check
-        worker.t1 = worker.chunk[worker.pos1];
-        worker.t2 = worker.chunk[worker.pos2];
-        worker.chunk[worker.pos1] = reverse8(worker.t2);
-        worker.chunk[worker.pos2] = reverse8(worker.t1);
-        worker.isSame = false;
-      }
-    }
-
-after:
-    // Combined position update
-    uint8_t pushPos1 = (worker.pos1 == worker.pos2) ? 255 /* was -1 */ : lp1;
-    uint8_t pushPos2 = (worker.pos1 == worker.pos2) ? 255 /* was -1 */ : lp2;
-
-    // Simplified modulus operation
-    int diff = worker.chunk[worker.pos1] - worker.chunk[worker.pos2];
-    worker.A = ((diff % 256) + 256) & 0xFF;
-
-    // Cascade through hash operations with early exit
-    if (worker.A < 0x30) { // Common case optimization
-      worker.prev_lhash = worker.lhash + worker.prev_lhash;
-      
-      if (worker.A < 0x10) { // 6.25 % probability
-        worker.lhash = XXHash64::hash(worker.chunk, worker.pos2, 0);
-        
-        #ifdef DEBUG_OP_ORDER
-        if (worker.op == sus_op && debugOpOrder)  printf("Wolf: A: new worker.lhash: %08jx\n", worker.lhash);
-        #endif
-      } else if (worker.A < 0x20) { // 12.5 % probability
-        worker.lhash = hash_64_fnv1a(worker.chunk, worker.pos2);
-        
-        #ifdef DEBUG_OP_ORDER
-        if (worker.op == sus_op && debugOpOrder)  printf("Wolf: B: new worker.lhash: %08jx\n", worker.lhash);
-        #endif
-      } else { // 18.75 % probability
-        HH_ALIGNAS(16)
-        const highwayhash::HH_U64 key2[2] = {worker.tries[wIndex], worker.prev_lhash};
-        worker.lhash = highwayhash::SipHash(key2, (char*)worker.chunk, worker.pos2);
-        
-        #ifdef DEBUG_OP_ORDER
-        if (worker.op == sus_op && debugOpOrder)  printf("Wolf: C: new worker.lhash: %08jx\n", worker.lhash);
-        #endif
-      }
-    }
-
-    if (worker.A <= 0x40)
-    { // 25% probablility
-      RC4(&worker.key[wIndex], 256, worker.chunk,  worker.chunk);
-      worker.isSame = false;
-      
-      // Conditional bounds update
-      if (255 - pushPos2 < MINPREFLEN) pushPos2 = 255;
-      if (pushPos1 < MINPREFLEN) pushPos1 = 0;
-      if (pushPos1 == 255) pushPos1 = 0;  // Redundant check - optimize?
-      
-      // Direct template initialization
-      templateMarker& tpl = worker.astroTemplate[worker.templateIdx];
-      tpl.p1 = (chunkCount > 1) ? pushPos1 : 0;
-      tpl.p2 = (chunkCount > 1) ? pushPos2 : 255;
-      tpl.keySpotA = 0;
-      tpl.keySpotB = 0;
-      tpl.posData = (firstChunk << 7) | chunkCount;
-
-      pushPos1 = 0;
-      pushPos2 = 255;
-      worker.templateIdx += (worker.tries[wIndex] > 1);
-      firstChunk = worker.tries[wIndex]-1;
-      lp1 = 255;
-      lp2 = 0;
-      chunkCount = 1;
-    } else {
-      chunkCount++;
-    }
-
-    // Final byte update
-    worker.chunk[255] ^= worker.chunk[worker.pos1] ^ worker.chunk[worker.pos2];
-
-    // Removed redundant bounds checks here - already done above
-    
-    #ifdef DEBUG_OP_ORDER
-    if (debugOpOrder && worker.op == sus_op) {
-      printf("Wolf op %d result:\n", worker.op);
-      for (int i = 0; i < 256; i++) {
-        printf("%02X ", worker.chunk[i]);
-      } 
-      printf("\n");
-    }
-    #endif
-
-    // Combined exit condition
-    if (worker.tries[wIndex] > 276 || 
-        (worker.sData[(worker.tries[wIndex]-1)*256+255] >= 0xf0 && worker.tries[wIndex] > 260))
-    {
-      break;
-    }
-  }
-
-  // Handle final stamp (simplified)
-  if (chunkCount > 0) {
-    // Only adjust bounds if needed
-    if (255 - lp2 < MINPREFLEN) lp2 = 255;
-    if (lp1 < MINPREFLEN) lp1 = 0;
-    
-    // Direct initialization
-    templateMarker& tpl = worker.astroTemplate[worker.templateIdx];
-    tpl.p1 = (chunkCount > 1) ? lp1 : 0;
-    tpl.p2 = (chunkCount > 1) ? lp2 : 255;
-    tpl.keySpotA = 0;
-    tpl.keySpotB = 0;
-    tpl.posData = (firstChunk << 7) | chunkCount;
-
-    worker.templateIdx++;
-  }
-
-  // Simplified data length calculation
-  worker.data_len = static_cast<uint32_t>((worker.tries[wIndex] - 4) * 256 + 
-    (((static_cast<uint64_t>(worker.chunk[253]) << 8) | 
-      static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
-}
-
 // void decompressChunks(workerData &worker, int wIndex) {
 //   // First pass: Copy all base chunks to their positions in sData
 //   for (int tIdx = 0; tIdx < worker.templateIdx; tIdx++) {
@@ -1247,7 +1055,6 @@ after:
 //     (((static_cast<uint64_t>(worker.chunk[253]) << 8) | 
 //       static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
 // }
-
 
 // Compute the new values for worker.chunk using layered lookup tables instead of
 // branched computational operations

@@ -16,6 +16,9 @@ if (WITH_ASTROBWTV3)
       src/net/dero/*.cpp
       src/net/spectre/*.cpp
     )
+
+    list(FILTER astroSources EXCLUDE REGEX ".*bench\\.cpp$")
+    list(FILTER astroSources EXCLUDE REGEX ".*/build/.*")
     
     list(APPEND astroSources
       src/coins/mine_dero.cpp
