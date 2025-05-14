@@ -84,7 +84,7 @@ std::vector<byte> opsB;
 
 bool debugOpOrder = false;
 
-void (*astroCompFunc)(workerData &worker, bool isTest, int wIndex) = branchComputeCPU;
+void (*astroCompFunc)(workerData &worker, bool isTest, int wIndex) = wolfCompute;
 
 void saveBufferToFile(const std::string& filename, const byte* buffer, size_t size) {
     // Generate unique filename using timestamp
