@@ -56,6 +56,7 @@ public:
   int lucky = 0;
 
   SHA256_CTX sha256;
+  uint8_t sha_padding[64];
   ucstk::Salsa20 salsa20;
   RC4_KEY key[DERO_BATCH];
 
@@ -94,7 +95,7 @@ public:
   uint64_t prev_lhash;
   uint16_t tries[DERO_BATCH];
 
-  uint32_t sa_prelim[277*256+1];
+  uint32_t sa_prelim[128*256+1];
   int32_t sa[277*256+1];
   templateMarker astroTemplate[277];
   int templateIdx = 0;
@@ -109,6 +110,8 @@ public:
   uint16_t buckets_d[256][256];
   uint32_t bHeads[256][256];
   uint32_t bHeadIdx[256][256];
+
+  uint8_t end_padding[64];
   
   // std::bitset<277*256> isIn;
   // std::bitset<277*256> isKey;

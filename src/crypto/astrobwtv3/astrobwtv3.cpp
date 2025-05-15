@@ -420,7 +420,8 @@ void AstroBWTv3_batch(byte *input, int inputLen, byte *outputhash, workerData &w
 {
   try
   {
-    for (int i = 0; i < DERO_BATCH; i++) {
+      constexpr int i = 0;
+    // for (int i = 0; i < DERO_BATCH; i++) {
       // auto start = std::chrono::steady_clock::now();
       std::fill_n(worker.sData + ASTRO_SCRATCH_SIZE*i + 256, 64, 0);
       memset(worker.sData + ASTRO_SCRATCH_SIZE*i + 256, 0, 64);
@@ -448,9 +449,9 @@ void AstroBWTv3_batch(byte *input, int inputLen, byte *outputhash, workerData &w
 
       RC4_set_key(&worker.key[i], 256,  &worker.sData[ASTRO_SCRATCH_SIZE*i]);
       RC4(&worker.key[i], 256, &worker.sData[ASTRO_SCRATCH_SIZE*i], &worker.sData[ASTRO_SCRATCH_SIZE*i]);
-    }
+    // }
 
-    for (int i = 0; i < DERO_BATCH; i++) {
+    // for (int i = 0; i < DERO_BATCH; i++) {
       worker.lhash = hash_64_fnv1a_256(&worker.sData[ASTRO_SCRATCH_SIZE*i]);
       worker.prev_lhash = worker.lhash;
 
@@ -458,8 +459,8 @@ void AstroBWTv3_batch(byte *input, int inputLen, byte *outputhash, workerData &w
       worker.isSame = false;
 
       astroCompFunc(worker, false, i);
-    }
-    for (int i = 0; i < DERO_BATCH; i++) {
+    // }
+    // for (int i = 0; i < DERO_BATCH; i++) {
       worker.data_len = static_cast<uint32_t>(
         (worker.tries[i] - 4) * 256 + 
         (((static_cast<uint64_t>(worker.sData[i*ASTRO_SCRATCH_SIZE + (worker.tries[i]-1)*256 + 253]) << 8) | 
@@ -467,26 +468,26 @@ void AstroBWTv3_batch(byte *input, int inputLen, byte *outputhash, workerData &w
       );
       // auto start = std::chrono::steady_clock::now();
       // divsufsort(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.sa, worker.data_len, worker.bA, worker.bB);
-      #if defined(USE_ASTRO_SPSA)
+      // #if defined(USE_ASTRO_SPSA)
         // if(SPSA(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.data_len, worker)) {
         SPSA(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.data_len, worker);
 
         // #ifndef __x86_64__
-        // byte *B = reinterpret_cast<byte *>(worker.sa);
-        // hashSHA256(worker.sha256, B, (outputhash + 32*i), worker.data_len*4);
-        // #else
-        memcpy(outputhash, worker.padding, 32);
-        // } else {
-        //   byte *B = reinterpret_cast<byte *>(worker.sa);
-        //   hashSHA256(worker.sha256, B, (outputhash + 32*i), worker.data_len*4);
-        // }
-        // #endif
-      #else
-        divsufsort(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.sa, worker.data_len, worker.bA, worker.bB);
         byte *B = reinterpret_cast<byte *>(worker.sa);
         hashSHA256(worker.sha256, B, (outputhash + 32*i), worker.data_len*4);
-      #endif
-    }
+        // #else
+        // memcpy(outputhash, worker.padding, 32);
+        // } else {
+          // byte *B = reinterpret_cast<byte *>(worker.sa);
+          // hashSHA256(worker.sha256, B, (outputhash + 32*i), worker.data_len*4);
+        // }
+        // #endif
+      // #else
+      //   divsufsort(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.sa, worker.data_len, worker.bA, worker.bB);
+      //   byte *B = reinterpret_cast<byte *>(worker.sa);
+      //   hashSHA256(worker.sha256, B, (outputhash + 32*i), worker.data_len*4);
+      // #endif
+    // }
   }
   catch (const std::exception &ex)
   {
