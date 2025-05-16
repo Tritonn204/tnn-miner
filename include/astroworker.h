@@ -11,7 +11,7 @@
 #include <openssl/rc4.h>
 
 #define DERO_BATCH 1
-#define MAX_LENGTH ((256 * 277) - 1) // this is the maximum
+#define MAX_LENGTH (256 * 277) // this is the maximum
 #define ASTRO_SCRATCH_SIZE ((MAX_LENGTH + 64))
 #define MAX_RUN_LEN 48
 #define MAX_RUNS_PER_BUCKET 128
@@ -79,9 +79,6 @@ public:
   int bA[256];
   int bB[256*256];
 
-  byte sHash[32];
-  byte sha_key[32];
-  byte sha_key2[32];
   byte step_3[256];
   byte sData[ASTRO_SCRATCH_SIZE*DERO_BATCH];
 
@@ -95,7 +92,7 @@ public:
   uint64_t prev_lhash;
   uint16_t tries[DERO_BATCH];
 
-  uint32_t sa_prelim[128*256+1];
+  uint32_t sa_prelim[96*256+1] = {(uint32_t)-1};
   int32_t sa[277*256+1];
   templateMarker astroTemplate[277];
   int templateIdx = 0;

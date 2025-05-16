@@ -5,7 +5,7 @@
 // The base for the following code was contributed by @Wolf9466 on Discord
 
 // Last instruction is a special case, and duplicated.
-alignas(32) uint32_t CodeLUT[257] =
+alignas(32) constexpr uint32_t CodeLUT[257] =
 {
 	0x090F020A, 0x060B0500, 0x09080609, 0x0A0D030B, 0x04070A01, 0x09030607, 0x060D0401, 0x000A0904,
 	0x040F0F06, 0x030E070C, 0x04020D02, 0x0B0F050A, 0x0C020C04, 0x0B03070F, 0x07060206, 0x0C060501,
