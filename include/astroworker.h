@@ -92,7 +92,7 @@ public:
   uint64_t prev_lhash;
   uint16_t tries[DERO_BATCH];
 
-  uint32_t sa_prelim[96*256+1] = {(uint32_t)-1};
+  uint32_t sa_prelim[120*256+1] = {(uint32_t)-1};
   int32_t sa[277*256+1];
   templateMarker astroTemplate[277];
   int templateIdx = 0;
