@@ -163,7 +163,7 @@ inline po::options_description get_prog_opts()
 
   po::options_description dero("Dero", col_width);
   dero.add_options()
-    ("lookup", "Mine with lookup tables instead of computation")
+    // ("lookup", "Mine with lookup tables instead of computation")
     ("dero-benchmark", po::value<int>(), "Runs a mining benchmark for <arg> seconds (adheres to -t threads option)")
     ("test-dero", "Runs a set of tests to verify AstrobwtV3 is working (1 test expected to fail)")
   ;
@@ -213,9 +213,9 @@ inline po::options_description get_prog_opts()
 
   po::options_description advanced("Advanced", col_width);
   advanced.add_options()
-    ("tune-warmup", po::value<int>()->default_value(1), "Number of seconds to warmup the CPU before starting the AstroBWTv3 tuning")
-    ("tune-duration", po::value<int>()->default_value(2), "Number of seconds to tune *each* AstroBWTv3 algorithm. There will 3 or 4 algorithms depending on supported CPU features")
-    ("no-tune", po::value<std::string>(), "<branch|lookup|avx2|wolf|aarch64> Use the specified AstroBWTv3 algorithm and skip tuning")
+    // ("tune-warmup", po::value<int>()->default_value(1), "Number of seconds to warmup the CPU before starting the AstroBWTv3 tuning")
+    // ("tune-duration", po::value<int>()->default_value(2), "Number of seconds to tune *each* AstroBWTv3 algorithm. There will 3 or 4 algorithms depending on supported CPU features")
+    // ("no-tune", po::value<std::string>(), "<branch|lookup|avx2|wolf|aarch64> Use the specified AstroBWTv3 algorithm and skip tuning")
     ("mine-time", po::value<int>()->default_value(0), "Mine for a given number of seconds and then exit")
   ;
 
@@ -224,7 +224,7 @@ inline po::options_description get_prog_opts()
     ("op", po::value<int>(), "Sets which branch op to benchmark (0-255), benchmark will be skipped if unspecified")
     ("len", po::value<int>(), "Sets length of the processed chunk in said benchmark (default 15)")
     ("sabench", "Runs a benchmark for divsufsort on snapshot files in the 'tests' directory")
-    ("quiet", "Do not print TNN banner")
+    ("quiet", "Do not print TNN banner or stratum job notification")
   ;
 
   general.add(coins);

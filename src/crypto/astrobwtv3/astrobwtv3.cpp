@@ -126,125 +126,125 @@ void checkSIMDSupport() {
 }
 */
 
-template <std::size_t N>
-inline void generateRandomBytesForTune(std::uint8_t (&iv_buff)[N])
-{
-  auto const hes = std::random_device{}();
+// template <std::size_t N>
+// inline void generateRandomBytesForTune(std::uint8_t (&iv_buff)[N])
+// {
+//   auto const hes = std::random_device{}();
 
-  using random_bytes_engine = std::independent_bits_engine<std::default_random_engine,
-                                                           CHAR_BIT, unsigned short>;
+//   using random_bytes_engine = std::independent_bits_engine<std::default_random_engine,
+//                                                            CHAR_BIT, unsigned short>;
 
-  random_bytes_engine rbe;
-  rbe.seed(hes);
+//   random_bytes_engine rbe;
+//   rbe.seed(hes);
 
-  std::generate(std::begin(iv_buff), std::end(iv_buff), std::ref(rbe));
-}
+//   std::generate(std::begin(iv_buff), std::end(iv_buff), std::ref(rbe));
+// }
 
-bool setAstroAlgo(std::string desiredAlgo) {
-  bool toRet = false;
-  for(int x = 0; x < numAstroFuncs; x++) {
-    if(desiredAlgo.compare(allAstroFuncs[x].funcName) == 0) {
-      printf("Setting AstroBWTv3 override: %s\n", allAstroFuncs[x].funcName.c_str());
-      astroCompFunc = allAstroFuncs[x].funcPtr;
-      toRet = true;
-      break;
-    }
-  }
-  if(!toRet) {
-    printf("Unrecognized AstroBWTv3 algo: %s\nAllowed options are: ", desiredAlgo.c_str());
-    for(int x = 0; x < numAstroFuncs; x++) {
-      printf("%s ", allAstroFuncs[x].funcName.c_str());
-    }
-    printf("\n");
-  }
-  return toRet;
-}
+// bool setAstroAlgo(std::string desiredAlgo) {
+//   bool toRet = false;
+//   for(int x = 0; x < numAstroFuncs; x++) {
+//     if(desiredAlgo.compare(allAstroFuncs[x].funcName) == 0) {
+//       printf("Setting AstroBWTv3 override: %s\n", allAstroFuncs[x].funcName.c_str());
+//       astroCompFunc = allAstroFuncs[x].funcPtr;
+//       toRet = true;
+//       break;
+//     }
+//   }
+//   if(!toRet) {
+//     printf("Unrecognized AstroBWTv3 algo: %s\nAllowed options are: ", desiredAlgo.c_str());
+//     for(int x = 0; x < numAstroFuncs; x++) {
+//       printf("%s ", allAstroFuncs[x].funcName.c_str());
+//     }
+//     printf("\n");
+//   }
+//   return toRet;
+// }
 
-void astroTune(int num_threads, int tuneWarmupSec, int tuneDurationSec) {
-  int64_t tuneWarmupMs = tuneWarmupSec * 1000;
-  int64_t tuneDurationMs = tuneDurationSec * 1000;
+// void astroTune(int num_threads, int tuneWarmupSec, int tuneDurationSec) {
+//   int64_t tuneWarmupMs = tuneWarmupSec * 1000;
+//   int64_t tuneDurationMs = tuneDurationSec * 1000;
 
-  int totalTuneTime = numAstroFuncs * (tuneWarmupSec + tuneDurationSec);
-  printf("Tuning %zu AstroBWTv3 algos for %d seconds in total\n", numAstroFuncs, totalTuneTime);
-  fflush(stdout);
+//   int totalTuneTime = numAstroFuncs * (tuneWarmupSec + tuneDurationSec);
+//   printf("Tuning %zu AstroBWTv3 algos for %d seconds in total\n", numAstroFuncs, totalTuneTime);
+//   fflush(stdout);
 
-  boost::mutex durLock;
-  std::vector<int64_t> durations[numAstroFuncs];
+//   boost::mutex durLock;
+//   std::vector<int64_t> durations[numAstroFuncs];
   
-  boost::mutex hashLock;
-  int64_t numHashes[numAstroFuncs];
-  for(int x = 0; x < numAstroFuncs; x++) {
-    numHashes[x] = 0;
-  }
+//   boost::mutex hashLock;
+//   int64_t numHashes[numAstroFuncs];
+//   for(int x = 0; x < numAstroFuncs; x++) {
+//     numHashes[x] = 0;
+//   }
 
-  int fastestCompIdx = 0;
-  void (*fastestComp)(workerData &worker, bool isTest, int wIndex) = branchComputeCPU;
+//   int fastestCompIdx = 0;
+//   void (*fastestComp)(workerData &worker, bool isTest, int wIndex) = branchComputeCPU;
 
-  try {
-    byte random_buffer[48];
-    generateRandomBytesForTune<48>(random_buffer);
-    byte res[32];
+//   try {
+//     byte random_buffer[48];
+//     generateRandomBytesForTune<48>(random_buffer);
+//     byte res[32];
 
-    boost::thread tune_threads[num_threads];
-    for (int x = 0; x < numAstroFuncs; x++)
-    {
-      astroCompFunc = allAstroFuncs[x].funcPtr;
+//     boost::thread tune_threads[num_threads];
+//     for (int x = 0; x < numAstroFuncs; x++)
+//     {
+//       astroCompFunc = allAstroFuncs[x].funcPtr;
 
-      // Start each thread with an inline lambda function
-      for (int i = 0; i < num_threads; ++i) {
-        tune_threads[i] = boost::thread([&]() {
-          int tid = i;
-          workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
-          initWorker(*worker);
-          lookupGen(*worker, nullptr, nullptr);
+//       // Start each thread with an inline lambda function
+//       for (int i = 0; i < num_threads; ++i) {
+//         tune_threads[i] = boost::thread([&]() {
+//           int tid = i;
+//           workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
+//           initWorker(*worker);
+//           lookupGen(*worker, nullptr, nullptr);
 
-          auto warmupStart = std::chrono::steady_clock::now();
-          for(;;) {
-            AstroBWTv3(random_buffer, 48, res, *worker, false);
-            if(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - warmupStart).count() > tuneWarmupMs) {
-              break;
-            }
-          }
+//           auto warmupStart = std::chrono::steady_clock::now();
+//           for(;;) {
+//             AstroBWTv3(random_buffer, 48, res, *worker, false);
+//             if(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - warmupStart).count() > tuneWarmupMs) {
+//               break;
+//             }
+//           }
 
-          int hashes = 0;
-          auto start = std::chrono::steady_clock::now();
-          for(;;) {
-            AstroBWTv3(random_buffer, 48, res, *worker, false);
-            hashes++;
-            if(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count() > tuneDurationMs) {
-              break;
-            }
-          }
-          hashLock.lock();
-          numHashes[x] += hashes;
-          hashLock.unlock();
-        });
-      }
-      // Wait for all threads to finish
-      for (int i = 0; i < num_threads; ++i) {
-          tune_threads[i].join();
-      }
-      printf("%s: %2.3f   ", allAstroFuncs[x].funcName.c_str(), (double)numHashes[x] / (double)tuneDurationMs);
-    }
-  } catch (const std::exception& e) {
-      std::cerr << "Exception: " << e.what() << "\n";
-  }
+//           int hashes = 0;
+//           auto start = std::chrono::steady_clock::now();
+//           for(;;) {
+//             AstroBWTv3(random_buffer, 48, res, *worker, false);
+//             hashes++;
+//             if(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count() > tuneDurationMs) {
+//               break;
+//             }
+//           }
+//           hashLock.lock();
+//           numHashes[x] += hashes;
+//           hashLock.unlock();
+//         });
+//       }
+//       // Wait for all threads to finish
+//       for (int i = 0; i < num_threads; ++i) {
+//           tune_threads[i].join();
+//       }
+//       printf("%s: %2.3f   ", allAstroFuncs[x].funcName.c_str(), (double)numHashes[x] / (double)tuneDurationMs);
+//     }
+//   } catch (const std::exception& e) {
+//       std::cerr << "Exception: " << e.what() << "\n";
+//   }
 
-  astroCompFunc = allAstroFuncs[0].funcPtr;
-  int64_t mostHashes = numHashes[0];
-  for (int x = 0; x < numAstroFuncs; x++)
-  {
-    // printf("%s = %d\n", astroCompFuncNames.data()[x].c_str(), numHashes[x]);
-    if (numHashes[x] > mostHashes)
-    {
-      astroCompFunc = allAstroFuncs[x].funcPtr;
-      mostHashes = numHashes[x];
-      fastestCompIdx = x;
-    }
-  }
+//   astroCompFunc = allAstroFuncs[0].funcPtr;
+//   int64_t mostHashes = numHashes[0];
+//   for (int x = 0; x < numAstroFuncs; x++)
+//   {
+//     // printf("%s = %d\n", astroCompFuncNames.data()[x].c_str(), numHashes[x]);
+//     if (numHashes[x] > mostHashes)
+//     {
+//       astroCompFunc = allAstroFuncs[x].funcPtr;
+//       mostHashes = numHashes[x];
+//       fastestCompIdx = x;
+//     }
+//   }
 
-  printf("\nUsing %s\n", allAstroFuncs[fastestCompIdx].funcName.c_str());
-}
+//   printf("\nUsing %s\n", allAstroFuncs[fastestCompIdx].funcName.c_str());
+// }
 
 void hashSHA256(SHA256_CTX &sha256, const byte *input, byte *digest, unsigned long inputSize)
 {
@@ -253,241 +253,55 @@ void hashSHA256(SHA256_CTX &sha256, const byte *input, byte *digest, unsigned lo
   SHA256_Final(digest, &sha256);
 }
 
-std::vector<uint8_t> padSHA256Input(const uint8_t* input, size_t length) {
-    // Calculate the length of the padded message
-    size_t paddedLength = length + 1; // Original length plus the 0x80 byte
-    size_t mod = paddedLength % 64;
-    if (mod > 56) {
-        paddedLength += 64 + 56 - mod; // Pad so there's room for the length
-    } else {
-        paddedLength += 56 - mod; // Pad so there's room for the length
-    }
-    paddedLength += 8; // Add 8 bytes for the original length
-
-    // Create the padded message
-    std::vector<uint8_t> padded(paddedLength, 0);
-    memcpy(padded.data(), input, length);
-
-    // Append the '1' bit
-    padded[length] = 0x80;
-
-    // Append the original length in bits as a 64-bit big-endian integer
-    uint64_t bitLength = static_cast<uint64_t>(length) * 8; // Convert length to bits
-    for (size_t i = 0; i < 8; ++i) {
-        padded[paddedLength - 1 - i] = static_cast<uint8_t>((bitLength >> (8 * i)) & 0xff);
-    }
-
-    return padded;
-}
-
-void checkFalseRep(workerData &worker) {
-  byte f = worker.prev_chunk[worker.pos1];
-  bool falsePos = false;
-  for (int i = worker.pos1; i < worker.pos2; i++) {
-    if (worker.prev_chunk[i] != f) {
-      falsePos = true;
-      break;
-    }
-  }
-
-  if (falsePos) {
-    printf("false positive\n");
-    for (int i = worker.pos1; i < worker.pos2; i++) {
-      printf("%02x ", worker.prev_chunk[i]);
-    }
-    printf("\n");
-  }
-}
-
-// Function to compare two suffixes based on lexicographical order
-bool cmp(const uint8_t* data, const std::pair<uint32_t, uint32_t>& a, const std::pair<uint32_t, uint32_t>& b) {
-    const uint8_t* p1 = data + a.second;
-    const uint8_t* p2 = data + b.second;
-
-    while (*p1 != 0 && *p1 == *p2) {
-        ++p1;
-        ++p2;
-    }
-
-    return *p1 < *p2;
-}
-
-void buildSuffixArray(const uint8_t* data, int n, int* suffixArray, int* buckets, int* sorted) {
-    if (n <= 0 || !data || !suffixArray || !buckets || !sorted) {
-        // Handle invalid input
-        return;
-    }
-
-    // Step 1: Counting sort on first character
-    for (int i = 0; i < 256; ++i) {
-        buckets[i] = 0;  // Initialize buckets
-    }
-
-    for (int i = 0; i < n; ++i) {
-        buckets[data[i]]++;
-    }
-
-    for (int i = 1; i < 256; ++i) {
-        buckets[i] += buckets[i - 1];
-    }
-
-    for (int i = n - 1; i >= 0; --i) {
-        sorted[--buckets[data[i]]] = i;
-    }
-
-    // Step 2: Sort suffixes recursively
-    int* indices = new int[n];
-    indices[sorted[0]] = 0;
-    int rank = 0;
-    for (int i = 1; i < n; ++i) {
-        if (data[sorted[i]] != data[sorted[i - 1]]) {
-            rank++;
-        }
-        indices[sorted[i]] = rank;
-    }
-
-    int* temp = new int[n];
-    for (int k = 1; (1 << k) < n; k <<= 1) {
-        for (int i = 0; i < n; ++i) {
-            temp[i] = (indices[i] << k) | (i + (1 << k) < n ? indices[i + (1 << k)] : 0);
-        }
-
-        for (int i = 0; i < n; ++i) {
-            buckets[temp[i]] = 0;  // Reset buckets
-        }
-
-        for (int i = 0; i < n; ++i) {
-            buckets[temp[i]]++;
-        }
-
-        for (int i = 1; i < n; ++i) {
-            buckets[i] += buckets[i - 1];
-        }
-
-        for (int i = n - 1; i >= 0; --i) {
-            suffixArray[--buckets[temp[i]]] = sorted[i];
-        }
-
-        for (int i = 0; i < n; ++i) {
-            indices[suffixArray[i]] = temp[suffixArray[i]] == temp[suffixArray[i - 1]] && i > 0 ? indices[suffixArray[i - 1]] : i;
-        }
-    }
-
-    delete[] indices;
-    delete[] temp;
-}
-
-#if defined(__AVX2__)
-
-void computeByteFrequencyAVX2(const unsigned char* data, size_t dataSize, int frequencyTable[256]) {
-    __m256i chunk;
-    const size_t simdWidth = 32; // AVX2 SIMD register width in bytes
-
-    // Zero-initialize a local frequency table to avoid read-modify-write AVX2 operations
-    int localFrequencyTable[256] = {0};
-
-    // Process chunks of 32 bytes
-    for (size_t i = 0; i < dataSize; i += simdWidth) {
-        if (i + simdWidth <= dataSize) { // Ensure we don't read past the end
-            chunk = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + i));
-
-            // Update frequency table in a non-vectorized manner due to AVX2 limitations
-            unsigned char temp[simdWidth];
-            _mm256_storeu_si256(reinterpret_cast<__m256i*>(temp), chunk);
-
-            for (size_t j = 0; j < simdWidth; ++j) {
-                ++localFrequencyTable[temp[j]];
-            }
-        } else {
-            // Handle remainder bytes that don't fit into a full AVX2 register
-            for (size_t j = i; j < dataSize; ++j) {
-                ++localFrequencyTable[data[j]];
-            }
-            break; // Exit the loop after processing the remainder
-        }
-    }
-
-    // Accumulate the results into the provided frequency table
-    for (int i = 0; i < 256; ++i) {
-        frequencyTable[i] += localFrequencyTable[i];
-    }
-}
-
-#endif
-
 TNN_TARGETS
-void AstroBWTv3_batch(byte *input, int inputLen, byte *outputhash, workerData &worker, bool unused)
+void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker, bool unused)
 {
   try
   {
-      constexpr int i = 0;
-    // for (int i = 0; i < DERO_BATCH; i++) {
-      // auto start = std::chrono::steady_clock::now();
-      // std::fill_n(worker.sData + ASTRO_SCRATCH_SIZE*i + 256, 64, 0);
-      memset(worker.sData + ASTRO_SCRATCH_SIZE*i + 256, 0, 64);
+    constexpr int i = 0;
+    memset(worker.sData + ASTRO_SCRATCH_SIZE*i + 256, 0, 64);
 
-      __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 256], 1, 0);
-      __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 256+64], 1, 0);
-      __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 256+128], 1, 0);
-      __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 256+192], 1, 0);
-      
-      hashSHA256(worker.sha256, &input[i*inputLen], &worker.sData[ASTRO_SCRATCH_SIZE*i + 320], inputLen);
-      worker.salsa20.setKey(&worker.sData[ASTRO_SCRATCH_SIZE*i + 320]);
-      worker.salsa20.setIv(&worker.sData[ASTRO_SCRATCH_SIZE*i + 256]);
+    __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 256], 1, 0);
+    __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 256+64], 1, 0);
+    __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 256+128], 1, 0);
+    __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 256+192], 1, 0);
+    
+    hashSHA256(worker.sha256, &input[i*inputLen], &worker.sData[ASTRO_SCRATCH_SIZE*i + 320], inputLen);
+    worker.salsa20.setKey(&worker.sData[ASTRO_SCRATCH_SIZE*i + 320]);
+    worker.salsa20.setIv(&worker.sData[ASTRO_SCRATCH_SIZE*i + 256]);
 
-      __builtin_prefetch(worker.sData + ASTRO_SCRATCH_SIZE*i, 1, 3);
-      __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 64], 1, 3);
-      __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 128], 1, 3);
-      __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 192], 1, 3);
+    __builtin_prefetch(worker.sData + ASTRO_SCRATCH_SIZE*i, 1, 3);
+    __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 64], 1, 3);
+    __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 128], 1, 3);
+    __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 192], 1, 3);
 
-      worker.salsa20.processBytes(worker.salsaInput, &worker.sData[ASTRO_SCRATCH_SIZE*i], 256);
+    worker.salsa20.processBytes(worker.salsaInput, &worker.sData[ASTRO_SCRATCH_SIZE*i], 256);
 
-      __builtin_prefetch(&worker.key[i] + 8, 1, 2);
-      __builtin_prefetch(&worker.key[i] + 8+64, 1, 2);
-      __builtin_prefetch(&worker.key[i] + 8+128, 1, 2);
-      __builtin_prefetch(&worker.key[i] + 8+192, 1, 2);
+    __builtin_prefetch(&worker.key[i] + 8, 1, 2);
+    __builtin_prefetch(&worker.key[i] + 8+64, 1, 2);
+    __builtin_prefetch(&worker.key[i] + 8+128, 1, 2);
+    __builtin_prefetch(&worker.key[i] + 8+192, 1, 2);
 
-      RC4_set_key(&worker.key[i], 256,  &worker.sData[ASTRO_SCRATCH_SIZE*i]);
-      RC4(&worker.key[i], 256, &worker.sData[ASTRO_SCRATCH_SIZE*i], &worker.sData[ASTRO_SCRATCH_SIZE*i]);
-    // }
+    RC4_set_key(&worker.key[i], 256,  &worker.sData[ASTRO_SCRATCH_SIZE*i]);
+    RC4(&worker.key[i], 256, &worker.sData[ASTRO_SCRATCH_SIZE*i], &worker.sData[ASTRO_SCRATCH_SIZE*i]);
 
-    // for (int i = 0; i < DERO_BATCH; i++) {
-      worker.lhash = hash_64_fnv1a_256(&worker.sData[ASTRO_SCRATCH_SIZE*i]);
-      worker.prev_lhash = worker.lhash;
+    worker.lhash = hash_64_fnv1a_256(&worker.sData[ASTRO_SCRATCH_SIZE*i]);
+    worker.prev_lhash = worker.lhash;
 
-      worker.tries[i] = 0;
-      worker.isSame = false;
+    worker.tries[i] = 0;
+    worker.isSame = false;
 
-      astroCompFunc(worker, false, i);
-    // }
-    // for (int i = 0; i < DERO_BATCH; i++) {
-      // worker.data_len = static_cast<uint32_t>(
-      //   (worker.tries[i] - 4) * 256 + 
-      //   (((static_cast<uint64_t>(worker.sData[i*ASTRO_SCRATCH_SIZE + (worker.tries[i]-1)*256 + 253]) << 8) | 
-      //   static_cast<uint64_t>(worker.sData[i*ASTRO_SCRATCH_SIZE + (worker.tries[i]-1)*256 + 254])) & 0x3ff)
-      // );
-      // auto start = std::chrono::steady_clock::now();
-      // divsufsort(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.sa, worker.data_len, worker.bA, worker.bB);
-      // #if defined(USE_ASTRO_SPSA)
-        // if(SPSA(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.data_len, worker)) {
-        SPSA(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.data_len, worker);
+    astroCompFunc(worker, false, i);
 
-        // #ifndef __x86_64__
-        byte *B = reinterpret_cast<byte *>(worker.sa);
-        hashSHA256(worker.sha256, B, (outputhash + 32*i), worker.data_len*4);
-        // #else
-        // memcpy(outputhash, worker.padding, 32);
-        // } else {
-          // byte *B = reinterpret_cast<byte *>(worker.sa);
-          // hashSHA256(worker.sha256, B, (outputhash + 32*i), worker.data_len*4);
-        // }
-        // #endif
-      // #else
-      //   divsufsort(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.sa, worker.data_len, worker.bA, worker.bB);
-      //   byte *B = reinterpret_cast<byte *>(worker.sa);
-      //   hashSHA256(worker.sha256, B, (outputhash + 32*i), worker.data_len*4);
-      // #endif
-    // }
+    #if defined(USE_ASTRO_SPSA)
+      SPSA(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.data_len, worker);
+      byte *B = reinterpret_cast<byte *>(worker.sa);
+      hashSHA256(worker.sha256, B, (outputhash + 32*i), worker.data_len*4);
+    #else
+      divsufsort(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.sa, worker.data_len, worker.bA, worker.bB);
+      byte *B = reinterpret_cast<byte *>(worker.sa);
+      hashSHA256(worker.sha256, B, (outputhash + 32*i), worker.data_len*4);
+    #endif
   }
   catch (const std::exception &ex)
   {
@@ -495,60 +309,6 @@ void AstroBWTv3_batch(byte *input, int inputLen, byte *outputhash, workerData &w
     std::cerr << ex.what() << std::endl;
   }
 }
-
-TNN_TARGETS
-void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker, bool unused, int tid)
-{
-  try
-  {
-    uint8_t scratch[384] = {0};
-    
-    hashSHA256(worker.sha256, input, &scratch[320], inputLen);
-    worker.salsa20.setKey(&scratch[320]);
-    worker.salsa20.setIv(&scratch[256]);
-
-    worker.salsa20.processBytes(worker.salsaInput, scratch, 256);
-
-    RC4_set_key(&worker.key[0], 256,  scratch);
-    RC4(&worker.key[0], 256, scratch,  scratch);
-
-
-    worker.lhash = hash_64_fnv1a_256(scratch);
-    worker.prev_lhash = worker.lhash;
-
-    worker.tries[0] = 0;
-    worker.isSame = false;
-
-    memcpy(worker.sData, scratch, 256);
-    astroCompFunc(worker, false, 0);
-
-    #if defined(USE_ASTRO_SPSA)
-      bool alreadySha = SPSA(worker.sData, worker.data_len, worker);
-      // if(alreadySha) {
-      //   //printf("alreadySha\n");
-      //   memcpy(outputhash, worker.padding, 32);
-      // } else {
-        byte *B = reinterpret_cast<byte *>(worker.sa);
-        hashSHA256(worker.sha256, B, outputhash, worker.data_len*4);
-      // }
-    #else
-      divsufsort(worker.sData, worker.sa, worker.data_len, worker.bA, worker.bB);
-      byte *B = reinterpret_cast<byte *>(worker.sa);
-      hashSHA256(worker.sha256, B, outputhash, worker.data_len*4);
-    #endif
-  }
-  catch (const std::exception &ex)
-  {
-    std::cerr << ex.what() << std::endl;
-  }
-}
-
-TNN_TARGETS
-void branchComputeCPU(workerData &worker, bool isTest, int wIndex)
-{}
-
-void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest, int wIndex)
-{}
 
 // SIMD chunk copy
 
@@ -1058,8 +818,7 @@ after:
 
 // Compute the new values for worker.chunk using layered lookup tables instead of
 // branched computational operations
-void lookupCompute(workerData &worker, bool isTest, int wIndex)
-{}
+// void lookupCompute(workerData &worker, bool isTest, int wIndex)
 // {
 //   worker.templateIdx = 0;
 //   uint8_t chunkCount = 1;

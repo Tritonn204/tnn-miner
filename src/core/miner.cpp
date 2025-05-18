@@ -159,14 +159,14 @@ bool beQuiet = false;
 /* Start definitions from astrobwtv3.h */
 #if defined(TNN_ASTROBWTV3)
 AstroFunc allAstroFuncs[] = {
-  {"branch", branchComputeCPU},
+  // {"branch", branchComputeCPU},
   // {"lookup", lookupCompute},
   {"wolf", wolfCompute},
-#if defined(__AVX2__)
-  {"avx2z", branchComputeCPU_avx2_zOptimized}
-#elif defined(__aarch64__)
-  {"aarch64", branchComputeCPU_aarch64}
-#endif
+// #if defined(__AVX2__)
+//   {"avx2z", branchComputeCPU_avx2_zOptimized}
+// #elif defined(__aarch64__)
+//   {"aarch64", branchComputeCPU_aarch64}
+// #endif
 };
 size_t numAstroFuncs;
 #endif
@@ -780,8 +780,8 @@ int main(int argc, char **argv)
   }
 
   // We can do this because we've set default in terminal.h
-  tuneWarmupSec = vm["tune-warmup"].as<int>();
-  tuneDurationSec = vm["tune-duration"].as<int>();
+  // tuneWarmupSec = vm["tune-warmup"].as<int>();
+  // tuneDurationSec = vm["tune-duration"].as<int>();
 
   mine_time = vm["mine-time"].as<int>();
 
@@ -934,20 +934,20 @@ fillBlanks:
 
   setcolor(BRIGHT_YELLOW);
 
-  #ifdef TNN_ASTROBWTV3
-  if (miningProfile.coin.miningAlgo == ALGO_ASTROBWTV3 || miningProfile.coin.miningAlgo == ALGO_SPECTRE_X) {
-    if (vm.count("no-tune")) {
-      std::string noTune = vm["no-tune"].as<std::string>();
-      if(!setAstroAlgo(noTune)) {
-        throw po::validation_error(po::validation_error::invalid_option_value, "no-tune");
-      }
-    } else {
-      astroTune(threads, tuneWarmupSec, tuneDurationSec);
-    }
-  }
-  fflush(stdout);
-  setcolor(BRIGHT_WHITE);
-  #endif
+  // #ifdef TNN_ASTROBWTV3
+  // if (miningProfile.coin.miningAlgo == ALGO_ASTROBWTV3 || miningProfile.coin.miningAlgo == ALGO_SPECTRE_X) {
+  //   if (vm.count("no-tune")) {
+  //     std::string noTune = vm["no-tune"].as<std::string>();
+  //     if(!setAstroAlgo(noTune)) {
+  //       throw po::validation_error(po::validation_error::invalid_option_value, "no-tune");
+  //     }
+  //   } else {
+  //     astroTune(threads, tuneWarmupSec, tuneDurationSec);
+  //   }
+  // }
+  // fflush(stdout);
+  // setcolor(BRIGHT_WHITE);
+  // #endif
 
   #ifdef TNN_SHAIHIVE
   if (miningProfile.coin.miningAlgo == ALGO_SHAI_HIVE) {

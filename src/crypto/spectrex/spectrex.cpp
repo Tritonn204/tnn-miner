@@ -97,7 +97,7 @@ namespace SpectreX
     keccakf(worker.scratchData);
 
     // AstroBWTv3(worker.scratchData, 32, worker.astrobwtv3Hash, *(worker.astroWorker), false);
-    AstroBWTv3_batch(worker.scratchData, 32, worker.astrobwtv3Hash, *(worker.astroWorker), false);
+    AstroBWTv3(worker.scratchData, 32, worker.astrobwtv3Hash, *(worker.astroWorker), false);
     // AstroBWTv3(worker.sha3Hash, 32, worker.astrobwtv3Hash, *worker.astroWorker, false);
     memcpy(worker.scratchData, worker.astrobwtv3Hash, 32);
     heavyHash(worker.scratchData, worker.matBuffer, out);

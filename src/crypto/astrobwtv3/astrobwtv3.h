@@ -367,9 +367,9 @@ void initWolfLUT();
 void mineDero(int tid);
 
 void processAfterMarker(workerData& worker);
-void lookupCompute(workerData &worker, bool isTest, int wIndex);
+// void lookupCompute(workerData &worker, bool isTest, int wIndex);
 TNN_TARGETS
-void branchComputeCPU(workerData &worker, bool isTest, int wIndex);
+// void branchComputeCPU(workerData &worker, bool isTest, int wIndex);
 
 #ifdef __x86_64__
 #define WOLF_FMV \
@@ -404,16 +404,6 @@ static inline wolfPerm resolve_wolfPermute() {
 // Cached function pointer
 inline wolfPerm wolfPerms[1] = {resolve_wolfPermute()};
 
-#if defined(__AVX2__)
-
-void branchComputeCPU_avx2(workerData &worker, bool isTest, int wIndex);
-
-void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest, int wIndex);
-#elif defined(__aarch64__)
-// This is gross.  But we need to do this until 'workerData' gets pushed into it's own include file.
-void branchComputeCPU_aarch64(workerData &worker, bool isTest, int wIndex);
-#endif
-
 struct AstroFunc {
   std::string funcName;
   void (*funcPtr)(workerData& worker, bool isTest, int wIndex);
@@ -426,10 +416,7 @@ bool setAstroAlgo(std::string desiredAlgo);
 void astroTune(int num_threads, int tuneWarmupSec, int tuneDurationSec);
 
 TNN_TARGETS
-void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &scratch, bool unused, int tid = 0);
-TNN_TARGETS
-void AstroBWTv3_batch(byte *input, int inputLen, byte *outputhash, workerData &worker, bool unused);
-void finishBatch(workerData &worker);
+void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker, bool unused);
 
 static void construct_SA_pre(const byte *T, int *SA,
              int *bucket_A, int *bucket_B,
