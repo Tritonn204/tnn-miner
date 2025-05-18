@@ -412,7 +412,7 @@ struct AstroFunc {
 extern AstroFunc allAstroFuncs[];
 extern size_t numAstroFuncs;
 
-bool setAstroAlgo(std::string desiredAlgo);
+//bool setAstroAlgo(std::string desiredAlgo);
 void astroTune(int num_threads, int tuneWarmupSec, int tuneDurationSec);
 
 TNN_TARGETS
