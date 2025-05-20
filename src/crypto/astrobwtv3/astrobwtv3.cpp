@@ -295,8 +295,9 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
 
     #if defined(USE_ASTRO_SPSA)
       SPSA(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.data_len, worker);
-      byte *B = reinterpret_cast<byte *>(worker.sa);
-      hashSHA256(worker.sha256, B, (outputhash + 32*i), worker.data_len*4);
+      // byte *B = reinterpret_cast<byte *>(worker.sa);
+      // hashSHA256(worker.sha256, B, (outputhash + 32*i), worker.data_len*4);
+      memcpy(outputhash, worker.padding, 32);
     #else
       divsufsort(&worker.sData[i * ASTRO_SCRATCH_SIZE], worker.sa, worker.data_len, worker.bA, worker.bB);
       byte *B = reinterpret_cast<byte *>(worker.sa);
