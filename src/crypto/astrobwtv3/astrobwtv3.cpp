@@ -36,6 +36,7 @@
 #include <chrono>
 
 #include <Salsa20.h>
+#include <sodium.h>
 
 // #include <alcp/digest.h>
 
@@ -267,15 +268,19 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 256+192], 1, 0);
     
     hashSHA256(worker.sha256, &input[i*inputLen], &worker.sData[ASTRO_SCRATCH_SIZE*i + 320], inputLen);
-    worker.salsa20.setKey(&worker.sData[ASTRO_SCRATCH_SIZE*i + 320]);
-    worker.salsa20.setIv(&worker.sData[ASTRO_SCRATCH_SIZE*i + 256]);
 
     __builtin_prefetch(worker.sData + ASTRO_SCRATCH_SIZE*i, 1, 3);
     __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 64], 1, 3);
     __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 128], 1, 3);
     __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 192], 1, 3);
 
-    worker.salsa20.processBytes(worker.salsaInput, &worker.sData[ASTRO_SCRATCH_SIZE*i], 256);
+    crypto_stream_salsa20_xor(
+        &worker.sData[ASTRO_SCRATCH_SIZE*i],         // output
+        worker.salsaInput,                           // input
+        256,                                          // length
+        &worker.sData[ASTRO_SCRATCH_SIZE*i + 256],   // 8-byte nonce/IV
+        &worker.sData[ASTRO_SCRATCH_SIZE*i + 320]    // 32-byte key
+    );
 
     __builtin_prefetch(&worker.key[i] + 8, 1, 2);
     __builtin_prefetch(&worker.key[i] + 8+64, 1, 2);

@@ -40,7 +40,7 @@ function(setup_target_libraries target_name)
     #target_link_libraries(${target_name} ${THREAD_LIB} OpenSSL::SSL OpenSSL::Crypto sodium ${BLAKE3_LIBRARIES})
   else()
     #target_link_libraries(${target_name} ${THREAD_LIB} OpenSSL::SSL OpenSSL::Crypto sodium ${BLAKE3_LIBRARIES})
-    target_link_libraries(${target_name} ${THREAD_LIB} OpenSSL::SSL OpenSSL::Crypto ${BLAKE3_LIBRARIES})
+    target_link_libraries(${target_name} ${THREAD_LIB} OpenSSL::SSL OpenSSL::Crypto sodium ${BLAKE3_LIBRARIES})
   endif()
 
   set_target_properties(${target_name} PROPERTIES
