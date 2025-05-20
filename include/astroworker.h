@@ -43,8 +43,8 @@ class workerData
 {
 public:
   // For aarch64
-  byte aarchFixup[256];
-  byte opt[256];
+  //byte aarchFixup[256];
+  //byte opt[256];
   // byte simpleLookup[regOps_size*(256*256)];
   // byte lookup3D[branchedOps_size*256*256];
   // uint16_t lookup2D[regOps_size*(256*256)];
@@ -58,35 +58,35 @@ public:
   // byte branched_idx[256];
   // byte reg_idx[256];
 
-  int lucky = 0;
+  //int lucky = 0;
 
   SHA256_CTX sha256;
-  uint8_t sha_padding[64];
-  ucstk::Salsa20 salsa20;
+  //uint8_t sha_padding[64];
+  //ucstk::Salsa20 salsa20;
   RC4_KEY key[DERO_BATCH];
 
   // std::vector<std::tuple<int,int,int>> repeats;
 
-  byte salsaInput[256] = {0};
+  //byte salsaInput[256] = {0};
   byte op;
 
-  byte A;
+  //byte A;
   uint32_t data_len;
 
   byte *chunk;
   byte *prev_chunk;
 
-  byte maskTable_bytes[32*33];
+  //byte maskTable_bytes[32*33];
   byte padding[32];
 
-  bool isSame = false;
+  //bool isSame = false;
 
   #ifndef USE_ASTRO_SPSA
   int bA[256];
   int bB[256*256];
   #endif
 
-  byte step_3[256];
+  //byte step_3[256];
   byte sData[ASTRO_SCRATCH_SIZE*DERO_BATCH];
 
   byte pos1;
@@ -104,8 +104,9 @@ public:
   zeroRun zeroRuns[277*2];
   uint16_t zeroRunCount = 0;
   uint32_t sa_prelim[120*256+1] = {(uint32_t)-1};
-  #endif
+  #else
   int32_t sa[277*256+1];
+  #endif
   
   templateMarker astroTemplate[277];
   int templateIdx = 0;

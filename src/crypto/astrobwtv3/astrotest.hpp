@@ -79,7 +79,7 @@ void benchmarkLoadCompare();
 int TestAstroBWTv3(bool quiet);
 int TestAstroBWTv3repeattest(bool quiet);
 
-void optest_ref(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print=true);
+//void optest_ref(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print=true);
 void optest_branchcpu(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print=true);
 
 void optest_lookup(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print=true);

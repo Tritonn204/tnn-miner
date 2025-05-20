@@ -1,5 +1,5 @@
 
-#if defined(__aarch64__)
+#if defined(__aarch64__unused)
 
 #include "astro_aarch64.hpp"
 

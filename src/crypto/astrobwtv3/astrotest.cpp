@@ -671,6 +671,7 @@ int TestAstroBWTv3repeattest(bool quiet)
 }
 
 
+/*
 void optest_ref(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print) {
   // Set us up the bomb
   memset(worker.step_3, 0, 256);
@@ -3783,6 +3784,7 @@ void optest_ref(int op, workerData &worker, byte testData[32], OpTestResult &tes
     printf("\n took %lld ns\n---------------\n", time.count());
   }
 }
+*/
 
 
 // void optest_branchcpu(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print) {
@@ -3868,12 +3870,13 @@ void optest_ref(int op, workerData &worker, byte testData[32], OpTestResult &tes
 // }
 
 void optest_wolf(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print) {
+  byte step_3[256];
   // Set us up the bomb
-  memset(worker.step_3, 0, 256);
-  memcpy(worker.step_3, testData, 32);
+  memset(step_3, 0, 256);
+  memcpy(step_3, testData, 32);
 
   // Because lookupCompute references .chunk (which is a pointer)
-  worker.chunk = &worker.step_3[0];
+  worker.chunk = &step_3[0];
   worker.prev_chunk = worker.chunk;
   if (print){
     printf("Wolf\n");
@@ -3888,7 +3891,7 @@ void optest_wolf(int op, workerData &worker, byte testData[32], OpTestResult &te
   for(int x = 0; x < 256; x++) {
     worker.op = op;
     //worker.pos1 = 0; worker.pos2 = 32;
-    worker.chunk = worker.step_3;
+    worker.chunk = step_3;
     worker.prev_chunk = worker.chunk;
     wolfCompute(worker, true, 0);
   }
@@ -3951,7 +3954,7 @@ void optest_wolf(int op, workerData &worker, byte testData[32], OpTestResult &te
 // }
 // #endif
 
-#if defined(__aarch64__)
+#if defined(__aarch64__unused)
 void optest_aarch64(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print) {
   // Set us up the bomb
   memset(worker.step_3, 0, 256);

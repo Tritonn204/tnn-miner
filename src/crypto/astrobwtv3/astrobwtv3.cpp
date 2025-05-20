@@ -274,9 +274,10 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 128], 1, 3);
     __builtin_prefetch(&worker.sData[ASTRO_SCRATCH_SIZE*i + 192], 1, 3);
 
+    constexpr byte salsaInput[256] = {0};
     crypto_stream_salsa20_xor(
         &worker.sData[ASTRO_SCRATCH_SIZE*i],         // output
-        worker.salsaInput,                           // input
+        salsaInput,                                  // input
         256,                                          // length
         &worker.sData[ASTRO_SCRATCH_SIZE*i + 256],   // 8-byte nonce/IV
         &worker.sData[ASTRO_SCRATCH_SIZE*i + 320]    // 32-byte key
@@ -294,7 +295,7 @@ void AstroBWTv3(byte *input, int inputLen, byte *outputhash, workerData &worker,
     worker.prev_lhash = worker.lhash;
 
     worker.tries[i] = 0;
-    worker.isSame = false;
+    //worker.isSame = false;
 
     astroCompFunc(worker, false, i);
 
@@ -440,7 +441,7 @@ void wolfCompute(workerData &worker, bool isTest, int wIndex)
         worker.t2 = worker.chunk[worker.pos2];
         worker.chunk[worker.pos1] = reverse8(worker.t2);
         worker.chunk[worker.pos2] = reverse8(worker.t1);
-        worker.isSame = false;
+        //worker.isSame = false;
       }
     }
 
@@ -453,10 +454,10 @@ after:
       pushPos2 = -1;
     }
 
-    worker.A = (worker.chunk[worker.pos1] - worker.chunk[worker.pos2]);
-    worker.A = (256 + (worker.A % 256)) % 256;
+    byte workerA = (worker.chunk[worker.pos1] - worker.chunk[worker.pos2]);
+    workerA = (256 + (workerA % 256)) % 256;
 
-    if (worker.A < 0x10)
+    if (workerA < 0x10)
     { // 6.25 % probability
       worker.prev_lhash = worker.lhash + worker.prev_lhash;
       worker.lhash = XXHash64::hash(worker.chunk, worker.pos2, 0);
@@ -466,7 +467,7 @@ after:
       #endif
     }
 
-    if (worker.A < 0x20)
+    if (workerA < 0x20)
     { // 12.5 % probability
       worker.prev_lhash = worker.lhash + worker.prev_lhash;
       worker.lhash = hash_64_fnv1a(worker.chunk, worker.pos2);
@@ -476,7 +477,7 @@ after:
       #endif
     }
 
-    if (worker.A < 0x30)
+    if (workerA < 0x30)
     { // 18.75 % probability
       worker.prev_lhash = worker.lhash + worker.prev_lhash;
       HH_ALIGNAS(16)
@@ -488,10 +489,10 @@ after:
       #endif
     }
 
-    if (worker.A <= 0x40)
+    if (workerA <= 0x40)
     { // 25% probablility
       RC4(&worker.key[wIndex], 256, worker.chunk,  worker.chunk);
-      worker.isSame = false;
+      //worker.isSame = false;
       if (255 - pushPos2 < MINPREFLEN)
         pushPos2 = 255;
       if (pushPos1 < MINPREFLEN)
