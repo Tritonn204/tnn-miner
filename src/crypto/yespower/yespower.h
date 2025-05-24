@@ -31,11 +31,62 @@
 #define _YESPOWER_H_
 
 #include <stdint.h>
-#include <stdlib.h> /* for size_t */
+#include <stdlib.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
+
+#include <endian.hpp>
+#include <boost/multiprecision/cpp_int.hpp>
+
+using uint256_t = boost::multiprecision::uint256_t;
+using cpp_dec_float_50 = boost::multiprecision::cpp_dec_float_50;
+
+inline bool checkYespowerHash(uint8_t *hash_bytes, uint32_t *targetWords) {
+    uint32_t *hash_words = (uint32_t*)hash_bytes;
+    
+    for (int i = 7; i >= 0; i--) {
+        if (hash_words[i] > targetWords[i])
+            return false;
+        if (hash_words[i] < targetWords[i])
+            return true;
+    }
+    
+    return true;
+}
+
 extern "C" {
 #endif
+
+// Test result structure
+typedef struct YespowerTestResult {
+    bool matches;
+    uint64_t ref_time_us;
+    uint64_t fmv_time_us;
+    char ref_hash[65];    // 32 bytes = 64 hex chars + null terminator
+    char fmv_hash[65];    // 32 bytes = 64 hex chars + null terminator
+} YespowerTestResult;
+
+typedef struct {
+    const uint8_t* data;
+    size_t len;
+} YespowerTestInput;
+
+typedef struct {
+    YespowerTestResult* results;
+    size_t count;
+    size_t capacity;
+} YespowerTestResults;
+
+typedef struct {
+    const char *config_name;
+    double ref_hash_rate;
+    double opt_hash_rate;
+    double speedup;
+    int passed_correctness;
+    uint64_t ref_time_us;
+    uint64_t opt_time_us;
+} yespower_bench_result_t;
 
 /**
  * Internal type used by the memory allocator.  Please do not use it directly.
@@ -111,6 +162,15 @@ extern int yespower(yespower_local_t *local,
     const uint8_t *src, size_t srclen,
     const yespower_params_t *params, yespower_binary_t *dst);
 
+extern int yespower_ref(yespower_local_t *local,
+    const uint8_t *src, size_t srclen,
+    const yespower_params_t *params, yespower_binary_t *dst);
+
+extern YespowerTestResult testYespower(const uint8_t* input, size_t input_len,
+                               const yespower_params_t* params);
+
+extern void runYespowerTestsC(YespowerTestResults* results);
+
 /**
  * yespower_tls(src, srclen, params, dst):
  * Compute yespower(src[0 .. srclen - 1], N, r), to be checked for "< target".
@@ -123,8 +183,21 @@ extern int yespower(yespower_local_t *local,
 extern int yespower_tls(const uint8_t *src, size_t srclen,
     const yespower_params_t *params, yespower_binary_t *dst);
 
+extern int yespower_ref_tls(const uint8_t *src, size_t srclen,
+    const yespower_params_t *params, yespower_binary_t *dst);
+
+extern int yespower_tnn_tls(const uint8_t *src, size_t srclen,
+    const yespower_params_t *params, yespower_binary_t *dst);
+
 #ifdef __cplusplus
 }
+
+#include <vector>
+void runYespowerTests(std::vector<YespowerTestResult>& results);
 #endif
+
+void print_yespower_benchmark_results(const yespower_bench_result_t *results, size_t num_results);
+int benchmark_yespower_comparison(yespower_bench_result_t *results, size_t *num_results);
+int benchmark_yespower_comparison_mt(yespower_bench_result_t *results, size_t *num_results);
 
 #endif /* !_YESPOWER_H_ */

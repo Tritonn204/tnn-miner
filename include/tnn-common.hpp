@@ -48,6 +48,7 @@ extern double latest_hashrate;
 static const char* devWorkerName = "tnn-dev";                                      
 
 extern bool devTurn;
+extern int threads;
 
 extern std::string workerName;
 extern std::string workerNameFromWallet;
@@ -99,7 +100,9 @@ const TnnDevMinerInfo devInfo[COIN_COUNT] = {
   {COIN_HTN,      "na.mining4people.com",        "3390",    "hoosat:qr03chtq640d6p9r5p95kw4t4txcrt9x2cyfjf5w6wpfqwugs35yy472wq6hu", "hoosat:qr03chtq640d6p9r5p95kw4t4txcrt9x2cyfjf5w6wpfqwugs35yy472wq6hu"},
   {COIN_WALA,     "stratum+tcp://us-west.sumohash.com",     "4022",    "waglayla:qr6h2tqwx8ad57nkte9kvcd9cqyjfgk30gznnza9jte7qzfa6gu0xy5n3evj5", "waglayla:qr6h2tqwx8ad57nkte9kvcd9cqyjfgk30gznnza9jte7qzfa6gu0xy5n3evj5"},
   {COIN_SHAI,     "shaicoin.viporlab.net",       "3333",    "sh1qvee0lejv22n7s43q3asw4uzap8d9t32k95cznj", "sh1qvee0lejv22n7s43q3asw4uzap8d9t32k95cznj"},
-  //{COIN_COUNT 13  
+  {COIN_YESPOWER, "stratum+ssl://stratum-eu.rplant.xyz", "17149", "AU9CeyvCVWv2FSG2dipfg39rwVpUpDnWue", "AU9CeyvCVWv2FSG2dipfg39rwVpUpDnWue"}, // Default to ADVC TODO: make my own wallet
+  {COIN_ADVC,     "stratum+ssl://stratum-eu.rplant.xyz", "17149", "AU9CeyvCVWv2FSG2dipfg39rwVpUpDnWue", "AU9CeyvCVWv2FSG2dipfg39rwVpUpDnWue"},
+  //{COIN_COUNT 15  
 };
 
 typedef struct {
@@ -185,7 +188,9 @@ const Coin coins[COIN_COUNT] = {
   {COIN_HTN,      ALGO_HOOHASH,     "HTN",   "Hoosat"},
   {COIN_WALA,     ALGO_WALA_HASH,   "WALA",  "Waglayla"},
   {COIN_SHAI,     ALGO_SHAI_HIVE,   "SHAI",  "Shai"},
-  //{COIN_COUNT 12  
+  {COIN_YESPOWER, ALGO_YESPOWER, "YESPOWER", "Yespower (Generic)"},
+  {COIN_ADVC, ALGO_YESPOWER, "ADVC", "AdventureCoin"},
+  //{COIN_COUNT 15 
 };
 
 extern MiningProfile miningProfile;

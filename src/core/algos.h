@@ -11,9 +11,12 @@
 #include <hoohash/hoohash.h>
 #include <wala-hash/wala-hash.h>
 #include <shai/shai-hive.h>
+#include <yespower/yespower.h>
 
 #include <randomx/randomx.h>
 #include <randomx/tests/randomx_test.h>
+
+// TODO: use a macro to generate these without so much duplicated code
 
 const char* unsupported_astro = "This Binary was compiled without AstroBWTv3 support... \n"
             "Please source a TNN Miner binary with AstroBWTv3 support";
@@ -40,3 +43,6 @@ const char* unsupported_waglayla = "This Binary was compiled without Waglayla su
 
 const char* unsupported_shai = "This Binary was compiled without Shai support... \n"
 "Please source a TNN Miner binary with Shai support";
+
+const char* unsupported_yespower = "This Binary was compiled without YesPower support... \n"
+"Please source a TNN Miner binary with YesPower support";

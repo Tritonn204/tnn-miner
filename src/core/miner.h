@@ -36,7 +36,6 @@ const int workerThreads = 2;
 
 std::string password = "x";
 
-int threads = 0;
 int testOp = -1;
 int testLen = -1;
 int processPriority = 0;

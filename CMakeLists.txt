@@ -17,8 +17,8 @@ if(CMAKE_HOST_SYSTEM_NAME MATCHES Windows)
   set(CMAKE_C_COMPILER clang)
   set(CMAKE_CXX_COMPILER clang++)
   set(BOOST_TOOLSET_OPTS "BOOST_TOOLSET clang")
-  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -Wno-unused-command-line-argument")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-unused-command-line-argument")
+  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -Wno-unused-command-line-argument -msha")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-unused-command-line-argument -msha")
 endif()
 
 set(TARGET_ARCH "amd64")
@@ -88,6 +88,7 @@ option(WITH_NXLHASH        "Enable NxlHash algorithms family" ON)
 option(WITH_HOOHASH        "Enable Hoohash algorithms family" ON)
 option(WITH_WALAHASH        "Enable Walahash algorithms family" ON)
 option(WITH_SHAIHIVE        "Enable ShaiHive algorithms family" ON)
+option(WITH_YESPOWER        "Enable YesPower algorithms family" ON)
 # option(WITH_ARGON2          "Enable Argon2 algorithms family" ON)
 # option(WITH_KAWPOW          "Enable KawPow algorithms family" ON)
 # option(WITH_GHOSTRIDER      "Enable GhostRider algorithm" ON)
@@ -507,6 +508,8 @@ file(GLOB_RECURSE SOURCES_CORE
   "${PROJECT_SOURCE_DIR}/src/core/*.c"
   "${PROJECT_SOURCE_DIR}/src/crypto/cshake/*.c"
   "${PROJECT_SOURCE_DIR}/src/crypto/skein/*.c"
+  "${PROJECT_SOURCE_DIR}/src/crypto/salsa-simd/*.c"
+  "${PROJECT_SOURCE_DIR}/src/crypto/sha3/*.c"
   "${PROJECT_SOURCE_DIR}/src/broadcast/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/coins/dummy_miners.cpp"
   "${PROJECT_SOURCE_DIR}/src/util/*.c"
@@ -517,7 +520,6 @@ file(GLOB SOURCES_NET
   "${PROJECT_SOURCE_DIR}/src/net/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/net/*.c"
   "${PROJECT_SOURCE_DIR}/src/net/kas/*.cpp"
-  "${PROJECT_SOURCE_DIR}/src/crypto/sha3/*.c"
 )
 
 include(cmake/spsa.cmake)
@@ -532,6 +534,7 @@ if (NOT WITH_HIP)
   include(cmake/hoohash.cmake)
   include(cmake/wala-hash.cmake)
   include(cmake/shai-hive.cmake)
+  include(cmake/yespower.cmake)
 
   include(cmake/blake2.cmake)
   include(cmake/chacha20.cmake)

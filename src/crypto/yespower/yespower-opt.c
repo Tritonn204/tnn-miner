@@ -43,7 +43,6 @@
 #endif
 
 #if _YESPOWER_OPT_C_PASS_ == 1
-#define insecure_memzero(buf, len) /* empty */
 /*
  * AVX and especially XOP speed up Salsa20 a lot, but needlessly result in
  * extra instruction prefixes for pwxform (which we make more use of).  While
@@ -72,7 +71,7 @@
  * units.  Thus, the generic SSE2 version below actually runs faster on some
  * CPUs due to its balanced mix of SIMD and scalar instructions.
  */
-#undef USE_SSE4_FOR_32BIT
+// #undef USE_SSE4_FOR_32BIT
 
 #ifdef __SSE2__
 /*
@@ -101,16 +100,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <openssl/sha.h>
-#include <openssl/evp.h>
-#include <openssl/hmac.h>
-#include <openssl/kdf.h>
+#include "sha256_yp.h"
 
+#define insecure_memzero(buf, len)
 #include "sysendian.h"
 
 #include "yespower.h"
 
-#include "yespower-platform.c"
+#include "yespower-platform.inc"
 
 #if __STDC_VERSION__ >= 199901L
 /* Have restrict */
@@ -139,78 +136,6 @@ typedef union {
 	__m128i q[4];
 #endif
 } salsa20_blk_t;
-
-// Wrapper to match SHA256_Buf interface
-static void SHA256_Buf(const void *in, size_t len, uint8_t *digest) {
-  SHA256_CTX ctx;
-  SHA256_Init(&ctx);
-  SHA256_Update(&ctx, in, len);
-  SHA256_Final(digest, &ctx);
-}
-
-// PBKDF2-SHA256 implementation using OpenSSL
-static void PBKDF2_SHA256(const uint8_t *passwd, size_t passwdlen,
-    const uint8_t *salt, size_t saltlen, uint64_t c,
-    uint8_t *buf, size_t dkLen)
-{
-    // This is the recommended way in OpenSSL 3+
-    PKCS5_PBKDF2_HMAC((const char *)passwd, passwdlen,
-                      salt, saltlen, c,
-                      EVP_sha256(), dkLen, buf);
-}
-
-// HMAC-SHA256 wrapper
-static void HMAC_SHA256_Buf(const void *in, size_t len, 
-    const void *key, size_t key_len, uint8_t *digest)
-{
-    SHA256_CTX ctx;
-    uint8_t pad[64];
-    uint8_t keyhash[32];
-    int i;
-    
-    // If key is longer than block size, hash it
-    if (key_len > 64) {
-        SHA256_Init(&ctx);
-        SHA256_Update(&ctx, key, key_len);
-        SHA256_Final(keyhash, &ctx);
-        key = keyhash;
-        key_len = 32;
-    }
-    
-    // Prepare inner padding
-    memset(pad, 0x36, 64);
-    for (i = 0; i < key_len; i++)
-        pad[i] ^= ((const uint8_t *)key)[i];
-    
-    // Inner hash
-    SHA256_Init(&ctx);
-    SHA256_Update(&ctx, pad, 64);
-    SHA256_Update(&ctx, in, len);
-    SHA256_Final(digest, &ctx);
-    
-    // Prepare outer padding
-    memset(pad, 0x5c, 64);
-    for (i = 0; i < key_len; i++)
-        pad[i] ^= ((const uint8_t *)key)[i];
-    
-    // Outer hash
-    SHA256_Init(&ctx);
-    SHA256_Update(&ctx, pad, 64);
-    SHA256_Update(&ctx, digest, 32);
-    SHA256_Final(digest, &ctx);
-}
-
-// Helper function for big-endian encoding (if not already defined)
-#ifndef be32enc
-static inline void be32enc(void *pp, uint32_t x)
-{
-    uint8_t *p = (uint8_t *)pp;
-    p[3] = x & 0xff;
-    p[2] = (x >> 8) & 0xff;
-    p[1] = (x >> 16) & 0xff;
-    p[0] = (x >> 24) & 0xff;
-}
-#endif
 
 static inline void salsa20_simd_shuffle(const salsa20_blk_t *Bin,
     salsa20_blk_t *Bout)
@@ -245,6 +170,51 @@ static inline void salsa20_simd_unshuffle(const salsa20_blk_t *Bin,
 #undef UNCOMBINE
 }
 
+#ifdef __x86_64__
+    // Default implementations
+    __attribute__((target("default")))
+    static inline void arx_7(__m128i *out, __m128i in1, __m128i in2) {
+        __m128i tmp = _mm_add_epi32(in1, in2);
+        *out = _mm_xor_si128(*out, _mm_slli_epi32(tmp, 7));
+        *out = _mm_xor_si128(*out, _mm_srli_epi32(tmp, 25));
+    }
+    __attribute__((target("default")))
+    static inline void arx_9(__m128i *out, __m128i in1, __m128i in2) {
+        __m128i tmp = _mm_add_epi32(in1, in2);
+        *out = _mm_xor_si128(*out, _mm_slli_epi32(tmp, 9));
+        *out = _mm_xor_si128(*out, _mm_srli_epi32(tmp, 23));
+    }
+    __attribute__((target("default")))
+    static inline void arx_13(__m128i *out, __m128i in1, __m128i in2) {
+        __m128i tmp = _mm_add_epi32(in1, in2);
+        *out = _mm_xor_si128(*out, _mm_slli_epi32(tmp, 13));
+        *out = _mm_xor_si128(*out, _mm_srli_epi32(tmp, 19));
+    }
+    __attribute__((target("default")))
+    static inline void arx_18(__m128i *out, __m128i in1, __m128i in2) {
+        __m128i tmp = _mm_add_epi32(in1, in2);
+        *out = _mm_xor_si128(*out, _mm_slli_epi32(tmp, 18));
+        *out = _mm_xor_si128(*out, _mm_srli_epi32(tmp, 14));
+    }
+
+    __attribute__((target("avx512vl")))
+    static inline void arx_7(__m128i *out, __m128i in1, __m128i in2) {
+        _mm_xor_si128(*out, _mm_rol_epi32(_mm_add_epi32(in1, in2), 7));
+    }
+    __attribute__((target("avx512vl")))
+    static inline void arx_9(__m128i *out, __m128i in1, __m128i in2) {
+        _mm_xor_si128(*out, _mm_rol_epi32(_mm_add_epi32(in1, in2), 9));
+    }
+    __attribute__((target("avx512vl")))
+    static inline void arx_13(__m128i *out, __m128i in1, __m128i in2) {
+        _mm_xor_si128(*out, _mm_rol_epi32(_mm_add_epi32(in1, in2), 13));
+    }
+    __attribute__((target("avx512vl")))
+    static inline void arx_18(__m128i *out, __m128i in1, __m128i in2) {
+        _mm_xor_si128(*out, _mm_rol_epi32(_mm_add_epi32(in1, in2), 18));
+    }
+#endif
+
 #ifdef __SSE2__
 #define DECL_X \
 	__m128i X0, X1, X2, X3;
@@ -271,19 +241,19 @@ static inline void salsa20_simd_unshuffle(const salsa20_blk_t *Bin,
 
 #define SALSA20_2ROUNDS \
 	/* Operate on "columns" */ \
-	ARX(X1, X0, X3, 7) \
-	ARX(X2, X1, X0, 9) \
-	ARX(X3, X2, X1, 13) \
-	ARX(X0, X3, X2, 18) \
+  arx_7(&X1, X0, X3); \
+  arx_9(&X2, X1, X0); \
+  arx_13(&X3, X2, X1); \
+  arx_18(&X0, X3, X2); \
 	/* Rearrange data */ \
 	X1 = _mm_shuffle_epi32(X1, 0x93); \
 	X2 = _mm_shuffle_epi32(X2, 0x4E); \
 	X3 = _mm_shuffle_epi32(X3, 0x39); \
 	/* Operate on "rows" */ \
-	ARX(X3, X0, X1, 7) \
-	ARX(X2, X3, X0, 9) \
-	ARX(X1, X2, X3, 13) \
-	ARX(X0, X1, X2, 18) \
+  arx_7(&X3, X0, X1); \
+  arx_9(&X2, X3, X0); \
+  arx_13(&X1, X2, X3); \
+  arx_18(&X0, X1, X2); \
 	/* Rearrange data */ \
 	X1 = _mm_shuffle_epi32(X1, 0x39); \
 	X2 = _mm_shuffle_epi32(X2, 0x4E); \

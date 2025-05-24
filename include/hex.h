@@ -46,3 +46,20 @@ inline void hexstrToBytes(std::string s, unsigned char *b)
     b[i / 2] = byte;
   }
 }
+
+inline void hexToUint32Array(const std::string& hex, uint32_t* array) {
+    for (size_t i = 0; i < hex.length(); i += 8) {
+        std::string chunk = hex.substr(i, 8);
+        array[i/8] = std::stoul(chunk, nullptr, 16);
+    }
+}
+
+// Helper to convert array back to hex
+inline std::string uint32ArrayToHex(const uint32_t* array, int count) {
+    std::stringstream ss;
+    ss << std::hex << std::setfill('0');
+    for (int i = 0; i < count; i++) {
+        ss << std::setw(8) << array[i];
+    }
+    return ss.str();
+}
