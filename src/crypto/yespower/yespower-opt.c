@@ -196,7 +196,7 @@ static inline void salsa20_simd_unshuffle(const salsa20_blk_t *Bin,
         *out = _mm_xor_si128(*out, _mm_slli_epi32(tmp, 18));
         *out = _mm_xor_si128(*out, _mm_srli_epi32(tmp, 14));
     }
-
+    #if defined(__AVX512VL__)
     __attribute__((target("avx512vl")))
     static inline void arx_7(__m128i *out, __m128i in1, __m128i in2) {
         _mm_xor_si128(*out, _mm_rol_epi32(_mm_add_epi32(in1, in2), 7));
@@ -213,6 +213,7 @@ static inline void salsa20_simd_unshuffle(const salsa20_blk_t *Bin,
     static inline void arx_18(__m128i *out, __m128i in1, __m128i in2) {
         _mm_xor_si128(*out, _mm_rol_epi32(_mm_add_epi32(in1, in2), 18));
     }
+    #endif
 #endif
 
 #ifdef __SSE2__

@@ -167,13 +167,13 @@ bool beQuiet = false;
 /* Start definitions from astrobwtv3.h */
 #if defined(TNN_ASTROBWTV3)
 AstroFunc allAstroFuncs[] = {
-  {"branch", branchComputeCPU},
+  // {"branch", branchComputeCPU},
   // {"lookup", lookupCompute},
   {"wolf", wolfCompute},
 #if defined(__AVX2__)
-  {"avx2z", branchComputeCPU_avx2_zOptimized}
+  // {"avx2z", branchComputeCPU_avx2_zOptimized}
 #elif defined(__aarch64__)
-  {"aarch64", branchComputeCPU_aarch64}
+  // {"aarch64", branchComputeCPU_aarch64}
 #endif
 };
 size_t numAstroFuncs;

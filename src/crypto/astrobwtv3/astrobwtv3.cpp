@@ -8377,6 +8377,7 @@ void wolfCompute(workerData &worker, bool isTest, int wIndex)
   uint8_t lp1 = 0;
   uint8_t lp2 = 255;
 
+  worker.tries[wIndex] = 0;
   for (int it = 0; it < 278; ++it)
   {
       // TODO prefetch next chunk into L2

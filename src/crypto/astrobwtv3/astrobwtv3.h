@@ -392,8 +392,8 @@ typedef void (*wolfPerm)(uint8_t *, uint8_t *, uint16_t, uint8_t, uint8_t, worke
 
 static inline wolfPerm resolve_wolfPermute() {
   #ifdef __x86_64__
-  if (__builtin_cpu_supports("avx512bw"))
-    return wolfPermute_avx512;
+  //if (__builtin_cpu_supports("avx512bw"))
+  //  return wolfPermute_avx512;
   if (__builtin_cpu_supports("avx2"))
     return wolfPermute_avx2;
   #endif
