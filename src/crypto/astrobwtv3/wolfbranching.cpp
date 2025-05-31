@@ -185,6 +185,7 @@ uint8_t wolfBranch(uint8_t val, uint8_t pos2val, uint32_t opcode)
   return (val);
 }
 
+#if defined(__x86_64)
 __attribute__((target("avx512f,avx512bw,avx512vl")))
 void wolfPermute_avx512(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker)
 {
@@ -212,6 +213,7 @@ void wolfPermute_avx2(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint
 
   _mm256_storeu_si256((__m256i*)&out[pos1], data);
 }
+#endif
 
 void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker)
 {
