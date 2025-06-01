@@ -129,6 +129,7 @@ int update_handler(const boost::system::error_code& error)
       case ALGO_NXL_HASH:
       case ALGO_HOOHASH:
       case ALGO_WALA_HASH:
+      case ALGO_YESPOWER:
         dPrint = doubleDiff;
         break;
     }

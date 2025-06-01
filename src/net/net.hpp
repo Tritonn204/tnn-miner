@@ -295,5 +295,19 @@ inline void do_session_v2(
     shai_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
     break;
   #endif
+  #ifdef TNN_YESPOWER
+  case ALGO_YESPOWER:
+    switch (miningProf->protocol)
+    {
+      case PROTO_BTC_STRATUM:
+        if(use_ssl) {
+          btc_stratum_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
+        } else {
+          btc_stratum_session_nossl(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
+        }
+        break;
+    }
+    break;
+  #endif
   }
 }

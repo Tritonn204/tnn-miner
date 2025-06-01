@@ -25,6 +25,9 @@
 #define PROTO_KAS_SOLO 60
 #define PROTO_KAS_STRATUM 61
 
+// BTC family
+#define PROTO_BTC_STRATUM 70
+
 #define COIN_UNKNOWN -1
 #define COIN_DERO 0
 #define COIN_XELIS 1
@@ -39,7 +42,10 @@
 #define COIN_HTN 10
 #define COIN_WALA 11
 #define COIN_SHAI 12
-#define COIN_COUNT 13
+#define COIN_YESPOWER 13 // for generic/manual configs
+#define COIN_ADVC 14
+
+#define COIN_COUNT 15
 
 // Corresponding to the ALGO_POW[] array in miners.hpp
 // Also used in coins[COIN_COUNT] from tnn-common.hpp
@@ -54,3 +60,36 @@
 #define ALGO_HOOHASH 80
 #define ALGO_WALA_HASH 90
 #define ALGO_SHAI_HIVE 100
+#define ALGO_YESPOWER 110
+
+typedef enum {
+  ENDIAN_LITTLE,
+  ENDIAN_BIG,
+  ENDIAN_SWAP_32,
+  ENDIAN_MIXED
+} endian_mode_t;
+
+typedef struct {
+  endian_mode_t header_endian;
+  bool swap_merkle_root;
+  bool swap_prev_hash;
+  int nbits_index;
+} algo_config_t;
+
+extern algo_config_t current_algo_config;
+
+#define CONFIG_ENDIAN_SHA256 0
+#define CONFIG_ENDIAN_SCRYPT 1
+#define CONFIG_ENDIAN_X11 2
+#define CONFIG_ENDIAN_YESPOWER 3
+
+static const algo_config_t algo_configs[] = {
+  // Bitcoin/SHA256
+  { .header_endian = ENDIAN_SWAP_32, .swap_merkle_root = true, .swap_prev_hash = true, .nbits_index = 18 },
+  // Scrypt  
+  { .header_endian = ENDIAN_SWAP_32, .swap_merkle_root = true, .swap_prev_hash = true, .nbits_index = 18 },
+  // X11
+  { .header_endian = ENDIAN_LITTLE, .swap_merkle_root = false, .swap_prev_hash = false, .nbits_index = 18 },
+  // YESPOWER
+  { .header_endian = ENDIAN_SWAP_32, .swap_merkle_root = true, .swap_prev_hash = false, .nbits_index = 18 },
+};

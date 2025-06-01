@@ -80,6 +80,8 @@ void mineWaglayla(int tid);
 
 void mineShai(int tid);
 
+void mineYespower(int tid);
+
 void mineAstrix_hip(int tid);
 void mineNexellia_hip(int tid);
 void mineWaglayla_hip(int tid);
@@ -132,6 +134,9 @@ inline mineFunc getMiningFunc(int algoNum, bool gpu) {
       break;
     case ALGO_SHAI_HIVE:
       return mineShai;
+      break;
+    case ALGO_YESPOWER:
+      return mineYespower;
       break;
     default:
       return unsupportedCPU;

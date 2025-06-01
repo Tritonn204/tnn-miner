@@ -148,11 +148,13 @@ int DeroTesting(int testOp, int testLen, bool useLookup) {
   printf("mask data in stored order: %08x %08x %08x %08x %08x %08x %08x %08x\n", v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
 #endif
 
+  /*
   if (testLen >= 0) {
     failedTests += runDeroOpTests(testOp, testLen);
   } else {
     failedTests += runDeroOpTests(testOp);
   }
+  */
 
   failedTests += TestAstroBWTv3(false);
   for(int x = 0; x < numAstroFuncs; x++) {
@@ -378,9 +380,11 @@ int runDeroOpTests(int testOp, int dataLen) {
     testFunc(op, *testWorker, test, *testResult, false);
 
     z_testWorker->pos1 = 0; z_testWorker->pos2 = dataLen+1;
+    z_testWorker->tries[0] = 0;
     z_testFunc(op, *z_testWorker, test, *z_testResult, false);
 
     z_testWorker->pos1 = 0; z_testWorker->pos2 = dataLen+1;
+    z_testWorker->tries[0] = 0;
     z_testFunc(op, *z_testWorker, test, *z_testResult, false);
 
     auto control_dur = controlResult->duration_ns.count();

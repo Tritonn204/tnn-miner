@@ -10,3 +10,4 @@ using byte = unsigned char;
 #include "spectre-stratum.h"
 #include "astrix-stratum.h"
 #include "kas-stratum.h"
+#include "btc-stratum.h"

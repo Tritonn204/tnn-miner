@@ -159,6 +159,8 @@ inline po::options_description get_prog_opts()
     ("hoosat", "Will mine Hoosat")
     ("waglayla", "Will mine Waglayla")
     ("shai", "Will mine Shai")
+    ("advc", "Will mine AdventureCoin (ADVC)")
+    ("yespower", po::value<std::string>(), "Mine with custom yespower parameters (format: N=2048,R=32,pers=string)")
   ;
 
   po::options_description dero("Dero", col_width);

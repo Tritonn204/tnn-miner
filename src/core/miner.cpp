@@ -15,6 +15,7 @@
 
 #include "tnn-common.hpp"
 #include "tnn-hugepages.h"
+#include "numa_optimizer.h"
 #include "gpulibs.h"
 #include "hipkill.h"
 
@@ -58,13 +59,20 @@
 #include <tnn_hip/core/devInfo.hip.h>
 #include <boost/algorithm/string.hpp>
 
+#ifdef TNN_YESPOWER
+#include <crypto/yespower/yespower_algo.h>
+#endif
+
 #if defined(USE_ASTRO_SPSA)
   #include "spsa.hpp"
 #endif
 
 // INITIALIZE COMMON STUFF
+algo_config_t current_algo_config;
+
 int reportCounter = 0;
 int reportInterval = 3;
+int threads = 0;
 
 bool ABORT_MINER = false;
 const char *tnnTargetArch = XSTR(CPU_ARCHTARGET);
@@ -159,13 +167,13 @@ bool beQuiet = false;
 /* Start definitions from astrobwtv3.h */
 #if defined(TNN_ASTROBWTV3)
 AstroFunc allAstroFuncs[] = {
-  {"branch", branchComputeCPU},
+  // {"branch", branchComputeCPU},
   // {"lookup", lookupCompute},
   {"wolf", wolfCompute},
 #if defined(__AVX2__)
-  {"avx2z", branchComputeCPU_avx2_zOptimized}
+  // {"avx2z", branchComputeCPU_avx2_zOptimized}
 #elif defined(__aarch64__)
-  {"aarch64", branchComputeCPU_aarch64}
+  // {"aarch64", branchComputeCPU_aarch64}
 #endif
 };
 size_t numAstroFuncs;
@@ -326,6 +334,10 @@ int main(int argc, char **argv)
   lookup2D_global = (uint16_t *)malloc_huge_pages(regOps_size * (256 * 256) * sizeof(uint16_t));
   lookup3D_global = (byte *)malloc_huge_pages(branchedOps_size * (256 * 256) * sizeof(byte));
 
+  if (!NUMAOptimizer::initialize()) {
+    std::cerr << "NUMA optimization unavailable, falling back to default" << std::endl;
+  }
+  
   // default values
   bool lockThreads = true;
   devFee = 2.5;
@@ -377,6 +389,15 @@ int main(int argc, char **argv)
 
   // SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
 #endif
+
+  // #if defined(TNN_YESPOWER)
+  // yespower_bench_result_t results[10];
+  // size_t num_results = 10;
+  
+  // if (benchmark_yespower_comparison_mt(results, &num_results) == 0) {
+  //   print_yespower_benchmark_results(results, num_results);
+  // }
+  // #endif
 
   if (vm.count("help"))
   {
@@ -490,6 +511,60 @@ int main(int argc, char **argv)
     #else
     setcolor(RED);
     printf("%s", unsupported_randomx);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
+  }
+
+  if (vm.count("advc"))
+  {
+    #if defined(TNN_YESPOWER)
+    miningProfile.coin = coins[COIN_ADVC];
+    miningProfile.protocol = PROTO_BTC_STRATUM;
+    current_algo_config = algo_configs[CONFIG_ENDIAN_YESPOWER];
+
+    initADVCParams(&currentYespowerParams);
+    initADVCParams(&devYespowerParams);
+    #else
+    setcolor(RED);
+    printf("%s", unsupported_yespower);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
+  }
+
+  if (vm.count("yespower")) {
+    #if defined(TNN_YESPOWER)
+    miningProfile.coin = coins[COIN_YESPOWER];
+    miningProfile.protocol = PROTO_BTC_STRATUM;
+    current_algo_config = algo_configs[CONFIG_ENDIAN_YESPOWER];
+    
+    std::string params = vm["yespower"].as<std::string>();
+    
+    // Parse parameters (N, R, pers)
+    uint32_t N = 2048;
+    uint32_t R = 32;
+    const char* pers = NULL;
+    
+    std::vector<std::string> paramPairs;
+    boost::split(paramPairs, params, boost::is_any_of(","));
+    for(const auto& pair : paramPairs) {
+      std::vector<std::string> keyValue;
+      boost::split(keyValue, pair, boost::is_any_of("="));
+      if(keyValue.size() == 2) {
+        if(keyValue[0] == "N") N = std::stoul(keyValue[1]);
+        else if(keyValue[0] == "R") R = std::stoul(keyValue[1]);
+        else if(keyValue[0] == "pers") pers = strdup(keyValue[1].c_str());
+      }
+    }
+    
+    setManualYespowerParams(&currentYespowerParams, N, R, pers);
+    initADVCParams(&devYespowerParams);
+    #else
+    setcolor(RED);
+    printf("%s", unsupported_yespower);
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;

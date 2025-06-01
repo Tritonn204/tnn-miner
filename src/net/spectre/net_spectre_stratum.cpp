@@ -318,435 +318,291 @@ void spectre_stratum_session(
     net::yield_context yield,
     bool isDev)
 {
-  ctx.set_options(boost::asio::ssl::context::default_workarounds |
-                  boost::asio::ssl::context::no_sslv2 |
-                  boost::asio::ssl::context::no_sslv3 |
-                  boost::asio::ssl::context::no_tlsv1 |
-                  boost::asio::ssl::context::no_tlsv1_1);
+    ctx.set_options(boost::asio::ssl::context::default_workarounds |
+                    boost::asio::ssl::context::no_sslv2 |
+                    boost::asio::ssl::context::no_sslv3 |
+                    boost::asio::ssl::context::no_tlsv1 |
+                    boost::asio::ssl::context::no_tlsv1_1);
 
-  beast::error_code ec;
-  boost::system::error_code jsonEc;
+    beast::error_code ec;
+    boost::system::error_code jsonEc;
 
-  auto endpoint = resolve_host(wsMutex, ioc, yield, host, port);
-  boost::beast::tcp_stream stream(ioc);
+    auto endpoint = resolve_host(wsMutex, ioc, yield, host, port);
+    boost::beast::tcp_stream stream(ioc);
 
-  // Set a timeout on the operation
-  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-
-  // Make the connection on the IP address we get from a lookup
-  beast::get_lowest_layer(stream).async_connect(endpoint, yield[ec]);
-  if (ec)
-    return fail(ec, "connect");
-
-  std::string minerName = "tnn-miner/" + std::string(versionString);
-  boost::json::object packet;
-
-  SpectreStratum::jobCache jobCache;
-
-  // Subscribe to Stratum
-  packet = SpectreStratum::stratumCall;
-  packet["id"] = SpectreStratum::subscribe.id;
-  packet["method"] = SpectreStratum::subscribe.method;
-  packet["params"] = boost::json::array({
-    minerName
-  });
-  std::string subscription = boost::json::serialize(packet) + "\n";
-
-  // std::cout << authResString << std::endl;
-  size_t trans;
-
-  try {
     beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-    trans = boost::asio::async_write(stream, boost::asio::buffer(subscription), yield[ec]);
+    beast::get_lowest_layer(stream).async_connect(endpoint, yield[ec]);
     if (ec)
-      return fail(ec, "Stratum subscribe");
+        return fail(ec, "connect");
 
-    boost::asio::streambuf subRes;
-    beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-    trans = boost::asio::read_until(stream, subRes, "\n");
+    std::string minerName = "tnn-miner/" + std::string(versionString);
+    boost::json::object packet;
 
-    std::string subResString = beast::buffers_to_string(subRes.data());
-    subRes.consume(trans);
-    if (jsonEc)
-    {
-      std::cerr << jsonEc.message() << std::endl;
-    }
+    SpectreStratum::jobCache jobCache;
 
-    // std::cout << "sub result: " << subResString << std::endl << std::flush;
+    // Subscribe to Stratum
+    packet = SpectreStratum::stratumCall;
+    packet["id"] = SpectreStratum::subscribe.id;
+    packet["method"] = SpectreStratum::subscribe.method;
+    packet["params"] = boost::json::array({minerName});
+    std::string subscription = boost::json::serialize(packet) + "\n";
 
-    std::stringstream  jsonStream(subResString);
-    std::vector<std::string> packets;
+    size_t trans;
 
-    std::string line;
-    while(std::getline(jsonStream,line,'\n'))
-    {
-      packets.push_back(line);
-    }
+    try {
+        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
+        trans = boost::asio::async_write(stream, boost::asio::buffer(subscription), yield[ec]);
+        if (ec)
+            return fail(ec, "Stratum subscribe");
 
-    for (std::string packet : packets) {
-      boost::json::object subRPC = boost::json::parse(packet.c_str()).as_object();
-      if (subRPC.contains("method"))
-      {
-        handleSpectreStratumPacket(subRPC, &jobCache, isDev);
-      } 
-    }
-  } catch (const std::exception &e) {
-    setcolor(RED);
-    printf("\nStratum Subscribe error: %s\n", e.what());
-    fflush(stdout);
-    setcolor(BRIGHT_WHITE);
-  }
-  // Authorize Stratum Worker
-  packet = SpectreStratum::stratumCall;
-  packet.at("id") = SpectreStratum::authorize.id;
-  packet.at("method") = SpectreStratum::authorize.method;
-  packet.at("params") = boost::json::array({wallet + "." + worker});
-  if(isDev) {
-    packet.at("params") = boost::json::array({devWallet + "." + worker + "-" + tnnTargetArch});
-  }
+        boost::asio::streambuf subRes;
+        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
+        trans = boost::asio::read_until(stream, subRes, "\n");
 
-  std::string authorization = boost::json::serialize(packet) + "\n";
+        std::string subResString = beast::buffers_to_string(subRes.data());
+        subRes.consume(trans);
 
-  // std::cout << authorization << std::endl;
-  try {
-    beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-    boost::asio::async_write(stream, boost::asio::buffer(authorization), yield[ec]);
-    if (ec)
-      return fail(ec, "Stratum authorize");
-
-    boost::asio::streambuf authRes;
-    beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-    trans = boost::asio::read_until(stream, authRes, "\n");
-
-    std::string authResString = beast::buffers_to_string(authRes.data());
-    authRes.consume(trans);
-    if (jsonEc)
-    {
-      std::cerr << jsonEc.message() << std::endl;
-    }
-
-    // std::cout << "auth result: " << authResString << std::endl << std::flush;
-
-    std::stringstream  jsonStream(authResString);
-    std::vector<std::string> packets;
-
-    std::string line;
-    while(std::getline(jsonStream,line,'\n'))
-    {
-      packets.push_back(line);
-    }
-
-    for (std::string packet : packets) {
-      boost::json::object authRPC = boost::json::parse(packet.c_str()).as_object();
-      if (authRPC.contains("method"))
-      {
-        handleSpectreStratumPacket(authRPC, &jobCache, isDev);
-      }
-    }
-  } catch (const std::exception &e) {
-    setcolor(RED);
-    printf("\nStratum Authorize error: %s\n", e.what());
-    fflush(stdout);
-    setcolor(BRIGHT_WHITE);
-  }
-  // SpectreStratum::stratumCall;
-  // packet.at("id") = SpectreStratum::subscribe.id;
-  // packet.at("method") = SpectreStratum::subscribe.method;
-  // packet.at("params") = {minerName};
-
-  // beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-  // trans = boost::asio::read_until(stream, subRes, "\n");
-
-  // std::string subResString = beast::buffers_to_string(subRes.data());
-  // subRes.consume(trans);
-
-  // mutex.lock();
-  // printf("before packet\n");
-  // std::cout << subResString << std::endl;
-
-  // printf("before parse\n");
-  // mutex.unlock();
-  // boost::json::object subResJson = boost::json::parse(subResString.c_str(), jsonEc).as_object();
-  // if (jsonEc)
-  // {
-  //   std::cerr << jsonEc.message() << std::endl;
-  // }
-
-  // printf("after parse\n");
-
-  // handleXStratumPacket(subResJson, isDev);
-
-  // // This buffer will hold the incoming message
-  // beast::flat_buffer buffer;
-  // std::stringstream workInfo;
-
-  SpectreStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-
-  std::string chopQueue = "NULL";
-
-  bool submitThread = false;
-  bool abort = false;
-
-  boost::thread subThread([&](){
-    submitThread = true;
-    while(!abort) {
-      boost::unique_lock<boost::mutex> lock(mutex);
-      bool *B = isDev ? &submittingDev : &submitting;
-      cv.wait(lock, [&]{ return (data_ready && (*B)) || abort; });
-      if (abort) break;
-      try {
-        boost::json::object *S = &share;
-        if (isDev)
-          S = &devShare;
-
-        boost::system::error_code ec;
-        std::string msg = boost::json::serialize((*S)) + "\n";
-        // std::cout << "sending in: " << msg << std::endl;
-        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(1));
-        boost::asio::async_write(stream, boost::asio::buffer(msg), [&](const boost::system::error_code& error, std::size_t bytes_transferred) {
-          if (error) {
-            printf("error on write: %s\n", error.message().c_str());
-            fflush(stdout);
-            abort = true;
-          }
-          if (!isDev) SpectreStratum::lastShareSubmissionTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-          // (*B) = false;
-          // data_ready = false;
-        });
-        (*B) = false;
-        data_ready = false;
-      } catch (const std::exception &e) {
-        setcolor(RED);
-        printf("\nSubmit thread error: %s\n", e.what());
-        fflush(stdout);
-        setcolor(BRIGHT_WHITE);
-        break;
-      }
-      boost::this_thread::yield();
-    }
-    submitThread = false;
-  });
-
-  while (!ABORT_MINER)
-  {
-    bool *C = isDev ? &devConnected : &isConnected;
-    bool *B = isDev ? &submittingDev : &submitting;
-    try
-    {
-      if (
-          SpectreStratum::lastReceivedJobTime > 0 &&
-          std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count() - SpectreStratum::lastReceivedJobTime > SpectreStratum::jobTimeout)
-      {
-        setcolor(RED);
-        printf("timeout\n");
-        fflush(stdout);
-        setcolor(BRIGHT_WHITE);
-        setForDisconnected(C, B, &abort, &data_ready, &cv);
-
-        for (;;) {
-          if (!submitThread) break;
-          boost::this_thread::yield();
-        }
-        stream.close();
-        return fail(ec, "Stratum session timed out");
-      }
-
-      boost::asio::streambuf response;
-      std::stringstream workInfo;
-      beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(60));
-
-      trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
-      if (ec) {
-        setcolor(RED);
-        printf("failed to read: %s\n", isDev ? "dev" : "user");
-        fflush(stdout);
-        setcolor(BRIGHT_WHITE);
-        setForDisconnected(C, B, &abort, &data_ready, &cv);
-        boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
-        cv.notify_all();
-
-        for (;;) {
-          if (!submitThread) {
-            break;
-          }
-          boost::this_thread::yield();
-        }
-        
-        stream.close();
-        return fail(ec, "async_read");
-      }
-
-      if (trans > 0)
-      {
-        // std::scoped_lock<boost::mutex> lockGuard(wsMutex);
-        std::vector<std::string> packets;
-        std::string data = beast::buffers_to_string(response.data());
-        // Consume the data from the buffer after processing it
-        response.consume(trans);
-
-        // std::cout << "received: " << data << std::endl << std::flush;
-        // printf("received data\n");
-        fflush(stdout);
-
-        std::stringstream  jsonStream(data);
-
+        // Process subscription response packets
+        std::stringstream jsonStream(subResString);
         std::string line;
-        while(std::getline(jsonStream,line,'\n'))
-        {
-          packets.push_back(line);
-        }
-
-        for (std::string packet : packets) {
-          try {
-            boost::json::object sRPC = boost::json::parse(packet.c_str()).as_object();
-            if (sRPC.contains("method"))
-            {
-              if (std::string(sRPC.at("method").as_string().c_str()).compare(SpectreStratum::s_ping) == 0)
-              {
-                boost::json::object pong({{"id", sRPC.at("id").get_uint64()},
-                                          {"method", SpectreStratum::pong.method}});
-                std::string pongPacket = std::string(boost::json::serialize(pong).c_str()) + "\n";
-                trans = boost::asio::async_write(
-                    stream,
-                    boost::asio::buffer(pongPacket),
-                    yield[ec]);
-                if(ec) {
-                  printf("error on write(%zu): %s\n", trans, ec.message().c_str());
-                  fflush(stdout);
+        while(std::getline(jsonStream, line, '\n')) {
+            if (!line.empty()) {
+                boost::json::object subRPC = boost::json::parse(line.c_str()).as_object();
+                if (subRPC.contains("method")) {
+                    handleSpectreStratumPacket(subRPC, &jobCache, isDev);
                 }
-                if (ec && trans > 0) {
-                  setcolor(RED);
-                  printf("ec && trans > 0\n");
-                  fflush(stdout);
-                  setcolor(BRIGHT_WHITE);
-                  setForDisconnected(C, B, &abort, &data_ready, &cv);
-
-                  for (;;)
-                  {
-                    if (!submitThread)
-                      break;
-                    boost::this_thread::yield();
-                  }
-                  stream.close();
-                  return fail(ec, "Stratum pong");
-                }
-              }
-              else
-                handleSpectreStratumPacket(sRPC, &jobCache, isDev);
             }
-            else
-            {
-              handleSpectreStratumResponse(sRPC, isDev);
-            } 
-          } catch(const std::exception &e){
-            // printf("\n\n packet count: %d, msg size: %llu\n\n", packets.size(), trans);
-            setcolor(RED);
-            // printf("BEFORE PACKET\n");
-            // std::cout << "BAD PACKET: " << packet << std::endl;
-            // printf("AFTER PACKET\n");
-            // std::cerr << e.what() << std::endl;
-            setcolor(BRIGHT_WHITE);
-            bool tryParse = (chopQueue.compare("NULL") != 0);
+        }
+    } catch (const std::exception &e) {
+        setcolor(RED);
+        printf("\nStratum Subscribe error: %s\n", e.what());
+        fflush(stdout);
+        setcolor(BRIGHT_WHITE);
+    }
 
-            if (tryParse) {
-              chopQueue += packet;
-              printf("resulting json string: %s\n\n", chopQueue.c_str());
-              try
-              {
-                packets.clear();
-                boost::json::object sRPC = boost::json::parse(chopQueue.c_str()).as_object();
-                if (sRPC.contains("method"))
-                {
-                  if (std::string(sRPC.at("method").as_string().c_str()).compare(SpectreStratum::s_ping) == 0)
-                  {
-                    boost::json::object pong({{"id", sRPC.at("id").get_uint64()},
-                                              {"method", SpectreStratum::pong.method}});
-                    std::string pongPacket = std::string(boost::json::serialize(pong).c_str()) + "\n";
-                    trans = boost::asio::async_write(
-                        stream,
-                        boost::asio::buffer(pongPacket),
-                        yield[ec]);
-                    if(ec) {
-                      printf("error on write(%zu): %s\n", trans, ec.message().c_str());
-                      fflush(stdout);
-                    }
-                    if (ec && trans > 0) {
-                      printf("ec && trans > 0\n");
-                      fflush(stdout);
-                      setForDisconnected(C, B, &abort, &data_ready, &cv);
-  
-                      for (;;)
-                      {
-                        if (!submitThread) {
-                          break;
-                        }
-                        boost::this_thread::yield();
-                      }
-                      stream.close();
-                      return fail(ec, "Stratum pong");
-                    }
-                  }
-                  else
-                    handleSpectreStratumPacket(sRPC, &jobCache, isDev);
+    // Authorize Stratum Worker
+    packet = SpectreStratum::stratumCall;
+    packet.at("id") = SpectreStratum::authorize.id;
+    packet.at("method") = SpectreStratum::authorize.method;
+    packet.at("params") = boost::json::array({wallet + "." + worker});
+    if(isDev) {
+        packet.at("params") = boost::json::array({devWallet + "." + worker + "-" + tnnTargetArch});
+    }
+
+    std::string authorization = boost::json::serialize(packet) + "\n";
+
+    try {
+        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
+        boost::asio::async_write(stream, boost::asio::buffer(authorization), yield[ec]);
+        if (ec)
+            return fail(ec, "Stratum authorize");
+
+        boost::asio::streambuf authRes;
+        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
+        trans = boost::asio::read_until(stream, authRes, "\n");
+
+        std::string authResString = beast::buffers_to_string(authRes.data());
+        authRes.consume(trans);
+
+        // Process authorization response packets
+        std::stringstream jsonStream(authResString);
+        std::string line;
+        while(std::getline(jsonStream, line, '\n')) {
+            if (!line.empty()) {
+                boost::json::object authRPC = boost::json::parse(line.c_str()).as_object();
+                if (authRPC.contains("method")) {
+                    handleSpectreStratumPacket(authRPC, &jobCache, isDev);
                 }
-                else
-                {
-                  handleSpectreStratumResponse(sRPC, isDev);
-                }
-                chopQueue = "NULL";
-                // printf("COMBINE WORKED!\n\n");
-              }
-              catch (const std::exception &e)
-              {
+            }
+        }
+    } catch (const std::exception &e) {
+        setcolor(RED);
+        printf("\nStratum Authorize error: %s\n", e.what());
+        fflush(stdout);
+        setcolor(BRIGHT_WHITE);
+    }
+
+    SpectreStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+
+    // Persistent packet buffer for handling split packets
+    std::string packetBuffer;
+
+    bool submitThread = false;
+    bool abort = false;
+
+    boost::thread subThread([&](){
+        submitThread = true;
+        while(!abort) {
+            boost::unique_lock<boost::mutex> lock(mutex);
+            bool *B = isDev ? &submittingDev : &submitting;
+            cv.wait(lock, [&]{ return (data_ready && (*B)) || abort; });
+            if (abort) break;
+            
+            try {
+                boost::json::object *S = &share;
+                if (isDev) S = &devShare;
+
+                std::string msg = boost::json::serialize((*S)) + "\n";
+                beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(1));
+                boost::asio::async_write(stream, boost::asio::buffer(msg), [&](const boost::system::error_code& error, std::size_t bytes_transferred) {
+                    if (error) {
+                        printf("error on write: %s\n", error.message().c_str());
+                        fflush(stdout);
+                        abort = true;
+                    }
+                    if (!isDev) SpectreStratum::lastShareSubmissionTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+                });
+                (*B) = false;
+                data_ready = false;
+            } catch (const std::exception &e) {
                 setcolor(RED);
-                printf("COMBINE FAILED\n\nBEFORE PACKET\n");
-                std::cout << chopQueue << std::endl;
-                printf("AFTER PACKET\n");
-                std::cerr << e.what() << std::endl;
+                printf("\nSubmit thread error: %s\n", e.what());
                 fflush(stdout);
                 setcolor(BRIGHT_WHITE);
-              }
-            } else {
-              chopQueue = packet;
-              printf("partial json start = %s\n", chopQueue.c_str());
-            } 
-          }
+                break;
+            }
+            boost::this_thread::yield();
         }
-      }
-    }
-    catch (const std::exception &e)
+        submitThread = false;
+    });
+
+    // Main message loop with optimal packet handling
+    while (!ABORT_MINER)
     {
-      bool *C = isDev ? &devConnected : &isConnected;
-      printf("exception\n");
-      //std::cout << e.what() << std::endl;
-      fflush(stdout);
-      setForDisconnected(C, B, &abort, &data_ready, &cv);
+        bool *C = isDev ? &devConnected : &isConnected;
+        bool *B = isDev ? &submittingDev : &submitting;
+        
+        try {
+            // Timeout check
+            if (SpectreStratum::lastReceivedJobTime > 0 &&
+                std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count() 
+                - SpectreStratum::lastReceivedJobTime > SpectreStratum::jobTimeout) {
+                setcolor(RED);
+                printf("timeout\n");
+                fflush(stdout);
+                setcolor(BRIGHT_WHITE);
+                setForDisconnected(C, B, &abort, &data_ready, &cv);
 
-      for (;;) {
-        if (!submitThread) break;
+                for (;;) {
+                    if (!submitThread) break;
+                    boost::this_thread::yield();
+                }
+                stream.close();
+                return fail(ec, "Stratum session timed out");
+            }
+
+            // Read incoming data
+            boost::asio::streambuf response;
+            beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(60));
+
+            trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
+            if (ec) {
+                setcolor(RED);
+                printf("failed to read: %s\n", isDev ? "dev" : "user");
+                fflush(stdout);
+                setcolor(BRIGHT_WHITE);
+                setForDisconnected(C, B, &abort, &data_ready, &cv);
+                boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
+                cv.notify_all();
+
+                for (;;) {
+                    if (!submitThread) break;
+                    boost::this_thread::yield();
+                }
+                
+                stream.close();
+                return fail(ec, "async_read");
+            }
+
+            if (trans > 0) {
+                std::string newData = beast::buffers_to_string(response.data());
+                response.consume(trans);
+
+                // Add new data to persistent buffer
+                packetBuffer += newData;
+
+                // Process all complete packets (lines ending with \n)
+                size_t pos = 0;
+                while ((pos = packetBuffer.find('\n')) != std::string::npos) {
+                    std::string completePacket = packetBuffer.substr(0, pos);
+                    packetBuffer.erase(0, pos + 1); // Remove processed packet including \n
+
+                    if (!completePacket.empty()) {
+                        try {
+                            boost::json::object sRPC = boost::json::parse(completePacket.c_str()).as_object();
+                            if (sRPC.contains("method")) {
+                                if (std::string(sRPC.at("method").as_string().c_str()).compare(SpectreStratum::s_ping) == 0) {
+                                    boost::json::object pong({
+                                        {"id", sRPC.at("id").get_uint64()},
+                                        {"method", SpectreStratum::pong.method}
+                                    });
+                                    std::string pongPacket = boost::json::serialize(pong) + "\n";
+                                    trans = boost::asio::async_write(stream, boost::asio::buffer(pongPacket), yield[ec]);
+                                    if (ec) {
+                                        printf("error on write(%zu): %s\n", trans, ec.message().c_str());
+                                        fflush(stdout);
+                                        setForDisconnected(C, B, &abort, &data_ready, &cv);
+                                        for (;;) {
+                                            if (!submitThread) break;
+                                            boost::this_thread::yield();
+                                        }
+                                        stream.close();
+                                        return fail(ec, "Stratum pong");
+                                    }
+                                } else {
+                                    handleSpectreStratumPacket(sRPC, &jobCache, isDev);
+                                }
+                            } else {
+                                handleSpectreStratumResponse(sRPC, isDev);
+                            }
+                        } catch (const std::exception &e) {
+                            setcolor(RED);
+                            printf("Parse error: %s\nPacket: %s\n", e.what(), completePacket.c_str());
+                            fflush(stdout);
+                            setcolor(BRIGHT_WHITE);
+                        }
+                    }
+                }
+
+                // Prevent buffer from growing indefinitely
+                if (packetBuffer.length() > 65536) {
+                    setcolor(RED);
+                    printf("Packet buffer overflow, clearing\n");
+                    fflush(stdout);
+                    setcolor(BRIGHT_WHITE);
+                    packetBuffer.clear();
+                }
+            }
+        }
+        catch (const std::exception &e) {
+            bool *C = isDev ? &devConnected : &isConnected;
+            printf("exception\n");
+            fflush(stdout);
+            setForDisconnected(C, B, &abort, &data_ready, &cv);
+
+            for (;;) {
+                if (!submitThread) break;
+                boost::this_thread::yield();
+            }
+            stream.close();
+            setcolor(RED);
+            std::cerr << e.what() << std::endl;
+            fflush(stdout);
+            setcolor(BRIGHT_WHITE);
+            return fail(ec, "Stratum session error");
+        }
+        
         boost::this_thread::yield();
-      }
-      stream.close();
-      setcolor(RED);
-      std::cerr << e.what() << std::endl;
-      fflush(stdout);
-      setcolor(BRIGHT_WHITE);
-      return fail(ec, "Stratum session error");
+        if(ABORT_MINER) {
+            bool *connPtr = isDev ? &devConnected : &isConnected;
+            bool *submitPtr = isDev ? &submittingDev : &submitting;
+            setForDisconnected(connPtr, submitPtr, &abort, &data_ready, &cv);
+            ioc.stop();
+        }
     }
-    boost::this_thread::yield();
-    if(ABORT_MINER) {
-      bool *connPtr = isDev ? &devConnected : &isConnected;
-      bool *submitPtr = isDev ? &submittingDev : &submitting;
-      setForDisconnected(connPtr, submitPtr, &abort, &data_ready, &cv);
-      ioc.stop();
-    }
-  }
-  cv.notify_all();
 
-  subThread.interrupt();
-  subThread.join();
-
-  // submission_thread.interrupt();
-  // printf("\n\n\nflagged connection loss\n");
-  // stream.close();
+    cv.notify_all();
+    subThread.interrupt();
+    subThread.join();
 }

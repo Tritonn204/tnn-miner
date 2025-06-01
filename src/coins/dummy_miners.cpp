@@ -48,6 +48,11 @@ blankfunc(mineWaglayla);
 blankfunc(mineShai);
 #endif
 
+// Yespower
+#ifndef TNN_YESPOWER
+blankfunc(mineYespower);
+#endif
+
 #ifndef TNN_HIP
 blankfunc(mineAstrix_hip);
 blankfunc(mineNexellia_hip);
