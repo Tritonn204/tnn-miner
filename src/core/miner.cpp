@@ -16,6 +16,7 @@
 #include "tnn-common.hpp"
 #include "tnn-hugepages.h"
 #include "numa_optimizer.h"
+#include "msr.hpp"
 #include "gpulibs.h"
 #include "hipkill.h"
 
@@ -1008,6 +1009,12 @@ fillBlanks:
   #endif
 
   setcolor(BRIGHT_YELLOW);
+
+  if (miningProfile.coin.miningAlgo == ALGO_RX0) {
+    applyMSROptimization("RandomX");
+    std::atexit(cleanupMSROnExit);
+  }
+
 
   #ifdef TNN_ASTROBWTV3
   if (miningProfile.coin.miningAlgo == ALGO_ASTROBWTV3 || miningProfile.coin.miningAlgo == ALGO_SPECTRE_X) {
