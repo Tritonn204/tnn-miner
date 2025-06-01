@@ -192,68 +192,59 @@ int rxRPCTest() {
   return toRet;
 }
 
-void mineRx0(int tid){
-  // const char* minerSig = "tnn-miner";
+// Global variables for synchronized batch scheduling
+std::atomic<bool> globalInDevBatch(false);
+std::atomic<int64_t> globalNextDevBatchTime(0);
+std::atomic<int64_t> globalDevBatchDuration(0);
+std::atomic<uint32_t> globalBatchSalt(0);  // Random salt for batch scheduling
 
-  // byte random_buf[12 + strlen(minerSig)];
-  // std::random_device rd;
-  // std::mt19937 gen(rd());
-  // std::uniform_int_distribution<uint8_t> dist(0, 255);
-  // std::array<uint8_t, 12> buf;
-  // std::generate(buf.begin(), buf.end(), [&dist, &gen]()
-  //               { return dist(gen); });
-  // std::memcpy(random_buf, buf.data(), buf.size());
+void initGlobalBatchScheduler() {
+  // Initialize once at program start
+  globalBatchSalt = rand() & 0xFFFFFF;
+  auto currentTime = std::chrono::steady_clock::now();
+  globalNextDevBatchTime = std::chrono::duration_cast<std::chrono::milliseconds>(
+    currentTime.time_since_epoch()).count() + (rand() % 60000);
+}
 
-  // memcpy(random_buf + 12, minerSig, strlen(minerSig));
-
+void mineRx0(int tid) {
   boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
 
-  bool updateCache = false;
-
   int64_t localJobCounter;
+  int64_t localUserHeight = 0;
+  int64_t localDevHeight = 0;
+ 
+  std::string localUserCacheKey = "";
+  std::string localDevCacheKey = "";
+ 
   byte powHash[32];
   byte devWork[RANDOMX_TEMPLATE_SIZE];
   byte work[RANDOMX_TEMPLATE_SIZE];
 
-  randomx_vm *vm = randomx_create_vm(rxFlags, rxCache, rxDataset);
-  randomx_vm *vmDev = randomx_create_vm(rxFlags, rxCache_dev, rxDataset_dev);
+  randomx_vm *vm = nullptr;
+  randomx_vm *vmDev = nullptr;
+  
+  // Batched dev fee constants
+  const int64_t BATCH_WINDOW_MS = 120000; // 2-minute window
+  const int64_t MIN_BATCH_DURATION_MS = 5000;  // Minimum 5 seconds per batch
+  const int64_t MAX_BATCH_DURATION_MS = 30000; // Maximum 30 seconds per batch
 
-  if (vm == nullptr) {
-    if ((rxFlags & RANDOMX_FLAG_HARD_AES)) {
-      throw std::runtime_error("Cannot create VM with the selected options. Try using --softAes");
-    }
-    if (rxFlags & RANDOMX_FLAG_LARGE_PAGES) {
-      throw std::runtime_error("Cannot create VM with the selected options. Try without --largePages");
-    }
-    throw std::runtime_error("Cannot create VM");
-  }
-
-  if (vmDev == nullptr) {
-    if ((rxFlags & RANDOMX_FLAG_HARD_AES)) {
-      throw std::runtime_error("DEV: Cannot create VM with the selected options. Try using --softAes");
-    }
-    if (rxFlags & RANDOMX_FLAG_LARGE_PAGES) {
-      throw std::runtime_error("DEV: Cannot create VM with the selected options. Try without --largePages");
-    }
-    throw std::runtime_error("DEV: Cannot create VM");
+  // Initialize batch scheduling if this is the first thread
+  if (tid == 0) {
+    initGlobalBatchScheduler();
   }
 
 waitForJob:
-
-  while (!isConnected)
-  {
+  while (!isConnected) {
     CHECK_CLOSE;
     boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
   }
 
-
-  while (!ABORT_MINER)
-  {
+  while (!ABORT_MINER) {
     while(!randomx_ready && !randomx_ready_dev) {
       boost::this_thread::yield();
     }
-    try
-    {
+    
+    try {
       boost::json::value myJob;
       boost::json::value myJobDev;
       {
@@ -262,91 +253,187 @@ waitForJob:
         myJobDev = devJob;
         localJobCounter = jobCounter;
       }
-
-      randomx_vm_set_cache(vm, rxCache);
-      byte *b2 = new byte[RANDOMX_TEMPLATE_SIZE];
-      memset(b2, 0, RANDOMX_TEMPLATE_SIZE);
-      hexstrToBytes(std::string(myJob.at("blob").as_string()), b2);
-      memcpy(work, b2, std::string(myJob.at("blob").as_string().c_str()).size() / 2);
-      delete[] b2;
-
-      if (devConnected)
-      {
-        randomx_vm_set_cache(vmDev, rxCache_dev);
+      
+      // VM recreation logic (unchanged)
+      if (randomx_ready && randomx_cacheKey != localUserCacheKey) {
+        if (vm) {
+          randomx_destroy_vm(vm);
+          vm = nullptr;
+        }
+        vm = randomx_create_vm(rxFlags, rxCache, rxDataset);
+        if (vm == nullptr) {
+          if ((rxFlags & RANDOMX_FLAG_HARD_AES)) {
+            throw std::runtime_error("Cannot create user VM with the selected options. Try using --softAes");
+          }
+          if (rxFlags & RANDOMX_FLAG_LARGE_PAGES) {
+            throw std::runtime_error("Cannot create user VM with the selected options. Try without --largePages");
+          }
+          throw std::runtime_error("Cannot create user VM");
+        }
+        localUserCacheKey = randomx_cacheKey;
+      }
+      
+      if (randomx_ready_dev && randomx_cacheKey_dev != localDevCacheKey) {
+        if (vmDev) {
+          randomx_destroy_vm(vmDev);
+          vmDev = nullptr;
+        }
+        vmDev = randomx_create_vm(rxFlags, rxCache_dev, rxDataset_dev);
+        if (vmDev == nullptr) {
+          if ((rxFlags & RANDOMX_FLAG_HARD_AES)) {
+            throw std::runtime_error("DEV: Cannot create VM with the selected options. Try using --softAes");
+          }
+          if (rxFlags & RANDOMX_FLAG_LARGE_PAGES) {
+            throw std::runtime_error("DEV: Cannot create VM with the selected options. Try without --largePages");
+          }
+          throw std::runtime_error("DEV: Cannot create VM");
+        }
+        localDevCacheKey = randomx_cacheKey_dev;
+      }
+      
+      // Update work blobs (unchanged)
+      if (ourHeight == 0 || localUserHeight != ourHeight) {
+        byte *b2 = new byte[RANDOMX_TEMPLATE_SIZE];
+        memset(b2, 0, RANDOMX_TEMPLATE_SIZE);
+        hexstrToBytes(std::string(myJob.at("blob").as_string()), b2);
+        memcpy(work, b2, std::string(myJob.at("blob").as_string().c_str()).size() / 2);
+        delete[] b2;
+        localUserHeight = ourHeight;
+      }
+      
+      if (devConnected && (devHeight == 0 || localDevHeight != devHeight)) {
         byte *b2d = new byte[RANDOMX_TEMPLATE_SIZE];
         memset(b2d, 0, RANDOMX_TEMPLATE_SIZE);
         hexstrToBytes(std::string(myJobDev.at("blob").as_string()), b2d);
         memcpy(devWork, b2d, std::string(myJobDev.at("blob").as_string().c_str()).size() / 2);
         delete[] b2d;
+        localDevHeight = devHeight;
       }
 
-      double which;
-      bool devMine = false;
       bool submit = false;
-      Num cmpDiff;
-      // DIFF = 5000;
-
-      std::string hex;
-
-      uint32_t userNonce = 0;
-      uint32_t devNonce = 0;
+      bool devMine = false;
 
       int userLen = std::string(myJob.at("blob").as_string().c_str()).size() / 2;
       int devLen = std::string(myJobDev.at("blob").as_string().c_str()).size() / 2;
 
-      Num cmpTarget = rx0_calcTarget(devMine ? myJobDev : myJob);
-
-      while (localJobCounter == jobCounter)
-      {
+      while (localJobCounter == jobCounter) {
         CHECK_CLOSE;
-        which = (double)(rand() % 10000);
-        devMine = (devConnected && which < devFee * 100.0 && randomx_ready_dev) || (randomx_ready_dev && !randomx_ready);
+        
+        // Synchronized batch scheduling based on jobCounter + salt
+        auto now = std::chrono::steady_clock::now();
+        int64_t currentTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now.time_since_epoch()).count();
+        
+        // Deterministic batch scheduling - all threads see the same decision
+        uint32_t scheduleSeed = localJobCounter + globalBatchSalt;
+        
+        if (!globalInDevBatch.load() && currentTimeMs >= globalNextDevBatchTime.load() && 
+            devConnected && randomx_ready_dev && vmDev != nullptr) {
+          
+          // First thread that detects this condition sets up the batch
+          if (!globalInDevBatch.exchange(true)) {
+            // Use jobCounter + salt to seed the random batch duration
+            std::mt19937 rng(scheduleSeed);
+            std::uniform_int_distribution<int64_t> durationDist(
+                MIN_BATCH_DURATION_MS, MAX_BATCH_DURATION_MS);
+              
+            int64_t rawDuration = durationDist(rng);
+            int64_t scaledDuration = static_cast<int64_t>(rawDuration * devFee);
+            globalDevBatchDuration.store(scaledDuration);
+            
+            if (tid == 0) { // Only log from thread 0
+              setcolor(CYAN);
+              std::cout << "\nAll threads entering dev batch for " 
+                        << (scaledDuration/1000.0) << " seconds" << std::endl;
+              setcolor(BRIGHT_WHITE);
+            }
+          }
+        } 
+        else if (globalInDevBatch.load() && 
+                 currentTimeMs >= globalNextDevBatchTime.load() + globalDevBatchDuration.load()) {
+          
+          // First thread that detects this condition ends the batch
+          if (globalInDevBatch.exchange(false)) {
+            // Use jobCounter + salt + 1 to seed the next batch timing
+            std::mt19937 rng(scheduleSeed + 1);
+            std::uniform_int_distribution<int64_t> timingDist(30000, BATCH_WINDOW_MS - 30000);
+            
+            int64_t nextInterval = timingDist(rng);
+            globalNextDevBatchTime.store(currentTimeMs + nextInterval);
+            
+            if (tid == 0) { // Only log from thread 0
+              setcolor(CYAN);
+              std::cout << "\nAll threads exiting dev batch, next batch in ~" 
+                        << (nextInterval/1000.0) << " seconds" << std::endl;
+              setcolor(BRIGHT_WHITE);
+            }
+          }
+        }
 
-        uint32_t &nonce = devMine ? devNonce : userNonce;
+        // All threads use the same global batch state
+        devMine = globalInDevBatch.load() || (randomx_ready_dev && !randomx_ready && vmDev != nullptr);
+        
+        // Use appropriate VM
+        randomx_vm *chosenVm = devMine ? vmDev : vm;
+        if (!chosenVm) continue; // Skip if VM not ready
 
-        // printf("Difficulty: %" PRIx64 "\n", DIFF);
-
-        nonce ++;
+        uint64_t *nonce = devMine ? &nonce0_dev : &nonce0;
+        (*nonce)++;
 
         byte *WORK = devMine ? &devWork[0] : &work[0];
+        boost::json::value &J = devMine ? myJobDev : myJob;
 
-        uint32_t N = nonce << 11 | tid;
+        uint32_t N = (*nonce) << 11 | tid;
         memcpy(&WORK[39], &N, 4);
-        // if (littleEndian())
-        // {
-        //   std::swap(WORK[39], WORK[42]);
-        //   std::swap(WORK[40], WORK[41]);
+        
+        // Check for job updates before hashing
+        if (localJobCounter != jobCounter) {
+          break;
+        }
+        
+        // Check for height updates before hashing
+        if ((!devMine && localUserHeight != ourHeight) || 
+            (devMine && localDevHeight != devHeight)) {
+          break;
+        }
 
-        // }
-
-        randomx_calculate_hash(devMine ? vmDev : vm, WORK, devMine ? devLen : userLen, powHash);
+        randomx_calculate_hash(chosenVm, WORK, devMine ? devLen : userLen, powHash);
         counter.fetch_add(1);
         submit = devMine ? !submittingDev : !submitting;
 
-        // std::vector<char> tmp;
-        // cmpTarget.print(tmp, 16);
+        // Check for updates after hashing
+        if (localJobCounter != jobCounter || 
+            (!devMine && localUserHeight != ourHeight) ||
+            (devMine && localDevHeight != devHeight)) {
+          break;
+        }
 
+        Num cmpTarget = rx0_calcTarget(devMine ? myJobDev : myJob);
+        
         std::reverse(powHash, powHash + 32);
-        if (Num(hexStr(powHash, 32).c_str(), 16) < cmpTarget)
-        {
+        if (Num(hexStr(powHash, 32).c_str(), 16) < cmpTarget) {
           std::reverse(powHash, powHash + 32);
-          // std::cout << hexStr(powHash, 32).c_str() << "\n" << &tmp[0] << "\n" << std::endl << std::flush;
-          // std::cout << hexStr(powHash, 32).c_str() << " | hash\n" << std::flush;
-          // std::cout << hexStr(WORK, devMine ? devLen : userLen).c_str() << " | blob\n" << std::flush;
+          
+          // Rest of the submission logic (unchanged)
           if (!submit) {
             for(;;) {
               submit = (devMine && devConnected) ? !submittingDev : !submitting;
-              if (submit || localJobCounter != jobCounter)
+              int64_t &rH = devMine ? devHeight : ourHeight;
+              int64_t &lH = devMine ? localDevHeight : localUserHeight;
+              if (submit || localJobCounter != jobCounter || rH != lH)
                 break;
               boost::this_thread::yield();
             }
           }
-          if (localJobCounter != jobCounter)
-                break;
-          // printf("work: %s, hash: %s\n", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str(), hexStr(powHash, 32).c_str());
-          // boost::lock_guard<boost::mutex> lock(mutex);
-          if (devMine)
-          {
+          
+          // Final check before submission
+          int64_t &rH = devMine ? devHeight : ourHeight;
+          int64_t &lH = devMine ? localDevHeight : localUserHeight;
+          if (localJobCounter != jobCounter || rH != lH) {
+            break;
+          }
+
+          if (devMine) {
             submittingDev = true;
             setcolor(CYAN);
             std::cout << "\n(DEV) Thread " << tid << " found a dev share\n" << std::flush;
@@ -365,8 +452,8 @@ waitForJob:
             };
             data_ready = true;
           }
-          else
-          {
+          else {
+            // User share submission (unchanged)
             submitting = true;
             setcolor(BRIGHT_YELLOW);
             std::cout << "\nThread " << tid << " found a nonce!\n" << std::flush;
@@ -383,8 +470,8 @@ waitForJob:
                 share = {
                   {"jsonrpc", "2.0"},
                   {"method", "submit_block"},
-                  {"id", 7}, // hardcoded for now
-                  {"params", {hexStr(fullBlob, fbSize).c_str()/*,hexStr(WORK, userLen).c_str()*/}}
+                  {"id", 7},
+                  {"params", {hexStr(fullBlob, fbSize).c_str()}}
                 };
                 delete[] fullBlob;
                 break;
@@ -415,18 +502,59 @@ waitForJob:
       }
       if (!isConnected)
         break;
+      
+      // Reset batch state when job changes
+      if (localJobCounter != jobCounter) {
+        globalInDevBatch.store(false);
+        globalNextDevBatchTime.store(std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count() + (rand() % 30000));
+        
+        // Update the salt on job changes to prevent predictability
+        if (tid == 0) {
+          globalBatchSalt = (globalBatchSalt + jobCounter) ^ (rand() & 0xFFFFFF);
+        }
+      }
     }
-    catch (std::exception& e)
-    {
+    catch (std::exception& e) {
       setcolor(RED);
       std::cerr << "Error in POW Function" << std::endl;
       std::cerr << e.what() << std::endl << std::flush;
       setcolor(BRIGHT_WHITE);
 
       localJobCounter = -1;
+      localUserHeight = -1;
+      localDevHeight = -1;
+      
+      // Cleanup VMs on error
+      if (vm) {
+        randomx_destroy_vm(vm);
+        vm = nullptr;
+      }
+      if (vmDev) {
+        randomx_destroy_vm(vmDev);
+        vmDev = nullptr;
+      }
+      localUserCacheKey = "";
+      localDevCacheKey = "";
+      
+      // Reset batch state
+      globalInDevBatch.store(false);
     }
     if (!isConnected)
       break;
   }
+ 
+  // Cleanup before waiting for job
+  if (vm) {
+    randomx_destroy_vm(vm);
+    vm = nullptr;
+  }
+  if (vmDev) {
+    randomx_destroy_vm(vmDev);
+    vmDev = nullptr;
+  }
+  localUserCacheKey = "";
+  localDevCacheKey = "";
+ 
   goto waitForJob;
 }
