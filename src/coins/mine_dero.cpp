@@ -124,7 +124,7 @@ waitForJob:
         //   printf("%02x", WORK[i]);
         // }
         // printf("\n");
-        AstroBWTv3_batch(WORK, MINIBLOCK_SIZE, powHash, *worker, useLookupMine);
+        AstroBWTv3(WORK, MINIBLOCK_SIZE, powHash, *worker, useLookupMine);
         // AstroBWTv3_batch((byte*)"b", 1, powHash, *worker, useLookupMine);
         // for (int i = 0; i < 32; i++) {
         //   printf("%02x", powHash[i]);
