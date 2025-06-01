@@ -28,9 +28,6 @@ inline uint32_t be32toh_portable(uint32_t big_endian_32bits) {
     return htobe32_portable(big_endian_32bits);  // Same operation
 }
 
-#define htobe32 htobe32_portable
-#define be32toh be32toh_portable
-
 inline uint32_t le32dec(const uint8_t* data) {
     return ((uint32_t)data[0]) |
            ((uint32_t)data[1] << 8) |

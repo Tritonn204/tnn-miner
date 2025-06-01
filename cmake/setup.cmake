@@ -10,13 +10,10 @@ function(setup_target_libraries target_name)
     endif()
     target_link_libraries(${target_name} wsock32 ws2_32 kernel32)
   endif()
-  if (UNIX)
-    target_link_libraries(${target_name} numa)    
-  endif()
 
   # Link libraries for non-Apple, non-Windows systems (likely Linux)
   if(NOT APPLE AND NOT WIN32 AND NOT WIN_CROSS)
-    target_link_libraries(${target_name} udns)
+    target_link_libraries(${target_name} udns numa)
   endif()
 
   # Link AstroSPSA library if enabled
