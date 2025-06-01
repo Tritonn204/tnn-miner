@@ -24,6 +24,7 @@ COPY . .
 
 RUN ls -la .
 
+RUN --mount=type=cache,target=/src/_deps ./scripts/prereqs.sh
 RUN --mount=type=cache,target=/src/_deps mkdir ./build && cd ./build && cmake $CMAKE_ARGS -DTNN_VERSION=$PACKAGE_VERSION ..
 RUN --mount=type=cache,target=/src/_deps cd ./build && make -j$(nproc)
 RUN mv ./build/bin/tnn-miner-* ./
