@@ -1010,11 +1010,6 @@ fillBlanks:
 
   setcolor(BRIGHT_YELLOW);
 
-  if (miningProfile.coin.miningAlgo == ALGO_RX0) {
-    applyMSROptimization("RandomX");
-    std::atexit(cleanupMSROnExit);
-  }
-
 
   #ifdef TNN_ASTROBWTV3
   if (miningProfile.coin.miningAlgo == ALGO_ASTROBWTV3 || miningProfile.coin.miningAlgo == ALGO_SPECTRE_X) {
@@ -1161,6 +1156,8 @@ Mining:
   if (miningProfile.coin.miningAlgo == ALGO_RX0) {
     rx_hugePages = vm.count("rx-hugepages");
     randomx_set_flags(true);
+    applyMSROptimization("RandomX");
+    std::atexit(cleanupMSROnExit);
     fflush(stdout);
     randomx_init_intern(n);
   }

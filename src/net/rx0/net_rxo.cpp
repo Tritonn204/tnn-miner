@@ -44,21 +44,29 @@ void updateVM(boost::json::object &newJob, bool isDev) {
     printf("Reinitializing RandomX cache...\n");
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
+    
     randomx_cache *refCache = isDev ? rxCache_dev : rxCache;
-    randomx_dataset *refDataset = isDev ? rxDataset_dev : rxDataset;
-
     bool &status = isDev ? randomx_ready_dev : randomx_ready;
     status = false;
 
     unsigned char *newSeed = (unsigned char *)malloc(32);
     hexstrToBytes(newJob.at("seed_hash").as_string().c_str(), newSeed);
 
-    // printf("%s | seedHash\n%s | seedBuffer\n", newJob.at("seed_hash").as_string().c_str(), hexStr(newSeed, 32).c_str());
+    if (rx_numa_enabled) {
+      if (isDev) {
+        randomx_update_data_numa(refCache, rxDatasets_numa_dev, newSeed, 32, 
+                                std::thread::hardware_concurrency());
+      } else {
+        randomx_update_data_numa(refCache, rxDatasets_numa, newSeed, 32, 
+                                std::thread::hardware_concurrency());
+      }
+    } else {
+      randomx_dataset *refDataset = isDev ? rxDataset_dev : rxDataset;
+      randomx_update_data(refCache, refDataset, newSeed, 32, 
+                         std::thread::hardware_concurrency());
+    }
 
-    randomx_update_data(refCache, refDataset, newSeed, 32, std::thread::hardware_concurrency());
-
-    delete[] newSeed;
-
+    free(newSeed);
     refKey = newJob.at("seed_hash").as_string().c_str();
 
     setcolor(isDev ? CYAN : BRIGHT_YELLOW);

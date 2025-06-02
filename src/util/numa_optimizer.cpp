@@ -70,6 +70,7 @@ bool NUMAOptimizer::initialize() {
 #ifdef __linux__
     if (numa_available() < 0) {
         std::cerr << "NUMA not available on this system" << std::endl;
+        fflush(stdout);
         return false;
     }
     
@@ -78,6 +79,7 @@ bool NUMAOptimizer::initialize() {
     
     std::cout << "NUMA initialized: " << memory_nodes << " memory nodes, " 
               << total_cpus << " CPUs total" << std::endl;
+    fflush(stdout);
     
     // Print topology
     for (int node = 0; node < memory_nodes; node++) {
@@ -104,12 +106,14 @@ bool NUMAOptimizer::initialize() {
     
     if (!g_GetNumaHighestNodeNumber) {
         std::cerr << "NUMA functions not available on this Windows version" << std::endl;
+        fflush(stdout);
         return false;
     }
     
     ULONG highest_node_number;
     if (!g_GetNumaHighestNodeNumber(&highest_node_number)) {
         std::cerr << "Failed to get NUMA node count" << std::endl;
+        fflush(stdout);
         return false;
     }
     
@@ -118,6 +122,7 @@ bool NUMAOptimizer::initialize() {
     
     std::cout << "NUMA initialized (Windows): " << memory_nodes << " memory nodes, " 
               << total_cpus << " CPUs total" << std::endl;
+    fflush(stdout);
     
     // Print Windows NUMA topology
     if (g_GetNumaNodeProcessorMaskEx) {
@@ -133,6 +138,7 @@ bool NUMAOptimizer::initialize() {
                     }
                 }
                 std::cout << std::endl;
+                fflush(stdout);
             }
         }
     }
@@ -140,6 +146,7 @@ bool NUMAOptimizer::initialize() {
     return true;
 #else
     std::cerr << "NUMA optimization only available on Linux and Windows" << std::endl;
+    fflush(stdout);
     return false;
 #endif
 }

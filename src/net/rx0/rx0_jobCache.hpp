@@ -38,5 +38,7 @@ inline Num rx0_calcTarget(boost::json::value &job) {
 }
 
 void randomx_update_data(randomx_cache* rc, randomx_dataset* rd, void *seed, size_t seedSize, int threadCount);
+void randomx_update_data_numa(randomx_cache* rc, randomx_dataset **datasets, 
+                             void *seed, size_t seedSize, int threadCount);
 
 void updateVM(boost::json::object &newJob, bool isDev);

@@ -195,7 +195,7 @@ public:
         
         if (msrAvailable) {
             setcolor(BRIGHT_YELLOW);
-            std::cout << "MSR access available. Detected: ";
+            std::cout << "\nMSR access available. Detected: ";
             switch (cpuType) {
                 case CPUType::INTEL:
                     std::cout << "Intel CPU";
