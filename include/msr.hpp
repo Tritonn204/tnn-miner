@@ -18,7 +18,69 @@
 
 #ifdef _WIN32
 #include <Windows.h>
-#include "OlsApi.h" // WinRing0 API
+
+class WinRing0Dynamic {
+private:
+    HMODULE hDll = nullptr;
+    
+public:
+    // Function pointers
+    BOOL (WINAPI *InitializeOls)() = nullptr;
+    VOID (WINAPI *DeinitializeOls)() = nullptr;
+    BOOL (WINAPI *RdmsrTx)(DWORD, PDWORD, PDWORD, DWORD_PTR) = nullptr;
+    BOOL (WINAPI *WrmsrTx)(DWORD, DWORD, DWORD, DWORD_PTR) = nullptr;
+    
+    WinRing0Dynamic() {
+        hDll = LoadLibraryA("WinRing0x64.dll");
+        if (hDll) {
+            *(FARPROC*)&InitializeOls = GetProcAddress(hDll, "InitializeOls");
+            *(FARPROC*)&DeinitializeOls = GetProcAddress(hDll, "DeinitializeOls");
+            *(FARPROC*)&RdmsrTx = GetProcAddress(hDll, "RdmsrTx");  
+            *(FARPROC*)&WrmsrTx = GetProcAddress(hDll, "WrmsrTx");
+        }
+    }
+    
+    ~WinRing0Dynamic() {
+        if (hDll) FreeLibrary(hDll);
+    }
+    
+    bool isLoaded() const {
+        return hDll && InitializeOls && RdmsrTx && WrmsrTx;
+    }
+};
+
+static WinRing0Dynamic g_winRing0;
+
+inline bool initMSRAccess() {
+    if (!g_winRing0.isLoaded()) {
+        return false;
+    }
+    return g_winRing0.InitializeOls() != 0; // TRUE means success
+}
+
+inline bool readMSR(uint32_t reg, uint64_t& value, int core = 0) {
+    if (!g_winRing0.isLoaded()) {
+        return false;
+    }
+    
+    DWORD eax = 0, edx = 0;
+    if (g_winRing0.RdmsrTx(reg, &eax, &edx, (1ULL << core))) {
+        value = ((uint64_t)edx << 32) | eax;
+        return true;
+    }
+    return false;
+}
+
+inline bool writeMSR(uint32_t reg, uint64_t value, int core = 0) {
+    if (!g_winRing0.isLoaded()) {
+        return false;
+    }
+    
+    DWORD eax = static_cast<DWORD>(value & 0xFFFFFFFF);
+    DWORD edx = static_cast<DWORD>(value >> 32);
+    return g_winRing0.WrmsrTx(reg, eax, edx, (1ULL << core)) != 0;
+}
+
 #else
 #include <unistd.h>
 #include <fcntl.h>
@@ -327,7 +389,7 @@ private:
     
     bool initMSRAccess() {
         #ifdef _WIN32
-        return InitializeOls() == 0;
+        return ::initMSRAccess();
         #else
         std::ifstream msrCheck("/dev/cpu/0/msr");
         if (!msrCheck.good()) {
@@ -343,11 +405,7 @@ private:
     
     bool readMSR(uint32_t reg, uint64_t& value, int core = 0) {
         #ifdef _WIN32
-        DWORD eax = 0, edx = 0;
-        if (RdmsrTx(reg, &eax, &edx, (1ULL << core))) {
-            value = ((uint64_t)edx << 32) | eax;
-            return true;
-        }
+        return ::readMSR(reg, value, core);
         return false;
         #else
         char path[64];
@@ -363,9 +421,7 @@ private:
     
     bool writeMSR(uint32_t reg, uint64_t value, int core = 0) {
         #ifdef _WIN32
-        DWORD eax = (DWORD)(value & 0xFFFFFFFF);
-        DWORD edx = (DWORD)(value >> 32);
-        return WrmsrTx(reg, eax, edx, (1ULL << core)) != 0;
+        return ::writeMSR(reg, value, core);
         #else
         char path[64];
         snprintf(path, sizeof(path), "/dev/cpu/%d/msr", core);

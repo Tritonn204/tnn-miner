@@ -522,7 +522,6 @@ file(GLOB SOURCES_NET
   "${PROJECT_SOURCE_DIR}/src/net/kas/*.cpp"
 )
 
-include (cmake/winring0.cmake)
 include(cmake/spsa.cmake)
 
 if (NOT WITH_HIP)
@@ -560,6 +559,7 @@ endif()
 #  list(FILTER SOURCES_CORE EXCLUDE REGEX ".*/.*/*aarch64*")
 #endif()
 
+include (cmake/winring0.cmake)
 include(cmake/setup.cmake)
 
 if (WITH_HIP)
