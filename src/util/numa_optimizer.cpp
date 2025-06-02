@@ -490,3 +490,63 @@ bool NUMAOptimizer::isAvailable() {
     return false;
 #endif
 }
+
+bool NUMAOptimizer::setMemoryPolicy(int node) {
+#ifdef __linux__
+    if (!numa_initialized) {
+        return false;
+    }
+    
+    // Set preferred node for memory allocations
+    numa_set_preferred(node);
+    
+    // Also bind memory allocations to this node
+    struct bitmask* nodemask = numa_allocate_nodemask();
+    numa_bitmask_clearall(nodemask);
+    numa_bitmask_setbit(nodemask, node);
+    numa_set_membind(nodemask);
+    numa_free_nodemask(nodemask);
+    
+    return true;
+    
+#elif defined(_WIN32)
+    // Windows doesn't have a direct equivalent to numa_set_preferred
+    // But we can bind the thread to the NUMA node which influences allocations
+    if (!numa_initialized) {
+        return false;
+    }
+    
+    // Save current thread affinity
+    HANDLE thread = GetCurrentThread();
+    GROUP_AFFINITY old_affinity;
+    GetThreadGroupAffinity(thread, &old_affinity);
+    
+    // Bind to target NUMA node
+    if (g_GetNumaNodeProcessorMaskEx && g_SetThreadGroupAffinity) {
+        GROUP_AFFINITY node_affinity;
+        if (g_GetNumaNodeProcessorMaskEx((UCHAR)node, &node_affinity)) {
+            g_SetThreadGroupAffinity(thread, &node_affinity, nullptr);
+            return true;
+        }
+    }
+    
+    return false;
+#else
+    return false;
+#endif
+}
+
+void NUMAOptimizer::restoreMemoryPolicy() {
+#ifdef __linux__
+    if (!numa_initialized) {
+        return;
+    }
+    
+    // Restore default local allocation policy
+    numa_set_localalloc();
+    
+#elif defined(_WIN32)
+    // On Windows, we just let the thread scheduler handle placement again
+    // Could save and restore the original affinity if needed
+#endif
+}

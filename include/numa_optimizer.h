@@ -51,6 +51,27 @@ public:
     // Check if NUMA is available on this system
     static bool isAvailable();
 
+    // Set memory allocation policy for current thread
+    static bool setMemoryPolicy(int node);
+    
+    // Restore default memory allocation policy
+    static void restoreMemoryPolicy();
+    
+    // RAII helper for automatic policy restoration
+    class ScopedMemoryPolicy {
+    private:
+        bool need_restore;
+    public:
+        ScopedMemoryPolicy(int node) : need_restore(false) {
+            need_restore = NUMAOptimizer::setMemoryPolicy(node);
+        }
+        ~ScopedMemoryPolicy() {
+            if (need_restore) {
+                NUMAOptimizer::restoreMemoryPolicy();
+            }
+        }
+    };
+
 private:
     static bool numa_initialized;
     static int memory_nodes;

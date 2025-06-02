@@ -52,19 +52,9 @@ void updateVM(boost::json::object &newJob, bool isDev) {
     unsigned char *newSeed = (unsigned char *)malloc(32);
     hexstrToBytes(newJob.at("seed_hash").as_string().c_str(), newSeed);
 
-    if (rx_numa_enabled) {
-      if (isDev) {
-        randomx_update_data_numa(refCache, rxDatasets_numa_dev, newSeed, 32, 
-                                std::thread::hardware_concurrency());
-      } else {
-        randomx_update_data_numa(refCache, rxDatasets_numa, newSeed, 32, 
-                                std::thread::hardware_concurrency());
-      }
-    } else {
-      randomx_dataset *refDataset = isDev ? rxDataset_dev : rxDataset;
-      randomx_update_data(refCache, refDataset, newSeed, 32, 
-                         std::thread::hardware_concurrency());
-    }
+    randomx_dataset *refDataset = isDev ? rxDataset_dev : rxDataset;
+    randomx_update_data(refCache, refDataset, newSeed, 32, 
+                        std::thread::hardware_concurrency());
 
     free(newSeed);
     refKey = newJob.at("seed_hash").as_string().c_str();

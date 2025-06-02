@@ -66,8 +66,8 @@ extern randomx_cache* rxCache;
 extern randomx_dataset* rxDataset_dev;
 extern randomx_cache* rxCache_dev;
 
-extern randomx_dataset* rxDatasets_numa[256];      // One per NUMA node
-extern randomx_dataset* rxDatasets_numa_dev[256]; // One per NUMA node
+extern randomx_dataset* rxDatasets_numa[256];
+extern randomx_dataset* rxDatasets_numa_dev[256];
 
 extern bool rx_numa_enabled;
 

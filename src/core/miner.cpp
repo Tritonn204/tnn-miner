@@ -133,6 +133,7 @@ int miniBlockCounter;
 int rejected;
 int accepted;
 
+bool lockThreads = true;
 
 //static int firstRejected;
 
@@ -340,7 +341,6 @@ int main(int argc, char **argv)
   }
   
   // default values
-  bool lockThreads = true;
   devFee = 2.5;
 
   po::variables_map vm;
@@ -1141,14 +1141,6 @@ Mining:
     initSPSA();
   #endif
 
-  boost::thread GETWORK(getWork_v2, &miningProfile);
-  // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
-
-  devMiningProfile = miningProfile;
-  devMiningProfile.setDev(vm.count("testnet"));
-  boost::thread DEVWORK(getWork_v2, &devMiningProfile);
-  // setPriority(DEVWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
-
   unsigned int n = std::thread::hardware_concurrency();
 
   #ifdef TNN_RANDOMX
@@ -1162,6 +1154,14 @@ Mining:
     randomx_init_intern(n);
   }
   #endif
+
+  boost::thread GETWORK(getWork_v2, &miningProfile);
+  // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+
+  devMiningProfile = miningProfile;
+  devMiningProfile.setDev(vm.count("testnet"));
+  boost::thread DEVWORK(getWork_v2, &devMiningProfile);
+  // setPriority(DEVWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
   // Create worker threads and set CPU affinity
  //  mutex.lock();

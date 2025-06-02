@@ -48,6 +48,7 @@ extern double latest_hashrate;
 static const char* devWorkerName = "tnn-dev";                                      
 
 extern bool devTurn;
+extern bool lockThreads;
 extern int threads;
 
 extern std::string workerName;
