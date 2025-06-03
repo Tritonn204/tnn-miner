@@ -2,14 +2,24 @@
 #include <randomx/randomx.h>
 #include <string>
 
-extern bool randomx_ready;
-extern bool randomx_ready_dev;
+extern std::atomic<bool> randomx_ready;
+extern std::atomic<bool> randomx_ready_dev;
 
 extern std::string randomx_cacheKey;
 extern std::string randomx_cacheKey_dev;
 
 extern std::string randomx_login;
 extern std::string randomx_login_dev;
+
+extern std::atomic<bool> globalInDevBatch;
+extern std::atomic<bool> isDevOnActiveCache; 
+extern std::mutex cacheSwitchMutex; 
+
+extern std::atomic<bool> sharedDatasetMode;
+extern std::string currentDatasetSeedHash;
+extern std::mutex datasetMutex;
+
+extern std::atomic<bool> needsDatasetUpdate;
 
 inline Num rx0_calcTarget(boost::json::value &job) {
   int tLen = job.at("target").as_string().size();
@@ -42,3 +52,37 @@ void randomx_update_data_numa(randomx_cache* rc, randomx_dataset **datasets,
                              void *seed, size_t seedSize, int threadCount);
 
 void updateVM(boost::json::object &newJob, bool isDev);
+void updateDataset(randomx_cache* cache, std::string seedHash, bool isDev);
+
+inline bool checkAndUpdateDatasetIfNeeded(bool isDev) {
+  // Get references to relevant variables based on isDev
+  std::atomic<bool> &myReady = isDev ? randomx_ready_dev : randomx_ready;
+  std::string &myCacheKey = isDev ? randomx_cacheKey_dev : randomx_cacheKey;
+  randomx_cache* &myCache = isDev ? rxCache_dev : rxCache;
+  
+  // Fast check - only proceed if not ready and cache key exists
+  if (!myReady.load() && !myCacheKey.empty()) {
+    // Only update dataset if this thread's type matches the current mining mode
+    bool isActiveMiningMode = (isDev == globalInDevBatch.load());
+    
+    // Thread-safe check if dataset needs updating
+    std::lock_guard<std::mutex> lock(datasetMutex);
+    
+    // Check if our cache key differs from current dataset
+    if (currentDatasetSeedHash != myCacheKey) {
+      if (isActiveMiningMode) {
+        updateDataset(myCache, myCacheKey, isDev);
+      }
+    }
+    
+    if (isActiveMiningMode && !myReady.load()) {
+      printf("%s is not ready, %s vs. %s\n", isDev ? "DEV" : "USER", currentDatasetSeedHash.c_str(), myCacheKey.c_str());
+    }
+
+    // Mark as ready now that we've handled the situation
+    myReady.store(true);
+    return true;  // We did some work
+  }
+  
+  return false;  // No work needed
+}

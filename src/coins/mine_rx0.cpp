@@ -13,7 +13,6 @@
 
 // Change from single datasets to per-NUMA-node datasets
 randomx_dataset* rxDatasets_numa[256];      // One per NUMA node
-randomx_dataset* rxDatasets_numa_dev[256]; // One per NUMA node
 
 // Fallback for non-NUMA systems
 randomx_dataset* rxDataset;
@@ -37,6 +36,9 @@ std::string randomx_cacheKey_dev = "00000000000000000000000000000000000000000000
 std::string randomx_login;
 std::string randomx_login_dev;
 
+std::mutex cacheSwitchMutex;
+std::atomic<bool> isDevOnActiveCache{false};
+
 struct NUMADatasetInfo {
     randomx_dataset* dataset;
     size_t size;
@@ -46,99 +48,83 @@ struct NUMADatasetInfo {
 std::map<randomx_dataset*, NUMADatasetInfo> numa_dataset_map;
 
 void randomx_init_intern(int threadCount) {
-    if (nullptr == randomx::selectArgonImpl(rxFlags)) {
-        throw std::runtime_error("Unsupported Argon2 implementation");
-    }
-    if ((rxFlags & RANDOMX_FLAG_JIT) && !RANDOMX_HAVE_COMPILER) {
-        throw std::runtime_error("JIT compilation is not supported on this platform. Try without --jit");
-    }
-    if (!(rxFlags & RANDOMX_FLAG_JIT) && RANDOMX_HAVE_COMPILER) {
-        std::cout << "WARNING: You are using the interpreter mode. Use --jit for optimal performance." << std::endl;
-    }
+  if (nullptr == randomx::selectArgonImpl(rxFlags)) {
+    throw std::runtime_error("Unsupported Argon2 implementation");
+  }
+  if ((rxFlags & RANDOMX_FLAG_JIT) && !RANDOMX_HAVE_COMPILER) {
+    throw std::runtime_error("JIT compilation is not supported on this platform. Try without --jit");
+  }
+  if (!(rxFlags & RANDOMX_FLAG_JIT) && RANDOMX_HAVE_COMPILER) {
+    std::cout << "WARNING: You are using the interpreter mode. Use --jit for optimal performance." << std::endl;
+  }
 
-    rxCache = randomx_alloc_cache(rxFlags);
-    rxCache_dev = randomx_alloc_cache(rxFlags);
+  // Allocate both caches for quick switching
+  rxCache = randomx_alloc_cache(rxFlags);
+  rxCache_dev = randomx_alloc_cache(rxFlags);
 
-    if (rxCache == nullptr || rxCache_dev == nullptr) {
-        throw std::runtime_error("RandomX Cache Alloc Failed");
-    }
+  if (rxCache == nullptr || rxCache_dev == nullptr) {
+    throw std::runtime_error("RandomX Cache Alloc Failed");
+  }
 
-    // Initialize NUMA if available
-    if (NUMAOptimizer::initialize()) {
-        numa_nodes = NUMAOptimizer::getMemoryNodes();
-        
-        if (numa_nodes < 2 || threads < 4 || !lockThreads) {
-          rx_numa_enabled = false;
-          numa_nodes = 1;
-          rxDataset = randomx_alloc_dataset(rxFlags);
-          rxDataset_dev = randomx_alloc_dataset(rxFlags);
-          
-          if (!rxDataset || !rxDataset_dev) {
-              throw std::runtime_error("Failed to allocate datasets");
+  // Initialize NUMA if available
+  if (NUMAOptimizer::initialize()) {
+    numa_nodes = NUMAOptimizer::getMemoryNodes();
+    
+    if (numa_nodes < 2 || threads < 4 || !lockThreads) {
+      rx_numa_enabled = false;
+      numa_nodes = 1;
+      rxDataset = randomx_alloc_dataset(rxFlags);
+      
+      if (!rxDataset) {
+        throw std::runtime_error("Failed to allocate dataset");
+      }
+    } else {
+      rx_numa_enabled = true;
+
+      setcolor(BRIGHT_YELLOW);
+      std::cout << " NUMA enabled: " << numa_nodes << " memory nodes detected" << std::endl;
+      if (rxFlags & RANDOMX_FLAG_LARGE_PAGES) {
+        std::cout << " Large pages enabled - will allocate on NUMA nodes" << std::endl;
+      }
+      fflush(stdout);
+      setcolor(BRIGHT_WHITE);
+      
+      for (int node = 0; node < numa_nodes; node++) {
+        // Set memory policy for this NUMA node
+        {
+          NUMAOptimizer::ScopedMemoryPolicy policy(node);
+          // Allocate only one dataset per NUMA node
+          rxDatasets_numa[node] = randomx_alloc_dataset(rxFlags);
+          if (!rxDatasets_numa[node]) {
+            throw std::runtime_error("Failed to allocate dataset for NUMA node " + std::to_string(node));
           }
-          return;
         }
-
-        rx_numa_enabled = true;
-
+        
+        // Optimize the allocated memory for mining
+        if (rxDatasets_numa[node]->memory) {
+          size_t dataset_size = randomx_dataset_item_count() * RANDOMX_DATASET_ITEM_SIZE;
+          NUMAOptimizer::optimizeMemoryForMining(rxDatasets_numa[node]->memory, dataset_size);
+        }
+        
         setcolor(BRIGHT_YELLOW);
-        std::cout << " NUMA enabled: " << numa_nodes << " memory nodes detected" << std::endl;
-        if (rxFlags & RANDOMX_FLAG_LARGE_PAGES) {
-            std::cout << " Large pages enabled - will allocate on NUMA nodes" << std::endl;
-        }
+        std::cout << " Allocated dataset on NUMA node " << node << std::endl;
         fflush(stdout);
         setcolor(BRIGHT_WHITE);
-        
-        for (int node = 0; node < numa_nodes; node++) {
-            // Set memory policy for this NUMA node
-            {
-                NUMAOptimizer::ScopedMemoryPolicy policy(node);
-                
-                // Allocate user dataset - will use the NUMA policy
-                rxDatasets_numa[node] = randomx_alloc_dataset(rxFlags);
-                if (!rxDatasets_numa[node]) {
-                    throw std::runtime_error("Failed to allocate user dataset for NUMA node " + std::to_string(node));
-                }
-                
-                // Allocate dev dataset on same node
-                rxDatasets_numa_dev[node] = randomx_alloc_dataset(rxFlags);
-                if (!rxDatasets_numa_dev[node]) {
-                    throw std::runtime_error("Failed to allocate dev dataset for NUMA node " + std::to_string(node));
-                }
-                
-                // Policy automatically restored when leaving scope
-            }
-            
-            // Optimize the allocated memory for mining
-            if (rxDatasets_numa[node]->memory) {
-                size_t dataset_size = randomx_dataset_item_count() * RANDOMX_DATASET_ITEM_SIZE;
-                NUMAOptimizer::optimizeMemoryForMining(rxDatasets_numa[node]->memory, dataset_size);
-            }
-            if (rxDatasets_numa_dev[node]->memory) {
-                size_t dataset_size = randomx_dataset_item_count() * RANDOMX_DATASET_ITEM_SIZE;
-                NUMAOptimizer::optimizeMemoryForMining(rxDatasets_numa_dev[node]->memory, dataset_size);
-            }
-            
-            setcolor(BRIGHT_YELLOW);
-            std::cout << " Allocated datasets on NUMA node " << node << std::endl;
-            fflush(stdout);
-            setcolor(BRIGHT_WHITE);
-        }
-        
-        // Restore default memory policy for the rest of the program
-        NUMAOptimizer::restoreMemoryPolicy();
-        
-    } else {
-        // Fallback to single dataset for non-NUMA systems
-        rx_numa_enabled = false;
-        numa_nodes = 1;
-        rxDataset = randomx_alloc_dataset(rxFlags);
-        rxDataset_dev = randomx_alloc_dataset(rxFlags);
-        
-        if (!rxDataset || !rxDataset_dev) {
-            throw std::runtime_error("Failed to allocate datasets");
-        }
+      }
+      
+      // Restore default memory policy for the rest of the program
+      NUMAOptimizer::restoreMemoryPolicy();
     }
+  } else {
+    // Fallback to single dataset for non-NUMA systems
+    rx_numa_enabled = false;
+    numa_nodes = 1;
+    rxDataset = randomx_alloc_dataset(rxFlags);
+    
+    if (!rxDataset) {
+      throw std::runtime_error("Failed to allocate dataset");
+    }
+  }
 }
 
 
@@ -217,9 +203,9 @@ void randomx_update_data(randomx_cache* rc, randomx_dataset* rd, void *seed,
 }
 
 // Helper to get dataset for current thread
-randomx_dataset* getDatasetForThread(int tid, bool isDev) {
+randomx_dataset* getDatasetForThread(int tid) {
   if (!rx_numa_enabled) {
-    return isDev ? rxDataset_dev : rxDataset;
+    return rxDataset;
   }
   
   int numa_node = 0;
@@ -236,7 +222,7 @@ randomx_dataset* getDatasetForThread(int tid, bool isDev) {
     }
   }
   
-  return isDev ? rxDatasets_numa_dev[numa_node] : rxDatasets_numa[numa_node];
+  return rxDatasets_numa[numa_node];
 }
 
 void randomx_set_flags(bool autoFlags) {
@@ -378,15 +364,13 @@ void mineRx0(int tid) {
   int64_t localUserHeight = 0;
   int64_t localDevHeight = 0;
  
-  std::string localUserCacheKey = "";
-  std::string localDevCacheKey = "";
+  std::string localCacheKey = "";
  
   byte powHash[32];
   byte devWork[RANDOMX_TEMPLATE_SIZE];
   byte work[RANDOMX_TEMPLATE_SIZE];
 
   randomx_vm *vm = nullptr;
-  randomx_vm *vmDev = nullptr;
   
   // Batched dev fee constants
   const int64_t BATCH_WINDOW_MS = 120000; // 2-minute window
@@ -404,10 +388,10 @@ waitForJob:
     boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
   }
 
+  bool devMine = false;
+
   while (!ABORT_MINER) {
-    while(!randomx_ready || !randomx_ready_dev) {
-      boost::this_thread::yield();
-    }
+    fflush(stdout);
     
     try {
       boost::json::value myJob;
@@ -419,14 +403,30 @@ waitForJob:
         localJobCounter = jobCounter;
       }
       
-      if (randomx_ready && randomx_cacheKey != localUserCacheKey) {
+      devMine = globalInDevBatch.load();
+
+      if (devMine) {
+        while(!randomx_ready_dev.load()) {
+          boost::this_thread::yield();
+        }
+      } else {
+        while(!randomx_ready.load()) {
+          boost::this_thread::yield();
+        }
+      }
+
+      std::string &tKey = devMine ? randomx_cacheKey_dev : randomx_cacheKey;
+
+      if (tKey != localCacheKey ) {
         if (vm) {
           randomx_destroy_vm(vm);
           vm = nullptr;
         }
 
-        randomx_dataset* RXD = getDatasetForThread(tid, false);
-        vm = randomx_create_vm(rxFlags, rxCache, RXD);
+        randomx_cache* tCache = devMine ? rxCache_dev : rxCache;
+
+        randomx_dataset* RXD = getDatasetForThread(tid);
+        vm = randomx_create_vm(rxFlags, rxCache_dev, RXD);
 
         if (vm == nullptr) {
           if ((rxFlags & RANDOMX_FLAG_HARD_AES)) {
@@ -437,28 +437,7 @@ waitForJob:
           }
           throw std::runtime_error("Cannot create user VM");
         }
-        localUserCacheKey = randomx_cacheKey;
-      }
-      
-      if (randomx_ready_dev && randomx_cacheKey_dev != localDevCacheKey) {
-        if (vmDev) {
-          randomx_destroy_vm(vmDev);
-          vmDev = nullptr;
-        }
-
-        randomx_dataset* RXD = getDatasetForThread(tid, true);
-        vmDev = randomx_create_vm(rxFlags, rxCache_dev, RXD);
-
-        if (vmDev == nullptr) {
-          if ((rxFlags & RANDOMX_FLAG_HARD_AES)) {
-            throw std::runtime_error("DEV: Cannot create VM with the selected options. Try using --softAes");
-          }
-          if (rxFlags & RANDOMX_FLAG_LARGE_PAGES) {
-            throw std::runtime_error("DEV: Cannot create VM with the selected options. Try without --largePages");
-          }
-          throw std::runtime_error("DEV: Cannot create VM");
-        }
-        localDevCacheKey = randomx_cacheKey_dev;
+        localCacheKey = tKey;
       }
       
       if (ourHeight == 0 || localUserHeight != ourHeight) {
@@ -480,7 +459,6 @@ waitForJob:
       }
 
       bool submit = false;
-      bool devMine = false;
 
       int userLen = std::string(myJob.at("blob").as_string().c_str()).size() / 2;
       int devLen = std::string(myJobDev.at("blob").as_string().c_str()).size() / 2;
@@ -493,9 +471,11 @@ waitForJob:
             now.time_since_epoch()).count();
         
         uint32_t scheduleSeed = localJobCounter + globalBatchSalt;
-        
+
+        if (vm == nullptr) continue;
+
         if (!globalInDevBatch.load() && currentTimeMs >= globalNextDevBatchTime.load() && 
-            devConnected && randomx_ready_dev && vmDev != nullptr) {
+            devConnected && randomx_ready_dev.load()) {
           
           if (!globalInDevBatch.exchange(true)) {
             std::mt19937 rng(scheduleSeed);
@@ -505,6 +485,10 @@ waitForJob:
             int64_t rawDuration = durationDist(rng);
             int64_t scaledDuration = static_cast<int64_t>(rawDuration * (devFee / 100.0));
             globalDevBatchDuration.store(scaledDuration);
+
+            needsDatasetUpdate = true;
+            cv.notify_all();
+            break;
           }
         } 
         else if (globalInDevBatch.load() && 
@@ -516,14 +500,28 @@ waitForJob:
             
             int64_t nextInterval = timingDist(rng);
             globalNextDevBatchTime.store(currentTimeMs + nextInterval);
+
+            needsDatasetUpdate = true;
+            cv.notify_all();
+            break;
           }
         }
 
-        devMine = globalInDevBatch.load() || (randomx_ready_dev && !randomx_ready && vmDev != nullptr);
+        bool usingDevCache = (localCacheKey == randomx_cacheKey_dev);
+        if (devMine && !usingDevCache) {
+          if (vm && randomx_ready_dev.load()) {
+            randomx_vm_set_cache(vm, rxCache_dev);
+            localCacheKey = randomx_cacheKey_dev;
+          }
+        }
+        else if (!devMine && usingDevCache) {
+          if (vm && randomx_ready.load()) {
+            randomx_vm_set_cache(vm, rxCache);
+            localCacheKey = randomx_cacheKey;
+          }
+        }
         
-        // Use appropriate VM
-        randomx_vm *chosenVm = devMine ? vmDev : vm;
-        if (chosenVm == nullptr) continue; // Skip if VM not ready
+        if (vm == nullptr) continue; // Skip if VM not ready
 
         uint64_t *nonce = devMine ? &nonce0_dev : &nonce0;
         (*nonce)++;
@@ -543,11 +541,11 @@ waitForJob:
           break;
         }
 
-        if(!randomx_ready || !randomx_ready_dev) {
+        if(!randomx_ready.load() && !randomx_ready_dev.load()) {
           continue;
         }
 
-        randomx_calculate_hash(chosenVm, WORK, devMine ? devLen : userLen, powHash);
+        randomx_calculate_hash(vm, WORK, devMine ? devLen : userLen, powHash);
         counter.fetch_add(1);
         submit = devMine ? !submittingDev : !submitting;
 
@@ -560,100 +558,100 @@ waitForJob:
         Num cmpTarget = rx0_calcTarget(devMine ? myJobDev : myJob);
         
         std::reverse(powHash, powHash + 32);
-        // if (Num(hexStr(powHash, 32).c_str(), 16) < cmpTarget) {
-        //   std::reverse(powHash, powHash + 32);
+        if (Num(hexStr(powHash, 32).c_str(), 16) < cmpTarget) {
+          std::reverse(powHash, powHash + 32);
           
-        //   if (!submit) {
-        //     for(;;) {
-        //       submit = (devMine && devConnected) ? !submittingDev : !submitting;
-        //       int64_t &rH = devMine ? devHeight : ourHeight;
-        //       int64_t &lH = devMine ? localDevHeight : localUserHeight;
-        //       if (submit || localJobCounter != jobCounter || rH != lH)
-        //         break;
-        //       boost::this_thread::yield();
-        //     }
-        //   }
+          if (!submit) {
+            for(;;) {
+              submit = (devMine && devConnected) ? !submittingDev : !submitting;
+              int64_t &rH = devMine ? devHeight : ourHeight;
+              int64_t &lH = devMine ? localDevHeight : localUserHeight;
+              if (submit || localJobCounter != jobCounter || rH != lH)
+                break;
+              boost::this_thread::yield();
+            }
+          }
           
-        //   int64_t &rH = devMine ? devHeight : ourHeight;
-        //   int64_t &lH = devMine ? localDevHeight : localUserHeight;
-        //   if (localJobCounter != jobCounter || rH != lH) {
-        //     break;
-        //   }
+          int64_t &rH = devMine ? devHeight : ourHeight;
+          int64_t &lH = devMine ? localDevHeight : localUserHeight;
+          if (localJobCounter != jobCounter || rH != lH) {
+            break;
+          }
 
-        //   if (devMine) {
-        //     submittingDev = true;
+          if (devMine) {
+            submittingDev = true;
 
-        //     if (localJobCounter != jobCounter || localDevHeight != devHeight) {
-        //       submittingDev = false;
-        //       break;
-        //     }
+            if (localJobCounter != jobCounter || localDevHeight != devHeight) {
+              submittingDev = false;
+              break;
+            }
 
-        //     setcolor(CYAN);
-        //     std::cout << "\n(DEV) Thread " << tid << " found a dev share\n" << std::flush;
-        //     setcolor(BRIGHT_WHITE);
+            setcolor(CYAN);
+            std::cout << "\n(DEV) Thread " << tid << " found a dev share\n" << std::flush;
+            setcolor(BRIGHT_WHITE);
 
-        //     N = __builtin_bswap32(N);
-        //     devShare = {
-        //       {"method", rx0Stratum::submit.method.c_str()},
-        //       {"id", rx0Stratum::submit.id},
-        //       {"params", {
-        //         {"id", randomx_login_dev.c_str()},
-        //         {"job_id", myJobDev.at("job_id").as_string().c_str()},
-        //         {"nonce", uint32ToHex(N).c_str()},
-        //         {"result", hexStr(powHash, 32).c_str()}
-        //       }}
-        //     };
-        //     data_ready = true;
-        //   }
-        //   else {
-        //     submitting = true;
+            N = __builtin_bswap32(N);
+            devShare = {
+              {"method", rx0Stratum::submit.method.c_str()},
+              {"id", rx0Stratum::submit.id},
+              {"params", {
+                {"id", randomx_login_dev.c_str()},
+                {"job_id", myJobDev.at("job_id").as_string().c_str()},
+                {"nonce", uint32ToHex(N).c_str()},
+                {"result", hexStr(powHash, 32).c_str()}
+              }}
+            };
+            data_ready = true;
+          }
+          else {
+            submitting = true;
 
-        //     if (localJobCounter != jobCounter || localDevHeight != devHeight) {
-        //       submittingDev = false;
-        //       break;
-        //     }
+            if (localJobCounter != jobCounter || localUserHeight  != ourHeight) {
+              submitting = false;
+              break;
+            }
 
-        //     setcolor(BRIGHT_YELLOW);
-        //     std::cout << "\nThread " << tid << " found a nonce!\n" << std::flush;
-        //     setcolor(BRIGHT_WHITE);
+            setcolor(BRIGHT_YELLOW);
+            std::cout << "\nThread " << tid << " found a nonce!\n" << std::flush;
+            setcolor(BRIGHT_WHITE);
                       
-        //     switch (miningProfile.protocol) {
-        //       case PROTO_RX0_SOLO:
-        //       {
-        //         int fbSize = myJob.at("template").as_string().size() / 2;
-        //         byte *fullBlob = new byte[fbSize];
-        //         hexstrToBytes(std::string(myJob.at("template").as_string()), fullBlob);
-        //         memcpy(&fullBlob[39], &N, 4);
+            switch (miningProfile.protocol) {
+              case PROTO_RX0_SOLO:
+              {
+                int fbSize = myJob.at("template").as_string().size() / 2;
+                byte *fullBlob = new byte[fbSize];
+                hexstrToBytes(std::string(myJob.at("template").as_string()), fullBlob);
+                memcpy(&fullBlob[39], &N, 4);
 
-        //         share = {
-        //           {"jsonrpc", "2.0"},
-        //           {"method", "submit_block"},
-        //           {"id", 7},
-        //           {"params", {hexStr(fullBlob, fbSize).c_str()}}
-        //         };
-        //         delete[] fullBlob;
-        //         break;
-        //       }
-        //       case PROTO_RX0_STRATUM:
-        //       {
-        //         N = __builtin_bswap32(N);
-        //         share = {
-        //           {"method", rx0Stratum::submit.method.c_str()},
-        //           {"id", rx0Stratum::submit.id},
-        //           {"params", {
-        //             {"id", randomx_login.c_str()},
-        //             {"job_id", myJob.at("job_id").as_string().c_str()},
-        //             {"nonce", uint32ToHex(N).c_str()},
-        //             {"result", hexStr(powHash, 32).c_str()}
-        //           }}
-        //         };
-        //         break;                
-        //       }
-        //     }
-        //     data_ready = true;
-        //   }
-        //   cv.notify_all();
-        // }
+                share = {
+                  {"jsonrpc", "2.0"},
+                  {"method", "submit_block"},
+                  {"id", 7},
+                  {"params", {hexStr(fullBlob, fbSize).c_str()}}
+                };
+                delete[] fullBlob;
+                break;
+              }
+              case PROTO_RX0_STRATUM:
+              {
+                N = __builtin_bswap32(N);
+                share = {
+                  {"method", rx0Stratum::submit.method.c_str()},
+                  {"id", rx0Stratum::submit.id},
+                  {"params", {
+                    {"id", randomx_login.c_str()},
+                    {"job_id", myJob.at("job_id").as_string().c_str()},
+                    {"nonce", uint32ToHex(N).c_str()},
+                    {"result", hexStr(powHash, 32).c_str()}
+                  }}
+                };
+                break;                
+              }
+            }
+            data_ready = true;
+          }
+          cv.notify_all();
+        }
 
         if (!isConnected)
           break;
@@ -687,12 +685,7 @@ waitForJob:
         randomx_destroy_vm(vm);
         vm = nullptr;
       }
-      if (vmDev) {
-        randomx_destroy_vm(vmDev);
-        vmDev = nullptr;
-      }
-      localUserCacheKey = "";
-      localDevCacheKey = "";
+      localCacheKey = "";
       
       // Reset batch state
       globalInDevBatch.store(false);
@@ -706,12 +699,7 @@ waitForJob:
     randomx_destroy_vm(vm);
     vm = nullptr;
   }
-  if (vmDev) {
-    randomx_destroy_vm(vmDev);
-    vmDev = nullptr;
-  }
-  localUserCacheKey = "";
-  localDevCacheKey = "";
+  localCacheKey = "";
  
   goto waitForJob;
 }
