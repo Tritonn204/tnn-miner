@@ -44,8 +44,9 @@
 #define COIN_SHAI 12
 #define COIN_YESPOWER 13 // for generic/manual configs
 #define COIN_ADVC 14
+#define COIN_TARI 15
 
-#define COIN_COUNT 15
+#define COIN_COUNT 16
 
 // Corresponding to the ALGO_POW[] array in miners.hpp
 // Also used in coins[COIN_COUNT] from tnn-common.hpp

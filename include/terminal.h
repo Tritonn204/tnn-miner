@@ -150,16 +150,8 @@ inline po::options_description get_prog_opts()
 
   po::options_description coins("Coin Selection", col_width);
   coins.add_options()
-    ("dero", "Will mine Dero")
-    ("xelis", "Will mine Xelis")
-    ("spectre", "Will mine Spectre")
+    ("<symbol>", "Will mine the coin corresponding to <symbol> if supported")
     ("randomx", "For mining RandomX coins")
-    ("astrix", "Will mine Astrix")
-    ("nexellia", "Will mine Nexellia")
-    ("hoosat", "Will mine Hoosat")
-    ("waglayla", "Will mine Waglayla")
-    ("shai", "Will mine Shai")
-    ("advc", "Will mine AdventureCoin (ADVC)")
     ("yespower", po::value<std::string>(), "Mine with custom yespower parameters (format: N=2048,R=32,pers=string)")
   ;
 

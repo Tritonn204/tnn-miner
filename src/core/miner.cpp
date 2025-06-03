@@ -348,19 +348,86 @@ int main(int argc, char **argv)
   try
   {
     int style = get_prog_style();
-    po::store(po::command_line_parser(argc, argv).options(opts).style(style).run(), vm);
+    po::parsed_options parsed = po::command_line_parser(argc, argv)
+                                  .options(opts)
+                                  .style(style)
+                                  .allow_unregistered()  // Allow unknown args
+                                  .run();
+    
+    // Get unrecognized options
+    std::vector<std::string> unrecognized = po::collect_unrecognized(parsed.options, po::include_positional);
+    
+    // Process recognized options
+    po::store(parsed, vm);
     po::notify(vm);
+    
+    // Check if any unrecognized option is a coin symbol
+    std::vector<std::string> stillUnrecognized;
+    
+    for (const auto& arg : unrecognized) {
+      std::string cleanArg = arg;
+      
+      // Strip leading dashes
+      while (!cleanArg.empty() && cleanArg[0] == '-') {
+        cleanArg = cleanArg.substr(1);
+      }
+      
+      // Convert to uppercase for comparison
+      std::string upperArg = cleanArg;
+      std::transform(upperArg.begin(), upperArg.end(), upperArg.begin(), ::toupper);
+      
+      // Check against coin symbols
+      bool found = false;
+      for(int x = 0; x < COIN_COUNT; x++) {
+        if(boost::iequals(coins[x].coinSymbol, upperArg)) {
+          miningProfile.coin = coins[x];
+          setcolor(BRIGHT_YELLOW);
+          printf(" Set to mine %s from command line argument '%s'\n\n", 
+                miningProfile.coin.coinPrettyName.c_str(), arg.c_str());
+          fflush(stdout);
+          setcolor(BRIGHT_WHITE);
+          found = true;
+          break;
+        }
+      }
+      
+      if (!found) {
+        stillUnrecognized.push_back(arg);
+      }
+    }
+    
+    if (!stillUnrecognized.empty()) {
+      std::string errorMsg = "unrecognized option";
+      if (stillUnrecognized.size() > 1) {
+        errorMsg += "s";
+      }
+      for (size_t i = 0; i < stillUnrecognized.size(); ++i) {
+        if (i == 0) errorMsg += " '";
+        else if (i == stillUnrecognized.size() - 1) errorMsg += "' and '";
+        else errorMsg += "', '";
+        errorMsg += stillUnrecognized[i];
+      }
+      errorMsg += "'";
+      
+      throw po::error(errorMsg);
+    }
   }
   catch (std::exception &e)
   {
     printf("%s v%s %s\n", consoleLine, versionString, targetArch);
+    setcolor(RED);
     std::cerr << "Error: " << e.what() << "\n";
     std::cerr << "Remember: Long options now use a double-dash -- instead of a single-dash -\n";
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
     return -1;
   }
   catch (...)
   {
+    setcolor(RED);
     std::cerr << "Unknown error!" << "\n";
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
     return -1;
   }
 
@@ -927,7 +994,7 @@ fillBlanks:
       miningProfile.coin = coins[x];
 
       setcolor(BRIGHT_YELLOW);
-      printf("\n Set to mine %s\n", miningProfile.coin.coinPrettyName.c_str());
+      printf(" Set to mine %s\n\n", miningProfile.coin.coinPrettyName.c_str());
       fflush(stdout);
       setcolor(BRIGHT_WHITE);
     }
