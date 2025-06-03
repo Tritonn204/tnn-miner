@@ -388,7 +388,7 @@ int main(int argc, char **argv)
   else
     std::cout << "Huge Pages: Permission Failed..." << std::endl;
 
-  // SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
+  fflush(stdout);
 #endif
 
   // #if defined(TNN_YESPOWER)
@@ -925,6 +925,11 @@ fillBlanks:
   for(int x = 0; x < COIN_COUNT; x++) {
     if(boost::iequals(coins[x].coinSymbol, localSymbol)) {
       miningProfile.coin = coins[x];
+
+      setcolor(BRIGHT_YELLOW);
+      printf("\n Set to mine %s\n", miningProfile.coin.coinPrettyName.c_str());
+      fflush(stdout);
+      setcolor(BRIGHT_WHITE);
     }
   }
   if(miningProfile.coin.coinId == unknownCoin.coinId)
@@ -996,21 +1001,43 @@ fillBlanks:
       case ALGO_RX0:
         miningProfile.protocol = PROTO_RX0_STRATUM;
         break;
+      case ALGO_YESPOWER:
+        miningProfile.protocol = PROTO_BTC_STRATUM;
+
+        if (miningProfile.coin.coinId == coins[COIN_ADVC].coinId) {
+          current_algo_config = algo_configs[CONFIG_ENDIAN_YESPOWER];
+
+          initADVCParams(&currentYespowerParams);
+          initADVCParams(&devYespowerParams);
+        }
+        break;
     }
   }
 
   if (threads == 0)
   {
-    threads = processor_count;
+    setcolor(CYAN);
+    printf("%s\n", threadPrompt);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+
+    std::string cmdLine;
+    std::getline(std::cin, cmdLine);
+    if (cmdLine != "" && cmdLine.find_first_not_of(' ') != std::string::npos)
+    {
+      threads = atoi(cmdLine.c_str());
+    }
+    else
+    {
+      threads = processor_count;
+    }
+
+    if (threads == 0) {
+      threads = processor_count;
+    }
   }
 
-  #if defined(_WIN32)
-    if (threads > 32) lockThreads = false;
-  #endif
-
   setcolor(BRIGHT_YELLOW);
-
-
   #ifdef TNN_ASTROBWTV3
   if (miningProfile.coin.miningAlgo == ALGO_ASTROBWTV3 || miningProfile.coin.miningAlgo == ALGO_SPECTRE_X) {
     if (vm.count("no-tune")) {
@@ -1138,7 +1165,12 @@ Mining:
     return rc;
   }
   #if defined(USE_ASTRO_SPSA)
-    initSPSA();
+    if (
+      miningProfile.coin.miningAlgo == ALGO_ASTROBWTV3 ||
+      miningProfile.coin.miningAlgo == ALGO_SPECTRE_X
+    ) {
+      initSPSA();
+    }
   #endif
 
   unsigned int n = std::thread::hardware_concurrency();
@@ -1147,6 +1179,31 @@ Mining:
 
   if (miningProfile.coin.miningAlgo == ALGO_RX0) {
     rx_hugePages = vm.count("rx-hugepages");
+    if (rx_hugePages) {
+      setcolor(BRIGHT_YELLOW);
+      std::cout << "\nChecking huge/large pages configuration..." << std::endl;
+      fflush(stdout);
+      setcolor(BRIGHT_WHITE);
+      
+      bool hugePagesAvailable = setupHugePages();
+      
+      if (!hugePagesAvailable) {
+        setcolor(CYAN);
+        std::cout << "\nContinue without huge pages? (y/n): " << std::flush;
+        std::string response;
+        std::getline(std::cin, response);
+        
+        if (response != "y" && response != "Y") {
+          std::cout << "Exiting..." << std::endl;
+          return 1;
+        }
+        
+        rx_hugePages = false;
+        fflush(stdout);
+        setcolor(BRIGHT_WHITE);
+      }
+    }
+
     randomx_set_flags(true);
     applyMSROptimization("RandomX");
     std::atexit(cleanupMSROnExit);
@@ -1300,33 +1357,187 @@ DWORD_PTR SetThreadAffinityWithGroups(HANDLE threadHandle, DWORD_PTR coreIndex)
 }
 #endif
 
+#if defined(_WIN32)
+
+struct CoreInfo {
+    DWORD physicalCore;
+    DWORD logicalCore;
+    bool isPCore;
+    bool isHyperthread;
+};
+
+std::vector<CoreInfo> getCoreTopology() {
+    std::vector<CoreInfo> cores;
+    DWORD bufferSize = 0;
+    
+    GetLogicalProcessorInformationEx(RelationProcessorCore, nullptr, &bufferSize);
+    
+    std::vector<BYTE> buffer(bufferSize);
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX info = 
+        reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(buffer.data());
+    
+    if (GetLogicalProcessorInformationEx(RelationProcessorCore, info, &bufferSize)) {
+        DWORD offset = 0;
+        DWORD physicalCoreId = 0;
+        
+        while (offset < bufferSize) {
+            auto current = reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(
+                reinterpret_cast<BYTE*>(info) + offset);
+            
+            if (current->Relationship == RelationProcessorCore) {
+                for (WORD groupIdx = 0; groupIdx < current->Processor.GroupCount; groupIdx++) {
+                    KAFFINITY mask = current->Processor.GroupMask[groupIdx].Mask;
+                    WORD group = current->Processor.GroupMask[groupIdx].Group;
+                    DWORD logicalCount = __popcnt64(mask);
+                    DWORD baseLogicalCore = 0;
+                    
+                    // Calculate base logical core for this group
+                    for (WORD g = 0; g < group; g++) {
+                        baseLogicalCore += GetMaximumProcessorCount(g);
+                    }
+                    
+                    // Detect if this is a P-core (supports hyperthreading) or E-core
+                    bool isPCore = (logicalCount > 1);
+                    
+                    for (DWORD bit = 0; bit < 64; bit++) {
+                        if (mask & (1ULL << bit)) {
+                            CoreInfo core;
+                            core.physicalCore = physicalCoreId;
+                            core.logicalCore = baseLogicalCore + bit;
+                            core.isHyperthread = (logicalCount > 1 && __popcnt64(mask & ((1ULL << bit) - 1)) > 0);
+                            core.isPCore = isPCore;  // New field
+                            cores.push_back(core);
+                        }
+                    }
+                }
+                physicalCoreId++;
+            }
+            offset += current->Size;
+        }
+    }
+    
+    return cores;
+}
+
+#endif
+
 void setAffinity(boost::thread::native_handle_type t, uint64_t core)
 {
 #if defined(_WIN32)
-  HANDLE threadHandle = t;
-  DWORD_PTR affinityMask = core;
-  DWORD_PTR previousAffinityMask = SetThreadAffinityWithGroups(threadHandle, affinityMask);
-  if (previousAffinityMask == 0)
-  {
-    DWORD error = GetLastError();
-    std::cerr << "Failed to set CPU affinity for thread. Error code: " << error << std::endl;
+  static std::vector<CoreInfo> topology = getCoreTopology();
+  static std::vector<DWORD> physicalFirst;
+  
+  // Build physical-first assignment order (once)
+  if (physicalFirst.empty()) {
+    std::map<DWORD, std::vector<DWORD>> pCoreMap, eCoreMap;
+    
+    // Group logical cores by physical core, separating P and E cores
+    for (size_t i = 0; i < topology.size(); i++) {
+      if (topology[i].isPCore) {
+        pCoreMap[topology[i].physicalCore].push_back(i);
+      } else {
+        eCoreMap[topology[i].physicalCore].push_back(i);
+      }
+    }
+    
+    // Add P-cores first (first logical core of each physical)
+    for (auto& pair : pCoreMap) {
+      physicalFirst.push_back(pair.second[0]);
+    }
+    
+    // Then E-cores
+    for (auto& pair : eCoreMap) {
+      physicalFirst.push_back(pair.second[0]);
+    }
+    
+    // Then P-core hyperthreads
+    for (auto& pair : pCoreMap) {
+      for (size_t i = 1; i < pair.second.size(); i++) {
+        physicalFirst.push_back(pair.second[i]);
+      }
+    }
+  }
+  
+  if (core < physicalFirst.size()) {
+    // Critical part: use the physical-first ordering to get the proper logical core
+    DWORD logicalCoreIndex = physicalFirst[core];
+    DWORD targetCore = topology[logicalCoreIndex].logicalCore;
+    HANDLE threadHandle = t;
+    
+    // Get the total logical processor count across all groups
+    DWORD numGroups = GetActiveProcessorGroupCount();
+    DWORD totalProcessors = 0;
+    
+    for (DWORD i = 0; i < numGroups; i++) {
+      totalProcessors += GetMaximumProcessorCount(i);
+    }
+    
+    if (targetCore < totalProcessors) {
+      // Calculate group and processor within the group
+      DWORD group = 0;
+      DWORD processorInGroup = targetCore;
+      
+      // Find the correct group
+      for (DWORD i = 0; i < numGroups; i++) {
+        DWORD groupSize = GetMaximumProcessorCount(i);
+        if (processorInGroup < groupSize) {
+          group = i;
+          break;
+        }
+        processorInGroup -= groupSize;
+      }
+      
+      if (group >= numGroups) {
+        setcolor(RED);
+        std::cerr << "Invalid processor group calculated" << std::endl;
+        fflush(stdout);
+        setcolor(BRIGHT_WHITE);
+        return;
+      }
+      
+      // Use group affinity for all cases for consistency
+      GROUP_AFFINITY groupAffinity = {0};
+      groupAffinity.Group = static_cast<WORD>(group);
+      groupAffinity.Mask = 1ULL << processorInGroup;
+      
+      GROUP_AFFINITY previousAffinity;
+      if (!SetThreadGroupAffinity(threadHandle, &groupAffinity, &previousAffinity)) {
+        DWORD error = GetLastError();
+        setcolor(RED);
+        std::cerr << "Failed to set CPU affinity for thread " << core 
+                  << " to physical core " << topology[logicalCoreIndex].physicalCore
+                  << ", logical core " << targetCore
+                  << " (group " << group << ", mask " << std::hex << groupAffinity.Mask 
+                  << std::dec << "). Error: " << error << std::endl;
+        fflush(stdout);
+        setcolor(BRIGHT_WHITE);
+      }
+    } else {
+      setcolor(RED);
+      std::cerr << "Logical core ID " << targetCore 
+                << " exceeds available logical cores (" << totalProcessors << ")" << std::endl;
+      fflush(stdout);
+      setcolor(BRIGHT_WHITE);
+    }
+  } else {
+    setcolor(RED);
+    std::cerr << "Core ID " << core << " exceeds available cores (" 
+              << physicalFirst.size() << ")" << std::endl;
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
   }
 
 #elif !defined(__APPLE__)
-  // Get the native handle of the thread
   pthread_t threadHandle = t;
-
-  // Create a CPU set with a single core
   cpu_set_t cpuset;
   CPU_ZERO(&cpuset);
-  CPU_SET(core, &cpuset); // Set core 0
-
-  // Set the CPU affinity of the thread
+  CPU_SET(core, &cpuset);
   if (pthread_setaffinity_np(threadHandle, sizeof(cpu_set_t), &cpuset) != 0)
   {
     std::cerr << "Failed to set CPU affinity for thread" << std::endl;
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
   }
-
 #endif
 }
 

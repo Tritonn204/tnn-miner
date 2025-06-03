@@ -7,6 +7,8 @@
 #endif
 #include <assert.h>
 
+#include "terminal.h"
+
 extern bool printHugepagesError;
 
 #if defined(_WIN32)
@@ -38,7 +40,9 @@ inline BOOL SetPrivilege(
             &luid ) )        // receives LUID of privilege
     {
         #ifdef __cplusplus
+        setcolor(RED);
         printf("LookupPrivilegeValue error: %lu\n", GetLastError() ); 
+        fflush(stdout);
         #endif
         return FALSE; 
     }
@@ -61,7 +65,9 @@ inline BOOL SetPrivilege(
            (PDWORD) NULL) )
     { 
           #ifdef __cplusplus
+          setcolor(RED);
           printf("AdjustTokenPrivileges error: %lu\n", GetLastError() ); 
+          fflush(stdout);
           #endif
           return FALSE; 
     } 
@@ -70,7 +76,9 @@ inline BOOL SetPrivilege(
 
     {
           #ifdef __cplusplus
+          setcolor(RED);
           printf("The token does not have the specified privilege. \n");
+          fflush(stdout);
           #endif
           return FALSE;
     } 
@@ -164,4 +172,119 @@ inline void free_huge_pages(void *ptr)
     munmap(real_ptr, real_size);
     #endif
   } else free(real_ptr);
+}
+
+inline bool setupHugePages() {
+#ifdef __linux__
+    // Check current huge pages configuration
+    std::ifstream meminfo("/proc/meminfo");
+    std::string line;
+    size_t huge_page_size = 0;
+    size_t total_huge_pages = 0;
+    size_t free_huge_pages = 0;
+    
+    while (std::getline(meminfo, line)) {
+        if (line.find("Hugepagesize:") != std::string::npos) {
+            sscanf(line.c_str(), "Hugepagesize: %zu kB", &huge_page_size);
+            huge_page_size *= 1024; // Convert to bytes
+        } else if (line.find("HugePages_Total:") != std::string::npos) {
+            sscanf(line.c_str(), "HugePages_Total: %zu", &total_huge_pages);
+        } else if (line.find("HugePages_Free:") != std::string::npos) {
+            sscanf(line.c_str(), "HugePages_Free: %zu", &free_huge_pages);
+        }
+    }
+    meminfo.close();
+    
+    // Calculate required huge pages for RandomX
+    // RandomX needs ~2.5GB per NUMA node + caches
+    size_t required_memory = 0;
+    if (rx_numa_enabled) {
+        required_memory = (2560ULL * 1024 * 1024) * numa_nodes; // 2.5GB per node
+    } else {
+        required_memory = 2560ULL * 1024 * 1024; // 2.5GB total
+    }
+    required_memory += 512ULL * 1024 * 1024; // Add 512MB for caches and overhead
+    
+    size_t required_pages = (required_memory + huge_page_size - 1) / huge_page_size;
+    
+    setcolor(BRIGHT_YELLOW);
+    std::cout << " Huge page size: " << (huge_page_size / (1024 * 1024)) << " MB" << std::endl;
+    std::cout << " Total huge pages: " << total_huge_pages << std::endl;
+    std::cout << " Free huge pages: " << free_huge_pages << std::endl;
+    std::cout << " Required huge pages: " << required_pages << std::endl;
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    
+    if (free_huge_pages < required_pages) {
+        setcolor(RED);
+        std::cout << "\nInsufficient huge pages available!" << std::endl;
+        std::cout << "To fix this, run as root:" << std::endl;
+        std::cout << "  echo " << (total_huge_pages - free_huge_pages + required_pages) 
+                  << " > /proc/sys/vm/nr_hugepages" << std::endl;
+        std::cout << "\nOr to set permanently, add to /etc/sysctl.conf:" << std::endl;
+        std::cout << "  vm.nr_hugepages = " << (total_huge_pages - free_huge_pages + required_pages) 
+                  << std::endl;
+        std::cout << "\nContinuing without huge pages..." << std::endl;
+        fflush(stdout);
+        setcolor(BRIGHT_WHITE);
+        return false;
+    }
+    
+    return true;
+    
+#elif defined(_WIN32)
+    // Check if we have SeLockMemoryPrivilege
+    HANDLE hToken = NULL;
+    BOOL hasPrivilege = FALSE;
+    
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
+        LUID luid;
+        if (LookupPrivilegeValue(NULL, SE_LOCK_MEMORY_NAME, &luid)) {
+            PRIVILEGE_SET privSet = {0};
+            privSet.PrivilegeCount = 1;
+            privSet.Control = PRIVILEGE_SET_ALL_NECESSARY;
+            privSet.Privilege[0].Luid = luid;
+            privSet.Privilege[0].Attributes = SE_PRIVILEGE_ENABLED;
+            
+            BOOL result;
+            PrivilegeCheck(hToken, &privSet, &result);
+            hasPrivilege = result;
+        }
+        CloseHandle(hToken);
+    }
+    
+    if (!hasPrivilege) {
+        setcolor(RED);
+        std::cout << "\nHuge pages not available - missing SeLockMemoryPrivilege!" << std::endl;
+        std::cout << "To enable:" << std::endl;
+        std::cout << "1. Run gpedit.msc as Administrator" << std::endl;
+        std::cout << "2. Navigate to: Computer Configuration → Windows Settings → " << std::endl;
+        std::cout << "   Security Settings → Local Policies → User Rights Assignment" << std::endl;
+        std::cout << "3. Add your user to 'Lock pages in memory'" << std::endl;
+        std::cout << "4. Reboot the system" << std::endl;
+        fflush(stdout);
+        setcolor(BRIGHT_WHITE);
+        return false;
+    }
+    
+    // Check minimum large page size
+    SIZE_T minLargePageSize = GetLargePageMinimum();
+    if (minLargePageSize == 0) {
+        setcolor(RED);
+        std::cout << "\nHuge pages not supported on this Windows version!" << std::endl;
+        fflush(stdout);
+        setcolor(BRIGHT_WHITE);
+        return false;
+    }
+    
+    setcolor(BRIGHT_YELLOW);
+    std::cout << " Huge page size: " << (minLargePageSize / (1024 * 1024)) << " MB" << std::endl;
+    std::cout << " Huge pages available\n" << std::endl;
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    
+    return true;
+#else
+    return false;
+#endif
 }

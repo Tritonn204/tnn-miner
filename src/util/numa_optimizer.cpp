@@ -530,7 +530,7 @@ bool NUMAOptimizer::setMemoryPolicy(int node) {
         }
     }
     
-    return false;
+    return true;
 #else
     return false;
 #endif
@@ -546,7 +546,24 @@ void NUMAOptimizer::restoreMemoryPolicy() {
     numa_set_localalloc();
     
 #elif defined(_WIN32)
-    // On Windows, we just let the thread scheduler handle placement again
-    // Could save and restore the original affinity if needed
+    if (!numa_initialized) {
+        return;
+    }
+    
+    // Reset thread affinity to all available processors
+    HANDLE thread = GetCurrentThread();
+    SYSTEM_INFO sysInfo;
+    GetSystemInfo(&sysInfo);
+    
+    // Set affinity to all processors
+    SetThreadAffinityMask(thread, sysInfo.dwActiveProcessorMask);
+    
+    // Or for systems with processor groups:
+    if (g_SetThreadGroupAffinity) {
+        GROUP_AFFINITY all_processors = {0};
+        all_processors.Mask = ~0ULL;  // All processors in group
+        all_processors.Group = 0;      // Primary group
+        g_SetThreadGroupAffinity(thread, &all_processors, nullptr);
+    }
 #endif
 }

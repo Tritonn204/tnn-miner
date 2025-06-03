@@ -135,16 +135,19 @@ void randomx_update_data_numa(randomx_cache* rc, randomx_dataset **datasets,
   
   uint32_t datasetItemCount = randomx_dataset_item_count();
   
-  int bound = rx_numa_enabled ? NUMAOptimizer::getMemoryNodes() : 1;
+  if (!rx_numa_enabled) {
+    randomx_init_dataset(datasets[0], rc, 0, datasetItemCount);
+    return;
+  }
 
   // Update each NUMA node's dataset
-  for (int node = 0; node < bound; node++) {
+  for (int node = 0; node < numa_nodes; node++) {
     std::vector<std::thread> threads;
     
-    // Calculate threads per node
+    // Calculate threads per node - distribute total threads across nodes
     int threadsPerNode = threadCount / numa_nodes;
-    if (node == numa_nodes - 1) {
-      threadsPerNode += threadCount % numa_nodes;
+    if (node < (threadCount % numa_nodes)) {
+      threadsPerNode++; // Distribute remainder threads to first few nodes
     }
     
     if (threadsPerNode > 1) {
@@ -154,9 +157,13 @@ void randomx_update_data_numa(randomx_cache* rc, randomx_dataset **datasets,
 
       for (int i = 0; i < threadsPerNode; ++i) {
         auto count = perThread + (i == threadsPerNode - 1 ? remainder : 0);
-        threads.push_back(std::thread([&, node, startItem, count]() {
-          NUMAOptimizer::bindThreadToNode(node, numa_nodes);
-          randomx_init_dataset(datasets[node], rc, startItem, count);
+        
+        threads.push_back(std::thread([=, &rc, &datasets]() {
+          // Set memory policy to ensure initialization happens on correct node
+          {
+            NUMAOptimizer::ScopedMemoryPolicy policy(node);
+            randomx_init_dataset(datasets[node], rc, startItem, count);
+          }
         }));
         startItem += count;
       }
@@ -165,6 +172,8 @@ void randomx_update_data_numa(randomx_cache* rc, randomx_dataset **datasets,
         t.join();
       }
     } else {
+      // Single-threaded initialization for this node
+      NUMAOptimizer::ScopedMemoryPolicy policy(node);
       randomx_init_dataset(datasets[node], rc, 0, datasetItemCount);
     }
   }
@@ -209,17 +218,33 @@ randomx_dataset* getDatasetForThread(int tid) {
   }
   
   int numa_node = 0;
-  {
-    std::lock_guard<std::mutex> lock(numa_map_mutex);
-    auto it = thread_numa_map.find(tid);
-    if (it != thread_numa_map.end()) {
-      numa_node = it->second;
+  
+#ifdef __linux__
+  int current_cpu = sched_getcpu();
+  if (current_cpu >= 0) {
+    numa_node = numa_node_of_cpu(current_cpu);
+  }
+#elif defined(_WIN32)
+  PROCESSOR_NUMBER proc_num = {0};
+  proc_num.Group = 0xFFFF;
+  proc_num.Number = 0xFF;
+  GetCurrentProcessorNumberEx(&proc_num);
+
+  if (proc_num.Group != 0xFFFF && proc_num.Number != 0xFF) {
+    USHORT node_number = 0;
+    if (GetNumaProcessorNodeEx(&proc_num, &node_number)) {
+      numa_node = node_number;
     } else {
-      numa_node = tid % numa_nodes;
-      thread_numa_map[tid] = numa_node;
-      
-      NUMAOptimizer::bindThreadToNode(tid, std::thread::hardware_concurrency());
+      numa_node = (tid - 1) % numa_nodes;
     }
+  } else {
+    numa_node = (tid - 1) % numa_nodes;
+  }
+#endif
+  
+  // Validate and use fallback if needed
+  if (numa_node < 0 || numa_node >= numa_nodes) {
+    numa_node = (tid - 1) % numa_nodes;
   }
   
   return rxDatasets_numa[numa_node];
@@ -231,8 +256,7 @@ void randomx_set_flags(bool autoFlags) {
   }
 
   rxFlags |= RANDOMX_FLAG_FULL_MEM;
-  if (rx_hugePages) rxFlags |= RANDOMX_FLAG_LARGE_PAGES; // TODO: Make this a toggle from CLI
-  fflush(stdout);
+  if (rx_hugePages) rxFlags |= RANDOMX_FLAG_LARGE_PAGES;
 
   setcolor(BRIGHT_YELLOW);
   if (rxFlags & RANDOMX_FLAG_ARGON2_AVX2) {
