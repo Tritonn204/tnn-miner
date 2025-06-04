@@ -317,10 +317,10 @@ int runDeroOpTests(int testOp, int dataLen) {
   testFunc = &optest_wolf;
   // the ampersand is actually optional
   //testFunc = &optest_branchcpu;
-  if(useLookup) {
-    resultText = "Lookup";
-    testFunc = &optest_lookup;
-  } else {
+  // if(useLookup) {
+  //   resultText = "Lookup";
+  //   testFunc = &optest_lookup;
+  // } else {
     #if defined(__AVX2__)
     archText = "AVX2";
     resultText = "AVX2";
@@ -331,7 +331,7 @@ int runDeroOpTests(int testOp, int dataLen) {
     #elif defined(__x86_64__)
     archText = "AMD";
     resultText = "Lookup";
-    testFunc = &optest_lookup;
+    // testFunc = &optest_lookup;
 
     z_resultText = "Wolf";
     z_testFunc = &optest_wolf;
@@ -344,7 +344,7 @@ int runDeroOpTests(int testOp, int dataLen) {
     z_resultText = "Wolf";
     z_testFunc = &optest_wolf;
     #endif
-  }
+  // }
 
   int startOp = 0;
   int maxOp = 255;
@@ -467,9 +467,9 @@ int rakeDeroOpTests(int testOp, int dataLen) {
     void (*testFunc)(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print);
     // the ampersand is actually optional
     testFunc = &optest_branchcpu;
-    if(useLookup) {
-      testFunc = &optest_lookup;
-    } else {
+    // if(useLookup) {
+    //   testFunc = &optest_lookup;
+    // } else {
       #if defined(__AVX2__)
       resultText = "AVX2";
       testFunc = &optest_avx2;
@@ -481,7 +481,7 @@ int rakeDeroOpTests(int testOp, int dataLen) {
       resultText = "AA64";
       testFunc = &optest_aarch64;
       #endif
-    }
+    // }
 
     int startOp = 0;
     int maxOp = 255;

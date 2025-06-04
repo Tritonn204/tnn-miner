@@ -391,12 +391,16 @@ void wolfCompute(workerData &worker, bool isTest, int wIndex);
 typedef void (*wolfPerm)(uint8_t *, uint8_t *, uint16_t, uint8_t, uint8_t, workerData&);
 
 static inline wolfPerm resolve_wolfPermute() {
-  #ifdef __x86_64__
-  //if (__builtin_cpu_supports("avx512bw"))
-  //  return wolfPermute_avx512;
-  if (__builtin_cpu_supports("avx2"))
-    return wolfPermute_avx2;
-  #endif
+  #if defined(__x86_64__)
+    #if defined(__AVX512F__) && defined(__AVX512BW__) && defined(__AVX512VL__)
+      //if (__builtin_cpu_supports("avx512f") && __builtin_cpu_supports("avx512bw") && __builtin_cpu_supports("avx512vl"))
+      //  return wolfPermute_avx512;
+    #endif
+    #if defined(__AVX2__)
+      if (__builtin_cpu_supports("avx2"))
+        return wolfPermute_avx2;
+    #endif
+  #endif // __x86_64__
   return wolfPermute;
 }
 

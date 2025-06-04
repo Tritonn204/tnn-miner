@@ -58,8 +58,9 @@ void initWolfLUT() {
   // printf("%02X\n", CodeLUT_16[0]);
 }
 
-#if defined(__x86_64)
+#if defined(__x86_64__)
 
+#if defined(__AVX2__)
 __attribute__((target("avx2")))
 void wolfBranch_avx2(__m256i &in, uint8_t pos2val, uint32_t opcode, workerData &worker)
 {
@@ -119,6 +120,7 @@ void wolfBranch_avx2(__m256i &in, uint8_t pos2val, uint32_t opcode, workerData &
     }      
   }
 }
+#endif // __AVX2__
 
 #endif
 
@@ -185,21 +187,24 @@ uint8_t wolfBranch(uint8_t val, uint8_t pos2val, uint32_t opcode)
   return (val);
 }
 
-#if defined(__x86_64)
+#if defined(__x86_64__)
+#if defined(__AVX512F__) && defined(__AVX512BW__) && defined(__AVX512VL__)
 __attribute__((target("avx512f,avx512bw,avx512vl")))
 void wolfPermute_avx512(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker)
 {
   uint32_t Opcode = CodeLUT_16[op];
   
-  __m256i data = _mm256_loadu_si256((__m256i*)&in[pos1]);
+  __m256i data = _mm256_loadu_si256((__m256i*)&in[pos1]); // AVX
   wolfBranch_avx2(data, in[pos2], Opcode, worker);
   
   int bytes_to_update = pos2 - pos1;
-  __mmask32 mask = _cvtu32_mask32((1U << bytes_to_update) - 1);
+  __mmask32 mask = _cvtu32_mask32((1U << bytes_to_update) - 1); // AVX512VL
   
-  _mm256_mask_storeu_epi8((void*)&out[pos1], mask, data);
+  _mm256_mask_storeu_epi8((void*)&out[pos1], mask, data); // AVX512VL + AVX512BW
 }
+#endif // __AVX512
 
+#if defined(__AVX2__)
 __attribute__((target("avx2")))
 void wolfPermute_avx2(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker)
 {
@@ -213,7 +218,8 @@ void wolfPermute_avx2(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint
 
   _mm256_storeu_si256((__m256i*)&out[pos1], data);
 }
-#endif
+#endif // __AVX2__
+#endif // __x86_64__
 
 void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker)
 {
