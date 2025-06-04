@@ -74,10 +74,6 @@ inline bool checkAndUpdateDatasetIfNeeded(bool isDev) {
         updateDataset(myCache, myCacheKey, isDev);
       }
     }
-    
-    if (isActiveMiningMode && !myReady.load()) {
-      printf("%s is not ready, %s vs. %s\n", isDev ? "DEV" : "USER", currentDatasetSeedHash.c_str(), myCacheKey.c_str());
-    }
 
     // Mark as ready now that we've handled the situation
     myReady.store(true);

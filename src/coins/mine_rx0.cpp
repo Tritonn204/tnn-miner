@@ -427,6 +427,13 @@ waitForJob:
         localJobCounter = jobCounter;
       }
       
+      if (devMine != globalInDevBatch.load()) {
+        printf("devMine in thread %d changing to %d\n", tid, globalInDevBatch.load());
+        fflush(stdout);
+      } else {
+        printf("devMine of %d is correct in thread %d\n", devMine, tid);
+        fflush(stdout);
+      }
       devMine = globalInDevBatch.load();
 
       if (devMine) {
@@ -499,20 +506,23 @@ waitForJob:
         if (vm == nullptr) continue;
 
         if (!globalInDevBatch.load() && currentTimeMs >= globalNextDevBatchTime.load() && 
-            devConnected && randomx_ready_dev.load()) {
-          
+            devConnected) {
+
           if (!globalInDevBatch.exchange(true)) {
             std::mt19937 rng(scheduleSeed);
             std::uniform_int_distribution<int64_t> durationDist(
                 MIN_BATCH_DURATION_MS, MAX_BATCH_DURATION_MS);
               
             int64_t rawDuration = durationDist(rng);
-            int64_t scaledDuration = static_cast<int64_t>(rawDuration * (devFee / 100.0));
-            globalDevBatchDuration.store(scaledDuration);
+            globalDevBatchDuration.store(rawDuration * (devFee / 100.0));
+
+            randomx_vm_set_cache(vm, rxCache_dev);
 
             needsDatasetUpdate = true;
             cv.notify_all();
-            break;
+
+            printf("switched to dev mode\n");
+            fflush(stdout);
           }
         } 
         else if (globalInDevBatch.load() && 
@@ -525,25 +535,17 @@ waitForJob:
             int64_t nextInterval = timingDist(rng);
             globalNextDevBatchTime.store(currentTimeMs + nextInterval);
 
+            randomx_vm_set_cache(vm, rxCache);
+
             needsDatasetUpdate = true;
             cv.notify_all();
-            break;
+
+            printf("switched to user mode\n");
+            fflush(stdout);
           }
         }
 
-        bool usingDevCache = (localCacheKey == randomx_cacheKey_dev);
-        if (devMine && !usingDevCache) {
-          if (vm && randomx_ready_dev.load()) {
-            randomx_vm_set_cache(vm, rxCache_dev);
-            localCacheKey = randomx_cacheKey_dev;
-          }
-        }
-        else if (!devMine && usingDevCache) {
-          if (vm && randomx_ready.load()) {
-            randomx_vm_set_cache(vm, rxCache);
-            localCacheKey = randomx_cacheKey;
-          }
-        }
+        if (globalInDevBatch.load() != devMine) break;
         
         if (vm == nullptr) continue; // Skip if VM not ready
 
@@ -684,11 +686,6 @@ waitForJob:
         break;
       
       if (localJobCounter != jobCounter) {
-        globalInDevBatch.store(false);
-        globalNextDevBatchTime.store(std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count() + (rand() % 30000));
-        
-        // Update the salt on job changes to prevent predictability
         if (tid == 0) {
           globalBatchSalt = (globalBatchSalt + jobCounter) ^ (rand() & 0xFFFFFF);
         }

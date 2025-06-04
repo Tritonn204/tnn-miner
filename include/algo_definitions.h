@@ -84,6 +84,31 @@ extern algo_config_t current_algo_config;
 #define CONFIG_ENDIAN_X11 2
 #define CONFIG_ENDIAN_YESPOWER 3
 
+static const int astroCoins[] = {
+  COIN_DERO,
+  COIN_SPECTRE
+};
+
+static const int rxCoins[] = {
+  COIN_RX0,
+  COIN_XMR,
+  COIN_SAL,
+  COIN_ZEPH,
+  COIN_TARI
+};
+
+static const int yespowerCoins[] = {
+  ALGO_YESPOWER,
+  COIN_ADVC
+};
+
+inline bool isCoinOf(int coin, const int arr[]) {
+  for (size_t i = 0; i < sizeof(arr)/sizeof(arr[0]); ++i) {
+    if (arr[i] == coin) return true;
+  }
+  return false;
+}
+
 static const algo_config_t algo_configs[] = {
   // Bitcoin/SHA256
   { .header_endian = ENDIAN_SWAP_32, .swap_merkle_root = true, .swap_prev_hash = true, .nbits_index = 18 },

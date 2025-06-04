@@ -474,7 +474,7 @@ int main(int argc, char **argv)
     return 0;
   }
 
-  if (vm.count("dero"))
+  if (miningProfile.coin.coinId == COIN_DERO)
   {
     #if defined(TNN_ASTROBWTV3)
     miningProfile.coin = coins[COIN_DERO];
@@ -487,7 +487,7 @@ int main(int argc, char **argv)
     #endif
   }
 
-  if (vm.count("xelis"))
+  if (miningProfile.coin.coinId == COIN_XELIS)
   {
     #if defined(TNN_XELISHASH)
     miningProfile.coin = coins[COIN_XELIS];
@@ -500,10 +500,9 @@ int main(int argc, char **argv)
     #endif
   }
 
-  if (vm.count("spectre"))
+  if (miningProfile.coin.coinId == COIN_SPECTRE)
   {
     #if defined(TNN_ASTROBWTV3)
-    miningProfile.coin = coins[COIN_SPECTRE];
     miningProfile.protocol = PROTO_SPECTRE_STRATUM;
     #else
     setcolor(RED);
@@ -514,10 +513,9 @@ int main(int argc, char **argv)
     #endif
   }
 
-  if (vm.count("astrix"))
+  if (miningProfile.coin.coinId == COIN_AIX)
   {
     #if defined(TNN_ASTRIXHASH)
-    miningProfile.coin = coins[COIN_AIX];
     miningProfile.protocol = PROTO_KAS_STRATUM;
     #else
     setcolor(RED);
@@ -528,10 +526,9 @@ int main(int argc, char **argv)
     #endif
   }
 
-  if (vm.count("nexellia"))
+  if (miningProfile.coin.coinId == COIN_NXL)
   {
     #if defined(TNN_ASTRIXHASH)
-    miningProfile.coin = coins[COIN_NXL];
     miningProfile.protocol = PROTO_KAS_STRATUM;
     #else
     setcolor(RED);
@@ -542,10 +539,9 @@ int main(int argc, char **argv)
     #endif
   }
 
-  if (vm.count("hoosat"))
+  if (miningProfile.coin.coinId == COIN_HTN)
   {
     #if defined(TNN_HOOHASH)
-    miningProfile.coin = coins[COIN_HTN];
     miningProfile.protocol = PROTO_KAS_STRATUM;
     #else
     setcolor(RED);
@@ -556,10 +552,9 @@ int main(int argc, char **argv)
     #endif
   }
 
-  if (vm.count("waglayla"))
+  if (miningProfile.coin.coinId == COIN_WALA)
   {
     #if defined(TNN_WALAHASH)
-    miningProfile.coin = coins[COIN_WALA];
     miningProfile.protocol = PROTO_KAS_STRATUM;
     #else
     setcolor(RED);
@@ -570,7 +565,7 @@ int main(int argc, char **argv)
     #endif
   }
 
-  if (vm.count("randomx"))
+  if (vm.count("randomx") || miningProfile.coin.miningAlgo == ALGO_RX0)
   {
     fflush(stdout);
     #if defined(TNN_RANDOMX)
@@ -585,10 +580,9 @@ int main(int argc, char **argv)
     #endif
   }
 
-  if (vm.count("advc"))
+  if (miningProfile.coin.coinId == COIN_ADVC)
   {
     #if defined(TNN_YESPOWER)
-    miningProfile.coin = coins[COIN_ADVC];
     miningProfile.protocol = PROTO_BTC_STRATUM;
     current_algo_config = algo_configs[CONFIG_ENDIAN_YESPOWER];
 

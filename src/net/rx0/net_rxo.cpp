@@ -72,9 +72,9 @@ void updateVM(boost::json::object &newJob, bool isDev) {
     std::atomic<bool> &targetReady = isDev ? randomx_ready_dev : randomx_ready;
     std::atomic<bool> &altReady = (!isDev) ? randomx_ready_dev : randomx_ready;
     
-    // Fast path: seedHash matches current cache
     if (newSeedHash == targetCacheKey) {
-        return; // Already using this seed
+        targetReady.store(true);
+        return;
     }
     
     setcolor(isDev ? CYAN : BRIGHT_YELLOW);
@@ -99,11 +99,7 @@ void updateVM(boost::json::object &newJob, bool isDev) {
         std::lock_guard<std::mutex> lock(datasetMutex);
         std::string otherSideKey = isDev ? randomx_cacheKey : randomx_cacheKey_dev;
         
-        if (otherSideKey == newSeedHash) {
-            printf("Fast cache switch: Dataset already initialized for this seed hash\n");
-            fflush(stdout);
-        }
-        else if (currentDatasetSeedHash != newSeedHash) {
+        if (currentDatasetSeedHash != newSeedHash) {
             needDatasetUpdate = true;
         }
     }

@@ -16,6 +16,7 @@
 #include <terminal.h>
 #include <string>
 #include <num.h>
+#include "sha_detect.h"
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -123,11 +124,7 @@ inline void printSupported()
   pSupport(" AVX", __builtin_cpu_supports("avx"));
   pSupport(" AVX2", __builtin_cpu_supports("avx2"));
   pSupport(" AVX512", __builtin_cpu_supports("avx512f"));
-  bool sha = false;
-  #if defined(__SHA__)
-  sha = true;
-  #endif
-  pSupport(" SHA", sha);
+  pSupport(" SHA", has_sha_ni_support_cached);
   setcolor(BRIGHT_WHITE);
   printf("\n");
 #endif

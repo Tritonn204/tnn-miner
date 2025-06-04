@@ -91,11 +91,10 @@ const TnnDevMinerInfo devInfo[COIN_COUNT] = {
 #endif
   "spectredev:qqhh8ul66g7t6aj5ggzl473cpan25tv6yjm0cl4hffprgtqfvmyaq8q28m4z8"
   },
-  {COIN_RX0,      "monerohash.com",              "2222",    "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
-  {COIN_XMR,      "monerohash.com",              "2222",    "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
-  {COIN_SAL,      "monerohash.com",              "2222",    "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
-  {COIN_ZEPH,     "monerohash.com",              "2222",    "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
-  {COIN_TARI,     "monerohash.com",              "2222",    "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
+  {COIN_RX0,      "stratum+tcp://monerohash.com",              "2222",    "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
+  {COIN_XMR,      "stratum+tcp://monerohash.com",              "2222",    "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
+  {COIN_SAL,      "stratum+tcp://monerohash.com",              "2222",    "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
+  {COIN_ZEPH,     "stratum+tcp://monerohash.com",              "2222",    "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
   {COIN_VERUS,    "",                            "",        "", ""},
   {COIN_AIX,      "na.mining4people.com",        "3394",    "astrix:qz2mzpga6qv9uvnpueau7gs29vgu3ynj80xmd2dmja2kelzh6cssymsk3shjx", "astrix:qz2mzpga6qv9uvnpueau7gs29vgu3ynj80xmd2dmja2kelzh6cssymsk3shjx"},
   {COIN_NXL,      "178.16.131.178",              "5555",    "nexellia:qqq3lwqrnh6alujup2me8gkedvp4w4d8zkjxdzmlrzpju2npdvvmctwl649xr", "nexellia:qqq3lwqrnh6alujup2me8gkedvp4w4d8zkjxdzmlrzpju2npdvvmctwl649xr"},
@@ -104,6 +103,7 @@ const TnnDevMinerInfo devInfo[COIN_COUNT] = {
   {COIN_SHAI,     "shaicoin.viporlab.net",       "3333",    "sh1qvee0lejv22n7s43q3asw4uzap8d9t32k95cznj", "sh1qvee0lejv22n7s43q3asw4uzap8d9t32k95cznj"},
   {COIN_YESPOWER, "stratum+tcp://stratum.gettomine.com", "6998", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"}, // Default to ADVC
   {COIN_ADVC,     "stratum+tcp://stratum.gettomine.com", "6998", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
+  {COIN_TARI,     "monerohash.com",              "2222",    "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
   //{COIN_COUNT 16  
 };
 
@@ -123,7 +123,6 @@ const Coin coins[COIN_COUNT] = {
   {COIN_RX0,      ALGO_RX0,         "RX0",   "RandomX"},
   {COIN_XMR,      ALGO_RX0,         "XMR",   "Monero"},
   {COIN_SAL,      ALGO_RX0,         "SAL",   "Salvium"},
-  {COIN_TARI,     ALGO_RX0,         "XTM",   "Tari"},
   {COIN_ZEPH,     ALGO_RX0,         "ZEPH",  "Zephyr"},
   {COIN_VERUS,    ALGO_VERUS,       "VRSC",  "Verus"},
   {COIN_AIX,      ALGO_ASTRIX_HASH, "AIX",   "Astrix"},
@@ -133,6 +132,7 @@ const Coin coins[COIN_COUNT] = {
   {COIN_SHAI,     ALGO_SHAI_HIVE,   "SHAI",  "Shai"},
   {COIN_YESPOWER, ALGO_YESPOWER, "YESPOWER", "Yespower (Generic)"},
   {COIN_ADVC, ALGO_YESPOWER, "ADVC", "AdventureCoin"},
+  {COIN_TARI,     ALGO_RX0,         "XTM",   "Tari"},
   //{COIN_COUNT 16 
 };
 
