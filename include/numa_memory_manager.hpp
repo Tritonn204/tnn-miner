@@ -1,6 +1,6 @@
 #pragma once
 
-#include "tnn-common.h"
+#include "tnn-common.hpp"
 #include "numa_optimizer.h"
 
 template<typename Resource>
