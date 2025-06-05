@@ -1,5 +1,6 @@
 #pragma once
 
+#include "tnn-common.h"
 #include "numa_optimizer.h"
 
 template<typename Resource>
@@ -63,7 +64,7 @@ public:
     
     // Simplified initialization - just create resources, no thread assignment
     bool initialize(int total_threads, AllocatorFunc allocator) {
-        if (!NUMAOptimizer::initialize()) {
+        if (!lockThreads || !NUMAOptimizer::initialize()) {
             return false;
         }
         
