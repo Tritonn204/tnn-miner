@@ -171,7 +171,7 @@ inline po::options_description get_prog_opts()
   po::options_description xelis("Xelis", col_width);
   xelis.add_options()
     ("xatum", "Required for mining to Xatum pools on Xelis")
-    ("xelis-bench", "Run a benchmark of xelis-hash with 1 thread")
+    ("bench-xelis", "Run a benchmark of xelis-hash with 1 thread")
   ;
 
   po::options_description randomX("RandomX", col_width);

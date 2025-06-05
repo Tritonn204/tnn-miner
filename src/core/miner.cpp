@@ -361,10 +361,26 @@ int main(int argc, char **argv)
     po::store(parsed, vm);
     po::notify(vm);
     
+    #if defined(_WIN32)
+      SetConsoleOutputCP(CP_UTF8);
+      hInput = GetStdHandle(STD_INPUT_HANDLE);
+      GetConsoleMode(hInput, &prev_mode); 
+      SetConsoleMode(hInput, ENABLE_EXTENDED_FLAGS | (prev_mode & ~ENABLE_QUICK_EDIT_MODE));
+    #endif
+      setcolor(BRIGHT_WHITE);
+      printf("%s v%s %s\n", consoleLine, versionString, targetArch);
+      printf("Compiled with %s\n", __VERSION__);
+      if(vm.count("quiet")) {
+        beQuiet = true;
+      } else {
+        printf("%s", TNN);
+        fflush(stdout);
+      }
+
     // Check if any unrecognized option is a coin symbol
     std::vector<std::string> stillUnrecognized;
     
-    for (const auto& arg : unrecognized) {
+    for (const auto& arg : unrecognized) { 
       std::string cleanArg = arg;
       
       // Strip leading dashes
@@ -382,7 +398,7 @@ int main(int argc, char **argv)
         if(boost::iequals(coins[x].coinSymbol, upperArg)) {
           miningProfile.coin = coins[x];
           setcolor(BRIGHT_YELLOW);
-          printf(" Set to mine %s from command line argument '%s'\n\n", 
+          printf("Set to mine %s from command line argument '%s'\n\n", 
                 miningProfile.coin.coinPrettyName.c_str(), arg.c_str());
           fflush(stdout);
           setcolor(BRIGHT_WHITE);
@@ -430,21 +446,7 @@ int main(int argc, char **argv)
     setcolor(BRIGHT_WHITE);
     return -1;
   }
-
-#if defined(_WIN32)
-  SetConsoleOutputCP(CP_UTF8);
-  hInput = GetStdHandle(STD_INPUT_HANDLE);
-  GetConsoleMode(hInput, &prev_mode); 
-  SetConsoleMode(hInput, ENABLE_EXTENDED_FLAGS | (prev_mode & ~ENABLE_QUICK_EDIT_MODE));
-#endif
-  setcolor(BRIGHT_WHITE);
-  printf("%s v%s %s\n", consoleLine, versionString, targetArch);
-  printf("Compiled with %s\n", __VERSION__);
-  if(vm.count("quiet")) {
-    beQuiet = true;
-  } else {
-    printf("%s", TNN);
-  }
+  
 #if defined(_WIN32)
   SetConsoleOutputCP(CP_UTF8);
   HANDLE hSelfToken = NULL;
@@ -747,7 +749,7 @@ int main(int argc, char **argv)
     #endif
   }
 
-  if (vm.count("xelis-bench"))
+  if (vm.count("bench-xelis"))
   {
     #if defined(TNN_XELISHASH)
     boost::thread t(xelis_benchmark_cpu_hash_v2);
@@ -1271,6 +1273,16 @@ Mining:
     std::atexit(cleanupMSROnExit);
     fflush(stdout);
     randomx_init_intern(n);
+  }
+  #endif
+
+  #ifdef TNN_XELISHASH
+  if (miningProfile.coin.miningAlgo == ALGO_XELISV2) {
+    applyMSROptimization("RandomX");
+    setcolor(CYAN);
+    printf("NOTE: The RandomX MSR mod may benefit Xelishash as well\n\n");
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
   }
   #endif
 
