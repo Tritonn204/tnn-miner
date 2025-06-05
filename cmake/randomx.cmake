@@ -8,6 +8,7 @@ if (WITH_RANDOMX)
       src/crypto/randomx/argon2_ref.c
       src/crypto/randomx/argon2_ssse3.c
       src/crypto/randomx/argon2_avx2.c
+      src/crypto/randomx/argon2_avx512.c
       src/crypto/randomx/bytecode_machine.cpp
       src/crypto/randomx/cpu.cpp
       src/crypto/randomx/dataset.cpp

@@ -30,9 +30,6 @@ public:
     // Get total number of CPUs
     static int getTotalCPUs();
     
-    // Bind thread to specific NUMA node (1 thread per node strategy)
-    static bool bindThreadToNode(int thread_id, int total_threads);
-    
     // Allocate memory on current thread's NUMA node
     static void* allocateLocal(size_t size);
     

@@ -12,18 +12,6 @@
 
 void mineYespower(int tid)
 {
-    // NUMA optimization - bind this thread to its own NUMA node
-    // Use the global thread count or pass it as a parameter
-    
-    if (NUMAOptimizer::isAvailable()) {
-        if (!NUMAOptimizer::bindThreadToNode(tid, threads)) {
-            std::cerr << "Failed to bind thread " << tid << " to NUMA node" << std::endl;
-        }
-        
-        // Verify binding
-        NUMAOptimizer::printThreadBinding(tid);
-    }
-    
     // Thread-local RNG (no global contention)
     thread_local std::mt19937 rng(std::hash<std::thread::id>{}(std::this_thread::get_id()));
     thread_local std::uniform_real_distribution<double> dist(0, 10000);

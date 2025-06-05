@@ -30,6 +30,8 @@ std::atomic<bool> randomx_ready_dev = false;
 
 std::atomic<bool> needsDatasetUpdate = false;
 
+boost::mutex dsMutex;
+
 uint64_t diff_numerator = boost_swap_impl::stoull("0x100000001", nullptr, 16);
 
 static uint64_t rx_targetToDifficulty(const char* target) {
@@ -248,7 +250,7 @@ int handleRandomXStratumResponse(boost::json::object packet, bool isDev)
     if (shareAccepted)
     {
       accepted += !isDev;
-      setcolor(BRIGHT_YELLOW);
+      if (!isDev) setcolor(BRIGHT_YELLOW);
       std::cout << "Stratum share accepted" << std::endl;
     }
     else
@@ -378,7 +380,7 @@ void rx0_stratum_session(
 
     boost::thread cacheThread([&]() {
         while(!abort) {
-            boost::unique_lock<boost::mutex> lock(mutex);
+            boost::unique_lock<boost::mutex> lock(dsMutex);
             
             // Wait for dataset update signal OR abort
             cv.wait(lock, [&]{ 
@@ -386,16 +388,19 @@ void rx0_stratum_session(
             });
             
             if (abort) break;
+            printf("needs update");
+            fflush(stdout);
             
-            try {
+            if (globalInDevBatch.load() == isDev) {
+              try {
                 needsDatasetUpdate.exchange(false);
-                lock.unlock();
                 checkAndUpdateDatasetIfNeeded(isDev);
-            } catch (const std::exception &e) {
+              } catch (const std::exception &e) {
                 setcolor(RED);
                 printf("\nDataset update error: %s\n", e.what());
                 fflush(stdout);
                 setcolor(BRIGHT_WHITE);
+              }
             }
             
             boost::this_thread::yield();
@@ -693,16 +698,18 @@ void rx0_stratum_session_nossl(
             });
             
             if (abort) break;
-            
-            try {
+            bool isActiveMiningMode = (isDev == globalInDevBatch.load());
+            if (isActiveMiningMode) {
+              try {
+                checkAndUpdateDatasetIfNeeded(isDev);
                 needsDatasetUpdate.exchange(false);
                 lock.unlock();
-                checkAndUpdateDatasetIfNeeded(isDev);
-            } catch (const std::exception &e) {
+              } catch (const std::exception &e) {
                 setcolor(RED);
                 printf("\nDataset update error: %s\n", e.what());
                 fflush(stdout);
                 setcolor(BRIGHT_WHITE);
+              }
             }
             
             boost::this_thread::yield();

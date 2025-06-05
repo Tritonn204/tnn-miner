@@ -42,8 +42,11 @@ namespace randomx {
 		bool hasAvx2() const {
 			return avx2_;
 		}
+    bool hasAvx512() const {
+			return avx512_;
+		}
 	private:
-		bool aes_, ssse3_, avx2_;
+		bool aes_, ssse3_, avx2_, avx512_;
 	};
 
 }

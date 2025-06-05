@@ -15,6 +15,14 @@ namespace po = boost::program_options;  // from <boost/program_options.hpp>
 #define XSTR(x) STR(x)
 #define STR(x) #x
 
+#ifdef __WIN32
+#define RUN_EXTENSION ".exe"
+#define SCRIPT_EXTENSION ".bat"
+#else
+#define RUN_EXTENSION ""
+#define SCRIPT_EXTENSION ".sh"
+#endif
+
 static const char *versionString = XSTR(TNN_VERSION);
 static const char *consoleLine = " TNN-MINER ";
 static const char *targetArch = XSTR(CPU_ARCHTARGET);
@@ -157,21 +165,13 @@ inline po::options_description get_prog_opts()
 
   po::options_description dero("Dero", col_width);
   dero.add_options()
-    ("lookup", "Mine with lookup tables instead of computation")
     ("dero-benchmark", po::value<int>(), "Runs a mining benchmark for <arg> seconds (adheres to -t threads option)")
-    ("test-dero", "Runs a set of tests to verify AstrobwtV3 is working (1 test expected to fail)")
-  ;
-
-  po::options_description spectre("Spectre", col_width);
-  spectre.add_options()
-    ("test-spectre", "Run detailed diagnostics for SpectreX")
   ;
 
   po::options_description xelis("Xelis", col_width);
   xelis.add_options()
     ("xatum", "Required for mining to Xatum pools on Xelis")
     ("xelis-bench", "Run a benchmark of xelis-hash with 1 thread")
-    ("test-xelis", "Run the xelis-hash tests from the official source code")
   ;
 
   po::options_description randomX("RandomX", col_width);
@@ -180,28 +180,15 @@ inline po::options_description get_prog_opts()
     ("test-randomx", "Run Tevador's reference RandomX tests")
   ;
 
-  po::options_description astrix("Astrix", col_width);
-  astrix.add_options()
+  po::options_description testing("Testing", col_width);
+  testing.add_options()
+    ("test-dero", "Runs a set of tests to verify AstrobwtV3 is working (1 test expected to fail)")
+    ("test-spectre", "Run detailed diagnostics for SpectreX")
+    ("test-xelis", "Run the xelis-hash tests from the official source code")
     ("test-astrix", "Run a basic astrix-hash validation test")
-  ;
-
-  po::options_description hoosat("Hoosat", col_width);
-  astrix.add_options()
     ("test-hoosat", "Run a basic hoohash validation test")
-  ;
-
-  po::options_description nexellia("Nexell-AI", col_width);
-  astrix.add_options()
     ("test-nexellia", "Run a basic nxl-hash validation test")
-  ;
-
-  po::options_description waglayla("Waglayla", col_width);
-  astrix.add_options()
     ("test-waglayla", "Run a basic wala-hash validation test")
-  ;
-
-  po::options_description shai("ShaiCoin", col_width);
-  astrix.add_options()
     ("test-shai", "Run a basic shai-hive validation test")
   ;
 
@@ -223,12 +210,9 @@ inline po::options_description get_prog_opts()
 
   general.add(coins);
   general.add(dero);
-  general.add(spectre);
   general.add(xelis);
   general.add(randomX);
-  general.add(astrix);
-  general.add(nexellia);
-  general.add(waglayla);
+  general.add(testing);
   general.add(advanced);
   general.add(debug);
   return general;

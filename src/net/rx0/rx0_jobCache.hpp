@@ -20,6 +20,9 @@ extern std::string currentDatasetSeedHash;
 extern std::mutex datasetMutex;
 
 extern std::atomic<bool> needsDatasetUpdate;
+extern std::atomic<bool> inUpdate;
+
+extern std::atomic<bool> firstBatch;
 
 inline Num rx0_calcTarget(boost::json::value &job) {
   int tLen = job.at("target").as_string().size();
@@ -47,9 +50,8 @@ inline Num rx0_calcTarget(boost::json::value &job) {
   return cmpTarget;
 }
 
-void randomx_update_data(randomx_cache* rc, randomx_dataset* rd, void *seed, size_t seedSize, int threadCount);
-void randomx_update_data_numa(randomx_cache* rc, randomx_dataset **datasets, 
-                             void *seed, size_t seedSize, int threadCount);
+void randomx_update_data(randomx_cache* rc, randomx_dataset* rd, void *seed, 
+                        size_t seedSize, int threadCount, bool isDev);
 
 void updateVM(boost::json::object &newJob, bool isDev);
 void updateDataset(randomx_cache* cache, std::string seedHash, bool isDev);
@@ -57,26 +59,22 @@ void updateDataset(randomx_cache* cache, std::string seedHash, bool isDev);
 inline bool checkAndUpdateDatasetIfNeeded(bool isDev) {
   // Get references to relevant variables based on isDev
   std::atomic<bool> &myReady = isDev ? randomx_ready_dev : randomx_ready;
+  std::atomic<bool> &altReady = (!isDev) ? randomx_ready_dev : randomx_ready;
   std::string &myCacheKey = isDev ? randomx_cacheKey_dev : randomx_cacheKey;
   randomx_cache* &myCache = isDev ? rxCache_dev : rxCache;
   
   // Fast check - only proceed if not ready and cache key exists
   if (!myReady.load() && !myCacheKey.empty()) {
-    // Only update dataset if this thread's type matches the current mining mode
-    bool isActiveMiningMode = (isDev == globalInDevBatch.load());
-    
-    // Thread-safe check if dataset needs updating
-    std::lock_guard<std::mutex> lock(datasetMutex);
-    
+    fflush(stdout);
     // Check if our cache key differs from current dataset
+    std::scoped_lock<std::mutex> lock(datasetMutex);
     if (currentDatasetSeedHash != myCacheKey) {
-      if (isActiveMiningMode) {
-        updateDataset(myCache, myCacheKey, isDev);
-      }
+      // Thread-safe check if dataset needs updating
+      updateDataset(myCache, myCacheKey, isDev);
+      altReady.store(false);
     }
-
-    // Mark as ready now that we've handled the situation
     myReady.store(true);
+
     return true;  // We did some work
   }
   

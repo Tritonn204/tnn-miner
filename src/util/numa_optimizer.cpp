@@ -1,4 +1,5 @@
 #include "numa_optimizer.h"
+
 #include <vector>
 #include <fstream>
 
@@ -187,115 +188,6 @@ int NUMAOptimizer::getMemoryNodes() {
 
 int NUMAOptimizer::getTotalCPUs() {
     return total_cpus;
-}
-
-bool NUMAOptimizer::bindThreadToNode(int thread_id, int total_threads) {
-#ifdef __linux__
-    if (!numa_initialized) {
-        std::cerr << "NUMA not initialized" << std::endl;
-        return false;
-    }
-    
-    // Strategy: 1 thread per NUMA node, cycle if more threads than nodes
-    int target_node = (thread_id-1) % memory_nodes;
-    
-    // Ensure the node has memory
-    while (numa_node_size(target_node, nullptr) <= 0) {
-        target_node = (target_node + 1) % memory_nodes;
-    }
-    
-    // Bind to NUMA node for both CPU and memory
-    int rc = numa_run_on_node(target_node);
-    if(rc != 0) {
-        std::cerr << "Failed to bind NUMA node" << std::endl;
-        return false;
-    }
-    numa_set_localalloc();
-    
-    // Get CPUs for this NUMA node
-    struct bitmask* cpus = numa_allocate_cpumask();
-    rc = numa_node_to_cpus(target_node, cpus);
-    if(rc != 0) {
-        std::cerr << "Failed to get NUMA CPUs" << std::endl;
-        numa_free_cpumask(cpus);
-        return false;
-    }
-    
-    // Collect all CPUs on this NUMA node
-    std::vector<int> node_cpus;
-    for (int cpu = 0; cpu < total_cpus; cpu++) {
-        if (numa_bitmask_isbitset(cpus, cpu)) {
-            node_cpus.push_back(cpu);
-        }
-    }
-
-    if (node_cpus.empty()) {
-        std::cerr << "No CPUs found on NUMA node " << target_node << std::endl;
-        numa_free_cpumask(cpus);
-        return false;
-    }
-    
-    // Calculate which CPU to use on this node
-    int thread_offset_in_node = (thread_id-1) / memory_nodes; 
-    int selected_cpu = node_cpus[thread_offset_in_node % node_cpus.size()];
-    
-    // Set CPU affinity to the selected CPU
-    cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
-    CPU_SET(selected_cpu, &cpuset);
-    
-    rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
-    if (rc != 0) {
-        std::cerr << "Failed to set CPU affinity for thread " << thread_id << " to CPU " << selected_cpu << ", rc " << rc << std::endl;
-        numa_free_cpumask(cpus);
-        return false;
-    }
-    
-    numa_free_cpumask(cpus);
-    
-    std::cout << "Thread " << thread_id << " bound to NUMA node " << target_node << std::endl;
-    return true;
-    
-#elif defined(_WIN32)
-    if (!numa_initialized || !g_GetNumaNodeProcessorMaskEx || !g_SetThreadGroupAffinity) {
-        std::cerr << "NUMA binding not available on this Windows version" << std::endl;
-        return false;
-    }
-    
-    UCHAR target_node = thread_id % memory_nodes;
-    
-    // Get processor mask for this NUMA node
-    GROUP_AFFINITY processor_mask;
-    if (!g_GetNumaNodeProcessorMaskEx(target_node, &processor_mask)) {
-        std::cerr << "Failed to get processor mask for NUMA node " << (int)target_node << std::endl;
-        return false;
-    }
-    
-    // Set thread affinity to this NUMA node
-    if (!g_SetThreadGroupAffinity(GetCurrentThread(), &processor_mask, nullptr)) {
-        std::cerr << "Failed to set thread affinity for thread " << thread_id << std::endl;
-        return false;
-    }
-    
-    // Set ideal processor (first CPU in the node)
-    PROCESSOR_NUMBER ideal_proc = {0};
-    ideal_proc.Group = processor_mask.Group;
-    ideal_proc.Number = 0;
-    
-    // Find first set bit in mask
-    for (BYTE i = 0; i < 64; i++) {
-        if (processor_mask.Mask & (1ULL << i)) {
-            ideal_proc.Number = i;
-            break;
-        }
-    }
-    
-    SetThreadIdealProcessorEx(GetCurrentThread(), &ideal_proc, nullptr);
-    
-    return true;
-#else
-    return false;
-#endif
 }
 
 void* NUMAOptimizer::allocateLocal(size_t size) {
@@ -496,6 +388,8 @@ bool NUMAOptimizer::setMemoryPolicy(int node) {
     if (!numa_initialized) {
         return false;
     }
+
+    numa_run_on_node(node);
     
     // Set preferred node for memory allocations
     numa_set_preferred(node);
@@ -542,7 +436,8 @@ void NUMAOptimizer::restoreMemoryPolicy() {
         return;
     }
     
-    // Restore default local allocation policy
+    // Restore default local allocation policy+
+    numa_run_on_node(-1);
     numa_set_localalloc();
     
 #elif defined(_WIN32)

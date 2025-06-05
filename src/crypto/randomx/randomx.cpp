@@ -57,7 +57,10 @@ extern "C" {
 		if (HAVE_AES && cpu.hasAes()) {
 			flags |= RANDOMX_FLAG_HARD_AES;
 		}
-		if (randomx_argon2_impl_avx2() != nullptr && cpu.hasAvx2()) {
+		if (randomx_argon2_impl_avx512() != nullptr && cpu.hasAvx512()) {
+			flags |= RANDOMX_FLAG_ARGON2_AVX512;
+		}
+    if (randomx_argon2_impl_avx2() != nullptr && cpu.hasAvx2()) {
 			flags |= RANDOMX_FLAG_ARGON2_AVX2;
 		}
 		if (randomx_argon2_impl_ssse3() != nullptr && cpu.hasSsse3()) {

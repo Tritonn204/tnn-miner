@@ -36,31 +36,32 @@ static const char *jsonType = "application/json";
 Num maxTarget = Num(2).pow(256);
 
 std::atomic<bool> sharedDatasetMode{true};
+std::atomic<bool> inUpdate{false};
 std::string currentDatasetSeedHash = "";
 std::mutex datasetMutex;
 
+
 void updateDataset(randomx_cache* cache, std::string seedHash, bool isDev) {
-    printf("\n%sUpdating RandomX dataset for %s mode...\n", 
-           isDev ? "DEV | " : "", isDev ? "dev" : "user");
-    fflush(stdout);
+    // printf("\n%sUpdating RandomX dataset for %s mode...\n", 
+    //        isDev ? "DEV | " : "", isDev ? "dev" : "user");
+    // fflush(stdout);
     
     unsigned char *seed = (unsigned char *)malloc(32);
     hexstrToBytes(seedHash.c_str(), seed);
     
     // Do the actual update
-    randomx_update_data(cache, rxDataset, seed, 32, std::thread::hardware_concurrency());
+    randomx_update_data(cache, rxDataset, seed, 32, std::thread::hardware_concurrency(), isDev);
     
     free(seed);
     
     // Update tracking
     {
-        std::lock_guard<std::mutex> lock(datasetMutex);
         currentDatasetSeedHash = seedHash;
     }
     
-    printf("\n%sRandomX dataset updated successfully for %s mode\n", 
-           isDev ? "DEV | " : "", isDev ? "dev" : "user");
-    fflush(stdout);
+    // printf("\n%sRandomX dataset updated successfully for %s mode\n", 
+    //        isDev ? "DEV | " : "", isDev ? "dev" : "user");
+    // fflush(stdout);
 }
 
 void updateVM(boost::json::object &newJob, bool isDev) {
@@ -73,7 +74,7 @@ void updateVM(boost::json::object &newJob, bool isDev) {
     std::atomic<bool> &altReady = (!isDev) ? randomx_ready_dev : randomx_ready;
     
     if (newSeedHash == targetCacheKey) {
-        targetReady.store(true);
+        fflush(stdout);
         return;
     }
     
@@ -92,26 +93,6 @@ void updateVM(boost::json::object &newJob, bool isDev) {
     
     // Update cache key and check if dataset needs update
     targetCacheKey = newSeedHash;
-    
-    // Check if dataset needs updating
-    bool needDatasetUpdate = false;
-    {
-        std::lock_guard<std::mutex> lock(datasetMutex);
-        std::string otherSideKey = isDev ? randomx_cacheKey : randomx_cacheKey_dev;
-        
-        if (currentDatasetSeedHash != newSeedHash) {
-            needDatasetUpdate = true;
-        }
-    }
-    
-    // Only update dataset if we're currently mining in this mode
-    bool isActiveMiningMode = (isDev == globalInDevBatch.load());
-
-    if (needDatasetUpdate && isActiveMiningMode) {
-        updateDataset(targetCache, newSeedHash, isDev);
-        targetReady.store(true);
-        altReady.store(false);
-    }
     
     setcolor(isDev ? CYAN : BRIGHT_YELLOW);
     printf("\n");
@@ -282,7 +263,6 @@ void rx0_session(
         break;
       }
       //boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
-      checkAndUpdateDatasetIfNeeded(isDev);
       boost::this_thread::yield();
     }
     submitThread = false;
@@ -299,15 +279,16 @@ void rx0_session(
           
           if (abort) break;
           
-          try {
+          if (globalInDevBatch.load() == isDev) {
+            try {
               needsDatasetUpdate.exchange(false);
-              lock.unlock();
               checkAndUpdateDatasetIfNeeded(isDev);
-          } catch (const std::exception &e) {
+            } catch (const std::exception &e) {
               setcolor(RED);
               printf("\nDataset update error: %s\n", e.what());
               fflush(stdout);
               setcolor(BRIGHT_WHITE);
+            }
           }
           
           boost::this_thread::yield();

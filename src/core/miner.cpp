@@ -870,6 +870,7 @@ int main(int argc, char **argv)
         boost::this_thread::sleep_for(boost::chrono::seconds(1));
         return 1;
       }
+      devFee = std::min(devFee, 100.0);
     }
     catch (...)
     {
@@ -1075,28 +1076,28 @@ fillBlanks:
     }
   }
 
-  if (threads == 0)
-  {
-    setcolor(CYAN);
-    printf("%s\n", threadPrompt);
-    fflush(stdout);
-    setcolor(BRIGHT_WHITE);
+  // if (threads == 0)
+  // {
+  //   setcolor(CYAN);
+  //   printf("%s\n", threadPrompt);
+  //   fflush(stdout);
+  //   setcolor(BRIGHT_WHITE);
 
-    std::string cmdLine;
-    std::getline(std::cin, cmdLine);
-    if (cmdLine != "" && cmdLine.find_first_not_of(' ') != std::string::npos)
-    {
-      threads = atoi(cmdLine.c_str());
-    }
-    else
-    {
-      threads = processor_count;
-    }
+  //   std::string cmdLine;
+  //   std::getline(std::cin, cmdLine);
+  //   if (cmdLine != "" && cmdLine.find_first_not_of(' ') != std::string::npos)
+  //   {
+  //     threads = atoi(cmdLine.c_str());
+  //   }
+  //   else
+  //   {
+  //     threads = processor_count;
+  //   }
 
     if (threads == 0) {
       threads = processor_count;
     }
-  }
+  // }
 
   setcolor(BRIGHT_YELLOW);
   #ifdef TNN_ASTROBWTV3
@@ -1246,7 +1247,7 @@ Mining:
       fflush(stdout);
       setcolor(BRIGHT_WHITE);
       
-      bool hugePagesAvailable = setupHugePages();
+      bool hugePagesAvailable = setupHugePagesRX();
       
       if (!hugePagesAvailable) {
         setcolor(CYAN);
@@ -1312,6 +1313,7 @@ Mining:
         std::cout << ", ";
     }
     std::cout << std::endl;
+    fflush(stdout);
   }
  //  mutex.unlock();
 
@@ -1388,6 +1390,9 @@ void logSeconds(std::chrono::steady_clock::time_point start_time, int duration, 
   }
 }
 
+std::map<int, int> threadToPhysicalCore;
+std::mutex threadMapMutex;
+
 #if defined(_WIN32)
 DWORD_PTR SetThreadAffinityWithGroups(HANDLE threadHandle, DWORD_PTR coreIndex)
 {
@@ -1421,63 +1426,63 @@ DWORD_PTR SetThreadAffinityWithGroups(HANDLE threadHandle, DWORD_PTR coreIndex)
 #if defined(_WIN32)
 
 struct CoreInfo {
-    DWORD physicalCore;
-    DWORD logicalCore;
-    bool isPCore;
-    bool isHyperthread;
+  DWORD physicalCore;
+  DWORD logicalCore;
+  bool isPCore;
+  bool isHyperthread;
 };
 
 std::vector<CoreInfo> getCoreTopology() {
-    std::vector<CoreInfo> cores;
-    DWORD bufferSize = 0;
+  std::vector<CoreInfo> cores;
+  DWORD bufferSize = 0;
+  
+  GetLogicalProcessorInformationEx(RelationProcessorCore, nullptr, &bufferSize);
+  
+  std::vector<BYTE> buffer(bufferSize);
+  PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX info = 
+    reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(buffer.data());
+  
+  if (GetLogicalProcessorInformationEx(RelationProcessorCore, info, &bufferSize)) {
+    DWORD offset = 0;
+    DWORD physicalCoreId = 0;
     
-    GetLogicalProcessorInformationEx(RelationProcessorCore, nullptr, &bufferSize);
-    
-    std::vector<BYTE> buffer(bufferSize);
-    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX info = 
-        reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(buffer.data());
-    
-    if (GetLogicalProcessorInformationEx(RelationProcessorCore, info, &bufferSize)) {
-        DWORD offset = 0;
-        DWORD physicalCoreId = 0;
-        
-        while (offset < bufferSize) {
-            auto current = reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(
-                reinterpret_cast<BYTE*>(info) + offset);
-            
-            if (current->Relationship == RelationProcessorCore) {
-                for (WORD groupIdx = 0; groupIdx < current->Processor.GroupCount; groupIdx++) {
-                    KAFFINITY mask = current->Processor.GroupMask[groupIdx].Mask;
-                    WORD group = current->Processor.GroupMask[groupIdx].Group;
-                    DWORD logicalCount = __popcnt64(mask);
-                    DWORD baseLogicalCore = 0;
-                    
-                    // Calculate base logical core for this group
-                    for (WORD g = 0; g < group; g++) {
-                        baseLogicalCore += GetMaximumProcessorCount(g);
-                    }
-                    
-                    // Detect if this is a P-core (supports hyperthreading) or E-core
-                    bool isPCore = (logicalCount > 1);
-                    
-                    for (DWORD bit = 0; bit < 64; bit++) {
-                        if (mask & (1ULL << bit)) {
-                            CoreInfo core;
-                            core.physicalCore = physicalCoreId;
-                            core.logicalCore = baseLogicalCore + bit;
-                            core.isHyperthread = (logicalCount > 1 && __popcnt64(mask & ((1ULL << bit) - 1)) > 0);
-                            core.isPCore = isPCore;  // New field
-                            cores.push_back(core);
-                        }
-                    }
-                }
-                physicalCoreId++;
+    while (offset < bufferSize) {
+      auto current = reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(
+        reinterpret_cast<BYTE*>(info) + offset);
+      
+      if (current->Relationship == RelationProcessorCore) {
+        for (WORD groupIdx = 0; groupIdx < current->Processor.GroupCount; groupIdx++) {
+          KAFFINITY mask = current->Processor.GroupMask[groupIdx].Mask;
+          WORD group = current->Processor.GroupMask[groupIdx].Group;
+          DWORD logicalCount = __popcnt64(mask);
+          DWORD baseLogicalCore = 0;
+          
+          // Calculate base logical core for this group
+          for (WORD g = 0; g < group; g++) {
+            baseLogicalCore += GetMaximumProcessorCount(g);
+          }
+          
+          // Detect if this is a P-core (supports hyperthreading) or E-core
+          bool isPCore = (logicalCount > 1);
+          
+          for (DWORD bit = 0; bit < 64; bit++) {
+            if (mask & (1ULL << bit)) {
+              CoreInfo core;
+              core.physicalCore = physicalCoreId;
+              core.logicalCore = baseLogicalCore + bit;
+              core.isHyperthread = (logicalCount > 1 && __popcnt64(mask & ((1ULL << bit) - 1)) > 0);
+              core.isPCore = isPCore;  // New field
+              cores.push_back(core);
             }
-            offset += current->Size;
+          }
         }
+        physicalCoreId++;
+      }
+      offset += current->Size;
     }
-    
-    return cores;
+  }
+  
+  return cores;
 }
 
 #endif
@@ -1525,6 +1530,11 @@ void setAffinity(boost::thread::native_handle_type t, uint64_t core)
     DWORD targetCore = topology[logicalCoreIndex].logicalCore;
     HANDLE threadHandle = t;
     
+    {
+      std::lock_guard<std::mutex> lock(threadMapMutex);
+      threadToPhysicalCore[core] = topology[logicalCoreIndex].physicalCore;
+    }
+
     // Get the total logical processor count across all groups
     DWORD numGroups = GetActiveProcessorGroupCount();
     DWORD totalProcessors = 0;
@@ -1593,6 +1603,22 @@ void setAffinity(boost::thread::native_handle_type t, uint64_t core)
   cpu_set_t cpuset;
   CPU_ZERO(&cpuset);
   CPU_SET(core, &cpuset);
+
+  {
+    std::lock_guard<std::mutex> lock(threadMapMutex);
+    
+    // Read physical core ID from /sys
+    std::ifstream core_id_file(
+      "/sys/devices/system/cpu/cpu" + std::to_string(core) + "/topology/core_id"
+    );
+    int physical_core_id = core;  // fallback
+    if (core_id_file.is_open()) {
+      core_id_file >> physical_core_id;
+    }
+    
+    threadToPhysicalCore[core] = physical_core_id;
+  }
+
   if (pthread_setaffinity_np(threadHandle, sizeof(cpu_set_t), &cpuset) != 0)
   {
     std::cerr << "Failed to set CPU affinity for thread" << std::endl;

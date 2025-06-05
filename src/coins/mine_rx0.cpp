@@ -1,5 +1,5 @@
 #include "miners.hpp"
-#include "numa_optimizer.h"  // Add this
+#include "numa_memory_manager.hpp"
 
 #include <net/rx0/rx0_jobCache.hpp>
 #include <randomx/randomx.h>
@@ -30,22 +30,43 @@ int numa_nodes = 1;
 std::map<int, int> thread_numa_map;
 std::mutex numa_map_mutex;
 
-std::string randomx_cacheKey = "0000000000000000000000000000000000000000000000000000000000000000";
-std::string randomx_cacheKey_dev = "0000000000000000000000000000000000000000000000000000000000000000";
+std::string randomx_cacheKey = "";
+std::string randomx_cacheKey_dev = "";
 
 std::string randomx_login;
 std::string randomx_login_dev;
 
 std::mutex cacheSwitchMutex;
 std::atomic<bool> isDevOnActiveCache{false};
+std::atomic<bool> firstBatch{false};
 
-struct NUMADatasetInfo {
-    randomx_dataset* dataset;
-    size_t size;
-    int numa_node;
-};
+typedef struct RxDatasetWrapper {
+    randomx_dataset* ptr = nullptr;
+    int numa_node = -1;
+    
+    explicit RxDatasetWrapper(randomx_dataset* p, int node) 
+        : ptr(p), numa_node(node) {}
+    
+    ~RxDatasetWrapper() {
+        if (ptr) randomx_release_dataset(ptr);
+    }
+} RxDatasetWrapper;
 
-std::map<randomx_dataset*, NUMADatasetInfo> numa_dataset_map;
+typedef struct RxCacheWrapper {
+    randomx_cache* ptr = nullptr;
+    int numa_node = -1;
+    
+    explicit RxCacheWrapper(randomx_cache* p, int node) 
+        : ptr(p), numa_node(node) {}
+    
+    ~RxCacheWrapper() {
+        if (ptr) randomx_release_cache(ptr);
+    }
+} RxCacheWrapper;
+
+NUMAMemoryManager<RxDatasetWrapper> rx_dataset_manager;     
+NUMAMemoryManager<RxCacheWrapper> rx_cache_manager;         
+NUMAMemoryManager<RxCacheWrapper> rx_cache_dev_manager;
 
 void randomx_init_intern(int threadCount) {
   if (nullptr == randomx::selectArgonImpl(rxFlags)) {
@@ -58,138 +79,80 @@ void randomx_init_intern(int threadCount) {
     std::cout << "WARNING: You are using the interpreter mode. Use --jit for optimal performance." << std::endl;
   }
 
-  // Allocate both caches for quick switching
-  rxCache = randomx_alloc_cache(rxFlags);
-  rxCache_dev = randomx_alloc_cache(rxFlags);
-
-  if (rxCache == nullptr || rxCache_dev == nullptr) {
-    throw std::runtime_error("RandomX Cache Alloc Failed");
-  }
-
-  // Initialize NUMA if available
-  if (NUMAOptimizer::initialize()) {
-    numa_nodes = NUMAOptimizer::getMemoryNodes();
-    
-    if (numa_nodes < 2 || threads < 4 || !lockThreads) {
-      rx_numa_enabled = false;
-      numa_nodes = 1;
-      rxDataset = randomx_alloc_dataset(rxFlags);
-      
-      if (!rxDataset) {
-        throw std::runtime_error("Failed to allocate dataset");
-      }
-    } else {
-      rx_numa_enabled = true;
-
-      setcolor(BRIGHT_YELLOW);
-      std::cout << " NUMA enabled: " << numa_nodes << " memory nodes detected" << std::endl;
-      if (rxFlags & RANDOMX_FLAG_LARGE_PAGES) {
-        std::cout << " Large pages enabled - will allocate on NUMA nodes" << std::endl;
-      }
-      fflush(stdout);
-      setcolor(BRIGHT_WHITE);
-      
-      for (int node = 0; node < numa_nodes; node++) {
-        // Set memory policy for this NUMA node
-        {
-          NUMAOptimizer::ScopedMemoryPolicy policy(node);
-          // Allocate only one dataset per NUMA node
-          rxDatasets_numa[node] = randomx_alloc_dataset(rxFlags);
-          if (!rxDatasets_numa[node]) {
-            throw std::runtime_error("Failed to allocate dataset for NUMA node " + std::to_string(node));
-          }
-        }
+  rx_numa_enabled = rx_dataset_manager.initialize(threadCount, 
+    [](int node_id) -> std::unique_ptr<RxDatasetWrapper> {
+      NUMAOptimizer::ScopedMemoryPolicy policy(node_id);
+      auto* ds = randomx_alloc_dataset(rxFlags);
+      if (!ds) return nullptr;
+      return std::make_unique<RxDatasetWrapper>(ds, node_id);
+    });
+  
+  if (rx_numa_enabled) {
+    // Initialize separate cache managers for user and dev
+    rx_cache_manager.initialize(threads,
+      [](int node_id) -> std::unique_ptr<RxCacheWrapper> {
+        NUMAOptimizer::ScopedMemoryPolicy policy(node_id);
+        auto* cache = randomx_alloc_cache(rxFlags);
+        if (!cache) return nullptr;
+        return std::make_unique<RxCacheWrapper>(cache, node_id);
+      });
         
-        // Optimize the allocated memory for mining
-        if (rxDatasets_numa[node]->memory) {
-          size_t dataset_size = randomx_dataset_item_count() * RANDOMX_DATASET_ITEM_SIZE;
-          NUMAOptimizer::optimizeMemoryForMining(rxDatasets_numa[node]->memory, dataset_size);
-        }
+    rx_cache_dev_manager.initialize(threadCount,
+      [](int node_id) -> std::unique_ptr<RxCacheWrapper> {
+        NUMAOptimizer::ScopedMemoryPolicy policy(node_id);
+        auto* cache = randomx_alloc_cache(rxFlags);
+        if (!cache) return nullptr;
+        return std::make_unique<RxCacheWrapper>(cache, node_id);
+      });
         
-        setcolor(BRIGHT_YELLOW);
-        std::cout << " Allocated dataset on NUMA node " << node << std::endl;
-        fflush(stdout);
-        setcolor(BRIGHT_WHITE);
-      }
-      
-      // Restore default memory policy for the rest of the program
-      NUMAOptimizer::restoreMemoryPolicy();
-    }
+    setcolor(BRIGHT_YELLOW);
+    std::cout << " NUMA enabled with " << NUMAOptimizer::getMemoryNodes() << " nodes\n";
+    setcolor(BRIGHT_WHITE);
   } else {
-    // Fallback to single dataset for non-NUMA systems
-    rx_numa_enabled = false;
-    numa_nodes = 1;
+    // Non-NUMA fallback
+    rxCache = randomx_alloc_cache(rxFlags);
+    rxCache_dev = randomx_alloc_cache(rxFlags);
+    if (rxCache == nullptr || rxCache_dev == nullptr) {
+      throw std::runtime_error("RandomX Cache Alloc Failed");
+    }
     rxDataset = randomx_alloc_dataset(rxFlags);
-    
-    if (!rxDataset) {
-      throw std::runtime_error("Failed to allocate dataset");
-    }
-  }
-}
-
-
-// Modified to update all NUMA datasets
-void randomx_update_data_numa(randomx_cache* rc, randomx_dataset **datasets, 
-                             void *seed, size_t seedSize, int threadCount) {
-  randomx_init_cache(rc, seed, seedSize);
-  
-  uint32_t datasetItemCount = randomx_dataset_item_count();
-  
-  if (!rx_numa_enabled) {
-    randomx_init_dataset(datasets[0], rc, 0, datasetItemCount);
-    return;
-  }
-
-  // Update each NUMA node's dataset
-  for (int node = 0; node < numa_nodes; node++) {
-    std::vector<std::thread> threads;
-    
-    // Calculate threads per node - distribute total threads across nodes
-    int threadsPerNode = threadCount / numa_nodes;
-    if (node < (threadCount % numa_nodes)) {
-      threadsPerNode++; // Distribute remainder threads to first few nodes
-    }
-    
-    if (threadsPerNode > 1) {
-      auto perThread = datasetItemCount / threadsPerNode;
-      auto remainder = datasetItemCount % threadsPerNode;
-      uint32_t startItem = 0;
-
-      for (int i = 0; i < threadsPerNode; ++i) {
-        auto count = perThread + (i == threadsPerNode - 1 ? remainder : 0);
-        
-        threads.push_back(std::thread([=, &rc, &datasets]() {
-          // Set memory policy to ensure initialization happens on correct node
-          {
-            NUMAOptimizer::ScopedMemoryPolicy policy(node);
-            randomx_init_dataset(datasets[node], rc, startItem, count);
-          }
-        }));
-        startItem += count;
-      }
-      
-      for (auto& t : threads) {
-        t.join();
-      }
-    } else {
-      // Single-threaded initialization for this node
-      NUMAOptimizer::ScopedMemoryPolicy policy(node);
-      randomx_init_dataset(datasets[node], rc, 0, datasetItemCount);
-    }
   }
 }
 
 // Wrapper that handles both NUMA and non-NUMA cases
 void randomx_update_data(randomx_cache* rc, randomx_dataset* rd, void *seed, 
-                        size_t seedSize, int threadCount) {
+                        size_t seedSize, int threadCount, bool isDev) {
   if (rx_numa_enabled) {
-    randomx_update_data_numa(rc, rxDatasets_numa, seed, seedSize, threadCount);
+    // Select the appropriate cache manager
+    auto& cache_manager = isDev ? rx_cache_dev_manager : rx_cache_manager;
+    
+    // Initialize each NUMA cache with the same seed
+    cache_manager.forEachNode([&](int node_id, RxCacheWrapper* cache_wrapper) {
+      randomx_init_cache(cache_wrapper->ptr, seed, seedSize);
+    });
+    
+    // Initialize datasets with local caches
+    std::vector<std::thread> init_threads;
+    
+    rx_dataset_manager.forEachNode([&](int node_id, RxDatasetWrapper* dataset_wrapper) {
+      init_threads.emplace_back([&, node_id, dataset_wrapper]() {
+        NUMAOptimizer::ScopedMemoryPolicy policy(node_id);
+        
+        auto* cache_wrapper = cache_manager.getResourceForNode(node_id);
+        if (!cache_wrapper) return;
+        
+        randomx_init_dataset(dataset_wrapper->ptr, 
+                           cache_wrapper->ptr, 
+                           0, 
+                           randomx_dataset_item_count());
+      });
+    });
+    
+    for (auto& t : init_threads) t.join();
   } else {
     randomx_init_cache(rc, seed, seedSize);
-    
     uint32_t datasetItemCount = randomx_dataset_item_count();
     std::vector<std::thread> threads;
-
 
     if (threadCount > 1) {
       auto perThread = datasetItemCount / threadCount;
@@ -207,47 +170,7 @@ void randomx_update_data(randomx_cache* rc, randomx_dataset* rd, void *seed,
     } else {
       randomx_init_dataset(rd, rc, 0, datasetItemCount);
     }
-    threads.clear();
   }
-}
-
-// Helper to get dataset for current thread
-randomx_dataset* getDatasetForThread(int tid) {
-  if (!rx_numa_enabled) {
-    return rxDataset;
-  }
-  
-  int numa_node = 0;
-  
-#ifdef __linux__
-  int current_cpu = sched_getcpu();
-  if (current_cpu >= 0) {
-    numa_node = numa_node_of_cpu(current_cpu);
-  }
-#elif defined(_WIN32)
-  PROCESSOR_NUMBER proc_num = {0};
-  proc_num.Group = 0xFFFF;
-  proc_num.Number = 0xFF;
-  GetCurrentProcessorNumberEx(&proc_num);
-
-  if (proc_num.Group != 0xFFFF && proc_num.Number != 0xFF) {
-    USHORT node_number = 0;
-    if (GetNumaProcessorNodeEx(&proc_num, &node_number)) {
-      numa_node = node_number;
-    } else {
-      numa_node = (tid - 1) % numa_nodes;
-    }
-  } else {
-    numa_node = (tid - 1) % numa_nodes;
-  }
-#endif
-  
-  // Validate and use fallback if needed
-  if (numa_node < 0 || numa_node >= numa_nodes) {
-    numa_node = (tid - 1) % numa_nodes;
-  }
-  
-  return rxDatasets_numa[numa_node];
 }
 
 void randomx_set_flags(bool autoFlags) {
@@ -259,7 +182,10 @@ void randomx_set_flags(bool autoFlags) {
   if (rx_hugePages) rxFlags |= RANDOMX_FLAG_LARGE_PAGES;
 
   setcolor(BRIGHT_YELLOW);
-  if (rxFlags & RANDOMX_FLAG_ARGON2_AVX2) {
+  if (rxFlags & RANDOMX_FLAG_ARGON2_AVX512) {
+    std::cout << " Argon2 implementation: AVX512" << std::endl;
+  } 
+  else if (rxFlags & RANDOMX_FLAG_ARGON2_AVX2) {
     std::cout << " Argon2 implementation: AVX2" << std::endl;
   }
   else if (rxFlags & RANDOMX_FLAG_ARGON2_SSSE3) {
@@ -339,7 +265,7 @@ int rxRPCTest() {
   randomx_init_intern(th);
   
   randomx_vm *vm = randomx_create_vm(rxFlags, rxCache, rxDataset);
-  randomx_update_data(rxCache, rxDataset, seedBuffer, 32, th);
+  randomx_update_data(rxCache, rxDataset, seedBuffer, 32, th, false);
   randomx_vm_set_cache(vm, rxCache);
 
   // hashing
@@ -371,7 +297,9 @@ int rxRPCTest() {
 std::atomic<bool> globalInDevBatch(false);
 std::atomic<int64_t> globalNextDevBatchTime(0);
 std::atomic<int64_t> globalDevBatchDuration(0);
+std::atomic<int64_t> globalNextUserBatchDuration;
 std::atomic<uint32_t> globalBatchSalt(0);  // Random salt for batch scheduling
+std::atomic<bool> batchInit{false};
 
 void initGlobalBatchScheduler() {
   // Initialize once at program start
@@ -397,13 +325,20 @@ void mineRx0(int tid) {
   randomx_vm *vm = nullptr;
   
   // Batched dev fee constants
-  const int64_t BATCH_WINDOW_MS = 120000; // 2-minute window
-  const int64_t MIN_BATCH_DURATION_MS = 5000;  // Minimum 5 seconds per batch
-  const int64_t MAX_BATCH_DURATION_MS = 30000; // Maximum 30 seconds per batch
+  const int64_t MIN_DEV_DURATION_MS = 30000;
+  const int64_t MAX_DEV_DURATION_MS = 300000;
 
   // Initialize batch scheduling if this is the first thread
-  if (tid == 0) {
+  if (tid == 1) {
     initGlobalBatchScheduler();
+    batchInit.store(true);
+
+    needsDatasetUpdate.store(true);
+    cv.notify_all();
+  };
+
+  while (!batchInit.load() || needsDatasetUpdate.load()) {
+    boost::this_thread::yield();
   }
 
 waitForJob:
@@ -427,50 +362,53 @@ waitForJob:
         localJobCounter = jobCounter;
       }
       
-      if (devMine != globalInDevBatch.load()) {
-        printf("devMine in thread %d changing to %d\n", tid, globalInDevBatch.load());
-        fflush(stdout);
-      } else {
-        printf("devMine of %d is correct in thread %d\n", devMine, tid);
-        fflush(stdout);
-      }
       devMine = globalInDevBatch.load();
 
-      if (devMine) {
-        while(!randomx_ready_dev.load()) {
-          boost::this_thread::yield();
-        }
-      } else {
-        while(!randomx_ready.load()) {
-          boost::this_thread::yield();
-        }
+      std::string &tKey = devMine ? randomx_cacheKey_dev : randomx_cacheKey;
+      
+      while (needsDatasetUpdate.load()) {
+        boost::this_thread::yield();
       }
 
-      std::string &tKey = devMine ? randomx_cacheKey_dev : randomx_cacheKey;
-
-      if (tKey != localCacheKey ) {
+      if (tKey != localCacheKey) {
         if (vm) {
           randomx_destroy_vm(vm);
           vm = nullptr;
         }
 
-        randomx_cache* tCache = devMine ? rxCache_dev : rxCache;
+        randomx_cache* tCache = nullptr;
+        randomx_dataset* RXD = nullptr;
+        
+        if (rx_numa_enabled) {
+          auto* cache_wrapper = devMine ? 
+            rx_cache_dev_manager.getResourceForThread(tid) : 
+            rx_cache_manager.getResourceForThread(tid);
+          
+          auto* dataset_wrapper = rx_dataset_manager.getResourceForThread(tid);
+          
+          if (cache_wrapper && dataset_wrapper) {
+            tCache = cache_wrapper->ptr;
+            RXD = dataset_wrapper->ptr;
+          }
+        } else {
+          tCache = devMine ? rxCache_dev : rxCache;
+          RXD = rxDataset;
+        }
 
-        randomx_dataset* RXD = getDatasetForThread(tid);
-        vm = randomx_create_vm(rxFlags, rxCache_dev, RXD);
+        vm = randomx_create_vm(rxFlags, tCache, RXD);
 
         if (vm == nullptr) {
           if ((rxFlags & RANDOMX_FLAG_HARD_AES)) {
-            throw std::runtime_error("Cannot create user VM with the selected options. Try using --softAes");
+            throw std::runtime_error("Cannot create user VM with the selected options");
           }
           if (rxFlags & RANDOMX_FLAG_LARGE_PAGES) {
-            throw std::runtime_error("Cannot create user VM with the selected options. Try without --largePages");
+            throw std::runtime_error("Cannot create user VM with the selected options. Try without --rx-hugepages");
           }
           throw std::runtime_error("Cannot create user VM");
         }
         localCacheKey = tKey;
       }
-      
+
       if (ourHeight == 0 || localUserHeight != ourHeight) {
         byte *b2 = new byte[RANDOMX_TEMPLATE_SIZE];
         memset(b2, 0, RANDOMX_TEMPLATE_SIZE);
@@ -505,43 +443,33 @@ waitForJob:
 
         if (vm == nullptr) continue;
 
-        if (!globalInDevBatch.load() && currentTimeMs >= globalNextDevBatchTime.load() && 
-            devConnected) {
-
+        if (!globalInDevBatch.load() && currentTimeMs >= globalNextDevBatchTime.load() && devConnected) {
           if (!globalInDevBatch.exchange(true)) {
             std::mt19937 rng(scheduleSeed);
-            std::uniform_int_distribution<int64_t> durationDist(
-                MIN_BATCH_DURATION_MS, MAX_BATCH_DURATION_MS);
-              
-            int64_t rawDuration = durationDist(rng);
-            globalDevBatchDuration.store(rawDuration * (devFee / 100.0));
+            std::uniform_int_distribution<int64_t> devDist(MIN_DEV_DURATION_MS, MAX_DEV_DURATION_MS);
+
+            int64_t devDuration = devDist(rng);
+            globalDevBatchDuration.store(devDuration);
+
+            // Compute user duration to maintain devFee balance
+            int64_t userDuration = static_cast<int64_t>(devDuration * ((100.0 - devFee) / devFee));
+            globalNextDevBatchTime.store(currentTimeMs + devDuration);  // When to switch back to user
+            globalNextUserBatchDuration.store(userDuration);            // Save next user duration
 
             randomx_vm_set_cache(vm, rxCache_dev);
-
-            needsDatasetUpdate = true;
+            needsDatasetUpdate.store(true);
             cv.notify_all();
-
-            printf("switched to dev mode\n");
-            fflush(stdout);
           }
-        } 
-        else if (globalInDevBatch.load() && 
-                 currentTimeMs >= globalNextDevBatchTime.load() + globalDevBatchDuration.load()) {
-          
+        }
+        else if (globalInDevBatch.load() && currentTimeMs >= globalNextDevBatchTime.load()) {
           if (globalInDevBatch.exchange(false)) {
             std::mt19937 rng(scheduleSeed + 1);
-            std::uniform_int_distribution<int64_t> timingDist(30000, BATCH_WINDOW_MS - 30000);
-            
-            int64_t nextInterval = timingDist(rng);
-            globalNextDevBatchTime.store(currentTimeMs + nextInterval);
+            int64_t userDuration = globalNextUserBatchDuration.load();
+            globalNextDevBatchTime.store(currentTimeMs + userDuration); // When to switch back to dev
 
             randomx_vm_set_cache(vm, rxCache);
-
-            needsDatasetUpdate = true;
+            needsDatasetUpdate.store(true);
             cv.notify_all();
-
-            printf("switched to user mode\n");
-            fflush(stdout);
           }
         }
 
@@ -686,7 +614,7 @@ waitForJob:
         break;
       
       if (localJobCounter != jobCounter) {
-        if (tid == 0) {
+        if (tid == 1) {
           globalBatchSalt = (globalBatchSalt + jobCounter) ^ (rand() & 0xFFFFFF);
         }
       }
