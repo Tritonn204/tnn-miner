@@ -23,12 +23,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "argon2.h"
 
-void randomx_argon2_fill_segment_avx512(const argon2_instance_t* instance,
-	argon2_position_t position);
-
-
-// #if defined(__AVX512F__)
-
 #include <immintrin.h>
 
 #include "argon2_core.h"
@@ -73,10 +67,6 @@ static void fill_block(__m512i* state, const block* ref_block,
 		_mm512_storeu_si512((__m512i*)next_block->v + i, state[i]);
 	}
 }
-
-__attribute__((target("default")))
-static void fill_block(__m512i* state, const block* ref_block,
-	block* next_block, int with_xor) {}
 
 __attribute__((target("avx512f, avx512bw")))
 void randomx_argon2_fill_segment_avx512(const argon2_instance_t* instance,
@@ -162,11 +152,11 @@ __attribute__((target("default")))
 void randomx_argon2_fill_segment_avx512(const argon2_instance_t* instance,
 	argon2_position_t position) {}
 
-randomx_argon2_impl* randomx_argon2_impl_avx512() {
-// #if defined(__AVX512F__)
-	return &randomx_argon2_fill_segment_avx512;
-// #endif
-// 	return NULL;
+void avx512_dispatch(const argon2_instance_t* instance,
+	argon2_position_t position) {
+    randomx_argon2_fill_segment_avx512(instance, position);
 }
 
-// #endif
+randomx_argon2_impl* randomx_argon2_impl_avx512() {
+	return &avx512_dispatch;
+}

@@ -82,7 +82,7 @@ void randomx_init_intern(int threadCount) {
   rx_numa_enabled = rx_dataset_manager.initialize(threadCount, 
     [](int node_id) -> std::unique_ptr<RxDatasetWrapper> {
       NUMAOptimizer::ScopedMemoryPolicy policy(node_id);
-      auto* ds = randomx_alloc_dataset(rxFlags);
+      randomx_dataset* ds = randomx_alloc_dataset(rxFlags);
       if (!ds) return nullptr;
       return std::make_unique<RxDatasetWrapper>(ds, node_id);
     });
@@ -92,7 +92,7 @@ void randomx_init_intern(int threadCount) {
     rx_cache_manager.initialize(threads,
       [](int node_id) -> std::unique_ptr<RxCacheWrapper> {
         NUMAOptimizer::ScopedMemoryPolicy policy(node_id);
-        auto* cache = randomx_alloc_cache(rxFlags);
+        randomx_cache* cache = randomx_alloc_cache(rxFlags);
         if (!cache) return nullptr;
         return std::make_unique<RxCacheWrapper>(cache, node_id);
       });
@@ -100,7 +100,7 @@ void randomx_init_intern(int threadCount) {
     rx_cache_dev_manager.initialize(threadCount,
       [](int node_id) -> std::unique_ptr<RxCacheWrapper> {
         NUMAOptimizer::ScopedMemoryPolicy policy(node_id);
-        auto* cache = randomx_alloc_cache(rxFlags);
+        randomx_cache* cache = randomx_alloc_cache(rxFlags);
         if (!cache) return nullptr;
         return std::make_unique<RxCacheWrapper>(cache, node_id);
       });
