@@ -32,6 +32,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stddef.h>
 #include <stdint.h>
 
+#include "numa_optimizer.h"
+
 #define RANDOMX_HASH_SIZE 32
 #define RANDOMX_DATASET_ITEM_SIZE 64
 
@@ -51,7 +53,8 @@ typedef enum {
   RANDOMX_FLAG_SECURE = 16,
   RANDOMX_FLAG_ARGON2_SSSE3 = 32,
   RANDOMX_FLAG_ARGON2_AVX2 = 64,
-  RANDOMX_FLAG_ARGON2 = 96
+  RANDOMX_FLAG_ARGON2_AVX512 = 128,
+  RANDOMX_FLAG_ARGON2 = 224
 } randomx_flags;
 
 typedef struct randomx_dataset randomx_dataset;
@@ -62,9 +65,10 @@ extern randomx_flags rxFlags;
 
 extern randomx_dataset* rxDataset;
 extern randomx_cache* rxCache;
-
-extern randomx_dataset* rxDataset_dev;
 extern randomx_cache* rxCache_dev;
+extern randomx_dataset* rxDatasets_numa[256];
+
+extern bool rx_numa_enabled;
 
 #if defined(__cplusplus)
 
@@ -110,7 +114,8 @@ RANDOMX_EXPORT randomx_flags randomx_get_flags(void);
  *                                   makes subsequent cache initialization faster
  *        RANDOMX_FLAG_ARGON2_AVX2 - optimized Argon2 for CPUs with the AVX2 instruction set
  *                                   makes subsequent cache initialization faster
- *
+ *        RANDOMX_FLAG_ARGON2_AVX512 - optimized Argon2 for CPUs with the AVX512 instruction set
+ *                                   makes subsequent cache initialization faster
  * @return Pointer to an allocated randomx_cache structure.
  *         Returns NULL if:
  *         (1) memory allocation fails
@@ -283,6 +288,132 @@ RANDOMX_EXPORT void randomx_calculate_commitment(const void* input, size_t input
 
 #if defined(__cplusplus)
 }
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
+#include <fstream>
+#include "terminal.h"
+#include "tnn-hugepages.h"
+
+inline bool setupHugePagesRX() {
+#ifdef __linux__
+    // Check current huge pages configuration
+    std::ifstream meminfo("/proc/meminfo");
+    std::string line;
+    size_t huge_page_size = 0;
+    size_t total_huge_pages = 0;
+    size_t free_huge_pages = 0;
+    
+    while (std::getline(meminfo, line)) {
+        if (line.find("Hugepagesize:") != std::string::npos) {
+            sscanf(line.c_str(), "Hugepagesize: %zu kB", &huge_page_size);
+            huge_page_size *= 1024; // Convert to bytes
+        } else if (line.find("HugePages_Total:") != std::string::npos) {
+            sscanf(line.c_str(), "HugePages_Total: %zu", &total_huge_pages);
+        } else if (line.find("HugePages_Free:") != std::string::npos) {
+            sscanf(line.c_str(), "HugePages_Free: %zu", &free_huge_pages);
+        }
+    }
+    meminfo.close();
+    
+    int numa_nodes = NUMAOptimizer::getMemoryNodes();
+
+    // Calculate required huge pages for RandomX
+    // RandomX needs ~2.5GB per NUMA node + caches
+    size_t required_memory = 0;
+    if (rx_numa_enabled) {
+        required_memory = (2560ULL * 1024 * 1024) * numa_nodes; // 2.5GB per node
+    } else {
+        required_memory = 2560ULL * 1024 * 1024; // 2.5GB total
+    }
+    required_memory += 512ULL * 1024 * 1024; // Add 512MB for caches and overhead
+    
+    size_t required_pages = (required_memory + huge_page_size - 1) / huge_page_size;
+    
+    setcolor(BRIGHT_YELLOW);
+    std::cout << " Huge page size: " << (huge_page_size / (1024 * 1024)) << " MB" << std::endl;
+    std::cout << " Total huge pages: " << total_huge_pages << std::endl;
+    std::cout << " Free huge pages: " << free_huge_pages << std::endl;
+    std::cout << " Required huge pages: " << required_pages << std::endl;
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    
+    if (free_huge_pages < required_pages) {
+        setcolor(RED);
+        std::cout << "\nInsufficient huge pages available!" << std::endl;
+        std::cout << "To fix this, run as root:" << std::endl;
+        std::cout << "  echo " << (total_huge_pages - free_huge_pages + required_pages) 
+                  << " > /proc/sys/vm/nr_hugepages" << std::endl;
+        std::cout << "\nOr to set permanently, add to /etc/sysctl.conf:" << std::endl;
+        std::cout << "  vm.nr_hugepages = " << (total_huge_pages - free_huge_pages + required_pages) 
+                  << std::endl;
+        std::cout << "\nContinuing without huge pages..." << std::endl;
+        fflush(stdout);
+        setcolor(BRIGHT_WHITE);
+        return false;
+    }
+    
+    return true;
+    
+#elif defined(_WIN32)
+    // Check if we have SeLockMemoryPrivilege
+    HANDLE hToken = NULL;
+    BOOL hasPrivilege = FALSE;
+    
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
+        LUID luid;
+        if (LookupPrivilegeValue(NULL, SE_LOCK_MEMORY_NAME, &luid)) {
+            PRIVILEGE_SET privSet = {0};
+            privSet.PrivilegeCount = 1;
+            privSet.Control = PRIVILEGE_SET_ALL_NECESSARY;
+            privSet.Privilege[0].Luid = luid;
+            privSet.Privilege[0].Attributes = SE_PRIVILEGE_ENABLED;
+            
+            BOOL result;
+            PrivilegeCheck(hToken, &privSet, &result);
+            hasPrivilege = result;
+        }
+        CloseHandle(hToken);
+    }
+    
+    if (!hasPrivilege) {
+        setcolor(RED);
+        std::cout << "\nHuge pages not available - missing SeLockMemoryPrivilege!" << std::endl;
+        std::cout << "To enable:" << std::endl;
+        std::cout << "1. Run gpedit.msc as Administrator" << std::endl;
+        std::cout << "2. Navigate to: Computer Configuration → Windows Settings → " << std::endl;
+        std::cout << "   Security Settings → Local Policies → User Rights Assignment" << std::endl;
+        std::cout << "3. Add your user to 'Lock pages in memory'" << std::endl;
+        std::cout << "4. Reboot the system" << std::endl;
+        fflush(stdout);
+        setcolor(BRIGHT_WHITE);
+        return false;
+    }
+    
+    // Check minimum large page size
+    SIZE_T minLargePageSize = GetLargePageMinimum();
+    if (minLargePageSize == 0) {
+        setcolor(RED);
+        std::cout << "\nHuge pages not supported on this Windows version!" << std::endl;
+        fflush(stdout);
+        setcolor(BRIGHT_WHITE);
+        return false;
+    }
+    
+    setcolor(BRIGHT_YELLOW);
+    std::cout << " Huge page size: " << (minLargePageSize / (1024 * 1024)) << " MB" << std::endl;
+    std::cout << " Huge pages available\n" << std::endl;
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    
+    return true;
+#else
+    return false;
+#endif
+}
+
 #endif
 
 #endif

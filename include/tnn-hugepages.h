@@ -7,6 +7,8 @@
 #endif
 #include <assert.h>
 
+#include "terminal.h"
+
 extern bool printHugepagesError;
 
 #if defined(_WIN32)
@@ -38,7 +40,9 @@ inline BOOL SetPrivilege(
             &luid ) )        // receives LUID of privilege
     {
         #ifdef __cplusplus
+        setcolor(RED);
         printf("LookupPrivilegeValue error: %lu\n", GetLastError() ); 
+        fflush(stdout);
         #endif
         return FALSE; 
     }
@@ -61,7 +65,9 @@ inline BOOL SetPrivilege(
            (PDWORD) NULL) )
     { 
           #ifdef __cplusplus
+          setcolor(RED);
           printf("AdjustTokenPrivileges error: %lu\n", GetLastError() ); 
+          fflush(stdout);
           #endif
           return FALSE; 
     } 
@@ -70,7 +76,9 @@ inline BOOL SetPrivilege(
 
     {
           #ifdef __cplusplus
+          setcolor(RED);
           printf("The token does not have the specified privilege. \n");
+          fflush(stdout);
           #endif
           return FALSE;
     } 
