@@ -48,6 +48,7 @@ extern double latest_hashrate;
 static const char* devWorkerName = "tnn-dev";                                      
 
 extern bool devTurn;
+extern bool lockThreads;
 extern int threads;
 
 extern std::string workerName;
@@ -56,6 +57,9 @@ extern bool useLookupMine;
 
 extern bool gpuMine;
 extern std::string devWallet;
+
+extern std::map<int, int> threadToPhysicalCore;  // tid -> physical core ID
+extern std::mutex threadMapMutex;
 
 typedef struct {
   int coinId;
@@ -90,19 +94,20 @@ const TnnDevMinerInfo devInfo[COIN_COUNT] = {
 #endif
   "spectredev:qqhh8ul66g7t6aj5ggzl473cpan25tv6yjm0cl4hffprgtqfvmyaq8q28m4z8"
   },
-  {COIN_RX0,      "monerohash.com",              "2222",    "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
-  {COIN_XMR,      "monerohash.com",              "2222",    "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
-  {COIN_SAL,      "monerohash.com",              "2222",    "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
-  {COIN_ZEPH,     "monerohash.com",              "2222",    "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
+  {COIN_RX0,      "stratum+tcp://monerohash.com",              "2222",    "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
+  {COIN_XMR,      "stratum+tcp://monerohash.com",              "2222",    "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
+  {COIN_SAL,      "stratum+tcp://monerohash.com",              "2222",    "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
+  {COIN_ZEPH,     "stratum+tcp://monerohash.com",              "2222",    "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
   {COIN_VERUS,    "",                            "",        "", ""},
   {COIN_AIX,      "na.mining4people.com",        "3394",    "astrix:qz2mzpga6qv9uvnpueau7gs29vgu3ynj80xmd2dmja2kelzh6cssymsk3shjx", "astrix:qz2mzpga6qv9uvnpueau7gs29vgu3ynj80xmd2dmja2kelzh6cssymsk3shjx"},
   {COIN_NXL,      "178.16.131.178",              "5555",    "nexellia:qqq3lwqrnh6alujup2me8gkedvp4w4d8zkjxdzmlrzpju2npdvvmctwl649xr", "nexellia:qqq3lwqrnh6alujup2me8gkedvp4w4d8zkjxdzmlrzpju2npdvvmctwl649xr"},
   {COIN_HTN,      "na.mining4people.com",        "3390",    "hoosat:qr03chtq640d6p9r5p95kw4t4txcrt9x2cyfjf5w6wpfqwugs35yy472wq6hu", "hoosat:qr03chtq640d6p9r5p95kw4t4txcrt9x2cyfjf5w6wpfqwugs35yy472wq6hu"},
   {COIN_WALA,     "stratum+tcp://us-west.sumohash.com",     "4022",    "waglayla:qr6h2tqwx8ad57nkte9kvcd9cqyjfgk30gznnza9jte7qzfa6gu0xy5n3evj5", "waglayla:qr6h2tqwx8ad57nkte9kvcd9cqyjfgk30gznnza9jte7qzfa6gu0xy5n3evj5"},
   {COIN_SHAI,     "shaicoin.viporlab.net",       "3333",    "sh1qvee0lejv22n7s43q3asw4uzap8d9t32k95cznj", "sh1qvee0lejv22n7s43q3asw4uzap8d9t32k95cznj"},
-  {COIN_YESPOWER, "stratum+ssl://stratum-eu.rplant.xyz", "17149", "AU9CeyvCVWv2FSG2dipfg39rwVpUpDnWue", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"}, // Default to ADVC
-  {COIN_ADVC,     "stratum+ssl://stratum-eu.rplant.xyz", "17149", "AU9CeyvCVWv2FSG2dipfg39rwVpUpDnWue", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
-  //{COIN_COUNT 15  
+  {COIN_YESPOWER, "stratum+ssl://stratum-eu.rplant.xyz", "17149", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"}, // Default to ADVC
+  {COIN_ADVC,     "stratum+ssl://stratum-eu.rplant.xyz", "17149", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
+  {COIN_TARI,     "stratum+tcp://monerohash.com",              "2222",    "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
+  //{COIN_COUNT 16  
 };
 
 typedef struct {
@@ -112,9 +117,33 @@ typedef struct {
     std::string coinPrettyName;
 } Coin;
 
+const Coin unknownCoin = {COIN_UNKNOWN, ALGO_UNSUPPORTED, "unknown", "unknown"};
+const Coin coins[COIN_COUNT] = {
+  // Coin         Aglo              Symbol   Name
+  {COIN_DERO,     ALGO_ASTROBWTV3,  "DERO",  "Dero"},
+  {COIN_XELIS,    ALGO_XELISV2,     "XEL",   "Xelis"},
+  {COIN_SPECTRE,  ALGO_SPECTRE_X,   "SPR",   "Spectre"},
+  {COIN_RX0,      ALGO_RX0,         "RX0",   "RandomX"},
+  {COIN_XMR,      ALGO_RX0,         "XMR",   "Monero"},
+  {COIN_SAL,      ALGO_RX0,         "SAL",   "Salvium"},
+  {COIN_ZEPH,     ALGO_RX0,         "ZEPH",  "Zephyr"},
+  {COIN_VERUS,    ALGO_VERUS,       "VRSC",  "Verus"},
+  {COIN_AIX,      ALGO_ASTRIX_HASH, "AIX",   "Astrix"},
+  {COIN_NXL,      ALGO_NXL_HASH,    "NXL",   "Nexellia"},
+  {COIN_HTN,      ALGO_HOOHASH,     "HTN",   "Hoosat"},
+  {COIN_WALA,     ALGO_WALA_HASH,   "WALA",  "Waglayla"},
+  {COIN_SHAI,     ALGO_SHAI_HIVE,   "SHAI",  "Shai"},
+  {COIN_YESPOWER, ALGO_YESPOWER, "YESPOWER", "Yespower (Generic)"},
+  {COIN_ADVC, ALGO_YESPOWER, "ADVC", "AdventureCoin"},
+  {COIN_TARI,     ALGO_RX0,         "XTM",   "Tari"},
+  //{COIN_COUNT 16 
+};
+
 class MiningProfile {
   public:
-    MiningProfile() {};
+    MiningProfile() {
+      coin = unknownCoin;
+    };
     ~MiningProfile() {
       //printf("Goodbye, miner\n");
       //fflush(stdout);
@@ -170,27 +199,6 @@ class MiningProfile {
       }
       printf("%s %s %s\n", this->transportLayer.c_str(), this->host.c_str(), this->port.c_str());
     }
-};
-
-const Coin unknownCoin = {COIN_UNKNOWN, ALGO_UNSUPPORTED, "unknown", "unknown"};
-const Coin coins[COIN_COUNT] = {
-  // Coin         Aglo              Symbol   Name
-  {COIN_DERO,     ALGO_ASTROBWTV3,  "DERO",  "Dero"},
-  {COIN_XELIS,    ALGO_XELISV2,     "XEL",   "Xelis"},
-  {COIN_SPECTRE,  ALGO_SPECTRE_X,   "SPR",   "Spectre"},
-  {COIN_RX0,      ALGO_RX0,         "RX0",   "RandomX"},
-  {COIN_XMR,      ALGO_RX0,         "XMR",   "Monero"},
-  {COIN_SAL,      ALGO_RX0,         "SAL",   "Salvium"},
-  {COIN_ZEPH,     ALGO_RX0,         "ZEPH",  "Zephyr"},
-  {COIN_VERUS,    ALGO_VERUS,       "VRSC",  "Verus"},
-  {COIN_AIX,      ALGO_ASTRIX_HASH, "AIX",   "Astrix"},
-  {COIN_NXL,      ALGO_NXL_HASH,    "NXL",   "Nexellia"},
-  {COIN_HTN,      ALGO_HOOHASH,     "HTN",   "Hoosat"},
-  {COIN_WALA,     ALGO_WALA_HASH,   "WALA",  "Waglayla"},
-  {COIN_SHAI,     ALGO_SHAI_HIVE,   "SHAI",  "Shai"},
-  {COIN_YESPOWER, ALGO_YESPOWER, "YESPOWER", "Yespower (Generic)"},
-  {COIN_ADVC, ALGO_YESPOWER, "ADVC", "AdventureCoin"},
-  //{COIN_COUNT 15 
 };
 
 extern MiningProfile miningProfile;

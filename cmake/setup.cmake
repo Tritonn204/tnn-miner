@@ -9,6 +9,7 @@ function(setup_target_libraries target_name)
       target_link_libraries(${target_name} mingw32)
     endif()
     target_link_libraries(${target_name} wsock32 ws2_32 kernel32)
+    target_link_winring0(${target_name})
   endif()
 
   # Link libraries for non-Apple, non-Windows systems (likely Linux)

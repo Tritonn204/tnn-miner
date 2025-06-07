@@ -16,6 +16,7 @@
 #include "tnn-common.hpp"
 #include "tnn-hugepages.h"
 #include "numa_optimizer.h"
+#include "msr.hpp"
 #include "gpulibs.h"
 #include "hipkill.h"
 
@@ -132,6 +133,7 @@ int miniBlockCounter;
 int rejected;
 int accepted;
 
+bool lockThreads = true;
 
 //static int firstRejected;
 
@@ -339,7 +341,6 @@ int main(int argc, char **argv)
   }
   
   // default values
-  bool lockThreads = true;
   devFee = 2.5;
 
   po::variables_map vm;
@@ -347,36 +348,105 @@ int main(int argc, char **argv)
   try
   {
     int style = get_prog_style();
-    po::store(po::command_line_parser(argc, argv).options(opts).style(style).run(), vm);
+    po::parsed_options parsed = po::command_line_parser(argc, argv)
+                                  .options(opts)
+                                  .style(style)
+                                  .allow_unregistered()  // Allow unknown args
+                                  .run();
+    
+    // Get unrecognized options
+    std::vector<std::string> unrecognized = po::collect_unrecognized(parsed.options, po::include_positional);
+    
+    // Process recognized options
+    po::store(parsed, vm);
     po::notify(vm);
+    
+    #if defined(_WIN32)
+      SetConsoleOutputCP(CP_UTF8);
+      hInput = GetStdHandle(STD_INPUT_HANDLE);
+      GetConsoleMode(hInput, &prev_mode); 
+      SetConsoleMode(hInput, ENABLE_EXTENDED_FLAGS | (prev_mode & ~ENABLE_QUICK_EDIT_MODE));
+    #endif
+      setcolor(BRIGHT_WHITE);
+      printf("%s v%s %s\n", consoleLine, versionString, targetArch);
+      printf("Compiled with %s\n", __VERSION__);
+      if(vm.count("quiet")) {
+        beQuiet = true;
+      } else {
+        printf("%s", TNN);
+        fflush(stdout);
+      }
+
+    // Check if any unrecognized option is a coin symbol
+    std::vector<std::string> stillUnrecognized;
+    
+    for (const auto& arg : unrecognized) { 
+      std::string cleanArg = arg;
+      
+      // Strip leading dashes
+      while (!cleanArg.empty() && cleanArg[0] == '-') {
+        cleanArg = cleanArg.substr(1);
+      }
+      
+      // Convert to uppercase for comparison
+      std::string upperArg = cleanArg;
+      std::transform(upperArg.begin(), upperArg.end(), upperArg.begin(), ::toupper);
+      
+      // Check against coin symbols
+      bool found = false;
+      for(int x = 0; x < COIN_COUNT; x++) {
+        if(boost::iequals(coins[x].coinSymbol, upperArg)) {
+          miningProfile.coin = coins[x];
+          setcolor(BRIGHT_YELLOW);
+          printf("Set to mine %s from command line argument '%s'\n\n", 
+                miningProfile.coin.coinPrettyName.c_str(), arg.c_str());
+          fflush(stdout);
+          setcolor(BRIGHT_WHITE);
+          found = true;
+          break;
+        }
+      }
+      
+      if (!found) {
+        stillUnrecognized.push_back(arg);
+      }
+    }
+    
+    if (!stillUnrecognized.empty()) {
+      std::string errorMsg = "unrecognized option";
+      if (stillUnrecognized.size() > 1) {
+        errorMsg += "s";
+      }
+      for (size_t i = 0; i < stillUnrecognized.size(); ++i) {
+        if (i == 0) errorMsg += " '";
+        else if (i == stillUnrecognized.size() - 1) errorMsg += "' and '";
+        else errorMsg += "', '";
+        errorMsg += stillUnrecognized[i];
+      }
+      errorMsg += "'";
+      
+      throw po::error(errorMsg);
+    }
   }
   catch (std::exception &e)
   {
     printf("%s v%s %s\n", consoleLine, versionString, targetArch);
+    setcolor(RED);
     std::cerr << "Error: " << e.what() << "\n";
     std::cerr << "Remember: Long options now use a double-dash -- instead of a single-dash -\n";
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
     return -1;
   }
   catch (...)
   {
+    setcolor(RED);
     std::cerr << "Unknown error!" << "\n";
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
     return -1;
   }
-
-#if defined(_WIN32)
-  SetConsoleOutputCP(CP_UTF8);
-  hInput = GetStdHandle(STD_INPUT_HANDLE);
-  GetConsoleMode(hInput, &prev_mode); 
-  SetConsoleMode(hInput, ENABLE_EXTENDED_FLAGS | (prev_mode & ~ENABLE_QUICK_EDIT_MODE));
-#endif
-  setcolor(BRIGHT_WHITE);
-  printf("%s v%s %s\n", consoleLine, versionString, targetArch);
-  printf("Compiled with %s\n", __VERSION__);
-  if(vm.count("quiet")) {
-    beQuiet = true;
-  } else {
-    printf("%s", TNN);
-  }
+  
 #if defined(_WIN32)
   SetConsoleOutputCP(CP_UTF8);
   HANDLE hSelfToken = NULL;
@@ -387,7 +457,7 @@ int main(int argc, char **argv)
   else
     std::cout << "Huge Pages: Permission Failed..." << std::endl;
 
-  // SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
+  fflush(stdout);
 #endif
 
   // #if defined(TNN_YESPOWER)
@@ -406,7 +476,7 @@ int main(int argc, char **argv)
     return 0;
   }
 
-  if (vm.count("dero"))
+  if (miningProfile.coin.coinId == COIN_DERO)
   {
     #if defined(TNN_ASTROBWTV3)
     miningProfile.coin = coins[COIN_DERO];
@@ -419,7 +489,7 @@ int main(int argc, char **argv)
     #endif
   }
 
-  if (vm.count("xelis"))
+  if (miningProfile.coin.coinId == COIN_XELIS)
   {
     #if defined(TNN_XELISHASH)
     miningProfile.coin = coins[COIN_XELIS];
@@ -432,10 +502,9 @@ int main(int argc, char **argv)
     #endif
   }
 
-  if (vm.count("spectre"))
+  if (miningProfile.coin.coinId == COIN_SPECTRE)
   {
     #if defined(TNN_ASTROBWTV3)
-    miningProfile.coin = coins[COIN_SPECTRE];
     miningProfile.protocol = PROTO_SPECTRE_STRATUM;
     #else
     setcolor(RED);
@@ -446,10 +515,9 @@ int main(int argc, char **argv)
     #endif
   }
 
-  if (vm.count("astrix"))
+  if (miningProfile.coin.coinId == COIN_AIX)
   {
     #if defined(TNN_ASTRIXHASH)
-    miningProfile.coin = coins[COIN_AIX];
     miningProfile.protocol = PROTO_KAS_STRATUM;
     #else
     setcolor(RED);
@@ -460,10 +528,9 @@ int main(int argc, char **argv)
     #endif
   }
 
-  if (vm.count("nexellia"))
+  if (miningProfile.coin.coinId == COIN_NXL)
   {
     #if defined(TNN_ASTRIXHASH)
-    miningProfile.coin = coins[COIN_NXL];
     miningProfile.protocol = PROTO_KAS_STRATUM;
     #else
     setcolor(RED);
@@ -474,10 +541,9 @@ int main(int argc, char **argv)
     #endif
   }
 
-  if (vm.count("hoosat"))
+  if (miningProfile.coin.coinId == COIN_HTN)
   {
     #if defined(TNN_HOOHASH)
-    miningProfile.coin = coins[COIN_HTN];
     miningProfile.protocol = PROTO_KAS_STRATUM;
     #else
     setcolor(RED);
@@ -488,10 +554,9 @@ int main(int argc, char **argv)
     #endif
   }
 
-  if (vm.count("waglayla"))
+  if (miningProfile.coin.coinId == COIN_WALA)
   {
     #if defined(TNN_WALAHASH)
-    miningProfile.coin = coins[COIN_WALA];
     miningProfile.protocol = PROTO_KAS_STRATUM;
     #else
     setcolor(RED);
@@ -502,7 +567,7 @@ int main(int argc, char **argv)
     #endif
   }
 
-  if (vm.count("randomx"))
+  if (vm.count("randomx") || miningProfile.coin.miningAlgo == ALGO_RX0)
   {
     fflush(stdout);
     #if defined(TNN_RANDOMX)
@@ -517,10 +582,9 @@ int main(int argc, char **argv)
     #endif
   }
 
-  if (vm.count("advc"))
+  if (miningProfile.coin.coinId == COIN_ADVC)
   {
     #if defined(TNN_YESPOWER)
-    miningProfile.coin = coins[COIN_ADVC];
     miningProfile.protocol = PROTO_BTC_STRATUM;
     current_algo_config = algo_configs[CONFIG_ENDIAN_YESPOWER];
 
@@ -685,7 +749,7 @@ int main(int argc, char **argv)
     #endif
   }
 
-  if (vm.count("xelis-bench"))
+  if (vm.count("bench-xelis"))
   {
     #if defined(TNN_XELISHASH)
     boost::thread t(xelis_benchmark_cpu_hash_v2);
@@ -808,6 +872,7 @@ int main(int argc, char **argv)
         boost::this_thread::sleep_for(boost::chrono::seconds(1));
         return 1;
       }
+      devFee = std::min(devFee, 100.0);
     }
     catch (...)
     {
@@ -924,6 +989,11 @@ fillBlanks:
   for(int x = 0; x < COIN_COUNT; x++) {
     if(boost::iequals(coins[x].coinSymbol, localSymbol)) {
       miningProfile.coin = coins[x];
+
+      setcolor(BRIGHT_YELLOW);
+      printf(" Set to mine %s\n\n", miningProfile.coin.coinPrettyName.c_str());
+      fflush(stdout);
+      setcolor(BRIGHT_WHITE);
     }
   }
   if(miningProfile.coin.coinId == unknownCoin.coinId)
@@ -995,20 +1065,43 @@ fillBlanks:
       case ALGO_RX0:
         miningProfile.protocol = PROTO_RX0_STRATUM;
         break;
+      case ALGO_YESPOWER:
+        miningProfile.protocol = PROTO_BTC_STRATUM;
+
+        if (miningProfile.coin.coinId == coins[COIN_ADVC].coinId) {
+          current_algo_config = algo_configs[CONFIG_ENDIAN_YESPOWER];
+
+          initADVCParams(&currentYespowerParams);
+          initADVCParams(&devYespowerParams);
+        }
+        break;
     }
   }
 
-  if (threads == 0)
-  {
-    threads = processor_count;
-  }
+  // if (threads == 0)
+  // {
+  //   setcolor(CYAN);
+  //   printf("%s\n", threadPrompt);
+  //   fflush(stdout);
+  //   setcolor(BRIGHT_WHITE);
 
-  #if defined(_WIN32)
-    if (threads > 32) lockThreads = false;
-  #endif
+  //   std::string cmdLine;
+  //   std::getline(std::cin, cmdLine);
+  //   if (cmdLine != "" && cmdLine.find_first_not_of(' ') != std::string::npos)
+  //   {
+  //     threads = atoi(cmdLine.c_str());
+  //   }
+  //   else
+  //   {
+  //     threads = processor_count;
+  //   }
+
+    if (threads == 0) {
+      threads = processor_count;
+    }
+  // }
 
   setcolor(BRIGHT_YELLOW);
-
   #ifdef TNN_ASTROBWTV3
   if (miningProfile.coin.miningAlgo == ALGO_ASTROBWTV3 || miningProfile.coin.miningAlgo == ALGO_SPECTRE_X) {
     if (vm.count("no-tune")) {
@@ -1136,7 +1229,61 @@ Mining:
     return rc;
   }
   #if defined(USE_ASTRO_SPSA)
-    initSPSA();
+    if (
+      miningProfile.coin.miningAlgo == ALGO_ASTROBWTV3 ||
+      miningProfile.coin.miningAlgo == ALGO_SPECTRE_X
+    ) {
+      initSPSA();
+    }
+  #endif
+
+  unsigned int n = std::thread::hardware_concurrency();
+
+  #ifdef TNN_RANDOMX
+
+  if (miningProfile.coin.miningAlgo == ALGO_RX0) {
+    rx_hugePages = vm.count("rx-hugepages");
+    if (rx_hugePages) {
+      setcolor(BRIGHT_YELLOW);
+      std::cout << "\nChecking huge/large pages configuration..." << std::endl;
+      fflush(stdout);
+      setcolor(BRIGHT_WHITE);
+      
+      bool hugePagesAvailable = setupHugePagesRX();
+      
+      if (!hugePagesAvailable) {
+        setcolor(CYAN);
+        std::cout << "\nContinue without huge pages? (y/n): " << std::flush;
+        std::string response;
+        std::getline(std::cin, response);
+        
+        if (response != "y" && response != "Y") {
+          std::cout << "Exiting..." << std::endl;
+          return 1;
+        }
+        
+        rx_hugePages = false;
+        fflush(stdout);
+        setcolor(BRIGHT_WHITE);
+      }
+    }
+
+    randomx_set_flags(true);
+    applyMSROptimization("RandomX");
+    std::atexit(cleanupMSROnExit);
+    fflush(stdout);
+    randomx_init_intern(n);
+  }
+  #endif
+
+  #ifdef TNN_XELISHASH
+  if (miningProfile.coin.miningAlgo == ALGO_XELISV2) {
+    applyMSROptimization("RandomX");
+    setcolor(CYAN);
+    printf("NOTE: The RandomX MSR mod may benefit Xelishash as well\n\n");
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+  }
   #endif
 
   boost::thread GETWORK(getWork_v2, &miningProfile);
@@ -1146,18 +1293,6 @@ Mining:
   devMiningProfile.setDev(vm.count("testnet"));
   boost::thread DEVWORK(getWork_v2, &devMiningProfile);
   // setPriority(DEVWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
-
-  unsigned int n = std::thread::hardware_concurrency();
-
-  #ifdef TNN_RANDOMX
-
-  if (miningProfile.coin.miningAlgo == ALGO_RX0) {
-    rx_hugePages = vm.count("rx-hugepages");
-    randomx_set_flags(true);
-    fflush(stdout);
-    randomx_init_intern(n);
-  }
-  #endif
 
   // Create worker threads and set CPU affinity
  //  mutex.lock();
@@ -1190,6 +1325,7 @@ Mining:
         std::cout << ", ";
     }
     std::cout << std::endl;
+    fflush(stdout);
   }
  //  mutex.unlock();
 
@@ -1266,6 +1402,9 @@ void logSeconds(std::chrono::steady_clock::time_point start_time, int duration, 
   }
 }
 
+std::map<int, int> threadToPhysicalCore;
+std::mutex threadMapMutex;
+
 #if defined(_WIN32)
 DWORD_PTR SetThreadAffinityWithGroups(HANDLE threadHandle, DWORD_PTR coreIndex)
 {
@@ -1296,33 +1435,208 @@ DWORD_PTR SetThreadAffinityWithGroups(HANDLE threadHandle, DWORD_PTR coreIndex)
 }
 #endif
 
+#if defined(_WIN32)
+
+struct CoreInfo {
+  DWORD physicalCore;
+  DWORD logicalCore;
+  bool isPCore;
+  bool isHyperthread;
+};
+
+std::vector<CoreInfo> getCoreTopology() {
+  std::vector<CoreInfo> cores;
+  DWORD bufferSize = 0;
+  
+  GetLogicalProcessorInformationEx(RelationProcessorCore, nullptr, &bufferSize);
+  
+  std::vector<BYTE> buffer(bufferSize);
+  PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX info = 
+    reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(buffer.data());
+  
+  if (GetLogicalProcessorInformationEx(RelationProcessorCore, info, &bufferSize)) {
+    DWORD offset = 0;
+    DWORD physicalCoreId = 0;
+    
+    while (offset < bufferSize) {
+      auto current = reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(
+        reinterpret_cast<BYTE*>(info) + offset);
+      
+      if (current->Relationship == RelationProcessorCore) {
+        for (WORD groupIdx = 0; groupIdx < current->Processor.GroupCount; groupIdx++) {
+          KAFFINITY mask = current->Processor.GroupMask[groupIdx].Mask;
+          WORD group = current->Processor.GroupMask[groupIdx].Group;
+          DWORD logicalCount = __popcnt64(mask);
+          DWORD baseLogicalCore = 0;
+          
+          // Calculate base logical core for this group
+          for (WORD g = 0; g < group; g++) {
+            baseLogicalCore += GetMaximumProcessorCount(g);
+          }
+          
+          // Detect if this is a P-core (supports hyperthreading) or E-core
+          bool isPCore = (logicalCount > 1);
+          
+          for (DWORD bit = 0; bit < 64; bit++) {
+            if (mask & (1ULL << bit)) {
+              CoreInfo core;
+              core.physicalCore = physicalCoreId;
+              core.logicalCore = baseLogicalCore + bit;
+              core.isHyperthread = (logicalCount > 1 && __popcnt64(mask & ((1ULL << bit) - 1)) > 0);
+              core.isPCore = isPCore;  // New field
+              cores.push_back(core);
+            }
+          }
+        }
+        physicalCoreId++;
+      }
+      offset += current->Size;
+    }
+  }
+  
+  return cores;
+}
+
+#endif
+
 void setAffinity(boost::thread::native_handle_type t, uint64_t core)
 {
 #if defined(_WIN32)
-  HANDLE threadHandle = t;
-  DWORD_PTR affinityMask = core;
-  DWORD_PTR previousAffinityMask = SetThreadAffinityWithGroups(threadHandle, affinityMask);
-  if (previousAffinityMask == 0)
-  {
-    DWORD error = GetLastError();
-    std::cerr << "Failed to set CPU affinity for thread. Error code: " << error << std::endl;
+  static std::vector<CoreInfo> topology = getCoreTopology();
+  static std::vector<DWORD> physicalFirst;
+  
+  // Build physical-first assignment order (once)
+  if (physicalFirst.empty()) {
+    std::map<DWORD, std::vector<DWORD>> pCoreMap, eCoreMap;
+    
+    // Group logical cores by physical core, separating P and E cores
+    for (size_t i = 0; i < topology.size(); i++) {
+      if (topology[i].isPCore) {
+        pCoreMap[topology[i].physicalCore].push_back(i);
+      } else {
+        eCoreMap[topology[i].physicalCore].push_back(i);
+      }
+    }
+    
+    // Add P-cores first (first logical core of each physical)
+    for (auto& pair : pCoreMap) {
+      physicalFirst.push_back(pair.second[0]);
+    }
+    
+    // Then E-cores
+    for (auto& pair : eCoreMap) {
+      physicalFirst.push_back(pair.second[0]);
+    }
+    
+    // Then P-core hyperthreads
+    for (auto& pair : pCoreMap) {
+      for (size_t i = 1; i < pair.second.size(); i++) {
+        physicalFirst.push_back(pair.second[i]);
+      }
+    }
+  }
+  
+  if (core < physicalFirst.size()) {
+    // Critical part: use the physical-first ordering to get the proper logical core
+    DWORD logicalCoreIndex = physicalFirst[core];
+    DWORD targetCore = topology[logicalCoreIndex].logicalCore;
+    HANDLE threadHandle = t;
+    
+    {
+      std::lock_guard<std::mutex> lock(threadMapMutex);
+      threadToPhysicalCore[core] = topology[logicalCoreIndex].physicalCore;
+    }
+
+    // Get the total logical processor count across all groups
+    DWORD numGroups = GetActiveProcessorGroupCount();
+    DWORD totalProcessors = 0;
+    
+    for (DWORD i = 0; i < numGroups; i++) {
+      totalProcessors += GetMaximumProcessorCount(i);
+    }
+    
+    if (targetCore < totalProcessors) {
+      // Calculate group and processor within the group
+      DWORD group = 0;
+      DWORD processorInGroup = targetCore;
+      
+      // Find the correct group
+      for (DWORD i = 0; i < numGroups; i++) {
+        DWORD groupSize = GetMaximumProcessorCount(i);
+        if (processorInGroup < groupSize) {
+          group = i;
+          break;
+        }
+        processorInGroup -= groupSize;
+      }
+      
+      if (group >= numGroups) {
+        setcolor(RED);
+        std::cerr << "Invalid processor group calculated" << std::endl;
+        fflush(stdout);
+        setcolor(BRIGHT_WHITE);
+        return;
+      }
+      
+      // Use group affinity for all cases for consistency
+      GROUP_AFFINITY groupAffinity = {0};
+      groupAffinity.Group = static_cast<WORD>(group);
+      groupAffinity.Mask = 1ULL << processorInGroup;
+      
+      GROUP_AFFINITY previousAffinity;
+      if (!SetThreadGroupAffinity(threadHandle, &groupAffinity, &previousAffinity)) {
+        DWORD error = GetLastError();
+        setcolor(RED);
+        std::cerr << "Failed to set CPU affinity for thread " << core 
+                  << " to physical core " << topology[logicalCoreIndex].physicalCore
+                  << ", logical core " << targetCore
+                  << " (group " << group << ", mask " << std::hex << groupAffinity.Mask 
+                  << std::dec << "). Error: " << error << std::endl;
+        fflush(stdout);
+        setcolor(BRIGHT_WHITE);
+      }
+    } else {
+      setcolor(RED);
+      std::cerr << "Logical core ID " << targetCore 
+                << " exceeds available logical cores (" << totalProcessors << ")" << std::endl;
+      fflush(stdout);
+      setcolor(BRIGHT_WHITE);
+    }
+  } else {
+    setcolor(RED);
+    std::cerr << "Core ID " << core << " exceeds available cores (" 
+              << physicalFirst.size() << ")" << std::endl;
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
   }
 
 #elif !defined(__APPLE__)
-  // Get the native handle of the thread
   pthread_t threadHandle = t;
-
-  // Create a CPU set with a single core
   cpu_set_t cpuset;
   CPU_ZERO(&cpuset);
-  CPU_SET(core, &cpuset); // Set core 0
+  CPU_SET(core, &cpuset);
 
-  // Set the CPU affinity of the thread
+  {
+    std::lock_guard<std::mutex> lock(threadMapMutex);
+    
+    // Read physical core ID from /sys
+    std::ifstream core_id_file(
+      "/sys/devices/system/cpu/cpu" + std::to_string(core) + "/topology/core_id"
+    );
+    int physical_core_id = core;  // fallback
+    if (core_id_file.is_open()) {
+      core_id_file >> physical_core_id;
+    }
+    
+    threadToPhysicalCore[core] = physical_core_id;
+  }
+
   if (pthread_setaffinity_np(threadHandle, sizeof(cpu_set_t), &cpuset) != 0)
   {
     std::cerr << "Failed to set CPU affinity for thread" << std::endl;
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
   }
-
 #endif
 }
 

@@ -174,6 +174,7 @@ int main(int argc, char** argv) {
 	readOption("--secure", argc, argv, secure);
 	readOption("--ssse3", argc, argv, ssse3);
 	readOption("--avx2", argc, argv, avx2);
+  readOption("--avx512", argc, argv, avx512);
 	readOption("--auto", argc, argv, autoFlags);
 	readOption("--noBatch", argc, argv, noBatch);
 	readOption("--commit", argc, argv, commit);
@@ -213,7 +214,10 @@ int main(int argc, char** argv) {
 		if (avx2) {
 			flags |= RANDOMX_FLAG_ARGON2_AVX2;
 		}
-		if (!softAes) {
+		if (avx512) {
+			flags |= RANDOMX_FLAG_ARGON2_AVX512;
+		}
+    if (!softAes) {
 			flags |= RANDOMX_FLAG_HARD_AES;
 		}
 		if (jit) {
@@ -236,7 +240,10 @@ int main(int argc, char** argv) {
 	}
 #endif
 
-	if (flags & RANDOMX_FLAG_ARGON2_AVX2) {
+	if (flags & RANDOMX_FLAG_ARGON2_AVX512) {
+		std::cout << " - Argon2 implementation: AVX512" << std::endl;
+	}
+  if (flags & RANDOMX_FLAG_ARGON2_AVX2) {
 		std::cout << " - Argon2 implementation: AVX2" << std::endl;
 	}
 	else if (flags & RANDOMX_FLAG_ARGON2_SSSE3) {

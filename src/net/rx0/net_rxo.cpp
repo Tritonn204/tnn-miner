@@ -19,6 +19,7 @@
 
 #include "rx0_jobCache.hpp"
 #include <randomx/randomx.h>
+#include "numa_optimizer.h"
 
 namespace beast = boost::beast;         // from <boost/beast.hpp>
 namespace http = beast::http;           // from <boost/beast/http.hpp>
@@ -34,44 +35,72 @@ static const char *jsonType = "application/json";
 
 Num maxTarget = Num(2).pow(256);
 
-void updateVM(boost::json::object &newJob, bool isDev) {
-  std::string &refKey = isDev ? randomx_cacheKey_dev : randomx_cacheKey;
+std::atomic<bool> sharedDatasetMode{true};
+std::atomic<bool> inUpdate{false};
+std::string currentDatasetSeedHash = "";
+std::mutex datasetMutex;
 
-  if (std::string(newJob.at("seed_hash").as_string().c_str()).compare(refKey) != 0) {
+
+void updateDataset(randomx_cache* cache, std::string seedHash, bool isDev) {
+    // printf("\n%sUpdating RandomX dataset for %s mode...\n", 
+    //        isDev ? "DEV | " : "", isDev ? "dev" : "user");
+    // fflush(stdout);
+    
+    unsigned char *seed = (unsigned char *)malloc(32);
+    hexstrToBytes(seedHash.c_str(), seed);
+    
+    // Do the actual update
+    randomx_update_data(cache, rxDataset, seed, 32, std::thread::hardware_concurrency(), isDev);
+    
+    free(seed);
+    
+    // Update tracking
+    {
+        currentDatasetSeedHash = seedHash;
+    }
+    
+    // printf("\n%sRandomX dataset updated successfully for %s mode\n", 
+    //        isDev ? "DEV | " : "", isDev ? "dev" : "user");
+    // fflush(stdout);
+}
+
+void updateVM(boost::json::object &newJob, bool isDev) {
+    std::string newSeedHash = newJob.at("seed_hash").as_string().c_str();
+    
+    // Get references to relevant variables based on isDev
+    randomx_cache* &targetCache = isDev ? rxCache_dev : rxCache;
+    std::string &targetCacheKey = isDev ? randomx_cacheKey_dev : randomx_cacheKey;
+    std::atomic<bool> &targetReady = isDev ? randomx_ready_dev : randomx_ready;
+    std::atomic<bool> &altReady = (!isDev) ? randomx_ready_dev : randomx_ready;
+    
+    if (newSeedHash == targetCacheKey) {
+        fflush(stdout);
+        return;
+    }
+    
     setcolor(isDev ? CYAN : BRIGHT_YELLOW);
     printf("\n");
     if (isDev) printf("DEV | ");
     printf("Reinitializing RandomX cache...\n");
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
-    randomx_cache *refCache = isDev ? rxCache_dev : rxCache;
-    randomx_dataset *refDataset = isDev ? rxDataset_dev : rxDataset;
-
-    bool &status = isDev ? randomx_ready_dev : randomx_ready;
-    status = false;
-
+    
+    // Initialize the cache only (quick operation)
     unsigned char *newSeed = (unsigned char *)malloc(32);
-    hexstrToBytes(newJob.at("seed_hash").as_string().c_str(), newSeed);
-
-    // printf("%s | seedHash\n%s | seedBuffer\n", newJob.at("seed_hash").as_string().c_str(), hexStr(newSeed, 32).c_str());
-
-    randomx_update_data(refCache, refDataset, newSeed, 32, std::thread::hardware_concurrency());
-
-    delete[] newSeed;
-
-    refKey = newJob.at("seed_hash").as_string().c_str();
-
+    hexstrToBytes(newSeedHash.c_str(), newSeed);
+    randomx_init_cache(targetCache, newSeed, 32);
+    free(newSeed);
+    
+    // Update cache key and check if dataset needs update
+    targetCacheKey = newSeedHash;
+    
     setcolor(isDev ? CYAN : BRIGHT_YELLOW);
     printf("\n");
     if (isDev) printf("DEV | ");
     printf("RandomX cache updated successfully\n");
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
-
-    status = true;
-  }
 }
-
 
 void rx0_session(
     std::string sessionHost,
@@ -239,6 +268,32 @@ void rx0_session(
     submitThread = false;
   });
 
+  boost::thread cacheThread([&]() {
+      while(!abort) {
+          boost::unique_lock<boost::mutex> lock(mutex);
+          
+          // Wait for dataset update signal OR abort
+          cv.wait(lock, [&]{ 
+              return needsDatasetUpdate.load() || abort; 
+          });
+          
+          if (abort) break;
+          
+          if (globalInDevBatch.load() == isDev) {
+            try {
+              needsDatasetUpdate.exchange(false);
+              checkAndUpdateDatasetIfNeeded(isDev);
+            } catch (const std::exception &e) {
+              setcolor(RED);
+              printf("\nDataset update error: %s\n", e.what());
+              fflush(stdout);
+              setcolor(BRIGHT_WHITE);
+            }
+          }
+          
+          boost::this_thread::yield();
+      }
+  });
 
   while(!ABORT_MINER)
   {
@@ -290,4 +345,7 @@ void rx0_session(
 
   subThread.interrupt();
   subThread.join();
+
+  cacheThread.interrupt();
+  cacheThread.join();
 }
