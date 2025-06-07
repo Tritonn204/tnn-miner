@@ -257,6 +257,8 @@ randomx_argon2_impl *randomx_argon2_impl_ssse3();
 randomx_argon2_impl *randomx_argon2_impl_avx2();
 randomx_argon2_impl *randomx_argon2_impl_avx512();
 
+void argon2_fmv_dispatch(const argon2_instance_t* instance, argon2_position_t position);
+
 #if defined(__cplusplus)
 }
 #endif
