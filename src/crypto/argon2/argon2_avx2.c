@@ -171,4 +171,40 @@ void randomx_argon2_fill_segment_avx2(const argon2_instance_t* instance,
 	}
 }
 
+void argon2_finalize_avx2(const argon2_instance_t* instance, uint8_t* out, size_t outlen) {
+	if (instance == NULL || out == NULL || outlen == 0 || outlen > ARGON2_BLOCK_SIZE) {
+		return;
+	}
+
+	__m256i blockhash[ARGON2_HWORDS_IN_BLOCK];
+	const uint32_t last_block_offset = instance->lane_length - 1;
+
+	// 1. Initialize blockhash with the last block of lane 0
+	memcpy(blockhash, instance->memory[last_block_offset].v, ARGON2_BLOCK_SIZE);
+
+	// 2. XOR in all other lane tail blocks
+	for (uint32_t l = 1; l < instance->lanes; ++l) {
+		const block* lane_block = instance->memory + l * instance->lane_length + last_block_offset;
+		for (uint32_t i = 0; i < ARGON2_HWORDS_IN_BLOCK; ++i) {
+			blockhash[i] = _mm256_xor_si256(blockhash[i], _mm256_loadu_si256((__m256i*)(lane_block->v + i * 4)));
+		}
+	}
+
+	// 3. Apply 12 rounds of BLAKE2 permutation
+	for (uint32_t r = 0; r < 6; ++r) {
+		for (uint32_t i = 0; i < 4; ++i) {
+			BLAKE2_ROUND_1(blockhash[8*i+0], blockhash[8*i+4], blockhash[8*i+1], blockhash[8*i+5],
+			               blockhash[8*i+2], blockhash[8*i+6], blockhash[8*i+3], blockhash[8*i+7]);
+		}
+		for (uint32_t i = 0; i < 4; ++i) {
+			BLAKE2_ROUND_2(blockhash[0+i], blockhash[4+i], blockhash[8+i], blockhash[12+i],
+			               blockhash[16+i], blockhash[20+i], blockhash[24+i], blockhash[28+i]);
+		}
+	}
+
+	// 4. Serialize the final block state to the output
+	uint8_t* hash_bytes = (uint8_t*)blockhash;
+	memcpy(out, hash_bytes, outlen);
+}
+
 #endif

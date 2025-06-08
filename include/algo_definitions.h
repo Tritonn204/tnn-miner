@@ -45,8 +45,9 @@
 #define COIN_YESPOWER 13 // for generic/manual configs
 #define COIN_ADVC 14
 #define COIN_TARI 15
+#define COIN_RIN 16
 
-#define COIN_COUNT 16
+#define COIN_COUNT 17
 
 // Corresponding to the ALGO_POW[] array in miners.hpp
 // Also used in coins[COIN_COUNT] from tnn-common.hpp
@@ -62,6 +63,7 @@
 #define ALGO_WALA_HASH 90
 #define ALGO_SHAI_HIVE 100
 #define ALGO_YESPOWER 110
+#define ALGO_RINHASH 120
 
 typedef enum {
   ENDIAN_LITTLE,
@@ -84,22 +86,9 @@ extern algo_config_t current_algo_config;
 #define CONFIG_ENDIAN_X11 2
 #define CONFIG_ENDIAN_YESPOWER 3
 
-static const int astroCoins[] = {
-  COIN_DERO,
-  COIN_SPECTRE
-};
-
-static const int rxCoins[] = {
-  COIN_RX0,
-  COIN_XMR,
-  COIN_SAL,
-  COIN_ZEPH,
-  COIN_TARI
-};
-
-static const int yespowerCoins[] = {
-  ALGO_YESPOWER,
-  COIN_ADVC
+static const int astroAlgos[] = {
+  ALGO_ASTROBWTV3,
+  ALGO_SPECTRE_X
 };
 
 inline bool isCoinOf(int coin, const int arr[]) {

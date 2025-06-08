@@ -9,6 +9,10 @@ void mineDero(int tid)
   std::random_device rd;
   std::mt19937 gen(rd());
   std::uniform_int_distribution<int> dist(0, 255);
+
+  thread_local std::mt19937 gen_local(rd());
+  thread_local std::uniform_real_distribution<double> dev_dist(0, 10000);
+
   std::array<int, 12> buf;
   std::generate(buf.begin(), buf.end(), [&dist, &gen]()
                 { return dist(gen); });
@@ -16,14 +20,13 @@ void mineDero(int tid)
 
   boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
 
-
   int64_t localJobCounter;
-  byte powHash[32];
+  thread_local byte powHash[32];
   // byte powHash2[32];
-  byte devWork[MINIBLOCK_SIZE*DERO_BATCH];
-  byte work[MINIBLOCK_SIZE*DERO_BATCH];
+  thread_local byte devWork[MINIBLOCK_SIZE*DERO_BATCH];
+  thread_local byte work[MINIBLOCK_SIZE*DERO_BATCH];
 
-  workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
+  thread_local workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
   initWorker(*worker);
   lookupGen(*worker, nullptr, nullptr);
 
@@ -96,7 +99,7 @@ waitForJob:
       while (localJobCounter == jobCounter)
       {
         CHECK_CLOSE;
-        which = (double)(rand() % 10000);
+        which = dev_dist(gen_local);
         devMine = (devConnected && which < devFee * 100.0);
         DIFF = devMine ? difficultyDev : difficulty;
 

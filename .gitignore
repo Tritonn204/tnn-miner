@@ -57,6 +57,8 @@ build/*
 
 # Misc
 **.txt
+
+!CMakeLists.txt
 # Blake3
 !/extern/BLAKE3/c/CMakeLists.txt
 # SPSA

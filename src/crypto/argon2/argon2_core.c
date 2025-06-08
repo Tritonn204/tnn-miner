@@ -69,6 +69,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define NOT_OPTIMIZED
 #endif
 
+#ifdef __x86_64__
+#include <immintrin.h>
+#include <emmintrin.h>
+#endif
+
 /***************Instance and Position constructors**********/
 
 static void load_block(block *dst, const void *input) {
@@ -409,3 +414,65 @@ int randomx_argon2_initialize(argon2_instance_t *instance, argon2_context *conte
 
 	return ARGON2_OK;
 }
+
+#ifdef __x86_64__
+__attribute__((target("default")))
+#endif
+void argon2_finalize(const argon2_instance_t* instance, uint8_t* digest_out) {
+    block final_block = instance->memory[instance->lane_length - 1];
+
+    for (uint32_t l = 1; l < instance->lanes; ++l) {
+        const block* b = &instance->memory[l * instance->lane_length + (instance->lane_length - 1)];
+        for (uint32_t i = 0; i < ARGON2_QWORDS_IN_BLOCK; ++i) {
+            final_block.v[i] ^= b->v[i];
+        }
+    }
+
+    blake2b(digest_out, 32, final_block.v, ARGON2_BLOCK_SIZE, NULL, 0);
+}
+
+#ifdef __x86_64__
+__attribute__((target("ssse3")))
+void argon2_finalize(const argon2_instance_t* instance, uint8_t* digest_out) {
+    __m128i* result = (__m128i*)instance->memory[instance->lane_length - 1].v;
+
+    for (uint32_t l = 1; l < instance->lanes; ++l) {
+        const __m128i* block = (const __m128i*)&instance->memory[l * instance->lane_length + (instance->lane_length - 1)].v;
+        for (uint32_t i = 0; i < ARGON2_OWORDS_IN_BLOCK; ++i) {
+            result[i] = _mm_xor_si128(result[i], block[i]);
+        }
+    }
+
+    blake2b(digest_out, 32, (uint8_t*)result, ARGON2_BLOCK_SIZE, NULL, 0);
+}
+
+#ifdef __AVX2__ // TODO use #ifndef TNN_LEGACY_AMD64
+__attribute__((target("avx2")))
+void argon2_finalize(const argon2_instance_t* instance, uint8_t* digest_out) {
+    __m256i* result = (__m256i*)instance->memory[instance->lane_length - 1].v;
+
+    for (uint32_t l = 1; l < instance->lanes; ++l) {
+        const __m256i* block = (const __m256i*)&instance->memory[l * instance->lane_length + (instance->lane_length - 1)].v;
+        for (uint32_t i = 0; i < ARGON2_HWORDS_IN_BLOCK; ++i) {
+            result[i] = _mm256_xor_si256(result[i], block[i]);
+        }
+    }
+
+    blake2b(digest_out, 32, (uint8_t*)result, ARGON2_BLOCK_SIZE, NULL, 0);
+}
+
+__attribute__((target("avx512f,avx512bw")))
+void argon2_finalize(const argon2_instance_t* instance, uint8_t* digest_out) {
+    __m512i* result = (__m512i*)instance->memory[instance->lane_length - 1].v;
+
+    for (uint32_t l = 1; l < instance->lanes; ++l) {
+        const __m512i* block = (const __m512i*)&instance->memory[l * instance->lane_length + (instance->lane_length - 1)].v;
+        for (uint32_t i = 0; i < ARGON2_512BIT_WORDS_IN_BLOCK; ++i) {
+            result[i] = _mm512_xor_si512(result[i], block[i]);
+        }
+    }
+
+    blake2b(digest_out, 32, (uint8_t*)result, ARGON2_BLOCK_SIZE, NULL, 0);
+}
+#endif
+#endif

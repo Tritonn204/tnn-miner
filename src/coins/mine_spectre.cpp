@@ -11,24 +11,28 @@ void mineSpectre(int tid)
   int64_t localOurHeight = 0;
   int64_t localDevHeight = 0;
 
-  byte powHash[32];
-  byte work[SpectreX::INPUT_SIZE] = {0};
-  byte devWork[SpectreX::INPUT_SIZE] = {0};
+  thread_local byte powHash[32];
+  thread_local byte work[SpectreX::INPUT_SIZE] = {0};
+  thread_local byte devWork[SpectreX::INPUT_SIZE] = {0};
 
-  byte diffBytes[32];
-  byte diffBytes_dev[32];
+  thread_local byte diffBytes[32];
+  thread_local byte diffBytes_dev[32];
 
-  workerData *astroWorker = (workerData *)malloc_huge_pages(sizeof(workerData));
-  SpectreX::worker *worker = (SpectreX::worker *)malloc_huge_pages(sizeof(SpectreX::worker));
+  thread_local workerData *astroWorker = (workerData *)malloc_huge_pages(sizeof(workerData));
+  thread_local SpectreX::worker *worker = (SpectreX::worker *)malloc_huge_pages(sizeof(SpectreX::worker));
   initWorker(*astroWorker);
   lookupGen(*astroWorker, nullptr, nullptr);
   worker->astroWorker = astroWorker;
 
-  workerData *devAstroWorker = (workerData *)malloc_huge_pages(sizeof(workerData));
-  SpectreX::worker *devWorker = (SpectreX::worker *)malloc_huge_pages(sizeof(SpectreX::worker));
+  thread_local workerData *devAstroWorker = (workerData *)malloc_huge_pages(sizeof(workerData));
+  thread_local SpectreX::worker *devWorker = (SpectreX::worker *)malloc_huge_pages(sizeof(SpectreX::worker));
   initWorker(*devAstroWorker);
   lookupGen(*devAstroWorker, nullptr, nullptr);
   devWorker->astroWorker = devAstroWorker;
+
+    thread_local std::random_device rd;
+    thread_local std::mt19937 rng(rd());
+  thread_local std::uniform_real_distribution<double> dist(0, 10000);
 
 waitForJob:
 
@@ -86,7 +90,7 @@ waitForJob:
       while (localJobCounter == jobCounter)
       {
         CHECK_CLOSE;
-        which = (double)(rand() % 10000);
+        which = dist(rng);
         devMine = (devConnected && devHeight > 0 && which < devFee * 100.0);
         DIFF = devMine ? doubleDiffDev : doubleDiff;
         if (DIFF == 0)

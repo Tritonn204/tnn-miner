@@ -13,9 +13,9 @@ if (WITH_RINHASH)
       src/net/btc/*.cpp
     )
     
-    # list(APPEND rinSources
-    #   src/coins/mine_rinhash.cpp
-    # )
+    list(APPEND rinSources
+      src/coins/mine_rinhash.cpp
+    )
 
     list(APPEND HEADERS_CRYPTO
       ${rinHeaders}

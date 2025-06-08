@@ -9,20 +9,24 @@ void mineHoosat(int tid)
   int64_t localOurHeight = 0;
   int64_t localDevHeight = 0;
 
-  byte powHash[32];
-  byte work[HooHash::INPUT_SIZE] = {0};
-  byte devWork[HooHash::INPUT_SIZE] = {0};
+  thread_local byte powHash[32];
+  thread_local byte work[HooHash::INPUT_SIZE] = {0};
+  thread_local byte devWork[HooHash::INPUT_SIZE] = {0};
 
-  std::string diffHex;
-  std::string diffHex_dev;
+  thread_local std::string diffHex;
+  thread_local std::string diffHex_dev;
 
-  byte diffBytes[32];
-  byte diffBytes_dev[32];
+  thread_local byte diffBytes[32];
+  thread_local byte diffBytes_dev[32];
 
-  HooHash::worker *worker = (HooHash::worker *)malloc(sizeof(HooHash::worker));
-  HooHash::worker *devWorker = (HooHash::worker *)malloc(sizeof(HooHash::worker));
+  thread_local HooHash::worker *worker = (HooHash::worker *)malloc(sizeof(HooHash::worker));
+  thread_local HooHash::worker *devWorker = (HooHash::worker *)malloc(sizeof(HooHash::worker));
 
   fflush(stdout);
+
+  thread_local std::random_device rd;
+  thread_local std::mt19937 rng(rd());
+  thread_local std::uniform_real_distribution<double> dist(0, 10000);
 
 waitForJob:
 
@@ -118,7 +122,7 @@ waitForJob:
       while (localJobCounter == jobCounter)
       {
         CHECK_CLOSE;
-        which = (double)(rand() % 10000);
+        which = dist(rng);
         devMine = (devConnected && devHeight > 0 && which < devFee * 100.0);
         DIFF = devMine ? doubleDiffDev : doubleDiff;
         if (DIFF == 0)

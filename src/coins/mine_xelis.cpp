@@ -14,11 +14,15 @@ void mineXelis_v1(int tid)
   uint64_t i_dev = 0;
 
   byte powHash[32];
-  alignas(64) byte work[XELIS_BYTES_ARRAY_INPUT] = {0};
-  alignas(64) byte devWork[XELIS_BYTES_ARRAY_INPUT] = {0};
-  alignas(64) byte FINALWORK[XELIS_BYTES_ARRAY_INPUT] = {0};
+  alignas(64) thread_local byte work[XELIS_BYTES_ARRAY_INPUT] = {0};
+  alignas(64) thread_local byte devWork[XELIS_BYTES_ARRAY_INPUT] = {0};
+  alignas(64) thread_local byte FINALWORK[XELIS_BYTES_ARRAY_INPUT] = {0};
 
-  alignas(64) workerData_xelis *worker = (workerData_xelis *)malloc_huge_pages(sizeof(workerData_xelis));
+  alignas(64) thread_local workerData_xelis *worker = (workerData_xelis *)malloc_huge_pages(sizeof(workerData_xelis));
+
+  thread_local std::random_device rd;
+  thread_local std::mt19937 rng(rd());
+  thread_local std::uniform_real_distribution<double> dist(0, 10000);
 
 waitForJob:
 
@@ -106,7 +110,7 @@ waitForJob:
       while (localJobCounter == jobCounter)
       {
         CHECK_CLOSE;
-        which = (double)(rand() % 10000);
+        which = dist(rng);
         devMine = (devConnected && devHeight > 0 && which < devFee * 100.0);
         DIFF = devMine ? difficultyDev : difficulty;
         if (DIFF == 0)
@@ -284,12 +288,16 @@ void mineXelis(int tid)
   uint64_t i = 0;
   uint64_t i_dev = 0;
 
-  byte powHash[32];
-  alignas(64) byte work[XELIS_TEMPLATE_SIZE] = {0};
-  alignas(64) byte devWork[XELIS_TEMPLATE_SIZE] = {0};
-  alignas(64) byte FINALWORK[XELIS_TEMPLATE_SIZE] = {0};
+  thread_local byte powHash[32];
+  alignas(64) thread_local byte work[XELIS_TEMPLATE_SIZE] = {0};
+  alignas(64) thread_local byte devWork[XELIS_TEMPLATE_SIZE] = {0};
+  alignas(64) thread_local byte FINALWORK[XELIS_TEMPLATE_SIZE] = {0};
 
-  alignas(64) workerData_xelis_v2 *worker = (workerData_xelis_v2 *)malloc_huge_pages(sizeof(workerData_xelis));
+  alignas(64) thread_local workerData_xelis_v2 *worker = (workerData_xelis_v2 *)malloc_huge_pages(sizeof(workerData_xelis));
+
+  thread_local std::random_device rd;
+  thread_local std::mt19937 rng(rd());
+  thread_local std::uniform_real_distribution<double> dist(0, 10000);
 
 waitForJob:
 
@@ -376,7 +384,7 @@ waitForJob:
 
       while (localJobCounter == jobCounter)
       {
-        which = (double)(rand() % 10000);
+        which = dist(rng);
         devMine = (devConnected && devHeight > 0 && which < devFee * 100.0);
         DIFF = devMine ? difficultyDev : difficulty;
         if (DIFF == 0)

@@ -16,33 +16,18 @@
 #include <randomx/randomx.h>
 #include <randomx/tests/randomx_test.h>
 
-// TODO: use a macro to generate these without so much duplicated code
+#define DEFINE_UNSUPPORTED_MSG(name, algo) \
+    const char* unsupported_##name = "This Binary was compiled without " algo " support... \n" \
+    "Please source a TNN Miner binary with " algo " support";
 
-const char* unsupported_astro = "This Binary was compiled without AstroBWTv3 support... \n"
-            "Please source a TNN Miner binary with AstroBWTv3 support";
-
-const char* unsupported_xelishash = "This Binary was compiled without XelisHash support... \n"
-            "Please source a TNN Miner binary with XelisHash support";
-
-const char* unsupported_randomx = "This Binary was compiled without RandomX support... \n"
-            "Please source a TNN Miner binary with RandomX support";
-
-// verus goes
-
-const char* unsupported_astrix = "This Binary was compiled without AstrixHash support... \n"
-"Please source a TNN Miner binary with AstrixHash support";
-
-const char* unsupported_nexellia = "This Binary was compiled without Nexell-AI support... \n"
-"Please source a TNN Miner binary with Nexell-AI support";
-
-const char* unsupported_hoohash = "This Binary was compiled without Hoohash support... \n"
-"Please source a TNN Miner binary with Hoohash support";
-
-const char* unsupported_waglayla = "This Binary was compiled without Waglayla support... \n"
-"Please source a TNN Miner binary with Waglayla support";
-
-const char* unsupported_shai = "This Binary was compiled without Shai support... \n"
-"Please source a TNN Miner binary with Shai support";
-
-const char* unsupported_yespower = "This Binary was compiled without YesPower support... \n"
-"Please source a TNN Miner binary with YesPower support";
+// Use it for each algo
+DEFINE_UNSUPPORTED_MSG(astro, "AstroBWTv3")
+DEFINE_UNSUPPORTED_MSG(xelishash, "XelisHash")
+DEFINE_UNSUPPORTED_MSG(randomx, "RandomX")
+DEFINE_UNSUPPORTED_MSG(astrix, "AstrixHash")
+DEFINE_UNSUPPORTED_MSG(nexellia, "Nexell-AI")
+DEFINE_UNSUPPORTED_MSG(hoohash, "Hoohash")
+DEFINE_UNSUPPORTED_MSG(waglayla, "Waglayla")
+DEFINE_UNSUPPORTED_MSG(shai, "Shai")
+DEFINE_UNSUPPORTED_MSG(yespower, "YesPower")
+DEFINE_UNSUPPORTED_MSG(rinhash, "RinHash")

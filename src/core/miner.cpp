@@ -635,6 +635,20 @@ int main(int argc, char **argv)
     #endif
   }
 
+  if (miningProfile.coin.coinId == COIN_RIN)
+  {
+    #if defined(TNN_RINHASH)
+    miningProfile.protocol = PROTO_BTC_STRATUM;
+    current_algo_config = algo_configs[CONFIG_ENDIAN_SHA256];
+    #else
+    setcolor(RED);
+    printf("%s", unsupported_rinhash);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
+  }
+
   miningProfile.protocol = vm.count("xatum") ? PROTO_XELIS_XATUM : miningProfile.protocol;
 
   miningProfile.useStratum |= vm.count("stratum");
