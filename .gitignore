@@ -59,6 +59,8 @@ build/*
 **.txt
 
 !CMakeLists.txt
+# Winring0
+!/lib/winring0/*.dll
 # Blake3
 !/extern/BLAKE3/c/CMakeLists.txt
 # SPSA
