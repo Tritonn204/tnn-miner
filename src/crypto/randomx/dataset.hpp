@@ -34,7 +34,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "common.hpp"
 #include "superscalar_program.hpp"
 #include "allocator.hpp"
-#include "argon2.h"
+#include "argon2/argon2.h"
 
 /* Global scope for C binding */
 struct randomx_dataset {

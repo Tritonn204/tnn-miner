@@ -309,5 +309,19 @@ inline void do_session_v2(
     }
     break;
   #endif
+  #ifdef TNN_RINHASH
+  case ALGO_RINHASH:
+    switch (miningProf->protocol)
+    {
+      case PROTO_BTC_STRATUM:
+        if(use_ssl) {
+          btc_stratum_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
+        } else {
+          btc_stratum_session_nossl(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
+        }
+        break;
+    }
+    break;
+  #endif
   }
 }

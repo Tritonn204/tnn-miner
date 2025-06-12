@@ -9,6 +9,10 @@
   #include <sys/ioctl.h>
 #endif
 
+#if defined(__WIN32)
+#include <Windows.h>
+#endif
+
 namespace po = boost::program_options;  // from <boost/program_options.hpp>
 
 // macro tricks so we can use a string to set TNN_VERSION

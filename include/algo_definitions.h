@@ -45,8 +45,9 @@
 #define COIN_YESPOWER 13 // for generic/manual configs
 #define COIN_ADVC 14
 #define COIN_TARI 15
+#define COIN_RIN 16
 
-#define COIN_COUNT 16
+#define COIN_COUNT 17
 
 // Corresponding to the ALGO_POW[] array in miners.hpp
 // Also used in coins[COIN_COUNT] from tnn-common.hpp
@@ -62,11 +63,42 @@
 #define ALGO_WALA_HASH 90
 #define ALGO_SHAI_HIVE 100
 #define ALGO_YESPOWER 110
+#define ALGO_RINHASH 120
+
+inline const char* algoName(int algo) {
+  switch(algo) {
+    case ALGO_ASTROBWTV3:
+      return "AstroBWTv3";
+    case ALGO_XELISV2:
+      return "XelisHashV2";
+    case ALGO_SPECTRE_X:
+      return "SpectreX";
+    case ALGO_RX0:
+      return "RandomX";
+    case ALGO_VERUS:
+      return "VerusHash";
+    case ALGO_ASTRIX_HASH:
+      return "AstrixHash";
+    case ALGO_NXL_HASH:
+      return "NxlHash";
+    case ALGO_HOOHASH:
+      return "HooHash";
+    case ALGO_SHAI_HIVE:
+      return "ShaiHive";
+    case ALGO_YESPOWER:
+      return "YesPower";
+    case ALGO_RINHASH:
+      return "RinHash";
+    default:
+      return "Unknown";
+  }
+}
 
 typedef enum {
   ENDIAN_LITTLE,
   ENDIAN_BIG,
   ENDIAN_SWAP_32,
+  ENDIAN_SWAP_32_BE,
   ENDIAN_MIXED
 } endian_mode_t;
 
@@ -84,22 +116,9 @@ extern algo_config_t current_algo_config;
 #define CONFIG_ENDIAN_X11 2
 #define CONFIG_ENDIAN_YESPOWER 3
 
-static const int astroCoins[] = {
-  COIN_DERO,
-  COIN_SPECTRE
-};
-
-static const int rxCoins[] = {
-  COIN_RX0,
-  COIN_XMR,
-  COIN_SAL,
-  COIN_ZEPH,
-  COIN_TARI
-};
-
-static const int yespowerCoins[] = {
-  ALGO_YESPOWER,
-  COIN_ADVC
+static const int astroAlgos[] = {
+  ALGO_ASTROBWTV3,
+  ALGO_SPECTRE_X
 };
 
 inline bool isCoinOf(int coin, const int arr[]) {
@@ -113,7 +132,7 @@ static const algo_config_t algo_configs[] = {
   // Bitcoin/SHA256
   { .header_endian = ENDIAN_SWAP_32, .swap_merkle_root = true, .swap_prev_hash = true, .nbits_index = 18 },
   // Scrypt  
-  { .header_endian = ENDIAN_SWAP_32, .swap_merkle_root = true, .swap_prev_hash = true, .nbits_index = 18 },
+  { .header_endian = ENDIAN_SWAP_32_BE, .swap_merkle_root = false, .swap_prev_hash = true, .nbits_index = 18 },
   // X11
   { .header_endian = ENDIAN_LITTLE, .swap_merkle_root = false, .swap_prev_hash = false, .nbits_index = 18 },
   // YESPOWER

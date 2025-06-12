@@ -238,10 +238,6 @@ typedef struct Argon2_position_t argon2_position_t;
 typedef void randomx_argon2_impl(const argon2_instance_t* instance,
 	argon2_position_t position);
 
-#if defined(__cplusplus)
-extern "C" {
-#endif
-
 /*
  * Function that fills the segment using previous segments also from other
  * threads
@@ -257,6 +253,12 @@ randomx_argon2_impl *randomx_argon2_impl_ssse3();
 randomx_argon2_impl *randomx_argon2_impl_avx2();
 randomx_argon2_impl *randomx_argon2_impl_avx512();
 
-#if defined(__cplusplus)
-}
-#endif
+void argon2_fill_segment_avx2(const argon2_instance_t* instance, argon2_position_t position);
+
+void argon2_finalize_ref(const argon2_instance_t* instance, uint8_t* out, size_t outlen);
+void argon2_finalize_ssse3(const argon2_instance_t* instance, uint8_t* out, size_t outlen);
+void argon2_finalize_avx2(const argon2_instance_t* instance, uint8_t* out, size_t outlen);
+void argon2_finalize_avx512(const argon2_instance_t* instance, uint8_t* out, size_t outlen);
+
+void argon2_slice_fmv(const argon2_instance_t* instance, argon2_position_t position);
+void argon2_finalize_fmv(const argon2_instance_t* instance, uint8_t* out, size_t outlen);

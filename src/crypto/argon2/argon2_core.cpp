@@ -69,6 +69,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define NOT_OPTIMIZED
 #endif
 
+#ifdef __x86_64__
+#include <immintrin.h>
+#include <emmintrin.h>
+#endif
+
 /***************Instance and Position constructors**********/
 
 static void load_block(block *dst, const void *input) {
@@ -382,6 +387,8 @@ void rxa2_initial_hash(uint8_t *blockhash, argon2_context *context, argon2_type 
 	blake2b_final(&BlakeHash, blockhash, ARGON2_PREHASH_DIGEST_LENGTH);
 }
 
+#include <inttypes.h>
+
 int randomx_argon2_initialize(argon2_instance_t *instance, argon2_context *context) {
 	uint8_t blockhash[ARGON2_PREHASH_SEED_LENGTH];
 	int result = ARGON2_OK;
@@ -398,6 +405,7 @@ int randomx_argon2_initialize(argon2_instance_t *instance, argon2_context *conte
 	/* uint8_t blockhash[ARGON2_PREHASH_SEED_LENGTH]; */
 	/* Hashing all inputs */
 	rxa2_initial_hash(blockhash, context, instance->type);
+
 	/* Zeroing 8 extra bytes */
 	/*rxa2_clear_internal_memory(blockhash + ARGON2_PREHASH_DIGEST_LENGTH,
 		ARGON2_PREHASH_SEED_LENGTH -
@@ -407,5 +415,31 @@ int randomx_argon2_initialize(argon2_instance_t *instance, argon2_context *conte
 	 */
 	rxa2_fill_first_blocks(blockhash, instance);
 
-	return ARGON2_OK;
+  return ARGON2_OK;
+}
+
+void fill_first_blocks(uint8_t *blockhash, const argon2_instance_t *instance) {
+    uint32_t l;
+    uint8_t blockhash_bytes[ARGON2_BLOCK_SIZE];
+
+    for (l = 0; l < instance->lanes; ++l) {
+        // G(H0 || 0 || l)
+        store32(blockhash + ARGON2_PREHASH_DIGEST_LENGTH, 0);
+        store32(blockhash + ARGON2_PREHASH_DIGEST_LENGTH + 4, l);
+        memset(blockhash + ARGON2_PREHASH_DIGEST_LENGTH + 8, 0,
+               ARGON2_PREHASH_SEED_LENGTH - ARGON2_PREHASH_DIGEST_LENGTH - 8);
+        blake2b_long(blockhash_bytes, ARGON2_BLOCK_SIZE, blockhash, ARGON2_PREHASH_SEED_LENGTH);
+        load_block(&instance->memory[l * instance->lane_length + 0], blockhash_bytes);
+
+        // G(H0 || 1 || l)
+        store32(blockhash + ARGON2_PREHASH_DIGEST_LENGTH, 1);
+        store32(blockhash + ARGON2_PREHASH_DIGEST_LENGTH + 4, l);
+        memset(blockhash + ARGON2_PREHASH_DIGEST_LENGTH + 8, 0,
+               ARGON2_PREHASH_SEED_LENGTH - ARGON2_PREHASH_DIGEST_LENGTH - 8);
+        blake2b_long(blockhash_bytes, ARGON2_BLOCK_SIZE, blockhash, ARGON2_PREHASH_SEED_LENGTH);
+        load_block(&instance->memory[l * instance->lane_length + 1], blockhash_bytes);
+    }
+
+    // Optionally clear temporary buffer
+    // clear_internal_memory(blockhash_bytes, sizeof(blockhash_bytes));
 }

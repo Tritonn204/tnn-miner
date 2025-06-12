@@ -13,7 +13,8 @@
 void mineYespower(int tid)
 {
     // Thread-local RNG (no global contention)
-    thread_local std::mt19937 rng(std::hash<std::thread::id>{}(std::this_thread::get_id()));
+    thread_local std::random_device rd;
+    thread_local std::mt19937 rng(rd());
     thread_local std::uniform_real_distribution<double> dist(0, 10000);
     
     int64_t localJobCounter;

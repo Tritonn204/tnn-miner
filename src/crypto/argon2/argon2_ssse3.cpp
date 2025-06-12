@@ -38,68 +38,76 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "argon2.h"
 
-void randomx_argon2_fill_segment_avx2(const argon2_instance_t* instance,
+#if defined(_MSC_VER) //MSVC doesn't define SSSE3
+#define __SSSE3__
+#endif
+
+void randomx_argon2_fill_segment_ssse3(const argon2_instance_t* instance,
 	argon2_position_t position);
 
-randomx_argon2_impl* randomx_argon2_impl_avx2() {
-#if defined(__AVX2__)
-	return &randomx_argon2_fill_segment_avx2;
+randomx_argon2_impl* randomx_argon2_impl_ssse3() {
+#if defined(__SSSE3__)
+	return &randomx_argon2_fill_segment_ssse3;
 #endif
 	return NULL;
 }
 
-#if defined(__AVX2__)
+#if defined(__SSSE3__)
+
+#include <tmmintrin.h> /* for _mm_shuffle_epi8 and _mm_alignr_epi8 */
 
 #include "argon2_core.h"
 
-#include "blake2/blamka-round-avx2.h"
+#include "blake2/blamka-round-ssse3.h"
 #include "blake2/blake2-impl.h"
 #include "blake2/blake2.h"
 
-static void fill_block(__m256i* state, const block* ref_block,
+static void fill_block(__m128i* state, const block* ref_block,
 	block* next_block, int with_xor) {
-	__m256i block_XY[ARGON2_HWORDS_IN_BLOCK];
+	__m128i block_XY[ARGON2_OWORDS_IN_BLOCK];
 	unsigned int i;
 
 	if (with_xor) {
-		for (i = 0; i < ARGON2_HWORDS_IN_BLOCK; i++) {
-			state[i] = _mm256_xor_si256(
-				state[i], _mm256_loadu_si256((const __m256i*)ref_block->v + i));
-			block_XY[i] = _mm256_xor_si256(
-				state[i], _mm256_loadu_si256((const __m256i*)next_block->v + i));
+		for (i = 0; i < ARGON2_OWORDS_IN_BLOCK; i++) {
+			state[i] = _mm_xor_si128(
+				state[i], _mm_loadu_si128((const __m128i*)ref_block->v + i));
+			block_XY[i] = _mm_xor_si128(
+				state[i], _mm_loadu_si128((const __m128i*)next_block->v + i));
 		}
 	}
 	else {
-		for (i = 0; i < ARGON2_HWORDS_IN_BLOCK; i++) {
-			block_XY[i] = state[i] = _mm256_xor_si256(
-				state[i], _mm256_loadu_si256((const __m256i*)ref_block->v + i));
+		for (i = 0; i < ARGON2_OWORDS_IN_BLOCK; i++) {
+			block_XY[i] = state[i] = _mm_xor_si128(
+				state[i], _mm_loadu_si128((const __m128i*)ref_block->v + i));
 		}
 	}
 
-	for (i = 0; i < 4; ++i) {
-		BLAKE2_ROUND_1(state[8 * i + 0], state[8 * i + 4], state[8 * i + 1], state[8 * i + 5],
-			state[8 * i + 2], state[8 * i + 6], state[8 * i + 3], state[8 * i + 7]);
+	for (i = 0; i < 8; ++i) {
+		BLAKE2_ROUND(state[8 * i + 0], state[8 * i + 1], state[8 * i + 2],
+			state[8 * i + 3], state[8 * i + 4], state[8 * i + 5],
+			state[8 * i + 6], state[8 * i + 7]);
 	}
 
-	for (i = 0; i < 4; ++i) {
-		BLAKE2_ROUND_2(state[0 + i], state[4 + i], state[8 + i], state[12 + i],
-			state[16 + i], state[20 + i], state[24 + i], state[28 + i]);
+	for (i = 0; i < 8; ++i) {
+		BLAKE2_ROUND(state[8 * 0 + i], state[8 * 1 + i], state[8 * 2 + i],
+			state[8 * 3 + i], state[8 * 4 + i], state[8 * 5 + i],
+			state[8 * 6 + i], state[8 * 7 + i]);
 	}
 
-	for (i = 0; i < ARGON2_HWORDS_IN_BLOCK; i++) {
-		state[i] = _mm256_xor_si256(state[i], block_XY[i]);
-		_mm256_storeu_si256((__m256i*)next_block->v + i, state[i]);
+	for (i = 0; i < ARGON2_OWORDS_IN_BLOCK; i++) {
+		state[i] = _mm_xor_si128(state[i], block_XY[i]);
+		_mm_storeu_si128((__m128i*)next_block->v + i, state[i]);
 	}
 }
 
-void randomx_argon2_fill_segment_avx2(const argon2_instance_t* instance,
+void randomx_argon2_fill_segment_ssse3(const argon2_instance_t* instance,
 	argon2_position_t position) {
 	block* ref_block = NULL, * curr_block = NULL;
 	block address_block, input_block;
 	uint64_t pseudo_rand, ref_index, ref_lane;
 	uint32_t prev_offset, curr_offset;
 	uint32_t starting_index, i;
-	__m256i state[ARGON2_HWORDS_IN_BLOCK];
+	__m128i state[ARGON2_OWORDS_IN_BLOCK];
 
 	if (instance == NULL) {
 		return;
@@ -169,6 +177,41 @@ void randomx_argon2_fill_segment_avx2(const argon2_instance_t* instance,
 			}
 		}
 	}
+}
+
+void argon2_finalize_ssse3(const argon2_instance_t* instance, uint8_t* out, size_t outlen) {
+	if (instance == NULL || out == NULL || outlen == 0 || outlen > ARGON2_BLOCK_SIZE) {
+		return;
+	}
+
+	__m128i blockhash[ARGON2_OWORDS_IN_BLOCK];
+	const uint32_t last_block_offset = instance->lane_length - 1;
+
+	// 1. Initialize from the final block of the first lane
+	memcpy(blockhash, instance->memory[last_block_offset].v, ARGON2_BLOCK_SIZE);
+
+	// 2. XOR across final blocks from remaining lanes
+	for (uint32_t l = 1; l < instance->lanes; ++l) {
+		const __m128i* lane_block = (const __m128i*)(instance->memory + l * instance->lane_length + last_block_offset);
+		for (uint32_t i = 0; i < ARGON2_OWORDS_IN_BLOCK; ++i) {
+			blockhash[i] = _mm_xor_si128(blockhash[i], _mm_loadu_si128(&lane_block[i]));
+		}
+	}
+
+	// 3. Perform 12 rounds using SSSE3 BLAKE2 (8 + 8 structure)
+	for (int r = 0; r < 6; ++r) {
+		for (int i = 0; i < 8; ++i) {
+			BLAKE2_ROUND(blockhash[8 * i + 0], blockhash[8 * i + 1], blockhash[8 * i + 2],
+			             blockhash[8 * i + 3], blockhash[8 * i + 4], blockhash[8 * i + 5],
+			             blockhash[8 * i + 6], blockhash[8 * i + 7]);
+		}
+		for (int i = 0; i < 8; ++i) {
+			BLAKE2_ROUND(blockhash[i + 0], blockhash[i + 8], blockhash[i + 16], blockhash[i + 24],
+			             blockhash[i + 32], blockhash[i + 40], blockhash[i + 48], blockhash[i + 56]);
+		}
+	}
+
+	blake2b_long(out, outlen, (uint8_t*)blockhash, ARGON2_BLOCK_SIZE);
 }
 
 #endif

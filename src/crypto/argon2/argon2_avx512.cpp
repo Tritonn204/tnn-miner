@@ -31,6 +31,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "blake2/blake2-impl.h"
 #include "blake2/blake2.h"
 
+#ifdef __AVX2__
+
 __attribute__((target("avx512f, avx512bw")))
 static void fill_block(__m512i* state, const block* ref_block,
 	block* next_block, int with_xor) {
@@ -160,3 +162,44 @@ void avx512_dispatch(const argon2_instance_t* instance,
 randomx_argon2_impl* randomx_argon2_impl_avx512() {
 	return &avx512_dispatch;
 }
+
+__attribute__((target("default")))
+void argon2_finalize_avx512(const argon2_instance_t* instance, uint8_t* out, size_t outlen) {}
+
+__attribute__((target("avx512f,avx512bw")))
+void argon2_finalize_avx512(const argon2_instance_t* instance, uint8_t* out, size_t outlen) {
+    if (instance == NULL || out == NULL || outlen == 0 || outlen > ARGON2_BLOCK_SIZE) {
+        return;
+    }
+
+    __m512i blockhash[ARGON2_512BIT_WORDS_IN_BLOCK];
+    const uint32_t last_block_offset = instance->lane_length - 1;
+
+    // 1. Start from the last block of the first lane
+    memcpy(blockhash, instance->memory[last_block_offset].v, ARGON2_BLOCK_SIZE);
+
+    // 2. XOR in the last blocks from other lanes
+    for (uint32_t l = 1; l < instance->lanes; ++l) {
+        const __m512i* lane_block = (const __m512i*)(instance->memory + l * instance->lane_length + last_block_offset);
+        for (uint32_t i = 0; i < ARGON2_512BIT_WORDS_IN_BLOCK; ++i) {
+            blockhash[i] = _mm512_xor_si512(blockhash[i], _mm512_loadu_si512(&lane_block[i]));
+        }
+    }
+
+    // 3. Run 12 BLAKE2-style rounds
+    for (int r = 0; r < 6; ++r) {
+        BLAKE2_ROUND_1(blockhash[0], blockhash[1], blockhash[2], blockhash[3],
+                       blockhash[4], blockhash[5], blockhash[6], blockhash[7]);
+        BLAKE2_ROUND_1(blockhash[8], blockhash[9], blockhash[10], blockhash[11],
+                       blockhash[12], blockhash[13], blockhash[14], blockhash[15]);
+
+        BLAKE2_ROUND_2(blockhash[0], blockhash[2], blockhash[4], blockhash[6],
+                       blockhash[8], blockhash[10], blockhash[12], blockhash[14]);
+        BLAKE2_ROUND_2(blockhash[1], blockhash[3], blockhash[5], blockhash[7],
+                       blockhash[9], blockhash[11], blockhash[13], blockhash[15]);
+    }
+
+    blake2b_long(out, outlen, (uint8_t*)blockhash, ARGON2_BLOCK_SIZE);
+}
+
+#endif
