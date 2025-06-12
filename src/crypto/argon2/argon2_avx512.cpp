@@ -17,6 +17,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * Daniel Dinu, Dmitry Khovratovich, Jean-Philippe Aumasson, and Samuel Neves
 */
 
+#ifdef __x86_64__
+
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
@@ -31,7 +33,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "blake2/blake2-impl.h"
 #include "blake2/blake2.h"
 
-#ifdef __AVX2__
+#ifndef TNN_LEGACY_AMD64
 
 __attribute__((target("avx512f, avx512bw")))
 static void fill_block(__m512i* state, const block* ref_block,
@@ -202,4 +204,5 @@ void argon2_finalize_avx512(const argon2_instance_t* instance, uint8_t* out, siz
     blake2b_long(out, outlen, (uint8_t*)blockhash, ARGON2_BLOCK_SIZE);
 }
 
+#endif
 #endif

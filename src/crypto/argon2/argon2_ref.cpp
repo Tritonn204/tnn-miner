@@ -233,3 +233,4 @@ void argon2_finalize_ref(const argon2_instance_t* instance, uint8_t* out, size_t
 
 	blake2b_long(out, outlen, (uint8_t*)&blockhash, ARGON2_BLOCK_SIZE);
 }
+

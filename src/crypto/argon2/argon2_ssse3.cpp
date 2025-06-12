@@ -32,6 +32,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * Daniel Dinu, Dmitry Khovratovich, Jean-Philippe Aumasson, and Samuel Neves
 */
 
+#ifdef __x86_64__
+
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
@@ -214,4 +216,5 @@ void argon2_finalize_ssse3(const argon2_instance_t* instance, uint8_t* out, size
 	blake2b_long(out, outlen, (uint8_t*)blockhash, ARGON2_BLOCK_SIZE);
 }
 
+#endif
 #endif
