@@ -1346,7 +1346,7 @@ Mining:
   g_start_time = std::chrono::steady_clock::now();
   if (broadcastStats)
   {
-    boost::thread BROADCAST(BroadcastServer::serverThread, &rate30sec, &accepted, &rejected, miningProfile.coin.coinPrettyName.c_str(), versionString, reportInterval);
+    boost::thread BROADCAST(BroadcastServer::serverThread, &rate30sec, &accepted, &rejected, algoName(miningProfile.coin.miningAlgo), versionString, reportInterval);
   }
 
   while (!isConnected)

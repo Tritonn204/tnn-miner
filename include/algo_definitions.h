@@ -65,6 +65,35 @@
 #define ALGO_YESPOWER 110
 #define ALGO_RINHASH 120
 
+inline const char* algoName(int algo) {
+  switch(algo) {
+    case ALGO_ASTROBWTV3:
+      return "AstroBWTv3";
+    case ALGO_XELISV2:
+      return "XelisHashV2";
+    case ALGO_SPECTRE_X:
+      return "SpectreX";
+    case ALGO_RX0:
+      return "RandomX";
+    case ALGO_VERUS:
+      return "VerusHash";
+    case ALGO_ASTRIX_HASH:
+      return "AstrixHash";
+    case ALGO_NXL_HASH:
+      return "NxlHash";
+    case ALGO_HOOHASH:
+      return "HooHash";
+    case ALGO_SHAI_HIVE:
+      return "ShaiHive";
+    case ALGO_YESPOWER:
+      return "YesPower";
+    case ALGO_RINHASH:
+      return "RinHash";
+    default:
+      return "Unknown";
+  }
+}
+
 typedef enum {
   ENDIAN_LITTLE,
   ENDIAN_BIG,
