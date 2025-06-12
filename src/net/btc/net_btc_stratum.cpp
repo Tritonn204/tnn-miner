@@ -254,7 +254,7 @@ int handleBTCStratumPacket(boost::json::object packet, BTCStratum::jobCache *cac
                                           .count();
 
     bool *C = isDev ? &devConnected : &isConnected;
-    if (!*C && !beQuiet)
+    if (!beQuiet)
     {
       setcolor(CYAN);
       printf("\n");

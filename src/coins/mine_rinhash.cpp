@@ -33,10 +33,6 @@ void mineRinhash(int tid)
   thread_local bool blake3_main_ready = false;
   thread_local bool blake3_dev_ready = false;
 
-  if (tid == 1) {
-    RinHash::test();
-  }
-
 waitForJob:
   while (!isConnected)
   {
