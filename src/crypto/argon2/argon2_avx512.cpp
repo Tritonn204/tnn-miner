@@ -199,8 +199,7 @@ void argon2_finalize_avx512(const argon2_instance_t* instance, uint8_t* out, siz
                        blockhash[9], blockhash[11], blockhash[13], blockhash[15]);
     }
 
-    // 4. Write the output
-    memcpy(out, blockhash, outlen);
+    blake2b_long(out, outlen, (uint8_t*)blockhash, ARGON2_BLOCK_SIZE);
 }
 
 #endif

@@ -387,6 +387,8 @@ void rxa2_initial_hash(uint8_t *blockhash, argon2_context *context, argon2_type 
 	blake2b_final(&BlakeHash, blockhash, ARGON2_PREHASH_DIGEST_LENGTH);
 }
 
+#include <inttypes.h>
+
 int randomx_argon2_initialize(argon2_instance_t *instance, argon2_context *context) {
 	uint8_t blockhash[ARGON2_PREHASH_SEED_LENGTH];
 	int result = ARGON2_OK;
@@ -403,6 +405,7 @@ int randomx_argon2_initialize(argon2_instance_t *instance, argon2_context *conte
 	/* uint8_t blockhash[ARGON2_PREHASH_SEED_LENGTH]; */
 	/* Hashing all inputs */
 	rxa2_initial_hash(blockhash, context, instance->type);
+
 	/* Zeroing 8 extra bytes */
 	/*rxa2_clear_internal_memory(blockhash + ARGON2_PREHASH_DIGEST_LENGTH,
 		ARGON2_PREHASH_SEED_LENGTH -
@@ -412,67 +415,31 @@ int randomx_argon2_initialize(argon2_instance_t *instance, argon2_context *conte
 	 */
 	rxa2_fill_first_blocks(blockhash, instance);
 
-	return ARGON2_OK;
+  return ARGON2_OK;
 }
 
-#ifdef __x86_64__
-__attribute__((target("default")))
-#endif
-void argon2_finalize(const argon2_instance_t* instance, uint8_t* digest_out) {
-    block final_block = instance->memory[instance->lane_length - 1];
+void fill_first_blocks(uint8_t *blockhash, const argon2_instance_t *instance) {
+    uint32_t l;
+    uint8_t blockhash_bytes[ARGON2_BLOCK_SIZE];
 
-    for (uint32_t l = 1; l < instance->lanes; ++l) {
-        const block* b = &instance->memory[l * instance->lane_length + (instance->lane_length - 1)];
-        for (uint32_t i = 0; i < ARGON2_QWORDS_IN_BLOCK; ++i) {
-            final_block.v[i] ^= b->v[i];
-        }
+    for (l = 0; l < instance->lanes; ++l) {
+        // G(H0 || 0 || l)
+        store32(blockhash + ARGON2_PREHASH_DIGEST_LENGTH, 0);
+        store32(blockhash + ARGON2_PREHASH_DIGEST_LENGTH + 4, l);
+        memset(blockhash + ARGON2_PREHASH_DIGEST_LENGTH + 8, 0,
+               ARGON2_PREHASH_SEED_LENGTH - ARGON2_PREHASH_DIGEST_LENGTH - 8);
+        blake2b_long(blockhash_bytes, ARGON2_BLOCK_SIZE, blockhash, ARGON2_PREHASH_SEED_LENGTH);
+        load_block(&instance->memory[l * instance->lane_length + 0], blockhash_bytes);
+
+        // G(H0 || 1 || l)
+        store32(blockhash + ARGON2_PREHASH_DIGEST_LENGTH, 1);
+        store32(blockhash + ARGON2_PREHASH_DIGEST_LENGTH + 4, l);
+        memset(blockhash + ARGON2_PREHASH_DIGEST_LENGTH + 8, 0,
+               ARGON2_PREHASH_SEED_LENGTH - ARGON2_PREHASH_DIGEST_LENGTH - 8);
+        blake2b_long(blockhash_bytes, ARGON2_BLOCK_SIZE, blockhash, ARGON2_PREHASH_SEED_LENGTH);
+        load_block(&instance->memory[l * instance->lane_length + 1], blockhash_bytes);
     }
 
-    blake2b(digest_out, 32, final_block.v, ARGON2_BLOCK_SIZE, NULL, 0);
+    // Optionally clear temporary buffer
+    // clear_internal_memory(blockhash_bytes, sizeof(blockhash_bytes));
 }
-
-#ifdef __x86_64__
-__attribute__((target("ssse3")))
-void argon2_finalize(const argon2_instance_t* instance, uint8_t* digest_out) {
-    __m128i* result = (__m128i*)instance->memory[instance->lane_length - 1].v;
-
-    for (uint32_t l = 1; l < instance->lanes; ++l) {
-        const __m128i* block = (const __m128i*)&instance->memory[l * instance->lane_length + (instance->lane_length - 1)].v;
-        for (uint32_t i = 0; i < ARGON2_OWORDS_IN_BLOCK; ++i) {
-            result[i] = _mm_xor_si128(result[i], block[i]);
-        }
-    }
-
-    blake2b(digest_out, 32, (uint8_t*)result, ARGON2_BLOCK_SIZE, NULL, 0);
-}
-
-#ifdef __AVX2__ // TODO use #ifndef TNN_LEGACY_AMD64
-__attribute__((target("avx2")))
-void argon2_finalize(const argon2_instance_t* instance, uint8_t* digest_out) {
-    __m256i* result = (__m256i*)instance->memory[instance->lane_length - 1].v;
-
-    for (uint32_t l = 1; l < instance->lanes; ++l) {
-        const __m256i* block = (const __m256i*)&instance->memory[l * instance->lane_length + (instance->lane_length - 1)].v;
-        for (uint32_t i = 0; i < ARGON2_HWORDS_IN_BLOCK; ++i) {
-            result[i] = _mm256_xor_si256(result[i], block[i]);
-        }
-    }
-
-    blake2b(digest_out, 32, (uint8_t*)result, ARGON2_BLOCK_SIZE, NULL, 0);
-}
-
-__attribute__((target("avx512f,avx512bw")))
-void argon2_finalize(const argon2_instance_t* instance, uint8_t* digest_out) {
-    __m512i* result = (__m512i*)instance->memory[instance->lane_length - 1].v;
-
-    for (uint32_t l = 1; l < instance->lanes; ++l) {
-        const __m512i* block = (const __m512i*)&instance->memory[l * instance->lane_length + (instance->lane_length - 1)].v;
-        for (uint32_t i = 0; i < ARGON2_512BIT_WORDS_IN_BLOCK; ++i) {
-            result[i] = _mm512_xor_si512(result[i], block[i]);
-        }
-    }
-
-    blake2b(digest_out, 32, (uint8_t*)result, ARGON2_BLOCK_SIZE, NULL, 0);
-}
-#endif
-#endif

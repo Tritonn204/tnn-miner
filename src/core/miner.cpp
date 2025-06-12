@@ -639,7 +639,7 @@ int main(int argc, char **argv)
   {
     #if defined(TNN_RINHASH)
     miningProfile.protocol = PROTO_BTC_STRATUM;
-    current_algo_config = algo_configs[CONFIG_ENDIAN_SHA256];
+    current_algo_config = algo_configs[CONFIG_ENDIAN_SCRYPT];
     #else
     setcolor(RED);
     printf("%s", unsupported_rinhash);

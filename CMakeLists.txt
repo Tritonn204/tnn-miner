@@ -512,6 +512,7 @@ file(GLOB_RECURSE SOURCES_CORE
   "${PROJECT_SOURCE_DIR}/src/crypto/salsa-simd/*.c"
   "${PROJECT_SOURCE_DIR}/src/crypto/sha3/*.c"
   "${PROJECT_SOURCE_DIR}/src/crypto/argon2/*.c"
+  "${PROJECT_SOURCE_DIR}/src/crypto/argon2/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/broadcast/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/coins/dummy_miners.cpp"
   "${PROJECT_SOURCE_DIR}/src/util/*.c"

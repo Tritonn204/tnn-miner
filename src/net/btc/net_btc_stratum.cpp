@@ -105,6 +105,40 @@ std::string buildBlockHeader(const BTCStratum::jobCache &cache)
     le32enc(blockHeader + 72, cache.nBits);
     break;
 
+  case ENDIAN_SWAP_32_BE:
+    // Bitcoin-style: swap 32-bit chunks
+    be32enc(blockHeader + 0, cache.version);
+
+    // Handle prevHash swapping if configured
+    if (current_algo_config.swap_prev_hash)
+    {
+      for (int i = 0; i < 8; i++)
+      {
+        be32enc(blockHeader + 4 + i * 4, ((uint32_t *)cache.prevHash.data())[i]);
+      }
+    }
+    else
+    {
+      memcpy(blockHeader + 4, cache.prevHash.data(), 32);
+    }
+
+    // Handle merkleRoot swapping if configured
+    if (current_algo_config.swap_merkle_root)
+    {
+      for (int i = 0; i < 8; i++)
+      {
+        be32enc(blockHeader + 36 + i * 4, ((uint32_t *)merkleRoot.data())[i]);
+      }
+    }
+    else
+    {
+      memcpy(blockHeader + 36, merkleRoot.data(), 32);
+    }
+
+    be32enc(blockHeader + 68, cache.nTime);
+    be32enc(blockHeader + 72, cache.nBits);
+    break;
+
   case ENDIAN_BIG:
     // Pure big-endian (rare, but included for completeness)
     be32enc(blockHeader + 0, cache.version);

@@ -211,8 +211,7 @@ void argon2_finalize_ssse3(const argon2_instance_t* instance, uint8_t* out, size
 		}
 	}
 
-	// 4. Write output from SIMD state
-	memcpy(out, blockhash, outlen);
+	blake2b_long(out, outlen, (uint8_t*)blockhash, ARGON2_BLOCK_SIZE);
 }
 
 #endif

@@ -10,6 +10,17 @@
 #include "argon2/argon2.h"
 #include "argon2/argon2_core.h"
 #include <openssl/evp.h>
+#include "hex.h"
+
+#define CHECK_EQUAL(mem1, mem2, len, label) \
+  do { \
+    if (memcmp(mem1, mem2, len) != 0) { \
+      fprintf(stderr, "%s mismatch!\n", label); \
+      print_hex("Expected", mem2, len); \
+      print_hex("Actual", mem1, len); \
+      fflush(stdout); \
+    } \
+  } while (0)
 
 static inline int blake2b_openssl(const void* input, size_t input_len, void* output, size_t output_len) {
     if (output_len > 64) {
@@ -54,6 +65,7 @@ namespace RinHash {
   typedef struct rin_context_holder{
     block* memory;
     argon2_context argon;
+    uint8_t scratch[200];
   } rin_context_holder;
 
   thread_local rin_context_holder* rin_ctx;
@@ -81,6 +93,14 @@ namespace RinHash {
     keccakf(scratch);
   }
 
+  inline void print_hex(const char* label, const void* data, size_t len) {
+    printf("%s: ", label);
+    const uint8_t* bytes = (const uint8_t*)data;
+    for (size_t i = 0; i < len; ++i)
+      printf("%02x", bytes[i]);
+    printf("\n");
+  }
+
   void hash(void* state, const void* input, const blake3_hasher* prehashedPrefix)
   {
     if (rin_ctx == NULL) {
@@ -97,7 +117,7 @@ namespace RinHash {
       const char* salt_str = "RinCoinSalt";
 
       // Allocate memory for Argon2
-      rin_ctx->memory = (block*) aligned_malloc(64 * sizeof(block), 64);  // m_cost = 64
+      rin_ctx->memory = (block*) aligned_malloc(64 * ARGON2_BLOCK_SIZE, 64);  // m_cost = 64
       if (!rin_ctx->memory) {
         setcolor(RED);
         fprintf(stderr, "Failed to allocate Argon2 memory\n");
@@ -150,6 +170,8 @@ namespace RinHash {
     instance.context_ptr = ctx;
     instance.impl = NULL;
 
+    randomx_argon2_initialize(&instance, &(rin_ctx->argon));
+
     #pragma unroll 2
     for (uint32_t pass = 0; pass < 2; ++pass) {
       #pragma unroll 4
@@ -164,11 +186,43 @@ namespace RinHash {
       }
     }
 
-    uint8_t scratch[200] = {0};
-    // blake2b_openssl(instance.memory[instance.lane_length - 1].v, ARGON2_BLOCK_SIZE, scratch, 32);
-    argon2_finalize_fmv(&instance, scratch, 32);
-    sha3_256_rin(scratch);
+    argon2_finalize_fmv(&instance, rin_ctx->scratch, 32);
 
-    memcpy(state, scratch, 32);
+    memset(rin_ctx->scratch + 32, 0, 200-32);
+    sha3_256_rin(rin_ctx->scratch);
+
+    memcpy(state, rin_ctx->scratch, 32);
+  }
+
+  void test() {
+    const char* input_hex =
+      "00000020a14ae141585f60301ed2dafab2a65045d5d12afa0b232233a0065fa7"
+      "01000000a710d54064e2a2728c2f435a8a7593dacd261d9418d1b69dd0be6ecd9"
+      "91c78efa413456838dd011d00000000";
+
+    const uint8_t expected_final[32] = {
+      0xa5, 0x7b, 0x72, 0x38, 0xb9, 0xab, 0x81, 0x8a,
+      0x25, 0xcc, 0xcd, 0xb5, 0x68, 0x34, 0x07, 0x20,
+      0x76, 0x37, 0xbe, 0x79, 0xcc, 0x5c, 0x58, 0x1d,
+      0x8b, 0x16, 0x72, 0xb6, 0xda, 0x89, 0x72, 0x92
+    };
+
+    uint8_t input[80];
+    hexstrToBytes(input_hex, input);
+    print_hex("HASH INPUT", input, 80);
+
+    uint8_t state[32];
+    blake3_hasher prehashed;
+    blake3_hasher_init(&prehashed);
+    blake3_hasher_update(&prehashed, input, 64);  // Prehash only the first 64 bytes
+
+    hash(state, input, &prehashed);  // Call your actual hash pipeline
+    memset(state, 0, 32);
+    hash(state, input, &prehashed);
+
+    print_hex("FINAL Output", state, 32);
+    CHECK_EQUAL(state, expected_final, 32, "Final SHA3-256 Output");
   }
 }
+
+#undef CHECK_EQUAL

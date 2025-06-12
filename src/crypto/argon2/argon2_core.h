@@ -38,10 +38,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdint.h>
 #include "argon2.h"
 
-#if defined(__cplusplus)
-extern "C" {
-#endif
-
 #define CONST_CAST(x) (x)(uintptr_t)
 
  /**********************Argon2 internal constants*******************************/
@@ -147,6 +143,7 @@ int randomx_argon2_validate_inputs(const argon2_context *context);
  * will be modified if successful.
  */
 int randomx_argon2_initialize(argon2_instance_t *instance, argon2_context *context);
+int argon2_initialize(argon2_instance_t *instance, argon2_context *context);
 
 /*
  * Function that fills the entire memory t_cost times based on the first two
@@ -155,9 +152,5 @@ int randomx_argon2_initialize(argon2_instance_t *instance, argon2_context *conte
  * @return ARGON2_OK if successful, @context->state
  */
 int randomx_argon2_fill_memory_blocks(argon2_instance_t* instance);
-
-#if defined(__cplusplus)
-}
-#endif
 
 #endif

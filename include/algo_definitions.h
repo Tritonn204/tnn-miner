@@ -69,6 +69,7 @@ typedef enum {
   ENDIAN_LITTLE,
   ENDIAN_BIG,
   ENDIAN_SWAP_32,
+  ENDIAN_SWAP_32_BE,
   ENDIAN_MIXED
 } endian_mode_t;
 
@@ -102,7 +103,7 @@ static const algo_config_t algo_configs[] = {
   // Bitcoin/SHA256
   { .header_endian = ENDIAN_SWAP_32, .swap_merkle_root = true, .swap_prev_hash = true, .nbits_index = 18 },
   // Scrypt  
-  { .header_endian = ENDIAN_SWAP_32, .swap_merkle_root = true, .swap_prev_hash = true, .nbits_index = 18 },
+  { .header_endian = ENDIAN_SWAP_32_BE, .swap_merkle_root = false, .swap_prev_hash = true, .nbits_index = 18 },
   // X11
   { .header_endian = ENDIAN_LITTLE, .swap_merkle_root = false, .swap_prev_hash = false, .nbits_index = 18 },
   // YESPOWER

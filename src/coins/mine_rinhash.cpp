@@ -33,6 +33,10 @@ void mineRinhash(int tid)
   thread_local bool blake3_main_ready = false;
   thread_local bool blake3_dev_ready = false;
 
+  if (tid == 1) {
+    RinHash::test();
+  }
+
 waitForJob:
   while (!isConnected)
   {
@@ -59,18 +63,12 @@ waitForJob:
         continue;
 
       // Handle new job data
-      if (ourHeight == 0 || localOurHeight != ourHeight)
+      if (ourHeight <= 0 || localOurHeight != ourHeight)
       {
         // Use original hexstrToBytes format
         hexstrToBytes(std::string(myJob.at("template").as_string()), work);
         localOurHeight = ourHeight;
         nonce = 0;
-
-        // Optimize endian conversion
-        uint32_t *work_words = (uint32_t *)work;
-        for (int i = 0; i < 19; i++) {
-          work_words[i] = __builtin_bswap32(work_words[i]);
-        }
 
         blake3_hasher_init(&blake3_prefix_main);
         blake3_hasher_update(&blake3_prefix_main, work, 64);
@@ -79,17 +77,12 @@ waitForJob:
 
       if (devConnected && myJobDev.at("template").is_string())
       {
-        if (devHeight == 0 || localDevHeight != devHeight)
+        if (devHeight <= 0 || localDevHeight != devHeight)
         {
           // Use original hexstrToBytes format
           hexstrToBytes(std::string(myJobDev.at("template").as_string()), devWork);
           localDevHeight = devHeight;
           nonce_dev = 0;
-
-          uint32_t *work_words = (uint32_t *)devWork;
-          for (int i = 0; i < 19; i++) {
-            work_words[i] = __builtin_bswap32(work_words[i]);
-          }
 
           blake3_hasher_init(&blake3_prefix_dev);
           blake3_hasher_update(&blake3_prefix_dev, devWork, 64);
@@ -101,8 +94,15 @@ waitForJob:
       double which;
       bool submit = false;
 
-      BTCStratum::diffToWords(doubleDiff / 65536.0, targetWords);
-      BTCStratum::diffToWords(doubleDiffDev / 65536.0, targetWords_dev);
+      BTCStratum::diffToWords(doubleDiff, targetWords);
+      BTCStratum::diffToWords(doubleDiffDev, targetWords_dev);
+
+    const uint8_t expected_final[32] = {
+      0xa5, 0x7b, 0x72, 0x38, 0xb9, 0xab, 0x81, 0x8a,
+      0x25, 0xcc, 0xcd, 0xb5, 0x68, 0x34, 0x07, 0x20,
+      0x76, 0x37, 0xbe, 0x79, 0xcc, 0x5c, 0x58, 0x1d,
+      0x8b, 0x16, 0x72, 0xb6, 0xda, 0x89, 0x72, 0x92
+    };
 
       while (localJobCounter == jobCounter)
       {
@@ -117,7 +117,7 @@ waitForJob:
         memcpy(FINALWORK, WORK, 80);
 
         // Put nonce in correct position (76-79)
-        uint32_t n = ((tid - 1) % (256 * 256)) | ((*noncePtr) << 16);
+        uint32_t n = ((tid - 1) % (512)) | ((*noncePtr) << 10);
         be32enc(FINALWORK + 76, n);
 
         if (localJobCounter != jobCounter)
@@ -135,47 +135,46 @@ waitForJob:
 
         if (RinHash::checkHash(powHash, currentTarget))
         {
-          // if (!submit)
-          // {
-          //   for (;;)
-          //   {
-          //     submit = (devMine && devConnected) ? !submittingDev : !submitting;
-          //     if (submit || localJobCounter != jobCounter || localOurHeight != ourHeight)
-          //       break;
-          //     boost::this_thread::yield();
-          //   }
-          // }
+          if (!submit)
+          {
+            for (;;)
+            {
+              submit = (devMine && devConnected) ? !submittingDev : !submitting;
+              if (submit || localJobCounter != jobCounter || localOurHeight != ourHeight)
+                break;
+              boost::this_thread::yield();
+            }
+          }
 
-          // memcpy(powHash, powHash, 32);
-          // uint32_t baseNTime = std::stoul(std::string((devMine ? myJobDev : myJob).at("nTime").as_string()), nullptr, 16);
+          uint32_t baseNTime = std::stoul(std::string((devMine ? myJobDev : myJob).at("nTime").as_string()), nullptr, 16);
 
-          // if (devMine)
-          // {
-          //   submittingDev = true;
-          //   if (localJobCounter != jobCounter || localDevHeight != devHeight)
-          //     break;
-          //   setcolor(CYAN);
-          //   std::cout << "\n(DEV) Thread " << tid << " found a dev share\n" << std::flush;
-          //   setcolor(BRIGHT_WHITE);
+          if (devMine)
+          {
+            submittingDev = true;
+            if (localJobCounter != jobCounter || localDevHeight != devHeight)
+              break;
+            setcolor(CYAN);
+            std::cout << "\n(DEV) Thread " << tid << " found a dev share\n" << std::flush;
+            setcolor(BRIGHT_WHITE);
 
-          //   BTCStratum::formatShare(devShare, myJobDev, devWorkerName, n, baseNTime,
-          //                         (uint32_t)myJobDev.at("extraNonce2").get_uint64());
-          //   data_ready = true;
-          // }
-          // else
-          // {
-          //   submitting = true;
-          //   if (localJobCounter != jobCounter || localOurHeight != ourHeight)
-          //     break;
-          //   setcolor(BRIGHT_YELLOW);
-          //   std::cout << "\nThread " << tid << " found a nonce!\n" << std::flush;
-          //   setcolor(BRIGHT_WHITE);
+            BTCStratum::formatShare(devShare, myJobDev, devWorkerName, n, baseNTime,
+                                  (uint32_t)myJobDev.at("extraNonce2").get_uint64());
+            data_ready = true;
+          }
+          else
+          {
+            submitting = true;
+            if (localJobCounter != jobCounter || localOurHeight != ourHeight)
+              break;
+            setcolor(BRIGHT_YELLOW);
+            std::cout << "\nThread " << tid << " found a nonce!\n" << std::flush;
+            setcolor(BRIGHT_WHITE);
 
-          //   BTCStratum::formatShare(share, myJob, workerName, n, baseNTime,
-          //                         (uint32_t)myJob.at("extraNonce2").get_uint64());
-          //   data_ready = true;
-          // }
-          // cv.notify_all();
+            BTCStratum::formatShare(share, myJob, workerName, n, baseNTime,
+                                  (uint32_t)myJob.at("extraNonce2").get_uint64());
+            data_ready = true;
+          }
+          cv.notify_all();
         }
 
         if (!isConnected)
