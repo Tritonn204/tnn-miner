@@ -16,8 +16,10 @@
   #define SHA_DETECT_WINDOWS 1
   #define SHA_DETECT_MINGW 1
 #else
-  #include <cpuid.h>
-  #include <immintrin.h>
+  #ifdef __x86_64
+    #include <cpuid.h>
+    #include <immintrin.h>
+  #endif
   #include <signal.h>
   #include <setjmp.h>
   #include <string.h>
