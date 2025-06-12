@@ -60,45 +60,71 @@ This miner can be activated from the command line with the following parameters.
 ```
 General:
   --help                    Produce help message
-  --dero                    Will mine Dero
-  --xelis                   Will mine Xelis
-  --spectre                 Will mine Spectre
   --stratum                 Required for mining to Stratum pools
   --broadcast               Creates an http server to query miner stats
   --testnet                 Adjusts in-house parameters to mine on testnets
   --daemon-address arg      Node/pool URL or IP address to mine to
   --port arg                The port used to connect to the node
   --wallet arg              Wallet address for receiving mining rewards
-  --threads arg             The amount of mining threads to create, default is 1
-  --dev-fee arg             Your desired dev fee percentage, default is 2.5, minimum is 1
+  --threads arg             The amount of mining threads to create, default is
+                            1
+  --dev-fee arg             Your desired dev fee percentage, default is 2.5,
+                            minimum is 1
   --report-interval arg     Your desired status update interval in seconds
   --no-lock                 Disables CPU affinity / CPU core binding
-  --ignore-wallet           Disables wallet validation, for specific uses with pool mining
-  --worker-name arg         Sets the worker name for this instance when mining on Pools or Bridges
+  --ignore-wallet           Disables wallet validation, for specific uses with
+                            pool mining
+  --worker-name arg         Sets the worker name for this instance when mining
+                            on Pools or Bridges
+
+Coin Selection:
+  --<symbol>                Will mine the coin corresponding to <symbol> if
+                            supported
+  --randomx                 For mining RandomX coins
+  --yespower arg            Mine with custom yespower parameters (format:
+                            N=2048,R=32,pers=string)
 
 Dero:
-  --lookup                  Mine with lookup tables instead of computation
-  --dero-benchmark arg      Runs a mining benchmark for <arg> seconds (adheres to -t threads option)
-  --test-dero               Runs a set of tests to verify AstrobwtV3 is working (1 test expected to fail)
-
-Spectre:
-  --test-spectre            Run detailed diagnostics for SpectreX
+  --dero-benchmark arg      Runs a mining benchmark for <arg> seconds (adheres
+                            to -t threads option)
 
 Xelis:
   --xatum                   Required for mining to Xatum pools on Xelis
-  --xelis-bench             Run a benchmark of xelis-hash with 1 thread
-  --test-xelis              Run the xelis-hash tests from the official source code
+  --bench-xelis             Run a benchmark of xelis-hash with 1 thread
+
+RandomX:
+  --rx-hugepages            Use huge pages for RandomX
+  --test-randomx            Run Tevador's reference RandomX tests
+
+Testing:
+  --test-dero               Runs a set of tests to verify AstrobwtV3 is working
+                            (1 test expected to fail)
+  --test-spectre            Run detailed diagnostics for SpectreX
+  --test-xelis              Run the xelis-hash tests from the official source
+                            code
+  --test-astrix             Run a basic astrix-hash validation test
+  --test-hoosat             Run a basic hoohash validation test
+  --test-nexellia           Run a basic nxl-hash validation test
+  --test-waglayla           Run a basic wala-hash validation test
+  --test-shai               Run a basic shai-hive validation test
 
 Advanced:
-  --tune-warmup arg (=1)    Number of seconds to warmup the CPU before starting the AstroBWTv3 tuning
-  --tune-duration arg (=2)  Number of seconds to tune *each* AstroBWTv3 algorithm. There will 3 or 4 algorithms
-                            depending on supported CPU features
-  --no-tune arg             <branch|lookup|avx2|wolf|aarch64> Use the specified AstroBWTv3 algorithm and skip tuning
+  --tune-warmup arg (=1)    Number of seconds to warmup the CPU before starting
+                            the AstroBWTv3 tuning
+  --tune-duration arg (=2)  Number of seconds to tune *each* AstroBWTv3
+                            algorithm. There will 3 or 4 algorithms depending
+                            on supported CPU features
+  --no-tune arg             <branch|lookup|avx2|wolf|aarch64> Use the specified
+                            AstroBWTv3 algorithm and skip tuning
+  --mine-time arg (=0)      Mine for a given number of seconds and then exit
 
 DEBUG:
-  --op arg                  Sets which branch op to benchmark (0-255), benchmark will be skipped if unspecified
-  --len arg                 Sets length of the processed chunk in said benchmark (default 15)
-  --sabench                 Runs a benchmark for divsufsort on snapshot files in the 'tests' directory
+  --op arg                  Sets which branch op to benchmark (0-255),
+                            benchmark will be skipped if unspecified
+  --len arg                 Sets length of the processed chunk in said
+                            benchmark (default 15)
+  --sabench                 Runs a benchmark for divsufsort on snapshot files
+                            in the 'tests' directory
   --quiet                   Do not print TNN banner
 ```
 ### If the miner is run without any args, a CLI wizard will simply ask you to provide the required options one at a time.
