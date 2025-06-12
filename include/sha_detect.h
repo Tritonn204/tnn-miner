@@ -38,6 +38,7 @@ static void sha_detect_sigill_handler(int sig) {
 }
 #endif
 
+#ifdef __x86_64__
 // Cross-platform CPUID wrapper
 static inline void sha_detect_cpuid(uint32_t leaf, uint32_t subleaf, 
                                    uint32_t *eax, uint32_t *ebx, 
@@ -72,7 +73,7 @@ static inline void sha_detect_cpuid(uint32_t leaf, uint32_t subleaf,
     }
 #endif
 }
-
+#endif
 /**
  * Detects if SHA-NI instructions are supported and usable
  * 
