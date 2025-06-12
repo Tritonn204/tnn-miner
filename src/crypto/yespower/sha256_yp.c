@@ -114,10 +114,12 @@ static const uint32_t Krnd[64] = {
  * SHA256 block compression function using SHA-NI instructions.
  * Processes all 64 rounds using hardware acceleration.
  */
+
 static inline void
 SHA256_Transform_SHANI(uint32_t state[static restrict 8],
     const uint8_t block[static restrict 64])
 {
+  #ifdef __x86_64__
 	__m128i STATE0, STATE1;
 	__m128i MSG, TMP, TMP2;
 	__m128i MSG0, MSG1, MSG2, MSG3;
@@ -303,6 +305,7 @@ SHA256_Transform_SHANI(uint32_t state[static restrict 8],
 	/* Store result */
 	_mm_storeu_si128((__m128i*) &state[0], STATE0);
 	_mm_storeu_si128((__m128i*) &state[4], STATE1);
+  #endif
 }
 
 /* Elementary functions used by SHA256 */
