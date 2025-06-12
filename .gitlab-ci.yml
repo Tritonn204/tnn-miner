@@ -150,8 +150,8 @@ build-windows:
     - .\scripts\prereqs.bat ci
     - .\scripts\build.ps1 $PACKAGE_VERSION
     - dir .\build\
-    - dir .\build\
-    - move build\tnn-miner-cpu.exe .\
+    - dir .\build\bin\
+    - move build\bin\tnn-miner-cpu.exe .\
     - Compress-Archive -Path tnn-miner-cpu.exe -DestinationPath ${WIN_AMD64_ZIP}
     #- 7z.exe a ${WIN_AMD64_ZIP} tnn-miner-cpu.exe
   after_script:

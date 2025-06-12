@@ -17,8 +17,8 @@ if(CMAKE_HOST_SYSTEM_NAME MATCHES Windows)
   set(CMAKE_C_COMPILER clang)
   set(CMAKE_CXX_COMPILER clang++)
   set(BOOST_TOOLSET_OPTS "BOOST_TOOLSET clang")
-  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -Wno-unused-command-line-argument -msha")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-unused-command-line-argument -msha")
+  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -Wno-unused-command-line-argument")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-unused-command-line-argument")
 endif()
 
 set(TARGET_ARCH "amd64")
@@ -248,6 +248,13 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -D\"CPU_ARCHTARGET=${CPU
 #  -I/src/winsdk/sdk/Include/um")
 #endif()
 #set(CMAKE_LIB_SUFFIX "${CMAKE_LIB_SUFFIX}_${CPU_ARCHTARGET}")
+
+if(TARGET_ARCH MATCHES "amd64")
+  message(STATUS "Target architecture is amd64: enabling -msha")
+  
+  add_compile_options("$<$<COMPILE_LANGUAGE:C>:-msha>")
+  add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:-msha>")
+endif()
 
 set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} ${DO_STATIC} -DTNN_VERSION=${INTERNAL_TNN_VERSION}") # ${WIN_CROSS_OPTS}")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${DO_STATIC} -DTNN_VERSION=${INTERNAL_TNN_VERSION}") # ${WIN_CROSS_OPTS}")

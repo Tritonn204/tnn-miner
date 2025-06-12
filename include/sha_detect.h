@@ -76,7 +76,9 @@ static inline void sha_detect_cpuid(uint32_t leaf, uint32_t subleaf,
  * 
  * @return 1 if SHA-NI is supported and usable, 0 otherwise
  */
+
 static inline int has_sha_ni_support(void) {
+#ifdef __x86_64__
     // Variables for CPUID results
     uint32_t eax, ebx, ecx, edx;
     int has_cpuid_support = 0;
@@ -133,6 +135,9 @@ static inline int has_sha_ni_support(void) {
     sigaction(SIGILL, &old_action, NULL);
     
     return has_cpuid_support && !sha_detect_instruction_failed;
+#endif
+#else
+    return 0;
 #endif
 }
 
