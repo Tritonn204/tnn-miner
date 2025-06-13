@@ -184,8 +184,13 @@ else()
     string(REGEX MATCH "^([0-9]+)" CXX_MAJOR_VERSION "${CMAKE_CXX_COMPILER_VERSION}") 
     set(CMAKE_LIB_SUFFIX "_clang_${CXX_MAJOR_VERSION}")
     if(NOT CMAKE_HOST_SYSTEM_NAME MATCHES Windows)
-      set(CMAKE_AR "llvm-ar-${CXX_MAJOR_VERSION}")
-      set(CMAKE_RANLIB "llvm-ranlib-${CXX_MAJOR_VERSION}")
+      if(APPLE AND EXISTS "/opt/homebrew/opt/llvm@${CXX_MAJOR_VERSION}/bin/llvm-ar")
+        set(CMAKE_AR "/opt/homebrew/opt/llvm@${CXX_MAJOR_VERSION}/bin/llvm-ar")
+        set(CMAKE_RANLIB "/opt/homebrew/opt/llvm@${CXX_MAJOR_VERSION}/bin/llvm-ranlib")
+      else()
+        set(CMAKE_AR "llvm-ar-${CXX_MAJOR_VERSION}")
+        set(CMAKE_RANLIB "llvm-ranlib-${CXX_MAJOR_VERSION}")
+      endif()
     endif()
   endif()
 
@@ -469,7 +474,7 @@ elseif (CMAKE_HOST_SYSTEM_NAME MATCHES "Windows")
 endif()
 cmake_print_variables(CMAKE_EXE_LINKER_FLAGS)
 
-if(APPLE OR WITH_HIP)
+if(WITH_HIP)
 CPMAddPackage(
   NAME sodium
   GITHUB_REPOSITORY robinlinden/libsodium-cmake

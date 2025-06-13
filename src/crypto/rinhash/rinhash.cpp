@@ -1,7 +1,12 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <malloc.h>
+
+#if defined(__APPLE__) || defined(__MACH__)
+  #include <stdlib.h>
+#else
+  #include <malloc.h>
+#endif
 
 #include "rinhash.h"
 

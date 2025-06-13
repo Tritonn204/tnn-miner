@@ -16,7 +16,7 @@ if(USE_ASTRO_SPSA)
     FetchContent_Declare(
         astrospsa
         GIT_REPOSITORY https://gitlab.com/Tritonn204/astro-spsa.git
-        GIT_TAG        830e33e67cc861b1086915031fecc2e8058f6d00
+        GIT_TAG        fdc54aa1716690aef6ea2c84318ce9d99d480c93
         # GIT_REPOSITORY https://gitlab.com/dirkerdero/astro-spsa-dirker.git
         # GIT_TAG        1a2acdd2ed187a9b565c33028dba4052a89f875b
     )
