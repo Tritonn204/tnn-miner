@@ -78,7 +78,7 @@
     __attribute__((target(T12))) RET_TYPE NAME ARGS BODY
 
 #define TNN_FEATURES_ZNVER1  "sse4.2,popcnt,avx,avx2,bmi,bmi2,fma"
-#define TNN_FEATURES_ZNVER4  "avx512f,avx512dq,avx512bw,avx512vl,avx512vbmi,avx512vbmi2,avx512vnni,avx512bitalg"
+#define TNN_FEATURES_ZNVER4  "sse4.2,popcnt,avx,avx2,bmi,bmi2,fma,avx512f,avx512dq,avx512bw,avx512vl,avx512vbmi,avx512vbmi2,avx512vnni,avx512bitalg"
 #define TNN_FEATURES_ZNVER5 \
   "avx512f,avx512dq,avx512bw,avx512vl,avx512vbmi,avx512vbmi2," \
   "avx512vnni,avx512bitalg,avx512fp16,avx512ifma," \
