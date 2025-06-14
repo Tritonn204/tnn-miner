@@ -183,7 +183,7 @@ build-macos-aarch64:
     - cmake -DTNN_VERSION=${PACKAGE_VERSION} ${CMAKE_ARGS} ..
     - make -j$(sysctl -n hw.logicalcpu)
     - cd ..
-    - mv ./build/tnn-miner-cpu ./tnn-miner
+    - mv ./build/bin/tnn-miner-cpu ../tnn-miner
     - tar -czvf ${TARGZ_FILE} ./tnn-miner
   after_script:
     - echo "MACOS_BUILD_JOB_ID=$CI_JOB_ID" >> macos-arm64-job.env
@@ -314,6 +314,6 @@ release_job:
         - name: "${WIN_AMD64_ZIP}"
           url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${WIN_BUILD_JOB_ID}/artifacts/raw/${WIN_AMD64_ZIP}"
           filepath: "/${WIN_AMD64_ZIP}"
-        #- name: "${MACOS_ARM64_TGZ}"
-        #  url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${MACOS_BUILD_JOB_ID}/artifacts/raw/${MACOS_ARM64_TGZ}"
-        #  filepath: "/${MACOS_ARM64_TGZ}"
+        - name: "${MACOS_ARM64_TGZ}"
+          url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${MACOS_BUILD_JOB_ID}/artifacts/raw/${MACOS_ARM64_TGZ}"
+          filepath: "/${MACOS_ARM64_TGZ}"
