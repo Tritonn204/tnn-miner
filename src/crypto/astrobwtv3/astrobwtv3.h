@@ -138,11 +138,13 @@ static const bool sInduction = true;
 static const bool sTracking = true;
 
 #ifndef TNN_LEGACY_AMD64
+#ifdef __x86_64__
 template <unsigned int N>
 __m256i shiftRight256(__m256i a);
 
 template <unsigned int N> 
 __m256i shiftLeft256(__m256i a);
+#endif
 #endif
 
 
