@@ -382,7 +382,6 @@ typedef void (*wolfPerm)(uint8_t *, uint8_t *, uint16_t, uint8_t, uint8_t, worke
 #ifdef __AVX2__
 void branchComputeCPU_avx2(workerData &worker, bool isTest, int wIndex);
 void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest, int wIndex);
-#endif
 #elif defined(__aarch64__)
 // This is gross.  But we need to do this until 'workerData' gets pushed into it's own include file.
 void branchComputeCPU_aarch64(workerData &worker, bool isTest, int wIndex);
