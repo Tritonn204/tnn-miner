@@ -42,6 +42,10 @@ workflow:
   image: macos-14-xcode-15
   before_script:
     - echo "started by ${GITLAB_USER_NAME} / @${GITLAB_USER_LOGIN}"
+    - brew install llvm@18
+    - export PATH="/opt/homebrew/opt/llvm@18/bin:$PATH"
+    - export CC=clang-18
+    - export CXX=clang++-18
 
 .windows_job:
   tags:
