@@ -24,6 +24,9 @@
 #include <cassert>
 #include <chrono>
 
+#include "mydivision1.hpp"
+#include "compile.h"
+
 //#include <sodium.h>
 
 #ifdef _WIN32
@@ -121,6 +124,52 @@ void chacha_encrypt(uint8_t *key, uint8_t *nonce, uint8_t *in, uint8_t *out, siz
 	ChaCha20EncryptBytes(state, in, out, bytes, rounds);
 }
 
+// #ifdef __x86_64__
+// TNN_TARGET_CLONE(stage_1,
+// void,
+// (const uint8_t *input, uint64_t *sp, size_t input_len),
+// {
+//   const size_t chunk_size = 32;
+//   const size_t nonce_size = 12;
+//   const size_t output_size = XELIS_MEMORY_SIZE_V2 * 8;
+//   const size_t chunks = 4;
+
+//   uint8_t *t = reinterpret_cast<uint8_t *>(sp);
+//   uint8_t key[chunk_size * chunks] = {0};
+//   uint8_t K2[32] = {0};
+//   uint8_t buffer[chunk_size*2] = {0};
+
+//   memcpy(key, input, input_len);
+//   blake3(input, input_len, buffer);
+
+//   memcpy(buffer + chunk_size, key, chunk_size);
+//   blake3(buffer, chunk_size*2, K2);
+//   chacha_encrypt(K2, buffer, NULL, t, output_size / chunks, 8);
+
+//   t += output_size / chunks;
+
+//   memcpy(buffer, K2, chunk_size);
+//   memcpy(buffer + chunk_size, key + chunk_size, chunk_size);
+//   blake3(buffer, chunk_size*2, K2);
+//   chacha_encrypt(K2, t - nonce_size, NULL, t, output_size / chunks, 8);
+
+//   t += output_size / chunks;
+
+//   memcpy(buffer, K2, chunk_size);
+//   memcpy(buffer + chunk_size, key + 2*chunk_size, chunk_size);
+//   blake3(buffer, chunk_size*2, K2);
+//   chacha_encrypt(K2, t - nonce_size, NULL, t, output_size / chunks, 8);
+
+//   t += output_size / chunks;
+
+//   memcpy(buffer, K2, chunk_size);
+//   memcpy(buffer + chunk_size, key + 3*chunk_size, chunk_size);
+//   blake3(buffer, chunk_size*2, K2);
+//   chacha_encrypt(K2, t - nonce_size, NULL, t, output_size / chunks, 8);
+// },
+// "default", TNN_TARGETS_X86_AVX2, TNN_TARGETS_X86_AVX512
+// )
+// #else
 void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
 {
   const size_t chunk_size = 32;
@@ -168,6 +217,7 @@ void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
   // crc32.input(scratch_pad, 10);
   // std::cout << "Stage 1 scratch pad CRC32: 0x" << std::hex << std::setw(8) << std::setfill('0') << crc32.result() << std::endl;
 }
+// #endif
 
 static inline uint64_t isqrt(uint64_t n)
 {
@@ -334,20 +384,15 @@ static inline uint64_t ROTL(uint64_t x, uint32_t r)
 
 #endif
 
-static inline uint64_t udiv(uint64_t high, uint64_t low, uint64_t divisor)
-{
-	uint64_t remainder;
-
-	if (high < divisor)
-	{
-		return Divide128Div64To64(high, low, divisor, &remainder);
-	}
-	else
-	{
-		uint64_t qhi = Divide128Div64To64(0, high, divisor, &high);
-		return Divide128Div64To64(high, low, divisor, &remainder);
-	}
-  return low;
+static inline uint64_t udiv(uint64_t high, uint64_t low, uint64_t divisor) {
+#if defined(__x86_64__)
+  tu_int dividend = ((__uint128_t)high << 64) | low;
+  tu_int result = MyDivMod1(dividend, (__uint128_t)divisor, nullptr);
+  return (uint64_t)result;
+#else
+  __uint128_t dividend = ((__uint128_t)high << 64) | low;
+  return (uint64_t)(dividend / divisor);
+#endif
 }
 
 // __attribute__((noinline))
@@ -426,6 +471,51 @@ operation_func operations[] = {
     // Add other functions for cases 10-15
 };
 
+#ifdef __x86_64__
+TNN_TARGET_CLONE(stage_3, void, (uint64_t* scratch_pad, workerData_xelis_v2& worker), {
+    const uint8_t key[17] = "xelishash-pow-v2";
+    uint8_t block[16] = {0};
+
+    uint64_t* mem_buffer_a = scratch_pad;
+    uint64_t* mem_buffer_b = scratch_pad + XELIS_BUFFER_SIZE_V2;
+
+    uint64_t addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V2 - 1];
+    uint64_t addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - 1] >> 32;
+    size_t r = 0;
+
+    for (size_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V2; ++i) {
+        uint64_t mem_a = mem_buffer_a[addr_a % XELIS_BUFFER_SIZE_V2];
+        uint64_t mem_b = mem_buffer_b[addr_b % XELIS_BUFFER_SIZE_V2];
+
+        uint64_to_le_bytes(mem_b, block);
+        uint64_to_le_bytes(mem_a, block + 8);
+        aes_round(block, key);
+
+        uint64_t hash1 = le_bytes_to_uint64(block);
+        uint64_t hash2 = mem_a ^ mem_b;
+        addr_a = ~(hash1 ^ hash2);
+
+        for (size_t j = 0; j < XELIS_BUFFER_SIZE_V2; ++j) {
+            uint64_t a = mem_buffer_a[addr_a % XELIS_BUFFER_SIZE_V2];
+            uint64_t b = mem_buffer_b[~ROTR(addr_a, r) % XELIS_BUFFER_SIZE_V2];
+            uint64_t c = (r < XELIS_BUFFER_SIZE_V2) ? mem_buffer_a[r] : mem_buffer_b[r - XELIS_BUFFER_SIZE_V2];
+            r = (r + 1) % XELIS_MEMORY_SIZE_V2;
+
+            uint32_t idx = ROTL(addr_a, (uint32_t)c) & 0xF;
+            uint64_t v = operations[idx](a, b, c, r, addr_a, i, j);
+            addr_a = ROTL(addr_a ^ v, 1);
+
+            uint64_t t = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - j - 1] ^ addr_a;
+            mem_buffer_a[XELIS_BUFFER_SIZE_V2 - j - 1] = t;
+            mem_buffer_b[j] ^= ROTR(t, (uint32_t)addr_a);
+        }
+
+        addr_b = isqrt(addr_a);
+    }
+},
+  "default", TNN_TARGETS_X86_AVX2, TNN_TARGETS_X86_AVX512
+)
+#else
 void stage_3(uint64_t *scratch_pad, workerData_xelis_v2 &worker)
 {
     const uint8_t key[17] = "xelishash-pow-v2";
@@ -488,6 +578,7 @@ void stage_3(uint64_t *scratch_pad, workerData_xelis_v2 &worker)
   // crc32.input((uint8_t *)scratch_pad, XELIS_MEMORY_SIZE_V2 * 8);
   // printf("%llu\n", crc32.result());
 }
+#endif
 
 
 // void stage_3(workerData_xelis_v2 &worker)
