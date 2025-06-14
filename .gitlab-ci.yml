@@ -299,6 +299,8 @@ release_job:
       artifacts: true
     - job: build-linux-aarch64
       artifacts: true
+    - job: build-macos-aarch64
+      artifacts: true
     - job: build-hiveos-mmpos
       artifacts: true
     - job: build-windows
