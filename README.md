@@ -60,7 +60,6 @@ This miner can be activated from the command line with the following parameters.
 ```
 General:
   --help                    Produce help message
-  --stratum                 Required for mining to Stratum pools
   --broadcast               Creates an http server to query miner stats
   --testnet                 Adjusts in-house parameters to mine on testnets
   --daemon-address arg      Node/pool URL or IP address to mine to
@@ -74,6 +73,12 @@ General:
   --no-lock                 Disables CPU affinity / CPU core binding
   --ignore-wallet           Disables wallet validation, for specific uses with
                             pool mining
+
+Stratum:
+  --stratum                 Required for Stratum pools if not using
+                            'stratum+tcp://' or 'stratum+ssl://' in the daemon
+                            url
+  --password arg            Sets the Stratum password
   --worker-name arg         Sets the worker name for this instance when mining
                             on Pools or Bridges
 
@@ -125,7 +130,7 @@ DEBUG:
                             benchmark (default 15)
   --sabench                 Runs a benchmark for divsufsort on snapshot files
                             in the 'tests' directory
-  --quiet                   Do not print TNN banner
+  --quiet                   Do not print TNN banner or stratum job messages
 ```
 ### If the miner is run without any args, a CLI wizard will simply ask you to provide the required options one at a time.
 

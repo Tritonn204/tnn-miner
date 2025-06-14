@@ -214,7 +214,7 @@ inline po::options_description get_prog_opts()
     ("op", po::value<int>(), "Sets which branch op to benchmark (0-255), benchmark will be skipped if unspecified")
     ("len", po::value<int>(), "Sets length of the processed chunk in said benchmark (default 15)")
     ("sabench", "Runs a benchmark for divsufsort on snapshot files in the 'tests' directory")
-    ("quiet", "Do not print TNN banner")
+    ("quiet", "Do not print TNN banner or stratum job messages")
   ;
 
   general.add(stratum);
