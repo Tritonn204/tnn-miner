@@ -193,7 +193,7 @@ build-linux-aarch64:
   services:
     - name: docker:24.0.5-dind
 
-build-macos-arm64:
+build-macos-aarch64:
   extends:
     - .macos_saas_runners
   stage: build
