@@ -1,3 +1,6 @@
+// This header is based on code from https://danlark.org/2020/06/14/128-bit-division/
+// All credit goes to them for the logical flow of these methods
+
 #include <cstdint>
 #include <climits>
 #include <iostream>
@@ -30,7 +33,6 @@ inline du_int Divide128div64to64(du_int u1, du_int u0, du_int v, du_int* r) {
 #endif
 }
 
-// Full MyDivMod1 definition from your blog source:
 inline tu_int MyDivMod1(tu_int a, tu_int b, tu_int* rem) {
   utwords dividend{.all = a}, divisor{.all = b}, quotient{}, remainder{};
   const unsigned n_bits = sizeof(tu_int) * CHAR_BIT;
