@@ -310,7 +310,7 @@ void xelis_stratum_session(
   packet = XelisStratum::stratumCall;
   packet.at("id") = XelisStratum::authorize.id;
   packet.at("method") = XelisStratum::authorize.method;
-  packet.at("params") = boost::json::array({wallet, worker, "x"});
+  packet.at("params") = boost::json::array({wallet, worker, stratumPassword});
   std::string authorization = boost::json::serialize(packet) + "\n";
 
   // std::cout << authorization << std::endl;
@@ -644,7 +644,7 @@ void xelis_stratum_session_nossl(
   packet = XelisStratum::stratumCall;
   packet.at("id") = XelisStratum::authorize.id;
   packet.at("method") = XelisStratum::authorize.method;
-  packet.at("params") = boost::json::array({wallet, worker, "x"});
+  packet.at("params") = boost::json::array({wallet, worker, stratumPassword});
   std::string authorization = boost::json::serialize(packet) + "\n";
 
   // std::cout << authorization << std::endl;

@@ -429,6 +429,9 @@ void btc_stratum_session(
   std::string minerName = "tnn-miner/" + std::string(versionString);
   BTCStratum::jobCache jobCache;
 
+  // Persistent packet buffer for handling split packets
+  std::string packetBuffer;
+
   // Subscribe to Stratum
   boost::json::object packet = BTCStratum::stratumCall;
   packet["id"] = BTCStratum::subscribe.id;
@@ -442,22 +445,14 @@ void btc_stratum_session(
   if (ec)
     return fail(ec, "Stratum subscribe");
 
-  // Handle subscribe response
-  boost::asio::streambuf subRes;
-  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-  trans = boost::asio::read_until(stream, subRes, "\n");
-
-  std::string subResString = beast::buffers_to_string(subRes.data());
-  subRes.consume(trans);
-
-  boost::json::object subRPC = boost::json::parse(subResString.c_str()).as_object();
-  handleBTCStratumResponse(subRPC, &jobCache, isDev);
-
   // Authorize worker
   packet = BTCStratum::stratumCall;
   packet["id"] = BTCStratum::authorize.id;
   packet["method"] = BTCStratum::authorize.method;
-  packet["params"] = boost::json::array({wallet + "." + worker});
+  packet["params"] = boost::json::array({
+    wallet + "." + worker,
+    stratumPassword
+  });
   if (isDev)
   {
     packet["params"] = boost::json::array({devWallet + "." + worker + "-" + tnnTargetArch});
@@ -473,9 +468,6 @@ void btc_stratum_session(
   BTCStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(
                                         std::chrono::steady_clock::now().time_since_epoch())
                                         .count();
-
-  // Persistent packet buffer for handling split packets
-  std::string packetBuffer;
 
   bool submitThread = false;
   bool abort = false;
@@ -676,6 +668,9 @@ void btc_stratum_session_nossl(
   std::string minerName = "tnn-miner/" + std::string(versionString);
   BTCStratum::jobCache jobCache;
 
+  // Persistent packet buffer for handling split packets
+  std::string packetBuffer;
+
   // Subscribe to Stratum
   boost::json::object packet = BTCStratum::stratumCall;
   packet["id"] = BTCStratum::subscribe.id;
@@ -689,22 +684,14 @@ void btc_stratum_session_nossl(
   if (ec)
     return fail(ec, "Stratum subscribe");
 
-  // Handle subscribe response
-  boost::asio::streambuf subRes;
-  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-  trans = boost::asio::read_until(stream, subRes, "\n");
-
-  std::string subResString = beast::buffers_to_string(subRes.data());
-  subRes.consume(trans);
-
-  boost::json::object subRPC = boost::json::parse(subResString.c_str()).as_object();
-  handleBTCStratumResponse(subRPC, &jobCache, isDev);
-
   // Authorize worker
   packet = BTCStratum::stratumCall;
   packet["id"] = BTCStratum::authorize.id;
   packet["method"] = BTCStratum::authorize.method;
-  packet["params"] = boost::json::array({wallet + "." + worker});
+  packet["params"] = boost::json::array({
+    wallet + "." + worker,
+    stratumPassword
+  });
   if (isDev)
   {
     packet["params"] = boost::json::array({devWallet + "." + worker + "-" + tnnTargetArch});
@@ -720,9 +707,6 @@ void btc_stratum_session_nossl(
   BTCStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(
                                         std::chrono::steady_clock::now().time_since_epoch())
                                         .count();
-
-  // Persistent packet buffer for handling split packets
-  std::string packetBuffer;
 
   bool submitThread = false;
   bool abort = false;
@@ -813,6 +797,7 @@ void btc_stratum_session_nossl(
       if (trans > 0)
       {
         std::string newData = beast::buffers_to_string(response.data());
+
         response.consume(trans);
 
         // Add new data to persistent buffer

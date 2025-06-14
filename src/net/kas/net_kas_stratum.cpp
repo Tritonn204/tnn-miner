@@ -281,431 +281,331 @@ void kas_stratum_session(
     net::yield_context yield,
     bool isDev)
 {
-  ctx.set_options(boost::asio::ssl::context::default_workarounds |
-                  boost::asio::ssl::context::no_sslv2 |
-                  boost::asio::ssl::context::no_sslv3 |
-                  boost::asio::ssl::context::no_tlsv1 |
-                  boost::asio::ssl::context::no_tlsv1_1);
+    ctx.set_options(boost::asio::ssl::context::default_workarounds |
+                    boost::asio::ssl::context::no_sslv2 |
+                    boost::asio::ssl::context::no_sslv3 |
+                    boost::asio::ssl::context::no_tlsv1 |
+                    boost::asio::ssl::context::no_tlsv1_1);
 
-  beast::error_code ec;
-  boost::system::error_code jsonEc;
+    beast::error_code ec;
+    boost::system::error_code jsonEc;
+    auto endpoint = resolve_host(wsMutex, ioc, yield, host, port);
+    boost::beast::ssl_stream<boost::beast::tcp_stream> stream(ioc, ctx);
 
-  auto endpoint = resolve_host(wsMutex, ioc, yield, host, port);
-  boost::beast::tcp_stream stream(ioc);
-
-  // Set a timeout on the operation
-  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-
-  // Make the connection on the IP address we get from a lookup
-  beast::get_lowest_layer(stream).async_connect(endpoint, yield[ec]);
-  if (ec)
-    return fail(ec, "connect");
-
-  std::string minerName = "tnn-miner/" + std::string(versionString);
-  boost::json::object packet;
-
-  KasStratum::jobCache jobCache;
-
-  // Subscribe to Stratum
-  packet = KasStratum::stratumCall;
-  packet["id"] = KasStratum::subscribe.id;
-  packet["method"] = KasStratum::subscribe.method;
-  packet["params"] = boost::json::array({
-    minerName
-  });
-  std::string subscription = boost::json::serialize(packet) + "\n";
-
-  // std::cout << authResString << std::endl;
-  size_t trans;
-
-  try {
     beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-    trans = boost::asio::async_write(stream, boost::asio::buffer(subscription), yield[ec]);
-    if (ec)
-      return fail(ec, "Stratum subscribe");
+    beast::get_lowest_layer(stream).async_connect(endpoint, yield[ec]);
+    if (ec) return fail(ec, "connect");
 
-    boost::asio::streambuf subRes;
-    beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-    trans = boost::asio::read_until(stream, subRes, "\n");
+    stream.async_handshake(ssl::stream_base::client, yield[ec]);
+    if (ec) return fail(ec, "handshake");
 
-    std::string subResString = beast::buffers_to_string(subRes.data());
-    subRes.consume(trans);
-    if (jsonEc)
+    std::string minerName = "tnn-miner/" + std::string(versionString);
+    boost::json::object packet;
+    KasStratum::jobCache jobCache;
+
+    packet = KasStratum::stratumCall;
+    packet["id"] = KasStratum::subscribe.id;
+    packet["method"] = KasStratum::subscribe.method;
+    packet["params"] = boost::json::array({ minerName });
     {
-      std::cerr << jsonEc.message() << std::endl;
+        std::string msg = boost::json::serialize(packet) + "\n";
+        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
+        boost::asio::async_write(stream.next_layer(), boost::asio::buffer(msg), yield[ec]);
+        if (ec) return fail(ec, "Stratum subscribe");
     }
 
-    // std::cout << "sub result: " << subResString << std::endl << std::flush;
-
-    std::stringstream  jsonStream(subResString);
-    std::vector<std::string> packets;
-
-    std::string line;
-    while(std::getline(jsonStream,line,'\n'))
+    packet = KasStratum::stratumCall;
+    packet["id"] = KasStratum::authorize.id;
+    packet["method"] = KasStratum::authorize.method;
+    packet["params"] = boost::json::array({
+        wallet + "." + worker,
+        stratumPassword
+    });
     {
-      packets.push_back(line);
+        std::string msg = boost::json::serialize(packet) + "\n";
+        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
+        boost::asio::async_write(stream.next_layer(), boost::asio::buffer(msg), yield[ec]);
+        if (ec) return fail(ec, "Stratum authorize");
     }
 
-    for (std::string packet : packets) {
-      boost::json::object subRPC = boost::json::parse(packet.c_str()).as_object();
-      if (subRPC.contains("method"))
-      {
-        handleKasStratumPacket(subRPC, &jobCache, isDev);
-      } 
-    }
-  } catch (const std::exception &e) {
-    setcolor(RED);
-    printf("\nStratum Subscribe error: %s\n", e.what());
-    fflush(stdout);
-    setcolor(BRIGHT_WHITE);
-  }
-  // Authorize Stratum Worker
-  packet = KasStratum::stratumCall;
-  packet.at("id") = KasStratum::authorize.id;
-  packet.at("method") = KasStratum::authorize.method;
-  packet.at("params") = boost::json::array({wallet + "." + worker});
+    KasStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
 
-  std::string authorization = boost::json::serialize(packet) + "\n";
+    std::string packetBuffer;
+    bool submitThread = false, abort = false;
 
-  // std::cout << authorization << std::endl;
-  try {
-    beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-    boost::asio::async_write(stream, boost::asio::buffer(authorization), yield[ec]);
-    if (ec)
-      return fail(ec, "Stratum authorize");
+    boost::thread subThread([&]() {
+        submitThread = true;
+        while (!abort) {
+            boost::unique_lock<boost::mutex> lock(mutex);
+            bool *B = isDev ? &submittingDev : &submitting;
+            cv.wait(lock, [&] { return (data_ready && (*B)) || abort; });
+            if (abort) break;
 
-    boost::asio::streambuf authRes;
-    beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-    trans = boost::asio::read_until(stream, authRes, "\n");
-
-    std::string authResString = beast::buffers_to_string(authRes.data());
-    authRes.consume(trans);
-    if (jsonEc)
-    {
-      std::cerr << jsonEc.message() << std::endl;
-    }
-
-    // std::cout << "auth result: " << authResString << std::endl << std::flush;
-
-    std::stringstream  jsonStream(authResString);
-    std::vector<std::string> packets;
-
-    std::string line;
-    while(std::getline(jsonStream,line,'\n'))
-    {
-      packets.push_back(line);
-    }
-
-    for (std::string packet : packets) {
-      boost::json::object authRPC = boost::json::parse(packet.c_str()).as_object();
-      if (authRPC.contains("method"))
-      {
-        handleKasStratumPacket(authRPC, &jobCache, isDev);
-      }
-    }
-  } catch (const std::exception &e) {
-    setcolor(RED);
-    printf("\nStratum Authorize error: %s\n", e.what());
-    fflush(stdout);
-    setcolor(BRIGHT_WHITE);
-  }
-  // KasStratum::stratumCall;
-  // packet.at("id") = KasStratum::subscribe.id;
-  // packet.at("method") = KasStratum::subscribe.method;
-  // packet.at("params") = {minerName};
-
-  // beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-  // trans = boost::asio::read_until(stream, subRes, "\n");
-
-  // std::string subResString = beast::buffers_to_string(subRes.data());
-  // subRes.consume(trans);
-
-  // mutex.lock();
-  // printf("before packet\n");
-  // std::cout << subResString << std::endl;
-
-  // printf("before parse\n");
-  // mutex.unlock();
-  // boost::json::object subResJson = boost::json::parse(subResString.c_str(), jsonEc).as_object();
-  // if (jsonEc)
-  // {
-  //   std::cerr << jsonEc.message() << std::endl;
-  // }
-
-  // printf("after parse\n");
-
-  // handleXStratumPacket(subResJson, isDev);
-
-  // // This buffer will hold the incoming message
-  // beast::flat_buffer buffer;
-  // std::stringstream workInfo;
-
-  KasStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-
-  std::string chopQueue = "NULL";
-
-  bool submitThread = false;
-  bool abort = false;
-
-  boost::thread subThread([&](){
-    submitThread = true;
-    while(!abort) {
-      boost::unique_lock<boost::mutex> lock(mutex);
-      bool *B = isDev ? &submittingDev : &submitting;
-      cv.wait(lock, [&]{ return (data_ready && (*B)) || abort; });
-      if (abort) break;
-      try {
-        boost::json::object *S = &share;
-        if (isDev)
-          S = &devShare;
-
-        boost::system::error_code ec;
-        std::string msg = boost::json::serialize((*S)) + "\n";
-        // std::cout << "sending in: " << msg << std::endl;
-        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(1));
-        boost::asio::async_write(stream, boost::asio::buffer(msg), [&](const boost::system::error_code& error, std::size_t bytes_transferred) {
-          if (error) {
-            printf("error on write: %s\n", error.message().c_str());
-            fflush(stdout);
-            abort = true;
-          }
-          if (!isDev) KasStratum::lastShareSubmissionTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-          // (*B) = false;
-          // data_ready = false;
-        });
-        (*B) = false;
-        data_ready = false;
-      } catch (const std::exception &e) {
-        setcolor(RED);
-        printf("\nSubmit thread error: %s\n", e.what());
-        fflush(stdout);
-        setcolor(BRIGHT_WHITE);
-        break;
-      }
-      boost::this_thread::yield();
-    }
-    submitThread = false;
-  });
-
-  while (!ABORT_MINER)
-  {
-    bool *C = isDev ? &devConnected : &isConnected;
-    bool *B = isDev ? &submittingDev : &submitting;
-    try
-    {
-      if (
-          KasStratum::lastReceivedJobTime > 0 &&
-          std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count() - KasStratum::lastReceivedJobTime > KasStratum::jobTimeout)
-      {
-        setcolor(RED);
-        printf("timeout\n");
-        fflush(stdout);
-        setcolor(BRIGHT_WHITE);
-        setForDisconnected(C, B, &abort, &data_ready, &cv);
-
-        for (;;) {
-          if (!submitThread) break;
-          boost::this_thread::yield();
-        }
-        stream.close();
-        return fail(ec, "Stratum session timed out");
-      }
-
-      boost::asio::streambuf response;
-      std::stringstream workInfo;
-      beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(60));
-
-      trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
-      if (ec) {
-        setcolor(RED);
-        printf("failed to read: %s\n", isDev ? "dev" : "user");
-        fflush(stdout);
-        setcolor(BRIGHT_WHITE);
-        setForDisconnected(C, B, &abort, &data_ready, &cv);
-        boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
-        cv.notify_all();
-
-        for (;;) {
-          if (!submitThread) {
-            break;
-          }
-          boost::this_thread::yield();
-        }
-        
-        stream.close();
-        return fail(ec, "async_read");
-      }
-
-      if (trans > 0)
-      {
-        // std::scoped_lock<boost::mutex> lockGuard(wsMutex);
-        std::vector<std::string> packets;
-        std::string data = beast::buffers_to_string(response.data());
-        // Consume the data from the buffer after processing it
-        response.consume(trans);
-
-        // std::cout << "received: " << data << std::endl << std::flush;
-        // printf("received data\n");
-        fflush(stdout);
-
-        std::stringstream  jsonStream(data);
-
-        std::string line;
-        while(std::getline(jsonStream,line,'\n'))
-        {
-          packets.push_back(line);
-        }
-
-        for (std::string packet : packets) {
-          try {
-            boost::json::object sRPC = boost::json::parse(packet.c_str()).as_object();
-            if (sRPC.contains("method"))
-            {
-              if (std::string(sRPC.at("method").as_string().c_str()).compare(KasStratum::s_ping) == 0)
-              {
-                boost::json::object pong({{"id", sRPC.at("id").get_uint64()},
-                                          {"method", KasStratum::pong.method}});
-                std::string pongPacket = std::string(boost::json::serialize(pong).c_str()) + "\n";
-                trans = boost::asio::async_write(
-                    stream,
-                    boost::asio::buffer(pongPacket),
-                    yield[ec]);
-                if(ec) {
-                  printf("error on write(%zu): %s\n", trans, ec.message().c_str());
-                  fflush(stdout);
-                }
-                if (ec && trans > 0) {
-                  setcolor(RED);
-                  printf("ec && trans > 0\n");
-                  fflush(stdout);
-                  setcolor(BRIGHT_WHITE);
-                  setForDisconnected(C, B, &abort, &data_ready, &cv);
-
-                  for (;;)
-                  {
-                    if (!submitThread)
-                      break;
-                    boost::this_thread::yield();
-                  }
-                  stream.close();
-                  return fail(ec, "Stratum pong");
-                }
-              }
-              else
-                handleKasStratumPacket(sRPC, &jobCache, isDev);
+            try {
+                boost::json::object *S = isDev ? &devShare : &share;
+                std::string msg = boost::json::serialize(*S) + "\n";
+                beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(1));
+                boost::asio::async_write(stream.next_layer(), boost::asio::buffer(msg),
+                    [&](const boost::system::error_code& error, std::size_t) {
+                        if (error) abort = true;
+                        if (!isDev)
+                            KasStratum::lastShareSubmissionTime = std::chrono::duration_cast<std::chrono::seconds>(
+                                std::chrono::steady_clock::now().time_since_epoch()).count();
+                    });
+                *B = false;
+                data_ready = false;
             }
-            else
-            {
-              handleKasStratumResponse(sRPC, isDev);
-            } 
-          } catch(const std::exception &e){
-            // printf("\n\n packet count: %d, msg size: %llu\n\n", packets.size(), trans);
-            setcolor(RED);
-            // printf("BEFORE PACKET\n");
-            // std::cout << "BAD PACKET: " << packet << std::endl;
-            // printf("AFTER PACKET\n");
-            // std::cerr << e.what() << std::endl;
-            setcolor(BRIGHT_WHITE);
-            bool tryParse = (chopQueue.compare("NULL") != 0);
-
-            if (tryParse) {
-              chopQueue += packet;
-              // printf("resulting json string: %s\n\n", chopQueue.c_str());
-              try
-              {
-                packets.clear();
-                boost::json::object sRPC = boost::json::parse(chopQueue.c_str()).as_object();
-                if (sRPC.contains("method"))
-                {
-                  if (std::string(sRPC.at("method").as_string().c_str()).compare(KasStratum::s_ping) == 0)
-                  {
-                    boost::json::object pong({{"id", sRPC.at("id").get_uint64()},
-                                              {"method", KasStratum::pong.method}});
-                    std::string pongPacket = std::string(boost::json::serialize(pong).c_str()) + "\n";
-                    trans = boost::asio::async_write(
-                        stream,
-                        boost::asio::buffer(pongPacket),
-                        yield[ec]);
-                    if(ec) {
-                      printf("error on write(%zu): %s\n", trans, ec.message().c_str());
-                      fflush(stdout);
-                    }
-                    if (ec && trans > 0) {
-                      printf("ec && trans > 0\n");
-                      fflush(stdout);
-                      setForDisconnected(C, B, &abort, &data_ready, &cv);
-  
-                      for (;;)
-                      {
-                        if (!submitThread) {
-                          break;
-                        }
-                        boost::this_thread::yield();
-                      }
-                      stream.close();
-                      return fail(ec, "Stratum pong");
-                    }
-                  }
-                  else
-                    handleKasStratumPacket(sRPC, &jobCache, isDev);
-                }
-                else
-                {
-                  handleKasStratumResponse(sRPC, isDev);
-                }
-                chopQueue = "NULL";
-                // printf("COMBINE WORKED!\n\n");
-              }
-              catch (const std::exception &e)
-              {
-                setcolor(RED);
-                printf("COMBINE FAILED\n\nBEFORE PACKET\n");
-                std::cout << chopQueue << std::endl;
-                printf("AFTER PACKET\n");
-                std::cerr << e.what() << std::endl;
-                fflush(stdout);
-                setcolor(BRIGHT_WHITE);
-              }
-            } else {
-              chopQueue = packet;
-              // printf("partial json start = %s\n", chopQueue.c_str());
-            } 
-          }
+            catch (...) { break; }
+            boost::this_thread::yield();
         }
-      }
-    }
-    catch (const std::exception &e)
-    {
-      bool *C = isDev ? &devConnected : &isConnected;
-      printf("exception\n");
-      fflush(stdout);
-      setForDisconnected(C, B, &abort, &data_ready, &cv);
+        submitThread = false;
+    });
 
-      for (;;) {
-        if (!submitThread) break;
+    while (!ABORT_MINER) {
+        bool *C = isDev ? &devConnected : &isConnected;
+        bool *B = isDev ? &submittingDev : &submitting;
+
+        if (KasStratum::lastReceivedJobTime > 0 &&
+            std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count()
+            - KasStratum::lastReceivedJobTime > KasStratum::jobTimeout)
+        {
+            setForDisconnected(C, B, &abort, &data_ready, &cv);
+            while (submitThread) boost::this_thread::yield();
+            stream.next_layer().close();
+            return fail(ec, "Stratum session timed out");
+        }
+
+        boost::asio::streambuf response;
+        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(60));
+        size_t n = boost::asio::async_read_until(stream.next_layer(), response, "\n", yield[ec]);
+        if (ec) {
+            setForDisconnected(C, B, &abort, &data_ready, &cv);
+            while (submitThread) boost::this_thread::yield();
+            stream.next_layer().close();
+            return fail(ec, "async_read");
+        }
+
+        std::string newData = beast::buffers_to_string(response.data());
+        response.consume(n);
+        packetBuffer += newData;
+
+        size_t pos;
+        while ((pos = packetBuffer.find('\n')) != std::string::npos) {
+            std::string line = packetBuffer.substr(0, pos);
+            packetBuffer.erase(0, pos + 1);
+            if (line.empty()) continue;
+
+            try {
+                auto rpc = boost::json::parse(line).as_object();
+
+                if (rpc.contains("method") &&
+                    std::string(rpc["method"].as_string().c_str()) == KasStratum::s_ping)
+                {
+                    boost::json::object pong = {
+                        {"id", rpc["id"].get_uint64()},
+                        {"method", KasStratum::pong.method}
+                    };
+                    std::string pongMsg = boost::json::serialize(pong) + "\n";
+                    boost::asio::async_write(stream.next_layer(), boost::asio::buffer(pongMsg), yield[ec]);
+                    if (ec) {
+                        setForDisconnected(C, B, &abort, &data_ready, &cv);
+                        while (submitThread) boost::this_thread::yield();
+                        stream.next_layer().close();
+                        return fail(ec, "Stratum pong");
+                    }
+                }
+                else if (rpc.contains("method")) {
+                    handleKasStratumPacket(rpc, &jobCache, isDev);
+                }
+                else {
+                    handleKasStratumResponse(rpc, isDev);
+                }
+            }
+            catch (...) { /* ignore invalid packet */ }
+        }
+
+        if (packetBuffer.size() > 65536) packetBuffer.clear();
         boost::this_thread::yield();
-      }
-      stream.close();
-      setcolor(RED);
-      std::cerr << e.what() << std::endl;
-      fflush(stdout);
-      setcolor(BRIGHT_WHITE);
-      return fail(ec, "Stratum session error");
-    }
-    boost::this_thread::yield();
-    if(ABORT_MINER) {
-      bool *connPtr = isDev ? &devConnected : &isConnected;
-      bool *submitPtr = isDev ? &submittingDev : &submitting;
-      setForDisconnected(connPtr, submitPtr, &abort, &data_ready, &cv);
-      ioc.stop();
-    }
-  }
-  cv.notify_all();
 
-  subThread.interrupt();
-  subThread.join();
+        if (ABORT_MINER) {
+            setForDisconnected(C, B, &abort, &data_ready, &cv);
+            ioc.stop();
+        }
+    }
 
-  // submission_thread.interrupt();
-  // printf("\n\n\nflagged connection loss\n");
-  // stream.close();
+    cv.notify_all();
+    subThread.interrupt();
+    subThread.join();
+}
+
+void kas_stratum_session_nossl(
+    std::string host,
+    std::string const &port,
+    std::string const &wallet,
+    std::string const &worker,
+    net::io_context &ioc,
+    ssl::context &ctx,  // still accepted but unused
+    net::yield_context yield,
+    bool isDev)
+{
+    ctx.set_options(boost::asio::ssl::context::default_workarounds |
+                    boost::asio::ssl::context::no_sslv2 |
+                    boost::asio::ssl::context::no_sslv3 |
+                    boost::asio::ssl::context::no_tlsv1 |
+                    boost::asio::ssl::context::no_tlsv1_1);
+
+    beast::error_code ec;
+    auto endpoint = resolve_host(wsMutex, ioc, yield, host, port);
+    boost::beast::tcp_stream stream(ioc);
+
+    beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
+    beast::get_lowest_layer(stream).async_connect(endpoint, yield[ec]);
+    if (ec) return fail(ec, "connect");
+
+    std::string minerName = "tnn-miner/" + std::string(versionString);
+    boost::json::object packet;
+    KasStratum::jobCache jobCache;
+
+    // Subscribe
+    packet = KasStratum::stratumCall;
+    packet["id"] = KasStratum::subscribe.id;
+    packet["method"] = KasStratum::subscribe.method;
+    packet["params"] = boost::json::array({ minerName });
+    {
+        std::string msg = boost::json::serialize(packet) + "\n";
+        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
+        boost::asio::async_write(stream, boost::asio::buffer(msg), yield[ec]);
+        if (ec) return fail(ec, "Stratum subscribe");
+    }
+
+    // Authorize
+    packet = KasStratum::stratumCall;
+    packet["id"] = KasStratum::authorize.id;
+    packet["method"] = KasStratum::authorize.method;
+    packet["params"] = boost::json::array({
+        wallet + "." + worker,
+        stratumPassword
+    });
+    {
+        std::string msg = boost::json::serialize(packet) + "\n";
+        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
+        boost::asio::async_write(stream, boost::asio::buffer(msg), yield[ec]);
+        if (ec) return fail(ec, "Stratum authorize");
+    }
+
+    KasStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+
+    std::string packetBuffer;
+    bool submitThread = false, abort = false;
+
+    boost::thread subThread([&]() {
+        submitThread = true;
+        while (!abort) {
+            boost::unique_lock<boost::mutex> lock(mutex);
+            bool *B = isDev ? &submittingDev : &submitting;
+            cv.wait(lock, [&] { return (data_ready && (*B)) || abort; });
+            if (abort) break;
+
+            try {
+                boost::json::object *S = isDev ? &devShare : &share;
+                std::string msg = boost::json::serialize(*S) + "\n";
+                beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(1));
+                boost::asio::async_write(stream, boost::asio::buffer(msg),
+                    [&](const boost::system::error_code& err, std::size_t) {
+                        if (err) abort = true;
+                        if (!isDev)
+                            KasStratum::lastShareSubmissionTime =
+                              std::chrono::duration_cast<std::chrono::seconds>(
+                                std::chrono::steady_clock::now().time_since_epoch()).count();
+                    });
+                *B = false;
+                data_ready = false;
+            }
+            catch (...) { break; }
+            boost::this_thread::yield();
+        }
+        submitThread = false;
+    });
+
+    while (!ABORT_MINER) {
+        bool *C = isDev ? &devConnected : &isConnected;
+        bool *B = isDev ? &submittingDev : &submitting;
+
+        if (KasStratum::lastReceivedJobTime > 0 &&
+            std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count()
+            - KasStratum::lastReceivedJobTime > KasStratum::jobTimeout)
+        {
+            setForDisconnected(C, B, &abort, &data_ready, &cv);
+            while (submitThread) boost::this_thread::yield();
+            stream.close();
+            return fail(ec, "Stratum session timed out");
+        }
+
+        boost::asio::streambuf response;
+        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(60));
+        size_t n = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
+        if (ec) {
+            setForDisconnected(C, B, &abort, &data_ready, &cv);
+            while (submitThread) boost::this_thread::yield();
+            stream.close();
+            return fail(ec, "async_read");
+        }
+
+        std::string newData = beast::buffers_to_string(response.data());
+        response.consume(n);
+        packetBuffer += newData;
+
+        size_t pos;
+        while ((pos = packetBuffer.find('\n')) != std::string::npos) {
+            std::string line = packetBuffer.substr(0, pos);
+            packetBuffer.erase(0, pos + 1);
+            if (line.empty()) continue;
+
+            try {
+                auto rpc = boost::json::parse(line).as_object();
+                if (rpc.contains("method") &&
+                    std::string(rpc["method"].as_string().c_str()) == KasStratum::s_ping)
+                {
+                    boost::json::object pong = {
+                        {"id", rpc["id"].get_uint64()},
+                        {"method", KasStratum::pong.method}
+                    };
+                    std::string pongMsg = boost::json::serialize(pong) + "\n";
+                    boost::asio::async_write(stream, boost::asio::buffer(pongMsg), yield[ec]);
+                    if (ec) {
+                        setForDisconnected(C, B, &abort, &data_ready, &cv);
+                        while (submitThread) boost::this_thread::yield();
+                        stream.close();
+                        return fail(ec, "Stratum pong");
+                    }
+                }
+                else if (rpc.contains("method")) {
+                    handleKasStratumPacket(rpc, &jobCache, isDev);
+                }
+                else {
+                    handleKasStratumResponse(rpc, isDev);
+                }
+            }
+            catch (...) {
+                // invalid packet — ignore
+            }
+        }
+
+        if (packetBuffer.size() > 65536)
+            packetBuffer.clear();
+
+        boost::this_thread::yield();
+        if (ABORT_MINER) {
+            setForDisconnected(C, B, &abort, &data_ready, &cv);
+            ioc.stop();
+        }
+    }
+
+    cv.notify_all();
+    subThread.interrupt();
+    subThread.join();
 }

@@ -316,7 +316,7 @@ void rx0_stratum_session(
 
     boost::json::object loginParams = {
         {"login", wallet},
-        {"pass", "x"},
+        {"pass", stratumPassword},
         {"rigid", worker},
         {"agent", userAgent.c_str()}
     };
@@ -627,7 +627,7 @@ void rx0_stratum_session_nossl(
 
     boost::json::object loginParams = {
         {"login", wallet},
-        {"pass", "x"},
+        {"pass", stratumPassword},
         {"rigid", worker},
         {"agent", userAgent.c_str()}
     };

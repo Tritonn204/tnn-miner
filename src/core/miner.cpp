@@ -158,6 +158,7 @@ std::vector<int64_t> rate30sec;
 
 std::string workerName = "default";
 std::string workerNameFromWallet = "";
+std::string stratumPassword = "x";
 
 bool isConnected = false;
 bool devConnected = false;
@@ -895,6 +896,10 @@ int main(int argc, char **argv)
       return 1;
     }
   }
+  if (vm.count("password"))
+  {
+    stratumPassword = vm["password"].as<std::string>();
+  }
   if (vm.count("no-lock"))
   {
     setcolor(CYAN);
@@ -1088,6 +1093,9 @@ fillBlanks:
           initADVCParams(&currentYespowerParams);
           initADVCParams(&devYespowerParams);
         }
+        break;
+      case ALGO_RINHASH:
+        miningProfile.protocol = PROTO_BTC_STRATUM;
         break;
     }
   }

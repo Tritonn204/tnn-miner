@@ -53,6 +53,7 @@ extern int threads;
 
 extern std::string workerName;
 extern std::string workerNameFromWallet;
+extern std::string stratumPassword;
 extern bool useLookupMine;
 
 extern bool gpuMine;

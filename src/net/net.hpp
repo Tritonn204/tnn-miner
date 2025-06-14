@@ -196,7 +196,11 @@ inline void do_session_v2(
       case PROTO_SPECTRE_SOLO:
         break;
       case PROTO_SPECTRE_STRATUM:
-        spectre_stratum_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
+        if(use_ssl) {
+          spectre_stratum_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
+        } else {
+          spectre_stratum_session_nossl(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
+        }
         break;
     }
     break;
@@ -250,7 +254,11 @@ inline void do_session_v2(
         kas_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->isDev);
         break;
       case PROTO_KAS_STRATUM:
-        kas_stratum_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
+        if(use_ssl) {
+          kas_stratum_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
+        } else {
+          kas_stratum_session_nossl(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
+        }
         break;
     }
   #endif
@@ -262,7 +270,11 @@ inline void do_session_v2(
         kas_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->isDev);
         break;
       case PROTO_KAS_STRATUM:
-        kas_stratum_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
+        if(use_ssl) {
+          kas_stratum_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
+        } else {
+          kas_stratum_session_nossl(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
+        }
         break;
     }
   #endif
@@ -274,7 +286,11 @@ inline void do_session_v2(
         kas_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->isDev);
         break;
       case PROTO_KAS_STRATUM:
-        kas_stratum_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
+        if(use_ssl) {
+          kas_stratum_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
+        } else {
+          kas_stratum_session_nossl(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
+        }
         break;
     }
   #endif
@@ -286,7 +302,11 @@ inline void do_session_v2(
         kas_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->isDev);
         break;
       case PROTO_KAS_STRATUM:
-        kas_stratum_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
+        if(use_ssl) {
+          kas_stratum_session(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
+        } else {
+          kas_stratum_session_nossl(miningProf->host, miningProf->port, miningProf->wallet, miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
+        }
         break;
     }
   #endif

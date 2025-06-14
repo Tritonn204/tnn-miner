@@ -144,7 +144,6 @@ inline po::options_description get_prog_opts()
   po::options_description general("General", col_width);
   general.add_options()
     ("help", "Produce help message")
-    ("stratum", "Required for mining to Stratum pools")
     ("broadcast", "Creates an http server to query miner stats")
     ("testnet", "Adjusts in-house parameters to mine on testnets")
     ("daemon-address", po::value<std::string>(), "Node/pool URL or IP address to mine to") // todo: parse out port and/or wss:// or ws://
@@ -155,9 +154,15 @@ inline po::options_description get_prog_opts()
     ("report-interval", po::value<int>(), "Your desired status update interval in seconds")
     ("no-lock", "Disables CPU affinity / CPU core binding")
     ("ignore-wallet", "Disables wallet validation, for specific uses with pool mining")
-    ("worker-name", po::value<std::string>(), "Sets the worker name for this instance when mining on Pools or Bridges")
     // ("gpu", "Mine with GPU instead of CPU")
     // ("batch-size", po::value<int>(), "(GPU Setting) Sets batch size used for GPU mining")
+  ;
+
+  po::options_description stratum("Stratum", col_width);
+  stratum.add_options()
+    ("stratum", "Required for Stratum pools if not using 'stratum+tcp://' or 'stratum+ssl://' in the daemon url")
+    ("password", po::value<std::string>(), "Sets the Stratum password")
+    ("worker-name", po::value<std::string>(), "Sets the worker name for this instance when mining on Pools or Bridges")
   ;
 
   po::options_description coins("Coin Selection", col_width);
@@ -212,6 +217,7 @@ inline po::options_description get_prog_opts()
     ("quiet", "Do not print TNN banner")
   ;
 
+  general.add(stratum);
   general.add(coins);
   general.add(dero);
   general.add(xelis);

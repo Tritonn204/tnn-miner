@@ -77,6 +77,16 @@ void spectre_stratum_session(
     net::yield_context yield,
     bool isDev);
 
+void spectre_stratum_session_nossl(
+    std::string host,
+    std::string const &port,
+    std::string const &wallet,
+    std::string const &worker,
+    net::io_context &ioc,
+    ssl::context &ctx,
+    net::yield_context yield,
+    bool isDev);
+
 // RANDOMX FAMILY
 void rx0_session(
     std::string host,
@@ -123,6 +133,16 @@ void kas_session(
     bool isDev);
 
 void kas_stratum_session(
+    std::string host,
+    std::string const &port,
+    std::string const &wallet,
+    std::string const &worker,
+    net::io_context &ioc,
+    ssl::context &ctx,
+    net::yield_context yield,
+    bool isDev);
+
+  void kas_stratum_session_nossl(
     std::string host,
     std::string const &port,
     std::string const &wallet,
