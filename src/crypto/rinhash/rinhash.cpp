@@ -14,6 +14,7 @@
 #include <crypto/tiny-keccak/tiny-keccak.h>
 #include "argon2/argon2.h"
 #include "argon2/argon2_core.h"
+#include "blake2/blake2.h"
 #include <openssl/evp.h>
 #include "hex.h"
 
@@ -191,7 +192,10 @@ namespace RinHash {
       }
     }
 
-    argon2_finalize_fmv(&instance, rin_ctx->scratch, 32);
+    const uint32_t last_block_offset = instance.lane_length - 1;
+    const block* last_block = &(instance.memory[last_block_offset]);
+
+    blake2b_long(rin_ctx->scratch, 32, (uint8_t*)last_block->v, ARGON2_BLOCK_SIZE);
 
     memset(rin_ctx->scratch + 32, 0, 200-32);
     sha3_256_rin(rin_ctx->scratch);

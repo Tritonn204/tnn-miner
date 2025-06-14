@@ -3,22 +3,23 @@
 #if defined(__x86_64__)
 
 #include <immintrin.h>
+#include <inttypes.h>
 #include <memory.h>
  
 __attribute__((target("sse2")))
 static inline void PartialXor(const __m128i val, uint8_t* Src, uint8_t* Dest, uint64_t Size)
 {
-	_Alignas(16) uint8_t BuffForPartialOp[16];
+	alignas(16) uint8_t BuffForPartialOp[16];
 	memcpy(BuffForPartialOp, Src, Size);
-	_mm_storeu_si128((__m128i*)(BuffForPartialOp), _mm_xor_si128(val, _mm_loadu_si128((const __m128i*)BuffForPartialOp)));
+	_mm_store_si128((__m128i*)(BuffForPartialOp), _mm_xor_si128(val, _mm_loadu_si128((const __m128i*)BuffForPartialOp)));
 	memcpy(Dest, BuffForPartialOp, Size);
 }
 
 __attribute__((target("sse2")))
 static inline void PartialStore(const __m128i val, uint8_t* Dest, uint64_t Size)
 {
-	_Alignas(16) uint8_t BuffForPartialOp[16];
-	_mm_storeu_si128((__m128i*)(BuffForPartialOp), val);
+	alignas(16) uint8_t BuffForPartialOp[16];
+	_mm_store_si128((__m128i*)(BuffForPartialOp), val);
 	memcpy(Dest, BuffForPartialOp, Size);
 }
 
@@ -422,21 +423,21 @@ void ChaCha20EncryptBytes(uint8_t* state, uint8_t* In, uint8_t* Out, uint64_t Si
 		}
 		else
 		{
-			_Alignas(16) uint8_t TmpBuf[64];
+			alignas(16) uint8_t TmpBuf[64];
 			if (In)
 			{
 				memcpy(TmpBuf, CurrentIn, RemainingBytes);
-				_mm_storeu_si128((__m128i*)(TmpBuf + 0 * 16), _mm_xor_si128(_mm_loadu_si128((const __m128i*)(TmpBuf + 0 * 16)), r0_0));
-				_mm_storeu_si128((__m128i*)(TmpBuf + 1 * 16), _mm_xor_si128(_mm_loadu_si128((const __m128i*)(TmpBuf + 1 * 16)), r0_1));
-				_mm_storeu_si128((__m128i*)(TmpBuf + 2 * 16), _mm_xor_si128(_mm_loadu_si128((const __m128i*)(TmpBuf + 2 * 16)), r0_2));
-				_mm_storeu_si128((__m128i*)(TmpBuf + 3 * 16), _mm_xor_si128(_mm_loadu_si128((const __m128i*)(TmpBuf + 3 * 16)), r0_3));
+				_mm_store_si128((__m128i*)(TmpBuf + 0 * 16), _mm_xor_si128(_mm_loadu_si128((const __m128i*)(TmpBuf + 0 * 16)), r0_0));
+				_mm_store_si128((__m128i*)(TmpBuf + 1 * 16), _mm_xor_si128(_mm_loadu_si128((const __m128i*)(TmpBuf + 1 * 16)), r0_1));
+				_mm_store_si128((__m128i*)(TmpBuf + 2 * 16), _mm_xor_si128(_mm_loadu_si128((const __m128i*)(TmpBuf + 2 * 16)), r0_2));
+				_mm_store_si128((__m128i*)(TmpBuf + 3 * 16), _mm_xor_si128(_mm_loadu_si128((const __m128i*)(TmpBuf + 3 * 16)), r0_3));
 			}
 			else
 			{
-				_mm_storeu_si128((__m128i*)(TmpBuf + 0 * 16), r0_0);
-				_mm_storeu_si128((__m128i*)(TmpBuf + 1 * 16), r0_1);
-				_mm_storeu_si128((__m128i*)(TmpBuf + 2 * 16), r0_2);
-				_mm_storeu_si128((__m128i*)(TmpBuf + 3 * 16), r0_3);
+				_mm_store_si128((__m128i*)(TmpBuf + 0 * 16), r0_0);
+				_mm_store_si128((__m128i*)(TmpBuf + 1 * 16), r0_1);
+				_mm_store_si128((__m128i*)(TmpBuf + 2 * 16), r0_2);
+				_mm_store_si128((__m128i*)(TmpBuf + 3 * 16), r0_3);
 			}
 			memcpy(CurrentOut, TmpBuf, RemainingBytes);
 			ChaCha20AddCounter(state, 1);

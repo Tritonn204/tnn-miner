@@ -191,10 +191,17 @@ void argon2_finalize_ref(const argon2_instance_t* instance, uint8_t* out, size_t
 		return;
 	}
 
+  if (instance->lanes == 1) {
+      const uint32_t last_block_offset = instance->lane_length - 1;
+      const block* last_block = &(instance->memory[last_block_offset]);
+
+      blake2b_long(out, 32, (uint8_t*)last_block->v, ARGON2_BLOCK_SIZE);
+      return;
+  }
+
+
 	block blockhash;
 	uint32_t last_block_offset = instance->lane_length - 1;
-
-	// 1. Start with the last block from the first lane
 	memcpy(&blockhash, &instance->memory[last_block_offset], sizeof(block));
 
 	// 2. XOR in the last blocks from other lanes
@@ -205,32 +212,6 @@ void argon2_finalize_ref(const argon2_instance_t* instance, uint8_t* out, size_t
 		}
 	}
 
-	// 3. Apply 12 full BLAKE2-style rounds
-	for (int round = 0; round < 6; ++round) {
-		for (uint32_t i = 0; i < 8; ++i) {
-			BLAKE2_ROUND_NOMSG(
-				blockhash.v[16 * i + 0], blockhash.v[16 * i + 1],
-				blockhash.v[16 * i + 2], blockhash.v[16 * i + 3],
-				blockhash.v[16 * i + 4], blockhash.v[16 * i + 5],
-				blockhash.v[16 * i + 6], blockhash.v[16 * i + 7],
-				blockhash.v[16 * i + 8], blockhash.v[16 * i + 9],
-				blockhash.v[16 * i +10], blockhash.v[16 * i +11],
-				blockhash.v[16 * i +12], blockhash.v[16 * i +13],
-				blockhash.v[16 * i +14], blockhash.v[16 * i +15]);
-		}
-		for (uint32_t i = 0; i < 8; ++i) {
-			BLAKE2_ROUND_NOMSG(
-				blockhash.v[i * 2 + 0], blockhash.v[i * 2 + 1],
-				blockhash.v[i * 2 + 16], blockhash.v[i * 2 + 17],
-				blockhash.v[i * 2 + 32], blockhash.v[i * 2 + 33],
-				blockhash.v[i * 2 + 48], blockhash.v[i * 2 + 49],
-				blockhash.v[i * 2 + 64], blockhash.v[i * 2 + 65],
-				blockhash.v[i * 2 + 80], blockhash.v[i * 2 + 81],
-				blockhash.v[i * 2 + 96], blockhash.v[i * 2 + 97],
-				blockhash.v[i * 2 + 112], blockhash.v[i * 2 + 113]);
-		}
-	}
-
-	blake2b_long(out, outlen, (uint8_t*)&blockhash, ARGON2_BLOCK_SIZE);
+	// TODO Blake2
 }
 

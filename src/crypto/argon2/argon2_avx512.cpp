@@ -174,10 +174,16 @@ void argon2_finalize_avx512(const argon2_instance_t* instance, uint8_t* out, siz
         return;
     }
 
+    if (instance->lanes == 1) {
+        const uint32_t last_block_offset = instance->lane_length - 1;
+        const block* last_block = &(instance->memory[last_block_offset]);
+
+        blake2b_long(out, 32, (uint8_t*)last_block->v, ARGON2_BLOCK_SIZE);
+        return;
+    }
+
     __m512i blockhash[ARGON2_512BIT_WORDS_IN_BLOCK];
     const uint32_t last_block_offset = instance->lane_length - 1;
-
-    // 1. Start from the last block of the first lane
     memcpy(blockhash, instance->memory[last_block_offset].v, ARGON2_BLOCK_SIZE);
 
     // 2. XOR in the last blocks from other lanes
@@ -188,20 +194,7 @@ void argon2_finalize_avx512(const argon2_instance_t* instance, uint8_t* out, siz
         }
     }
 
-    // 3. Run 12 BLAKE2-style rounds
-    for (int r = 0; r < 6; ++r) {
-        BLAKE2_ROUND_1(blockhash[0], blockhash[1], blockhash[2], blockhash[3],
-                       blockhash[4], blockhash[5], blockhash[6], blockhash[7]);
-        BLAKE2_ROUND_1(blockhash[8], blockhash[9], blockhash[10], blockhash[11],
-                       blockhash[12], blockhash[13], blockhash[14], blockhash[15]);
-
-        BLAKE2_ROUND_2(blockhash[0], blockhash[2], blockhash[4], blockhash[6],
-                       blockhash[8], blockhash[10], blockhash[12], blockhash[14]);
-        BLAKE2_ROUND_2(blockhash[1], blockhash[3], blockhash[5], blockhash[7],
-                       blockhash[9], blockhash[11], blockhash[13], blockhash[15]);
-    }
-
-    blake2b_long(out, outlen, (uint8_t*)blockhash, ARGON2_BLOCK_SIZE);
+    // TODO Blake2
 }
 
 #endif

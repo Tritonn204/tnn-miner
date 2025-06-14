@@ -3912,7 +3912,7 @@ void optest_wolf(int op, workerData &worker, byte testData[32], OpTestResult &te
   return; 
 }
 
-#if defined(__AVX2__)
+#ifndef TNN_LEGACY_AMD64
 void optest_avx2(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print) {
   // Set us up the bomb
   memset(worker.step_3, 0, 256);

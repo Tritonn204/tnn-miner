@@ -1,8 +1,11 @@
 #include "astrobwtv3.h"
+#include "compile.h"
 #include <inttypes.h>
 #include <stdio.h>
 
 // The base for the following code was contributed by @Wolf9466 on Discord
+
+#define TNN_TARGETS_X86_AVX512_WOLF "avx512f,avx512bw,avx512vl", TNN_FEATURES_ZNVER4, TNN_FEATURES_ZNVER5
 
 // Last instruction is a special case, and duplicated.
 alignas(32) uint32_t CodeLUT[257] =
@@ -58,68 +61,35 @@ void initWolfLUT() {
   // printf("%02X\n", CodeLUT_16[0]);
 }
 
-#if defined(__x86_64)
+#if defined(__x86_64__)
 
-__attribute__((target("avx2")))
-void wolfBranch_avx2(__m256i &in, uint8_t pos2val, uint32_t opcode, workerData &worker)
-{
-  for (int i = 3; i >= 0; --i)
-  {
-    uint8_t insn = (opcode >> (i << 2)) & 0xF;
-    switch (insn)
-    {
-    case 0:
-      in = _mm256_add_epi8(in, in);
-      break;
-    case 1:
-      in = _mm256_sub_epi8(in, _mm256_xor_si256(in, _mm256_set1_epi8(97)));
-      break;
-    case 2:
-      in = _mm256_mul_epi8(in, in);
-      break;
-    case 3:
-      in = _mm256_xor_si256(in, _mm256_set1_epi8(pos2val));
-      break;
-    case 4:
-      in = _mm256_xor_si256(in, _mm256_set1_epi64x(-1LL));
-      break;
-    case 5:
-      in = _mm256_and_si256(in, _mm256_set1_epi8(pos2val));
-      break;
-    case 6:
-      in = _mm256_sllv_epi8(in,_mm256_and_si256(in,vec_3));
-      break;
-    case 7:
-      in = _mm256_srlv_epi8(in,_mm256_and_si256(in,vec_3));
-      break;
-    case 8:
-      in = _mm256_reverse_epi8(in);
-      break;
-    case 9:
-      in = _mm256_xor_si256(in, popcnt256_epi8(in));
-      break;
-    case 10:
-      in = _mm256_rolv_epi8(in, in);
-      break;
-    case 11:
-      in = _mm256_rol_epi8(in, 1);
-      break;
-    case 12:
-      in = _mm256_xor_si256(in, _mm256_rol_epi8(in, 2));
-      break;
-    case 13:
-      in = _mm256_rol_epi8(in, 3);
-      break;
-    case 14:
-      in = _mm256_xor_si256(in, _mm256_rol_epi8(in, 4));
-      break;
-    case 15:
-      in = _mm256_rol_epi8(in, 5);
-      break;
-    }      
-  }
-}
+#ifndef TNN_LEGACY_AMD64
+static __m256i vec_3 = _mm256_set1_epi8(3);
 
+#define WOLF_BRANCH_AVX2(IN, POS2VAL, OPCODE, WORKER)                           \
+                                                                                \
+  for (int i = 3; i >= 0; --i) {                                                \
+    uint8_t insn = ((OPCODE) >> (i << 2)) & 0xF;                                \
+    switch (insn) {                                                             \
+      case 0: (IN) = _mm256_add_epi8((IN), (IN)); break;                        \
+      case 1: (IN) = _mm256_sub_epi8((IN), _mm256_xor_si256((IN), _mm256_set1_epi8(97))); break; \
+      case 2: (IN) = _mm256_mul_epi8((IN), (IN)); break;                        \
+      case 3: (IN) = _mm256_xor_si256((IN), _mm256_set1_epi8((POS2VAL))); break; \
+      case 4: (IN) = _mm256_xor_si256((IN), _mm256_set1_epi64x(-1LL)); break;   \
+      case 5: (IN) = _mm256_and_si256((IN), _mm256_set1_epi8((POS2VAL))); break;\
+      case 6: (IN) = _mm256_sllv_epi8((IN), _mm256_and_si256((IN), vec_3)); break;\
+      case 7: (IN) = _mm256_srlv_epi8((IN), _mm256_and_si256((IN), vec_3)); break;\
+      case 8: (IN) = _mm256_reverse_epi8((IN)); break;                          \
+      case 9: (IN) = _mm256_xor_si256((IN), popcnt256_epi8((IN))); break;       \
+      case 10: (IN) = _mm256_rolv_epi8((IN), (IN)); break;                      \
+      case 11: (IN) = _mm256_rol_epi8((IN), 1); break;                          \
+      case 12: (IN) = _mm256_xor_si256((IN), _mm256_rol_epi8((IN), 2)); break;  \
+      case 13: (IN) = _mm256_rol_epi8((IN), 3); break;                          \
+      case 14: (IN) = _mm256_xor_si256((IN), _mm256_rol_epi8((IN), 4)); break;  \
+      case 15: (IN) = _mm256_rol_epi8((IN), 5); break;                          \
+    }                                                                           \
+  }                                                                             
+#endif
 #endif
 
 uint8_t wolfBranch(uint8_t val, uint8_t pos2val, uint32_t opcode)
@@ -185,42 +155,33 @@ uint8_t wolfBranch(uint8_t val, uint8_t pos2val, uint32_t opcode)
   return (val);
 }
 
-#if defined(__x86_64)
-__attribute__((target("avx512f,avx512bw,avx512vl")))
-void wolfPermute_avx512(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker)
-{
-  uint32_t Opcode = CodeLUT_16[op];
-  
-  __m256i data = _mm256_loadu_si256((__m256i*)&in[pos1]);
-  wolfBranch_avx2(data, in[pos2], Opcode, worker);
-  
-  int bytes_to_update = pos2 - pos1;
-  __mmask32 mask = _cvtu32_mask32((1U << bytes_to_update) - 1);
-  
-  _mm256_mask_storeu_epi8((void*)&out[pos1], mask, data);
-}
+#if defined(__x86_64__)
+#ifndef TNN_LEGACY_AMD64
 
-__attribute__((target("avx2")))
-void wolfPermute_avx2(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker)
-{
-	uint32_t Opcode = CodeLUT_16[op];
-
-  __m256i data = _mm256_loadu_si256((__m256i*)&in[pos1]);
-  __m256i old = data;
-
-  wolfBranch_avx2(data, in[pos2], Opcode, worker);
-  data = _mm256_blendv_epi8(old, data, genMask_avx2(pos2-pos1));
-
-  _mm256_storeu_si256((__m256i*)&out[pos1], data);
-}
+TNN_TARGET_CLONE(
+  wolfPermute,
+  void,
+  (uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker),
+  {
+    uint32_t Opcode = CodeLUT_16[op];
+    __m256i data = _mm256_loadu_si256((__m256i *)&in[pos1]);
+    __m256i old = data;
+    WOLF_BRANCH_AVX2(data, in[pos2], Opcode, worker);
+    data = _mm256_blendv_epi8(old, data, genMask_avx2(pos2 - pos1));
+    _mm256_storeu_si256((__m256i *)&out[pos1], data);
+  },
+  TNN_TARGETS_X86_AVX2, TNN_TARGETS_X86_AVX512_WOLF
+)
 #endif
 
+__attribute__((target("default")))
+#endif
 void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker)
 {
-	uint32_t Opcode = CodeLUT[op];
+  uint32_t Opcode = CodeLUT[op];
 
-	for(int i = pos1; i < pos2; ++i)
-	{
-		out[i] = wolfBranch(in[i], in[pos2], Opcode);
-	}		
+  for(int i = pos1; i < pos2; ++i)
+  {
+    out[i] = wolfBranch(in[i], in[pos2], Opcode);
+  }		
 }

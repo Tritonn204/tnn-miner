@@ -2,7 +2,7 @@ if (WITH_BLAKE2)
     add_definitions(/DTNN_BLAKE2)
 
     file(GLOB blake2_sources
-      src/crypto/blake2/blake2b.c
+      src/crypto/blake2/blake2b.cpp
     )
 
     list(APPEND SOURCES_CRYPTO

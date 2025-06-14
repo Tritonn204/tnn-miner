@@ -73,6 +73,7 @@ extern "C"
   #include <emmintrin.h>
 #endif
 
+
 using byte = unsigned char;
 
 int ops[256];
@@ -8449,7 +8450,7 @@ void wolfCompute(workerData &worker, bool isTest, int wIndex)
     if (worker.op >= 254) {
       RC4_set_key(&worker.key[wIndex], 256,  worker.prev_chunk);
     }
-    wolfPerms[0](worker.prev_chunk, worker.chunk, worker.op, worker.pos1, worker.pos2, worker);
+    wolfPermute(worker.prev_chunk, worker.chunk, worker.op, worker.pos1, worker.pos2, worker);
 
     if (!worker.op) {
       if ((worker.pos2-worker.pos1)%2 == 1) {

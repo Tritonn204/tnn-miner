@@ -37,10 +37,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <stdint.h>
 #include <limits.h>
-
-#if defined(__cplusplus)
-extern "C" {
-#endif
+#include "compile.h"
 
 	enum blake2b_constant {
 		BLAKE2B_BLOCKBYTES = 128,
@@ -102,15 +99,23 @@ extern "C" {
 	int blake2b_final(blake2b_state *S, void *out, size_t outlen);
 
 	/* Simple API */
-	int blake2b(void *out, size_t outlen, const void *in, size_t inlen,
-		const void *key, size_t keylen);
+  #ifdef __x86_64__
+  TNN_TARGET_CLONE(
+    blake2b,
+    int,
+    (void *out, size_t outlen, const void *in, size_t inlen,
+    const void *key, size_t keylen),
+    ;,
+    TNN_TARGETS_X86_AVX2, TNN_TARGETS_X86_AVX512
+  )
+  __attribute__((target("default")))
+  #endif
+  int blake2b(void *out, size_t outlen, const void *in, size_t inlen,
+    const void *key, size_t keylen);
 
 	/* Argon2 Team - Begin Code */
 	int blake2b_long(void *out, size_t outlen, const void *in, size_t inlen);
 	/* Argon2 Team - End Code */
 
-#if defined(__cplusplus)
-}
-#endif
 
 #endif

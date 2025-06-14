@@ -137,14 +137,12 @@ const int deviceAllocMB = 5;
 static const bool sInduction = true;
 static const bool sTracking = true;
 
-#if defined(__AVX2__)
+#ifndef TNN_LEGACY_AMD64
 template <unsigned int N>
 __m256i shiftRight256(__m256i a);
 
 template <unsigned int N> 
 __m256i shiftLeft256(__m256i a);
-
-static const __m256i vec_3 = _mm256_set1_epi8(3);
 #endif
 
 
@@ -371,18 +369,7 @@ void lookupCompute(workerData &worker, bool isTest, int wIndex);
 TNN_TARGETS
 void branchComputeCPU(workerData &worker, bool isTest, int wIndex);
 
-#ifdef __x86_64__
-#define WOLF_FMV \
-    __attribute__ ((target("default"))) \
-    __attribute__ ((target("sse2"))) \
-    __attribute__ ((target("avx2")))
-#else
-#define WOLF_FMV
-#endif
-
 void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker);
-void wolfPermute_avx512(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker);
-void wolfPermute_avx2(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker);
 void wolfSame(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker);
 uint8_t wolfSingle(uint8_t *in, uint16_t op, uint8_t idx, uint8_t pos2);
 
@@ -390,24 +377,11 @@ void wolfCompute(workerData &worker, bool isTest, int wIndex);
 
 typedef void (*wolfPerm)(uint8_t *, uint8_t *, uint16_t, uint8_t, uint8_t, workerData&);
 
-static inline wolfPerm resolve_wolfPermute() {
-  #ifdef __x86_64__
-  //if (__builtin_cpu_supports("avx512bw"))
-  //  return wolfPermute_avx512;
-  if (__builtin_cpu_supports("avx2"))
-    return wolfPermute_avx2;
-  #endif
-  return wolfPermute;
-}
-
-// Cached function pointer
-inline wolfPerm wolfPerms[1] = {resolve_wolfPermute()};
-
-#if defined(__AVX2__)
-
+#ifdef __x86_64__
+#ifndef TNN_LEGACY_AMD64
 void branchComputeCPU_avx2(workerData &worker, bool isTest, int wIndex);
-
 void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest, int wIndex);
+#endif
 #elif defined(__aarch64__)
 // This is gross.  But we need to do this until 'workerData' gets pushed into it's own include file.
 void branchComputeCPU_aarch64(workerData &worker, bool isTest, int wIndex);

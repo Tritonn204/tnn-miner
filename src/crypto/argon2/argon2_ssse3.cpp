@@ -186,13 +186,19 @@ void argon2_finalize_ssse3(const argon2_instance_t* instance, uint8_t* out, size
 		return;
 	}
 
+  if (instance->lanes == 1) {
+      const uint32_t last_block_offset = instance->lane_length - 1;
+      const block* last_block = &(instance->memory[last_block_offset]);
+
+      blake2b_long(out, 32, (uint8_t*)last_block->v, ARGON2_BLOCK_SIZE);
+      return;
+  }
+
 	__m128i blockhash[ARGON2_OWORDS_IN_BLOCK];
 	const uint32_t last_block_offset = instance->lane_length - 1;
 
 	// 1. Initialize from the final block of the first lane
 	memcpy(blockhash, instance->memory[last_block_offset].v, ARGON2_BLOCK_SIZE);
-
-	// 2. XOR across final blocks from remaining lanes
 	for (uint32_t l = 1; l < instance->lanes; ++l) {
 		const __m128i* lane_block = (const __m128i*)(instance->memory + l * instance->lane_length + last_block_offset);
 		for (uint32_t i = 0; i < ARGON2_OWORDS_IN_BLOCK; ++i) {
@@ -200,20 +206,7 @@ void argon2_finalize_ssse3(const argon2_instance_t* instance, uint8_t* out, size
 		}
 	}
 
-	// 3. Perform 12 rounds using SSSE3 BLAKE2 (8 + 8 structure)
-	for (int r = 0; r < 6; ++r) {
-		for (int i = 0; i < 8; ++i) {
-			BLAKE2_ROUND(blockhash[8 * i + 0], blockhash[8 * i + 1], blockhash[8 * i + 2],
-			             blockhash[8 * i + 3], blockhash[8 * i + 4], blockhash[8 * i + 5],
-			             blockhash[8 * i + 6], blockhash[8 * i + 7]);
-		}
-		for (int i = 0; i < 8; ++i) {
-			BLAKE2_ROUND(blockhash[i + 0], blockhash[i + 8], blockhash[i + 16], blockhash[i + 24],
-			             blockhash[i + 32], blockhash[i + 40], blockhash[i + 48], blockhash[i + 56]);
-		}
-	}
-
-	blake2b_long(out, outlen, (uint8_t*)blockhash, ARGON2_BLOCK_SIZE);
+	// TODO Blake2
 }
 
 #endif
