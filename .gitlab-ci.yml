@@ -7,7 +7,7 @@ stages:
 variables:
   RUNNER_SCRIPT_TIMEOUT: 40m
   DOCKER_TLS_CERTDIR: "/certs"
-  TNN_BUILD_MAC: false
+  TNN_BUILD_MAC: true
   TNN_BUILD_WIN: true
   PACKAGE_VERSION: "0.0.1"
   CMAKE_ARGS: "-DWITH_HIP=OFF"
@@ -110,34 +110,6 @@ build-hiveos-mmpos:
     reports:
       dotenv: hiveos-job.env
 
-build-macos:
-  rules:
-    - if: $CI_COMMIT_TAG && $TNN_BUILD_MAC == "true"                 # Run this job when a tag is created
-  extends:
-    - .macos_saas_runners
-  stage: build
-  script:
-    - export
-    - mkdir ./build
-    - cd ./build
-    - cmake -DTNN_VERSION=$PACKAGE_VERSION ..
-    - make -j$(nproc)
-    - cd ../
-    - mv ./build/Tnn-miner-cpu ./Tnn-miner
-    - ls -la ./
-    - ls -la ./build/
-    - tar -czvf Tnn-miner-macos-arm64.tar.gz ./Tnn-miner
-  after_script:
-    - pwd
-    - ls -la ./
-    - echo "MACOS_BUILD_JOB_ID=$CI_JOB_ID" >> macos-job.env
-  artifacts:
-    name: Tnn-miner-macos-arm64.tar.gz
-    paths:
-      - Tnn-miner-macos-arm64.tar.gz
-    reports:
-      dotenv: macos-job.env
-
 build-windows:
   rules:
     - if: $CI_COMMIT_TAG || $TNN_BUILD_WIN == "true" || ($CI_COMMIT_MESSAGE =~ /windows\|Windows/)                # Run this job when a tag is created
@@ -198,7 +170,7 @@ build-macos-aarch64:
     - .macos_saas_runners
   stage: build
   rules:
-    - if: $CI_COMMIT_TAG && $TNN_BUILD_MAC == "true"
+    - if: $CI_COMMIT_TAG || $TNN_BUILD_MAC == "true" 
   variables:
     TARGZ_FILE: "${MACOS_ARM64_TGZ}"
   script:
