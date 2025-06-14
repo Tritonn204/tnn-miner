@@ -193,6 +193,31 @@ build-linux-aarch64:
   services:
     - name: docker:24.0.5-dind
 
+build-macos-arm64:
+  extends:
+    - .macos_saas_runners
+  stage: build
+  rules:
+    - if: $CI_COMMIT_TAG && $TNN_BUILD_MAC == "true"
+  variables:
+    TARGZ_FILE: "${MACOS_ARM64_TGZ}"
+  script:
+    - mkdir -p build
+    - cd build
+    - cmake -DTNN_VERSION=${PACKAGE_VERSION} ${CMAKE_ARGS} ..
+    - make -j$(sysctl -n hw.logicalcpu)
+    - cd ..
+    - mv ./build/Tnn-miner-cpu ./Tnn-miner
+    - tar -czvf ${TARGZ_FILE} ./Tnn-miner
+  after_script:
+    - echo "MACOS_BUILD_JOB_ID=$CI_JOB_ID" >> macos-arm64-job.env
+  artifacts:
+    name: ${MACOS_ARM64_TGZ}
+    paths:
+      - ${MACOS_ARM64_TGZ}
+    reports:
+      dotenv: macos-arm64-job.env
+
 # run tests using the binary built before
 test-linux-amd64:
   #rules:
