@@ -379,8 +379,7 @@ void wolfCompute(workerData &worker, bool isTest, int wIndex);
 
 typedef void (*wolfPerm)(uint8_t *, uint8_t *, uint16_t, uint8_t, uint8_t, workerData&);
 
-#ifdef __x86_64__
-#ifndef TNN_LEGACY_AMD64
+#ifdef __AVX2__
 void branchComputeCPU_avx2(workerData &worker, bool isTest, int wIndex);
 void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest, int wIndex);
 #endif
