@@ -42,10 +42,14 @@ workflow:
   image: macos-14-xcode-15
   before_script:
     - echo "started by ${GITLAB_USER_NAME} / @${GITLAB_USER_LOGIN}"
+    - brew install llvm@18
+    - export PATH="/opt/homebrew/opt/llvm@18/bin:$PATH"
+    - export LDFLAGS="-L/opt/homebrew/opt/llvm@18/lib"
+    - export CPPFLAGS="-I/opt/homebrew/opt/llvm@18/include"
+    - export CC=clang
+    - export CXX=clang++
     - which clang
-    #- brew install clang
-    #- brew install fmt
-    - brew install cmake
+    - clang --version
 
 .windows_job:
   tags:
@@ -169,8 +173,6 @@ build-macos-aarch64:
   extends:
     - .macos_saas_runners
   stage: build
-  tags:
-  - saas-macos-medium-m1
   rules:
     - if: $CI_COMMIT_TAG || $TNN_BUILD_MAC == "true" 
   variables:
