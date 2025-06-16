@@ -37,39 +37,47 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 __attribute__((target("avx512f, avx512bw")))
 static void fill_block(__m512i* state, const block* ref_block,
-	block* next_block, int with_xor) {
-	__m512i block_XY[ARGON2_512BIT_WORDS_IN_BLOCK];
-	unsigned int i;
+  block* next_block, int with_xor) {
+  __m512i block_XY[ARGON2_512BIT_WORDS_IN_BLOCK];
+  unsigned int i;
 
-	if (with_xor) {
-		for (i = 0; i < ARGON2_512BIT_WORDS_IN_BLOCK; i++) {
-			state[i] = _mm512_xor_si512(
-				state[i], _mm512_loadu_si512((const __m512i*)ref_block->v + i));
-			block_XY[i] = _mm512_xor_si512(
-				state[i], _mm512_loadu_si512((const __m512i*)next_block->v + i));
-		}
-	}
-	else {
-		for (i = 0; i < ARGON2_512BIT_WORDS_IN_BLOCK; i++) {
-			block_XY[i] = state[i] = _mm512_xor_si512(
-				state[i], _mm512_loadu_si512((const __m512i*)ref_block->v + i));
-		}
-	}
+  // Load and XOR operations
+  if (with_xor) {
+    for (i = 0; i < ARGON2_512BIT_WORDS_IN_BLOCK; i++) {
+      state[i] = _mm512_xor_si512(
+        state[i], _mm512_loadu_si512((const __m512i*)ref_block->v + i));
+      block_XY[i] = _mm512_xor_si512(
+        state[i], _mm512_loadu_si512((const __m512i*)next_block->v + i));
+    }
+  }
+  else {
+    for (i = 0; i < ARGON2_512BIT_WORDS_IN_BLOCK; i++) {
+      block_XY[i] = state[i] = _mm512_xor_si512(
+        state[i], _mm512_loadu_si512((const __m512i*)ref_block->v + i));
+    }
+  }
 
-	BLAKE2_ROUND_1(state[0], state[1], state[2], state[3],
-		state[4], state[5], state[6], state[7]);
-	BLAKE2_ROUND_1(state[8], state[9], state[10], state[11],
-		state[12], state[13], state[14], state[15]);
+    // Row-wise rounds using dual processing (2 rounds per iteration)
+    for (i = 0; i < 2; ++i) {
+        BLAKE2_ROUND_DUAL_AVX512(
+            state[8 * i + 0], state[8 * i + 1], state[8 * i + 2], state[8 * i + 3],  // Row 2*i
+            state[8 * i + 4], state[8 * i + 5], state[8 * i + 6], state[8 * i + 7]   // Row 2*i+1
+        );
+    }
 
-	BLAKE2_ROUND_2(state[0], state[2], state[4], state[6],
-		state[8], state[10], state[12], state[14]);
-	BLAKE2_ROUND_2(state[1], state[3], state[5], state[7],
-		state[9], state[11], state[13], state[15]);
+    // Column-wise rounds using dual processing (2 rounds per iteration)  
+    for (i = 0; i < 2; ++i) {
+        BLAKE2_ROUND_DUAL_AVX512(
+            state[0 + 2*i], state[4 + 2*i], state[8 + 2*i], state[12 + 2*i],         // Column 2*i
+            state[1 + 2*i], state[5 + 2*i], state[9 + 2*i], state[13 + 2*i]          // Column 2*i+1
+        );
+    }
 
-	for (i = 0; i < ARGON2_512BIT_WORDS_IN_BLOCK; i++) {
-		state[i] = _mm512_xor_si512(state[i], block_XY[i]);
-		_mm512_storeu_si512((__m512i*)next_block->v + i, state[i]);
-	}
+    // Final XOR and store
+    for (i = 0; i < ARGON2_512BIT_WORDS_IN_BLOCK; i++) {
+        state[i] = _mm512_xor_si512(state[i], block_XY[i]);
+        _mm512_storeu_si512((__m512i*)next_block->v + i, state[i]);
+    }
 }
 
 __attribute__((target("avx512f, avx512bw")))

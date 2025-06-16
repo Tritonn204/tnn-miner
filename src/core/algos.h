@@ -12,6 +12,7 @@
 #include <wala-hash/wala-hash.h>
 #include <shai/shai-hive.h>
 #include <yespower/yespower.h>
+#include <rinhash/rinhash.h>
 
 #include <randomx/randomx.h>
 #include <randomx/tests/randomx_test.h>

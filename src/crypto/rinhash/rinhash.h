@@ -17,5 +17,5 @@ namespace RinHash {
   }
 
   void hash(void* state, const void* input, const blake3_hasher* prehashedPrefix);
-  void test();
+  int test();
 }

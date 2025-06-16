@@ -764,6 +764,19 @@ int main(int argc, char **argv)
     #endif
   }
 
+  if (vm.count("test-rin"))
+  {
+    #if defined(TNN_RINHASH)
+    return RinHash::test();
+    #else
+    setcolor(RED);
+    printf("%s", unsupported_rinhash);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+    #endif
+  }
+
   if (vm.count("bench-xelis"))
   {
     #if defined(TNN_XELISHASH)

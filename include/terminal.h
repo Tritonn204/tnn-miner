@@ -199,6 +199,7 @@ inline po::options_description get_prog_opts()
     ("test-nexellia", "Run a basic nxl-hash validation test")
     ("test-waglayla", "Run a basic wala-hash validation test")
     ("test-shai", "Run a basic shai-hive validation test")
+    ("test-rin", "Run a basic rinhash validation test")
   ;
 
   po::options_description advanced("Advanced", col_width);
