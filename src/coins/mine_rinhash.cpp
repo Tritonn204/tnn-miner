@@ -113,7 +113,7 @@ waitForJob:
         memcpy(FINALWORK, WORK, 80);
 
         // Put nonce in correct position (76-79)
-        uint32_t n = ((tid - 1) % (512)) | ((*noncePtr) << 10);
+        uint32_t n = ((tid - 1) % (512)) | ((*noncePtr) << 9);
         be32enc(FINALWORK + 76, n);
 
         if (localJobCounter != jobCounter)

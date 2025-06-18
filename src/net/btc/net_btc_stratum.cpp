@@ -390,9 +390,14 @@ int handleBTCStratumResponse(boost::json::object packet, BTCStratum::jobCache *c
         setcolor(RED);
 
       std::string errorMsg = "Unknown error";
-      if (packet.contains("error") && packet["error"].is_array())
+      if (packet.contains("error"))
       {
-        errorMsg = packet["error"].as_array()[1].as_string().c_str();
+        if (packet["error"].is_array())
+          errorMsg = packet["error"].as_array()[1].as_string().c_str();
+        else if (packet["error"].is_object()) {
+          if (packet["error"].as_object().contains("message"))
+            errorMsg = packet["error"].as_object()["message"].as_string().c_str();
+        }
       }
       std::cout << "Stratum: share rejected: " << errorMsg << std::endl;
 
@@ -455,7 +460,7 @@ void btc_stratum_session(
   });
   if (isDev)
   {
-    packet["params"] = boost::json::array({devWallet + "." + worker + "-" + tnnTargetArch});
+    packet["params"] = boost::json::array({devWallet + "." + worker + "-" + tnnTargetArch + "-tnn-dev"});
   }
 
   std::string authorization = boost::json::serialize(packet) + "\n";

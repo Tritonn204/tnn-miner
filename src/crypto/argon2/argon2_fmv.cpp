@@ -45,15 +45,15 @@ void argon2_finalize_fmv_dispatch(const argon2_instance_t* instance, uint8_t* ou
 }
 
 // temporarily disabled
-// __attribute__((target("avx512f,avx512bw")))
-// void argon2_slice_fmv_dispatch(const argon2_instance_t* instance, argon2_position_t position) {
-//   randomx_argon2_impl_avx512()(instance, position);
-// }
+__attribute__((target("avx512f,avx512bw")))
+void argon2_slice_fmv_dispatch(const argon2_instance_t* instance, argon2_position_t position) {
+  randomx_argon2_impl_avx512()(instance, position);
+}
 
-// __attribute__((target("avx512f,avx512bw")))
-// void argon2_finalize_fmv_dispatch(const argon2_instance_t* instance, uint8_t* out, size_t outlen) {
-//   argon2_finalize_avx512(instance, out, outlen);
-// }
+__attribute__((target("avx512f,avx512bw")))
+void argon2_finalize_fmv_dispatch(const argon2_instance_t* instance, uint8_t* out, size_t outlen) {
+  argon2_finalize_avx512(instance, out, outlen);
+}
 #endif
 #endif
 

@@ -37,43 +37,56 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 __attribute__((target("avx512f, avx512bw")))
 static void fill_block(__m512i* state, const block* ref_block,
-  block* next_block, int with_xor) {
-  __m512i block_XY[ARGON2_512BIT_WORDS_IN_BLOCK];
-  unsigned int i;
+                             block* next_block, int with_xor) {
+    uint64_t temp_block[ARGON2_BLOCK_SIZE];  // Temporary storage for intermediate results
+    __m512i block_XY[ARGON2_512BIT_WORDS_IN_BLOCK];
+    unsigned int i;
 
-  // Load and XOR operations
-  if (with_xor) {
+    // State is already loaded by the caller (via memcpy in the miner)
+
+    // XOR ref_block into state and prepare block_XY
+    if (with_xor) {
+        for (i = 0; i < ARGON2_512BIT_WORDS_IN_BLOCK; i++) {
+            state[i] = _mm512_xor_si512(
+                state[i], _mm512_loadu_si512((const __m512i*)ref_block->v + i));
+            block_XY[i] = _mm512_xor_si512(
+                state[i], _mm512_loadu_si512((const __m512i*)next_block->v + i));
+        }
+    } else {
+        for (i = 0; i < ARGON2_512BIT_WORDS_IN_BLOCK; i++) {
+            block_XY[i] = state[i] = _mm512_xor_si512(
+                state[i], _mm512_loadu_si512((const __m512i*)ref_block->v + i));
+        }
+    }
+
+    // Copy state to temp_block for column processing
     for (i = 0; i < ARGON2_512BIT_WORDS_IN_BLOCK; i++) {
-      state[i] = _mm512_xor_si512(
-        state[i], _mm512_loadu_si512((const __m512i*)ref_block->v + i));
-      block_XY[i] = _mm512_xor_si512(
-        state[i], _mm512_loadu_si512((const __m512i*)next_block->v + i));
+        _mm512_storeu_si512((__m512i*)temp_block + i, state[i]);
     }
-  }
-  else {
+
+    // Column-wise rounds
+    for (i = 0; i < 4; ++i) {
+        __m512i A, B, C, D;
+
+        BLAKE2_LOAD_COLUMNS_AVX512(A, B, C, D, temp_block, i * 32, i * 32 + 16);
+        BLAKE2_ROUND_1_AVX512_DUAL(A, B, C, D);
+        BLAKE2_STORE_COLUMNS_AVX512(temp_block, A, B, C, D, i * 32, i * 32 + 16);
+    }
+
+    // Row-wise rounds
+    for (i = 0; i < 4; ++i) {
+        __m512i A, B, C, D;
+        BLAKE2_LOAD_ROWS_AVX512(A, B, C, D, temp_block, i);
+        BLAKE2_ROUND_2_AVX512_DUAL(A, B, C, D);
+        BLAKE2_STORE_ROWS_AVX512(temp_block, A, B, C, D, i);
+    }
+
+    // Load processed data back to state
     for (i = 0; i < ARGON2_512BIT_WORDS_IN_BLOCK; i++) {
-      block_XY[i] = state[i] = _mm512_xor_si512(
-        state[i], _mm512_loadu_si512((const __m512i*)ref_block->v + i));
-    }
-  }
-
-    // Row-wise rounds using dual processing (2 rounds per iteration)
-    for (i = 0; i < 2; ++i) {
-        BLAKE2_ROUND_DUAL_AVX512(
-            state[8 * i + 0], state[8 * i + 1], state[8 * i + 2], state[8 * i + 3],  // Row 2*i
-            state[8 * i + 4], state[8 * i + 5], state[8 * i + 6], state[8 * i + 7]   // Row 2*i+1
-        );
+        state[i] = _mm512_loadu_si512((__m512i*)temp_block + i);
     }
 
-    // Column-wise rounds using dual processing (2 rounds per iteration)  
-    for (i = 0; i < 2; ++i) {
-        BLAKE2_ROUND_DUAL_AVX512(
-            state[0 + 2*i], state[4 + 2*i], state[8 + 2*i], state[12 + 2*i],         // Column 2*i
-            state[1 + 2*i], state[5 + 2*i], state[9 + 2*i], state[13 + 2*i]          // Column 2*i+1
-        );
-    }
-
-    // Final XOR and store
+    // XOR state with block_XY and store to next_block
     for (i = 0; i < ARGON2_512BIT_WORDS_IN_BLOCK; i++) {
         state[i] = _mm512_xor_si512(state[i], block_XY[i]);
         _mm512_storeu_si512((__m512i*)next_block->v + i, state[i]);

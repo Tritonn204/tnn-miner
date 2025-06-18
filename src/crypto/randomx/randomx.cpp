@@ -58,10 +58,9 @@ extern "C" {
 			flags |= RANDOMX_FLAG_HARD_AES;
 		}
     #ifdef __x86_64
-    // FIXME
-		// if (randomx_argon2_impl_avx512() != nullptr && cpu.hasAvx512()) {
-		// 	flags |= RANDOMX_FLAG_ARGON2_AVX512;
-		// }
+		if (randomx_argon2_impl_avx512() != nullptr && cpu.hasAvx512()) {
+			flags |= RANDOMX_FLAG_ARGON2_AVX512;
+		}
     if (randomx_argon2_impl_avx2() != nullptr && cpu.hasAvx2()) {
 			flags |= RANDOMX_FLAG_ARGON2_AVX2;
 		}

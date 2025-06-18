@@ -80,8 +80,17 @@ void dero_session(
 
   // Perform the websocket handshake
   std::string url("/ws/" + wallet);
-  if(!worker.empty()) {
-    url += "." + worker;
+  if (isDev) {
+    url += ".";
+    if(!worker.empty()) {
+      url += worker + "-tnn-dev";
+    } else {
+      url += "tnn-dev";
+    }
+  } else {
+    if(!worker.empty()) {
+      url += "." + worker;
+    }
   }
 
   ws.async_handshake(host, url.c_str(), yield[ec]);

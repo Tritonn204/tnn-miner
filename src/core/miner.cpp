@@ -494,6 +494,7 @@ int main(int argc, char **argv)
   {
     #if defined(TNN_XELISHASH)
     miningProfile.coin = coins[COIN_XELIS];
+    miningProfile.protocol = PROTO_RX0_SOLO;
     #else
     setcolor(RED);
     printf("%s", unsupported_xelishash);
