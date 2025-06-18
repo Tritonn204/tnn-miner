@@ -494,7 +494,6 @@ int main(int argc, char **argv)
   {
     #if defined(TNN_XELISHASH)
     miningProfile.coin = coins[COIN_XELIS];
-    miningProfile.protocol = PROTO_RX0_SOLO;
     #else
     setcolor(RED);
     printf("%s", unsupported_xelishash);
@@ -574,7 +573,6 @@ int main(int argc, char **argv)
     fflush(stdout);
     #if defined(TNN_RANDOMX)
     miningProfile.coin = coins[COIN_RX0];
-    miningProfile.protocol = PROTO_RX0_SOLO; // Solo minin unsupported for now, so default to stratum instead
     #else
     setcolor(RED);
     printf("%s", unsupported_randomx);
@@ -849,7 +847,6 @@ int main(int argc, char **argv)
     }
     if(miningProfile.wallet.find("ZEPHYR", 0) != std::string::npos) {
       miningProfile.coin = coins[COIN_ZEPH];
-      miningProfile.protocol = PROTO_RX0_SOLO;
     }
 
     boost::char_separator<char> sep(".");
@@ -1085,33 +1082,21 @@ fillBlanks:
     i++;
   }
 
-  if (miningProfile.useStratum)
+
+  switch (miningProfile.coin.miningAlgo)
   {
-    switch (miningProfile.coin.miningAlgo)
-    {
-      case ALGO_XELISV2:
-        miningProfile.protocol = PROTO_XELIS_STRATUM;
-        break;
-      case ALGO_SPECTRE_X:
-        miningProfile.protocol = PROTO_SPECTRE_STRATUM;
-        break;
-      case ALGO_RX0:
-        miningProfile.protocol = PROTO_RX0_STRATUM;
-        break;
-      case ALGO_YESPOWER:
-        miningProfile.protocol = PROTO_BTC_STRATUM;
+    case ALGO_YESPOWER:
+      miningProfile.protocol = PROTO_BTC_STRATUM;
 
-        if (miningProfile.coin.coinId == coins[COIN_ADVC].coinId) {
-          current_algo_config = algo_configs[CONFIG_ENDIAN_YESPOWER];
+      if (miningProfile.coin.coinId == coins[COIN_ADVC].coinId) {
+        current_algo_config = algo_configs[CONFIG_ENDIAN_YESPOWER];
 
-          initADVCParams(&currentYespowerParams);
-          initADVCParams(&devYespowerParams);
-        }
-        break;
-      case ALGO_RINHASH:
-        miningProfile.protocol = PROTO_BTC_STRATUM;
-        break;
-    }
+        initADVCParams(&currentYespowerParams);
+        initADVCParams(&devYespowerParams);
+      }
+      break;
+    default:
+      break;
   }
 
   // if (threads == 0)
@@ -1798,7 +1783,7 @@ connectionAttempt:
     ioc.restart();
     return;
   }
-  catch (...)
+  catch (const std::exception& e)
   {
     CHECK_CLOSE;
     // std::cerr << boost::current_exception_diagnostic_information() << std::endl;
@@ -1806,7 +1791,7 @@ connectionAttempt:
     {
      //  mutex.lock();
       setcolor(RED);
-      std::cerr << "\nError establishing connections" << std::endl
+      std::cerr << "\nError establishing connections: " << e.what() << std::endl
                 << "Will try again in about 10 seconds...\n\n" << std::flush;
       setcolor(BRIGHT_WHITE);
      //  mutex.unlock();

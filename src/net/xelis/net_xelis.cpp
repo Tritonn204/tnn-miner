@@ -35,8 +35,12 @@ void xelis_session(
   auto endpoint = resolve_host(wsMutex, ioc, yield, host, port);
   websocket::stream<beast::tcp_stream> ws(ioc);
 
+  fflush(stdout);
+
   // Make the connection on the IP address we get from a lookup
   beast::get_lowest_layer(ws).connect(endpoint);
+  fflush(stdout);
+
 
   // Update the host string. This will provide the value of the
   // Host HTTP header during the WebSocket handshake.
@@ -116,6 +120,8 @@ void xelis_session(
     }
     submitThread = false;
   });
+
+  fflush(stdout);
 
   while (!ABORT_MINER)
   {

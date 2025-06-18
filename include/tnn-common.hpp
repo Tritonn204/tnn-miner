@@ -200,7 +200,42 @@ class MiningProfile {
         if (this->transportLayer.find("stratum") != std::string::npos) this->useStratum = true;
         if (this->transportLayer.find("xatum") != std::string::npos) this->protocol = PROTO_XELIS_XATUM;
       }
+      this->setProtocol();
       printf("%s %s %s\n", this->transportLayer.c_str(), this->host.c_str(), this->port.c_str());
+    }
+
+    void setProtocol() {
+      if (this->useStratum)
+      {
+        switch (this->coin.miningAlgo)
+        {
+          case ALGO_XELISV2:
+            this->protocol = PROTO_XELIS_STRATUM;
+            break;
+          case ALGO_SPECTRE_X:
+            this->protocol = PROTO_SPECTRE_STRATUM;
+            break;
+          case ALGO_RX0:
+            this->protocol = PROTO_RX0_STRATUM;
+            break;
+          case ALGO_YESPOWER:
+            this->protocol = PROTO_BTC_STRATUM;
+            break;
+          case ALGO_RINHASH:
+            this->protocol = PROTO_BTC_STRATUM;
+            break;
+        }
+      } else {
+        switch (this->coin.miningAlgo)
+        {
+          case ALGO_XELISV2:
+            this->protocol = PROTO_XELIS_SOLO;
+            break;
+          case ALGO_RX0:
+            this->protocol = PROTO_RX0_SOLO;
+            break;
+        }
+      }
     }
 };
 
