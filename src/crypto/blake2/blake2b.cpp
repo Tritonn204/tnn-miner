@@ -39,6 +39,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "blake2.h"
 #include "blake2-impl.h"
 
+#include "compile.h"
+
 static const uint64_t blake2b_IV[8] = {
 	UINT64_C(0x6a09e667f3bcc908), UINT64_C(0xbb67ae8584caa73b),
 	UINT64_C(0x3c6ef372fe94f82b), UINT64_C(0xa54ff53a5f1d36f1),
@@ -179,6 +181,408 @@ int blake2b_init_key(blake2b_state *S, size_t outlen, const void *key, size_t ke
 	return 0;
 }
 
+#ifdef __x86_64__
+#include <x86intrin.h>
+
+__attribute__((target("ssse3")))
+static void blake2b_compress(blake2b_state *S, const uint8_t *block) {
+    __m128i row1l, row1h, row2l, row2h, row3l, row3h, row4l, row4h;
+    __m128i t0, t1;
+    __m128i b0, b1;
+    uint64_t m[16];
+    unsigned int i, r;
+
+    // Rotation constants for SSSE3
+    const __m128i r16 = _mm_setr_epi8(2, 3, 4, 5, 6, 7, 0, 1, 10, 11, 12, 13, 14, 15, 8, 9);
+    const __m128i r24 = _mm_setr_epi8(3, 4, 5, 6, 7, 0, 1, 2, 11, 12, 13, 14, 15, 8, 9, 10);
+
+    // Define rotation macros for SSSE3
+    #define rotr32_sse(x) _mm_shuffle_epi32(x, _MM_SHUFFLE(2, 3, 0, 1))
+    #define rotr24_sse(x) _mm_shuffle_epi8(x, r24)
+    #define rotr16_sse(x) _mm_shuffle_epi8(x, r16)
+    #define rotr63_sse(x) _mm_xor_si128(_mm_srli_epi64(x, 63), _mm_add_epi64(x, x))
+
+    // Load message block
+    for (i = 0; i < 16; ++i) {
+        m[i] = load64(block + i * 8);
+    }
+
+    // Initialize working variables (split into low and high parts)
+    row1l = _mm_set_epi64x(S->h[1], S->h[0]);
+    row1h = _mm_set_epi64x(S->h[3], S->h[2]);
+    row2l = _mm_set_epi64x(S->h[5], S->h[4]);
+    row2h = _mm_set_epi64x(S->h[7], S->h[6]);
+    row3l = _mm_set_epi64x(blake2b_IV[1], blake2b_IV[0]);
+    row3h = _mm_set_epi64x(blake2b_IV[3], blake2b_IV[2]);
+    row4l = _mm_set_epi64x(blake2b_IV[5] ^ S->t[1], blake2b_IV[4] ^ S->t[0]);
+    row4h = _mm_set_epi64x(blake2b_IV[7] ^ S->f[1], blake2b_IV[6] ^ S->f[0]);
+
+    for (r = 0; r < 12; r++) {
+        // Column step
+        // G(0,4,8,12) and G(1,5,9,13)
+        b0 = _mm_set_epi64x(m[blake2b_sigma[r][2]], m[blake2b_sigma[r][0]]);
+        b1 = _mm_set_epi64x(m[blake2b_sigma[r][3]], m[blake2b_sigma[r][1]]);
+
+        row1l = _mm_add_epi64(_mm_add_epi64(row1l, row2l), b0);
+        row4l = rotr32_sse(_mm_xor_si128(row4l, row1l));
+        row3l = _mm_add_epi64(row3l, row4l);
+        row2l = rotr24_sse(_mm_xor_si128(row2l, row3l));
+        row1l = _mm_add_epi64(_mm_add_epi64(row1l, row2l), b1);
+        row4l = rotr16_sse(_mm_xor_si128(row4l, row1l));
+        row3l = _mm_add_epi64(row3l, row4l);
+        row2l = rotr63_sse(_mm_xor_si128(row2l, row3l));
+
+        // G(2,6,10,14) and G(3,7,11,15)
+        b0 = _mm_set_epi64x(m[blake2b_sigma[r][6]], m[blake2b_sigma[r][4]]);
+        b1 = _mm_set_epi64x(m[blake2b_sigma[r][7]], m[blake2b_sigma[r][5]]);
+
+        row1h = _mm_add_epi64(_mm_add_epi64(row1h, row2h), b0);
+        row4h = rotr32_sse(_mm_xor_si128(row4h, row1h));
+        row3h = _mm_add_epi64(row3h, row4h);
+        row2h = rotr24_sse(_mm_xor_si128(row2h, row3h));
+        row1h = _mm_add_epi64(_mm_add_epi64(row1h, row2h), b1);
+        row4h = rotr16_sse(_mm_xor_si128(row4h, row1h));
+        row3h = _mm_add_epi64(row3h, row4h);
+        row2h = rotr63_sse(_mm_xor_si128(row2h, row3h));
+
+        // Diagonalize
+        t0 = _mm_alignr_epi8(row2h, row2l, 8);
+        t1 = _mm_alignr_epi8(row2l, row2h, 8);
+        row2l = t0;
+        row2h = t1;
+
+        t0 = row3l;
+        row3l = row3h;
+        row3h = t0;
+
+        t0 = _mm_alignr_epi8(row4h, row4l, 8);
+        t1 = _mm_alignr_epi8(row4l, row4h, 8);
+        row4l = t1;
+        row4h = t0;
+
+        // Diagonal step
+        // G(0,5,10,15) and G(1,6,11,12)
+        b0 = _mm_set_epi64x(m[blake2b_sigma[r][10]], m[blake2b_sigma[r][8]]);
+        b1 = _mm_set_epi64x(m[blake2b_sigma[r][11]], m[blake2b_sigma[r][9]]);
+
+        row1l = _mm_add_epi64(_mm_add_epi64(row1l, row2l), b0);
+        row4l = rotr32_sse(_mm_xor_si128(row4l, row1l));
+        row3l = _mm_add_epi64(row3l, row4l);
+        row2l = rotr24_sse(_mm_xor_si128(row2l, row3l));
+        row1l = _mm_add_epi64(_mm_add_epi64(row1l, row2l), b1);
+        row4l = rotr16_sse(_mm_xor_si128(row4l, row1l));
+        row3l = _mm_add_epi64(row3l, row4l);
+        row2l = rotr63_sse(_mm_xor_si128(row2l, row3l));
+
+        // G(2,7,8,13) and G(3,4,9,14)
+        b0 = _mm_set_epi64x(m[blake2b_sigma[r][14]], m[blake2b_sigma[r][12]]);
+        b1 = _mm_set_epi64x(m[blake2b_sigma[r][15]], m[blake2b_sigma[r][13]]);
+
+        row1h = _mm_add_epi64(_mm_add_epi64(row1h, row2h), b0);
+        row4h = rotr32_sse(_mm_xor_si128(row4h, row1h));
+        row3h = _mm_add_epi64(row3h, row4h);
+        row2h = rotr24_sse(_mm_xor_si128(row2h, row3h));
+        row1h = _mm_add_epi64(_mm_add_epi64(row1h, row2h), b1);
+        row4h = rotr16_sse(_mm_xor_si128(row4h, row1h));
+        row3h = _mm_add_epi64(row3h, row4h);
+        row2h = rotr63_sse(_mm_xor_si128(row2h, row3h));
+
+        // Undiagonalize
+        t0 = _mm_alignr_epi8(row2l, row2h, 8);
+        t1 = _mm_alignr_epi8(row2h, row2l, 8);
+        row2l = t0;
+        row2h = t1;
+
+        t0 = row3l;
+        row3l = row3h;
+        row3h = t0;
+
+        t0 = _mm_alignr_epi8(row4l, row4h, 8);
+        t1 = _mm_alignr_epi8(row4h, row4l, 8);
+        row4l = t1;
+        row4h = t0;
+    }
+
+    // Finalize
+    row1l = _mm_xor_si128(_mm_xor_si128(row1l, row3l), _mm_set_epi64x(S->h[1], S->h[0]));
+    row1h = _mm_xor_si128(_mm_xor_si128(row1h, row3h), _mm_set_epi64x(S->h[3], S->h[2]));
+    row2l = _mm_xor_si128(_mm_xor_si128(row2l, row4l), _mm_set_epi64x(S->h[5], S->h[4]));
+    row2h = _mm_xor_si128(_mm_xor_si128(row2h, row4h), _mm_set_epi64x(S->h[7], S->h[6]));
+
+    // Store results
+    _mm_storeu_si128((__m128i*)&S->h[0], row1l);
+    _mm_storeu_si128((__m128i*)&S->h[2], row1h);
+    _mm_storeu_si128((__m128i*)&S->h[4], row2l);
+    _mm_storeu_si128((__m128i*)&S->h[6], row2h);
+
+    #undef rotr32_sse
+    #undef rotr24_sse
+    #undef rotr16_sse
+    #undef rotr63_sse
+}
+
+#ifndef TNN_LEGACY_AMD64
+
+#define rotr32(x) _mm256_shuffle_epi32(x, _MM_SHUFFLE(2, 3, 0, 1))
+#define rotr24(x) _mm256_or_si256(_mm256_srli_epi64(x, 24), _mm256_slli_epi64(x, 40))
+#define rotr16(x) _mm256_or_si256(_mm256_srli_epi64(x, 16), _mm256_slli_epi64(x, 48))
+#define rotr63(x) _mm256_or_si256(_mm256_srli_epi64(x, 63), _mm256_slli_epi64(x, 1))
+
+TNN_TARGET_CLONE(
+  blake2b_compress,
+  static void,
+  (blake2b_state *S, const uint8_t *block),
+  {
+    __m256i m[4];
+    __m256i row1;
+    __m256i row2;
+    __m256i row3;
+    __m256i row4;
+    __m256i t0;
+    __m256i t1;
+    __m256i b0;
+    __m256i b1;
+
+    uint64_t m_scalar[16];
+    unsigned int r;
+
+    // Load message block using AVX2
+    m[0] = _mm256_loadu_si256((const __m256i*)(block));
+    m[1] = _mm256_loadu_si256((const __m256i*)(block + 32));
+    m[2] = _mm256_loadu_si256((const __m256i*)(block + 64));
+    m[3] = _mm256_loadu_si256((const __m256i*)(block + 96));
+    
+    // Store to scalar array for sigma indexing
+    _mm256_storeu_si256((__m256i*)&m_scalar[0], m[0]);
+    _mm256_storeu_si256((__m256i*)&m_scalar[4], m[1]);
+    _mm256_storeu_si256((__m256i*)&m_scalar[8], m[2]);
+    _mm256_storeu_si256((__m256i*)&m_scalar[12], m[3]);
+
+    // Initialize working variables
+    row1 = _mm256_setr_epi64x(S->h[0], S->h[1], S->h[2], S->h[3]);
+    row2 = _mm256_setr_epi64x(S->h[4], S->h[5], S->h[6], S->h[7]);
+    row3 = _mm256_setr_epi64x(blake2b_IV[0], blake2b_IV[1], blake2b_IV[2], blake2b_IV[3]);
+    row4 = _mm256_setr_epi64x(
+        blake2b_IV[4] ^ S->t[0],
+        blake2b_IV[5] ^ S->t[1],
+        blake2b_IV[6] ^ S->f[0],
+        blake2b_IV[7] ^ S->f[1]
+    );
+
+    for (r = 0; r < 12; r++) {
+        // Column step
+        b0 = _mm256_setr_epi64x(
+            m_scalar[blake2b_sigma[r][0]],
+            m_scalar[blake2b_sigma[r][2]],
+            m_scalar[blake2b_sigma[r][4]],
+            m_scalar[blake2b_sigma[r][6]]
+        );
+        b1 = _mm256_setr_epi64x(
+            m_scalar[blake2b_sigma[r][1]],
+            m_scalar[blake2b_sigma[r][3]],
+            m_scalar[blake2b_sigma[r][5]],
+            m_scalar[blake2b_sigma[r][7]]
+        );
+
+        row1 = _mm256_add_epi64(_mm256_add_epi64(row1, row2), b0);
+        row4 = rotr32(_mm256_xor_si256(row4, row1));
+        row3 = _mm256_add_epi64(row3, row4);
+        row2 = rotr24(_mm256_xor_si256(row2, row3));
+        row1 = _mm256_add_epi64(_mm256_add_epi64(row1, row2), b1);
+        row4 = rotr16(_mm256_xor_si256(row4, row1));
+        row3 = _mm256_add_epi64(row3, row4);
+        row2 = rotr63(_mm256_xor_si256(row2, row3));
+
+        // Diagonal step
+        row2 = _mm256_permute4x64_epi64(row2, _MM_SHUFFLE(0, 3, 2, 1));
+        row3 = _mm256_permute4x64_epi64(row3, _MM_SHUFFLE(1, 0, 3, 2));
+        row4 = _mm256_permute4x64_epi64(row4, _MM_SHUFFLE(2, 1, 0, 3));
+
+        b0 = _mm256_setr_epi64x(
+            m_scalar[blake2b_sigma[r][8]],
+            m_scalar[blake2b_sigma[r][10]],
+            m_scalar[blake2b_sigma[r][12]],
+            m_scalar[blake2b_sigma[r][14]]
+        );
+        b1 = _mm256_setr_epi64x(
+            m_scalar[blake2b_sigma[r][9]],
+            m_scalar[blake2b_sigma[r][11]],
+            m_scalar[blake2b_sigma[r][13]],
+            m_scalar[blake2b_sigma[r][15]]
+        );
+
+        row1 = _mm256_add_epi64(_mm256_add_epi64(row1, row2), b0);
+        row4 = rotr32(_mm256_xor_si256(row4, row1));
+        row3 = _mm256_add_epi64(row3, row4);
+        row2 = rotr24(_mm256_xor_si256(row2, row3));
+        row1 = _mm256_add_epi64(_mm256_add_epi64(row1, row2), b1);
+        row4 = rotr16(_mm256_xor_si256(row4, row1));
+        row3 = _mm256_add_epi64(row3, row4);
+        row2 = rotr63(_mm256_xor_si256(row2, row3));
+
+        // Undiagonalize
+        row2 = _mm256_permute4x64_epi64(row2, _MM_SHUFFLE(2, 1, 0, 3));
+        row3 = _mm256_permute4x64_epi64(row3, _MM_SHUFFLE(1, 0, 3, 2));
+        row4 = _mm256_permute4x64_epi64(row4, _MM_SHUFFLE(0, 3, 2, 1));
+    }
+
+    // Finalize
+    t0 = _mm256_xor_si256(_mm256_xor_si256(row1, row3), _mm256_loadu_si256((const __m256i*)&S->h[0]));
+    t1 = _mm256_xor_si256(_mm256_xor_si256(row2, row4), _mm256_loadu_si256((const __m256i*)&S->h[4]));
+
+    _mm256_storeu_si256((__m256i*)&S->h[0], t0);
+    _mm256_storeu_si256((__m256i*)&S->h[4], t1);
+  },
+  TNN_TARGETS_X86_AVX2
+)
+
+#undef rotr32
+#undef rotr24
+#undef rotr16
+#undef rotr63
+
+
+#define rotr32_512(x)   _mm512_shuffle_epi32(x, _MM_SHUFFLE(2, 3, 0, 1))
+#define rotr24_512(x)   _mm512_shuffle_epi8(x, _mm512_broadcast_i32x4(_mm_setr_epi8(3, 4, 5, 6, 7, 0, 1, 2, 11, 12, 13, 14, 15, 8, 9, 10)))
+#define rotr16_512(x)   _mm512_shuffle_epi8(x, _mm512_broadcast_i32x4(_mm_setr_epi8(2, 3, 4, 5, 6, 7, 0, 1, 10, 11, 12, 13, 14, 15, 8, 9)))
+#define rotr63_512(x)   _mm512_xor_si512(_mm512_srli_epi64((x), 63), _mm512_add_epi64((x), (x)))
+
+TNN_TARGET_CLONE(
+  blake2b_compress,
+  static void,
+  (blake2b_state *S, const uint8_t *block),
+  {
+    __m512i row1;
+    __m512i row2;
+    __m512i row3;
+    __m512i row4;
+    __m512i m0;
+    __m512i m1;
+
+    uint64_t m_scalar[16];
+    unsigned int r;
+
+    // Load message using AVX512
+    __m512i msg_block[2];
+    msg_block[0] = _mm512_loadu_si512((const __m512i*)block);
+    msg_block[1] = _mm512_loadu_si512((const __m512i*)(block + 64));
+    
+    // Store to scalar for sigma indexing
+    _mm512_storeu_si512((__m512i*)&m_scalar[0], msg_block[0]);
+    _mm512_storeu_si512((__m512i*)&m_scalar[8], msg_block[1]);
+
+    // Initialize state - broadcast 256-bit values to fill 512-bit registers
+    __m256i h_low = _mm256_setr_epi64x(S->h[0], S->h[1], S->h[2], S->h[3]);
+    __m256i h_high = _mm256_setr_epi64x(S->h[4], S->h[5], S->h[6], S->h[7]);
+    __m256i iv_low = _mm256_setr_epi64x(blake2b_IV[0], blake2b_IV[1], blake2b_IV[2], blake2b_IV[3]);
+    __m256i iv_high = _mm256_setr_epi64x(
+        blake2b_IV[4] ^ S->t[0],
+        blake2b_IV[5] ^ S->t[1],
+        blake2b_IV[6] ^ S->f[0],
+        blake2b_IV[7] ^ S->f[1]
+    );
+    
+    // Duplicate the 256-bit values to fill 512-bit registers
+    row1 = _mm512_broadcast_i64x4(h_low);
+    row2 = _mm512_broadcast_i64x4(h_high);
+    row3 = _mm512_broadcast_i64x4(iv_low);
+    row4 = _mm512_broadcast_i64x4(iv_high);
+
+    // Create permutation indices for diagonal/undiagonal
+    const __m512i diag_perm = _mm512_setr_epi64(1, 2, 3, 0, 5, 6, 7, 4);
+    const __m512i undiag_perm = _mm512_setr_epi64(3, 0, 1, 2, 7, 4, 5, 6);
+
+    for (r = 0; r < 12; r++) {
+        // Column step
+        m0 = _mm512_setr_epi64(
+            m_scalar[blake2b_sigma[r][0]], m_scalar[blake2b_sigma[r][2]], 
+            m_scalar[blake2b_sigma[r][4]], m_scalar[blake2b_sigma[r][6]],
+            m_scalar[blake2b_sigma[r][0]], m_scalar[blake2b_sigma[r][2]], 
+            m_scalar[blake2b_sigma[r][4]], m_scalar[blake2b_sigma[r][6]]
+        );
+        m1 = _mm512_setr_epi64(
+            m_scalar[blake2b_sigma[r][1]], m_scalar[blake2b_sigma[r][3]], 
+            m_scalar[blake2b_sigma[r][5]], m_scalar[blake2b_sigma[r][7]],
+            m_scalar[blake2b_sigma[r][1]], m_scalar[blake2b_sigma[r][3]], 
+            m_scalar[blake2b_sigma[r][5]], m_scalar[blake2b_sigma[r][7]]
+        );
+
+        // G function
+        row1 = _mm512_add_epi64(_mm512_add_epi64(row1, row2), m0);
+        row4 = rotr32_512(_mm512_xor_si512(row4, row1));
+        row3 = _mm512_add_epi64(row3, row4);
+        row2 = rotr24_512(_mm512_xor_si512(row2, row3));
+        row1 = _mm512_add_epi64(_mm512_add_epi64(row1, row2), m1);
+        row4 = rotr16_512(_mm512_xor_si512(row4, row1));
+        row3 = _mm512_add_epi64(row3, row4);
+        row2 = rotr63_512(_mm512_xor_si512(row2, row3));
+
+        // Diagonal
+        row2 = _mm512_permutexvar_epi64(diag_perm, row2);
+        row3 = _mm512_permutexvar_epi64(_mm512_setr_epi64(2, 3, 0, 1, 6, 7, 4, 5), row3);
+        row4 = _mm512_permutexvar_epi64(_mm512_setr_epi64(3, 0, 1, 2, 7, 4, 5, 6), row4);
+
+        // Diagonal step
+        m0 = _mm512_setr_epi64(
+            m_scalar[blake2b_sigma[r][8]], m_scalar[blake2b_sigma[r][10]], 
+            m_scalar[blake2b_sigma[r][12]], m_scalar[blake2b_sigma[r][14]],
+            m_scalar[blake2b_sigma[r][8]], m_scalar[blake2b_sigma[r][10]], 
+            m_scalar[blake2b_sigma[r][12]], m_scalar[blake2b_sigma[r][14]]
+        );
+        m1 = _mm512_setr_epi64(
+            m_scalar[blake2b_sigma[r][9]], m_scalar[blake2b_sigma[r][11]], 
+            m_scalar[blake2b_sigma[r][13]], m_scalar[blake2b_sigma[r][15]],
+            m_scalar[blake2b_sigma[r][9]], m_scalar[blake2b_sigma[r][11]], 
+            m_scalar[blake2b_sigma[r][13]], m_scalar[blake2b_sigma[r][15]]
+        );
+
+        // G function
+        row1 = _mm512_add_epi64(_mm512_add_epi64(row1, row2), m0);
+        row4 = rotr32_512(_mm512_xor_si512(row4, row1));
+        row3 = _mm512_add_epi64(row3, row4);
+        row2 = rotr24_512(_mm512_xor_si512(row2, row3));
+        row1 = _mm512_add_epi64(_mm512_add_epi64(row1, row2), m1);
+        row4 = rotr16_512(_mm512_xor_si512(row4, row1));
+        row3 = _mm512_add_epi64(row3, row4);
+        row2 = rotr63_512(_mm512_xor_si512(row2, row3));
+
+        // Undiagonal
+        row2 = _mm512_permutexvar_epi64(undiag_perm, row2);
+        row3 = _mm512_permutexvar_epi64(_mm512_setr_epi64(2, 3, 0, 1, 6, 7, 4, 5), row3);
+        row4 = _mm512_permutexvar_epi64(diag_perm, row4);
+    }
+
+    // Finalize - extract lower 256 bits
+    __m256i t0 = _mm256_xor_si256(
+        _mm256_xor_si256(
+            _mm512_extracti64x4_epi64(row1, 0), 
+            _mm512_extracti64x4_epi64(row3, 0)
+        ),
+        _mm256_loadu_si256((const __m256i*)&S->h[0])
+    );
+    __m256i t1 = _mm256_xor_si256(
+        _mm256_xor_si256(
+            _mm512_extracti64x4_epi64(row2, 0), 
+            _mm512_extracti64x4_epi64(row4, 0)
+        ),
+        _mm256_loadu_si256((const __m256i*)&S->h[4])
+    );
+
+    _mm256_storeu_si256((__m256i*)&S->h[0], t0);
+    _mm256_storeu_si256((__m256i*)&S->h[4], t1);
+  },
+  TNN_TARGETS_X86_AVX512BW
+)
+
+#undef rotr32_512
+#undef rotr24_512
+#undef rotr16_512
+#undef rotr63_512
+
+#endif
+
+__attribute__((target("default")))
+#endif
 static void blake2b_compress(blake2b_state *S, const uint8_t *block) {
 	uint64_t m[16];
 	uint64_t v[16];
@@ -309,6 +713,7 @@ int blake2b_final(blake2b_state *S, void *out, size_t outlen) {
 
 #ifdef __x86_64__ 
 
+#ifndef TNN_LEGACY_AMD64
 TNN_TARGET_CLONE(
   blake2b,
   int,
@@ -353,6 +758,7 @@ TNN_TARGET_CLONE(
   },
   TNN_TARGETS_X86_AVX2, TNN_TARGETS_X86_AVX512
 )
+#endif
 
 __attribute__((target("default")))
 #endif
