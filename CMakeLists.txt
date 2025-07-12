@@ -23,8 +23,8 @@ endif()
 
 set(TARGET_ARCH "amd64")
 set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   -Ofast -DNDEBUG")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Ofast -Wuninitialized -DNDEBUG")
+set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   -Ofast -flto -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Ofast -flto  -Wuninitialized -DNDEBUG")
 
 option(USE_GCC        "Use GCC instead of Clang" OFF)
 option(USE_ASTRO_SPSA "Use Astro Stamped Permutation Suffix Array library" ON)

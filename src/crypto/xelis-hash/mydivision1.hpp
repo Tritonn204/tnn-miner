@@ -35,9 +35,18 @@ inline du_int Divide128div64to64(du_int u1, du_int u0, du_int v, du_int* r) {
 
 inline tu_int MyDivMod1(tu_int a, tu_int b, tu_int* rem) {
   utwords dividend{.all = a}, divisor{.all = b}, quotient{}, remainder{};
-  const unsigned n_bits = sizeof(tu_int) * CHAR_BIT;
-
-  // Fast path when divisor fits in 64 bits
+  
+  // Ultra-fast path when both fit in 64 bits
+  if ((divisor.s.high | dividend.s.high) == 0) {
+    // Both operands fit in 64 bits - use native division
+    uint64_t q = dividend.s.low / divisor.s.low;
+    uint64_t r = dividend.s.low % divisor.s.low;
+    
+    if (rem) *rem = r;
+    return q;
+  }
+  
+  // Fast path when divisor fits in 64 bits but dividend doesn't
   if (divisor.s.high == 0) {
     remainder.s.high = 0;
     if (dividend.s.high < divisor.s.low) {

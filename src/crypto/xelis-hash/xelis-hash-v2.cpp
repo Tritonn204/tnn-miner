@@ -94,25 +94,37 @@ static inline void blake3(const uint8_t *input, int len, uint8_t *output) {
 	blake3_hasher_finalize(&hasher, output, BLAKE3_OUT_LEN);
 }
 
+#if !defined(__x86_64__)
 static inline void aes_round(uint8_t *block, const uint8_t *key)
 {
-#if defined(__AES__)
-  #if defined(__x86_64__)
-    __m128i block_m128i = _mm_load_si128((__m128i *)block);
-    __m128i key_m128i = _mm_load_si128((__m128i *)key);
-    __m128i result = _mm_aesenc_si128(block_m128i, key_m128i);
-    _mm_store_si128((__m128i *)block, result);
-  #elif defined(__aarch64__)
+  #if defined(__aarch64__) && defined(__AES__)
     uint8x16_t blck = vld1q_u8(block);
     uint8x16_t ky = vld1q_u8(key);
     // This magic sauce is from here: https://blog.michaelbrase.com/2018/06/04/optimizing-x86-aes-intrinsics-on-armv8-a/
     uint8x16_t rslt = vaesmcq_u8(vaeseq_u8(blck, (uint8x16_t){})) ^ ky;
     vst1q_u8(block, rslt);
+  #else
+    aes_single_round_no_intrinsics(block, key);
   #endif
-#else
-  aes_single_round_no_intrinsics(block, key);
-#endif
 }
+#endif
+
+#if defined(__x86_64__)
+
+__attribute__((target("aes")))
+inline void aes_round(uint8_t *block, const uint8_t *key) {
+  __m128i block_vec = _mm_loadu_si128((const __m128i *)block);
+  __m128i key_vec = _mm_loadu_si128((const __m128i *)key);
+  __m128i result = _mm_aesenc_si128(block_vec, key_vec);
+  _mm_storeu_si128((__m128i *)block, result);
+}
+
+__attribute__((target("default")))
+inline void aes_round(uint8_t *block, const uint8_t *key) {
+  aes_single_round_no_intrinsics(block, key);
+}
+
+#endif
 
 const uint8_t chaIn[XELIS_MEMORY_SIZE_V2 * 2] = {0};
 
@@ -219,6 +231,36 @@ void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
 }
 // #endif
 
+#ifdef __x86_64__
+__attribute__((target("sse2")))
+static inline uint64_t isqrt(uint64_t n)
+{
+  if (n < 2) return n;
+
+  __m128d v = _mm_set_sd((double)n);
+  __m128d s = _mm_sqrt_sd(v, v);
+  uint64_t root = (uint64_t)_mm_cvtsd_f64(s);
+  if ((root + 1) * (root + 1) <= n) ++root;
+  else if (root * root > n) --root;
+  return root;
+}
+
+__attribute__((target("default")))
+#endif
+#ifdef __aarch64__
+static inline uint64_t isqrt(uint64_t n)
+{
+  if (n < 2) return n;
+  
+  float64x1_t v = vset_lane_f64((double)n, vdup_n_f64(0), 0);
+  float64x1_t s = vsqrt_f64(v);
+  uint64_t root = (uint64_t)vget_lane_f64(s, 0);
+  
+  if ((root + 1) * (root + 1) <= n) ++root;
+  else if (root * root > n) --root;
+  return root;
+}
+#endif
 static inline uint64_t isqrt(uint64_t n)
 {
   if (n < 2)
@@ -332,16 +374,6 @@ static inline uint64_t div128(__uint128_t dividend, __uint128_t divisor) {
   return dividend / divisor;
 }
 
-static inline uint64_t Divide128Div64To64(uint64_t high, uint64_t low, uint64_t divisor, uint64_t *remainder)
-{
-	uint64_t result;
-	__asm__("divq %[v]"
-			: "=a"(result), "=d"(*remainder) // Output parametrs, =a for rax, =d for rdx, [v] is an
-			// alias for divisor, input paramters "a" and "d" for low and high.
-			: [v] "r"(divisor), "a"(low), "d"(high));
-	return result;
-}
-
 static inline uint64_t ROTR(uint64_t x, uint32_t r)
 {
 	asm("rorq %%cl, %0" : "+r"(x) : "c"(r));
@@ -357,16 +389,6 @@ static inline uint64_t ROTL(uint64_t x, uint32_t r)
 #else // aarch64
 
 static inline uint64_t div128(__uint128_t dividend, __uint128_t divisor) {
-    return dividend / divisor;
-}
-
-static inline uint64_t Divide128Div64To64(uint64_t high, uint64_t low, uint64_t divisor, uint64_t *remainder)
-{
-    // Combine high and low into a 128-bit dividend
-    __uint128_t dividend = ((__uint128_t)high << 64) | low;
-
-    // Perform division using built-in compiler functions
-    *remainder = dividend % divisor;
     return dividend / divisor;
 }
 
@@ -466,230 +488,227 @@ static inline uint64_t case_15(uint64_t a, uint64_t b, uint64_t c, int r, uint64
 typedef uint64_t (*operation_func)(uint64_t, uint64_t, uint64_t, int, uint64_t, int, int);
 
 operation_func operations[] = {
-    case_0, case_1, case_2, case_3, case_4, case_5, case_6, case_7,
-    case_8, case_9, case_10, case_11, case_12, case_13, case_14, case_15,
-    // Add other functions for cases 10-15
+  case_0, case_1, case_2, case_3, case_4, case_5, case_6, case_7,
+  case_8, case_9, case_10, case_11, case_12, case_13, case_14, case_15,
 };
 
 #ifdef __x86_64__
-TNN_TARGET_CLONE(stage_3, void, (uint64_t* scratch_pad, workerData_xelis_v2& worker), {
+
+#define PROCESS_ITERATION(offset) \
+{ \
+  size_t j_off = j + offset; \
+  size_t r = r_base + offset; \
+  size_t r_next = (r + 1 == XELIS_MEMORY_SIZE_V2) ? 0 : r + 1; \
+  \
+  uint64_t a = mem_buffer_a[addr_a % XELIS_BUFFER_SIZE_V2]; \
+  uint64_t b = mem_buffer_b[~ROTR(addr_a, r) % XELIS_BUFFER_SIZE_V2]; \
+  uint64_t c = buf[j_off]; \
+  \
+  uint32_t idx = ROTL(addr_a, (uint32_t)c) & 0xF; \
+  uint64_t v = operations[idx](a, b, c, r_next, addr_a, i, j_off); \
+  addr_a = ROTL(addr_a ^ v, 1); \
+  \
+  size_t iA = XELIS_BUFFER_SIZE_V2 - j_off - 1; \
+  uint64_t t = mem_buffer_a[iA] ^ addr_a; \
+  mem_buffer_a[iA] = t; \
+  mem_buffer_b[j_off] ^= ROTR(t, (uint32_t)addr_a); \
+}
+
+__attribute__((target("aes")))
+void stage_3(uint64_t* scratch_pad, workerData_xelis_v2& worker) {
+  const uint8_t key[17] = "xelishash-pow-v2";
+  __m128i key_vec = _mm_loadu_si128((const __m128i *)key);
+
+  uint64_t* mem_buffer_a = scratch_pad;
+  uint64_t* mem_buffer_b = scratch_pad + XELIS_BUFFER_SIZE_V2;
+
+  uint64_t addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V2 - 1];
+  uint64_t addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - 1] >> 32;
+
+  for (size_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V2; ++i) {
+    uint64_t mem_a = mem_buffer_a[addr_a % XELIS_BUFFER_SIZE_V2];
+    uint64_t mem_b = mem_buffer_b[addr_b % XELIS_BUFFER_SIZE_V2];
+    
+    __m128i block_vec = _mm_set_epi64x(mem_a, mem_b);
+    block_vec = _mm_aesenc_si128(block_vec, key_vec);
+    uint64_t hash1 = _mm_extract_epi64(block_vec, 0);
+    
+    uint64_t hash2 = mem_a ^ mem_b;
+    addr_a = ~(hash1 ^ hash2);
+
+    byte odd = i & 1;
+    uint64_t* buf = odd ? mem_buffer_b : mem_buffer_a;
+    size_t r_offset = odd ? XELIS_BUFFER_SIZE_V2 : 0;
+    
+    for (size_t j = 0; j < XELIS_BUFFER_SIZE_V2; j += 8) {
+      size_t r_base = j + r_offset;
+
+      PROCESS_ITERATION(0)
+      PROCESS_ITERATION(1)
+      PROCESS_ITERATION(2)
+      PROCESS_ITERATION(3)
+      PROCESS_ITERATION(4)
+      PROCESS_ITERATION(5)
+      PROCESS_ITERATION(6)
+      PROCESS_ITERATION(7)
+      
+    }
+    
+    addr_b = isqrt(addr_a);
+  }
+}
+
+#ifndef TNN_LEGACY_AMD64
+TNN_TARGET_CLONE(
+  stage_3,
+  void,
+  (uint64_t* scratch_pad, workerData_xelis_v2& worker),
+  {
     const uint8_t key[17] = "xelishash-pow-v2";
-    uint8_t block[16] = {0};
+    __m128i key_vec = _mm_loadu_si128((const __m128i *)key);
 
     uint64_t* mem_buffer_a = scratch_pad;
     uint64_t* mem_buffer_b = scratch_pad + XELIS_BUFFER_SIZE_V2;
 
     uint64_t addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V2 - 1];
     uint64_t addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - 1] >> 32;
-    size_t r = 0;
 
     for (size_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V2; ++i) {
-        uint64_t mem_a = mem_buffer_a[addr_a % XELIS_BUFFER_SIZE_V2];
-        uint64_t mem_b = mem_buffer_b[addr_b % XELIS_BUFFER_SIZE_V2];
+      uint64_t mem_a = mem_buffer_a[addr_a % XELIS_BUFFER_SIZE_V2];
+      uint64_t mem_b = mem_buffer_b[addr_b % XELIS_BUFFER_SIZE_V2];
+      
+      // Optimized AES using registers - no byte conversions needed
+      __m128i block_vec = _mm_set_epi64x(mem_a, mem_b);
+      block_vec = _mm_aesenc_si128(block_vec, key_vec);
+      uint64_t hash1 = _mm_extract_epi64(block_vec, 0);
+      
+      uint64_t hash2 = mem_a ^ mem_b;
+      addr_a = ~(hash1 ^ hash2);
 
-        uint64_to_le_bytes(mem_b, block);
-        uint64_to_le_bytes(mem_a, block + 8);
-        aes_round(block, key);
+      byte odd = i & 1;
+      uint64_t* buf = odd ? mem_buffer_b : mem_buffer_a;
+      size_t r_offset = odd ? XELIS_BUFFER_SIZE_V2 : 0;
+      
+      for (size_t j = 0; j < XELIS_BUFFER_SIZE_V2; j += 8) {
+        size_t r_base = j + r_offset;
 
-        uint64_t hash1 = le_bytes_to_uint64(block);
-        uint64_t hash2 = mem_a ^ mem_b;
-        addr_a = ~(hash1 ^ hash2);
-
-        for (size_t j = 0; j < XELIS_BUFFER_SIZE_V2; ++j) {
-            uint64_t a = mem_buffer_a[addr_a % XELIS_BUFFER_SIZE_V2];
-            uint64_t b = mem_buffer_b[~ROTR(addr_a, r) % XELIS_BUFFER_SIZE_V2];
-            uint64_t c = (r < XELIS_BUFFER_SIZE_V2) ? mem_buffer_a[r] : mem_buffer_b[r - XELIS_BUFFER_SIZE_V2];
-            r = (r + 1) % XELIS_MEMORY_SIZE_V2;
-
-            uint32_t idx = ROTL(addr_a, (uint32_t)c) & 0xF;
-            uint64_t v = operations[idx](a, b, c, r, addr_a, i, j);
-            addr_a = ROTL(addr_a ^ v, 1);
-
-            uint64_t t = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - j - 1] ^ addr_a;
-            mem_buffer_a[XELIS_BUFFER_SIZE_V2 - j - 1] = t;
-            mem_buffer_b[j] ^= ROTR(t, (uint32_t)addr_a);
-        }
-
-        addr_b = isqrt(addr_a);
+        PROCESS_ITERATION(0)
+        PROCESS_ITERATION(1)
+        PROCESS_ITERATION(2)
+        PROCESS_ITERATION(3)
+        PROCESS_ITERATION(4)
+        PROCESS_ITERATION(5)
+        PROCESS_ITERATION(6)
+        PROCESS_ITERATION(7)
+        
+      }
+      
+      addr_b = isqrt(addr_a);
     }
-},
-  "default", TNN_TARGETS_X86_AVX2, TNN_TARGETS_X86_AVX512
+  },
+  TNN_TARGETS_X86_AVX2, TNN_TARGETS_X86_AVX512
 )
-#else
-void stage_3(uint64_t *scratch_pad, workerData_xelis_v2 &worker)
-{
-    const uint8_t key[17] = "xelishash-pow-v2";
-    uint8_t block[16] = {0};
-
-    uint64_t *mem_buffer_a = scratch_pad;
-    uint64_t *mem_buffer_b = scratch_pad + XELIS_BUFFER_SIZE_V2;
-
-    uint64_t addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V2 - 1];
-    uint64_t addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - 1] >> 32;
-    size_t r = 0;
-
-
-    #pragma unroll 3
-    for (size_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V2; ++i) {
-        uint64_t mem_a = mem_buffer_a[addr_a % XELIS_BUFFER_SIZE_V2];
-        uint64_t mem_b = mem_buffer_b[addr_b % XELIS_BUFFER_SIZE_V2];
-
-        // std::copy(&mem_b, &mem_b + 8, block);
-        // std::copy(&mem_a, &mem_a + 8, block + 8);
-
-        uint64_to_le_bytes(mem_b, block);
-		    uint64_to_le_bytes(mem_a, block + 8);
-
-        aes_round(block, key);
-
-        uint64_t hash1 = 0, hash2 = 0;
-        // hash1 = ((uint64_t*)block)[0]; // simple assignment, slower than SIMD on my CPU
-        hash1 = le_bytes_to_uint64(block);
-        // std::copy(block, block + 8, &hash1);
-        // hash1 = _byteswap_uint64(hash1);
-        hash2 = mem_a ^ mem_b;
-
-        addr_a = ~(hash1 ^ hash2);
-
-        // printf("pre result: %llu\n", result);
-
-        for (size_t j = 0; j < XELIS_BUFFER_SIZE_V2; ++j) {
-            uint64_t a = mem_buffer_a[(addr_a % XELIS_BUFFER_SIZE_V2)];
-            uint64_t b = mem_buffer_b[~ROTR(addr_a, r) % XELIS_BUFFER_SIZE_V2];
-            uint64_t c = (r < XELIS_BUFFER_SIZE_V2) ? mem_buffer_a[r] : mem_buffer_b[r - XELIS_BUFFER_SIZE_V2];
-            r = (r+1) % XELIS_MEMORY_SIZE_V2;
-
-            // printf("a %llu, b %llu, c %llu, ", a, b, c);
-            uint64_t v;
-            uint32_t idx = ROTL(addr_a, (uint32_t)c) & 0xF;
-            v = operations[idx](a,b,c,r,addr_a,i,j);
-
-            addr_a = ROTL(addr_a ^ v, 1);
-
-            uint64_t t = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - j - 1] ^ addr_a;
-            mem_buffer_a[XELIS_BUFFER_SIZE_V2 - j - 1] = t;
-            mem_buffer_b[j] ^= ROTR(t, (uint32_t)addr_a);
-        }
-        // printf("post result: %llu\n", result);
-        addr_b = isqrt(addr_a);
-    }
-
-  // Crc32 crc32;
-  // crc32.input((uint8_t *)scratch_pad, XELIS_MEMORY_SIZE_V2 * 8);
-  // printf("%llu\n", crc32.result());
-}
 #endif
 
+// Default fallback version using memory-based aes_round
+__attribute__((target("default")))
+void stage_3(uint64_t* scratch_pad, workerData_xelis_v2& worker) {
+  const uint8_t key[17] = "xelishash-pow-v2";
+  uint8_t block[16] = {0};
+  
+  uint64_t* mem_buffer_a = scratch_pad;
+  uint64_t* mem_buffer_b = scratch_pad + XELIS_BUFFER_SIZE_V2;
+  
+  uint64_t addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V2 - 1];
+  uint64_t addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - 1] >> 32;
+  size_t r = 0;
 
-// void stage_3(workerData_xelis_v2 &worker)
-// {
-//     memset(worker.block, 0, 16);
+  for (size_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V2; ++i) {
+    uint64_t mem_a = mem_buffer_a[addr_a % XELIS_BUFFER_SIZE_V2];
+    uint64_t mem_b = mem_buffer_b[addr_b % XELIS_BUFFER_SIZE_V2];
+    
+    // Fallback using memory operations
+    uint64_to_le_bytes(mem_b, block);
+    uint64_to_le_bytes(mem_a, block + 8);
+    aes_round(block, key);
+    uint64_t hash1 = le_bytes_to_uint64(block);
+    
+    uint64_t hash2 = mem_a ^ mem_b;
+    addr_a = ~(hash1 ^ hash2);
+    
+    byte odd = i & 1;
+    uint64_t* buf = odd ? mem_buffer_b : mem_buffer_a;
+    size_t r_offset = odd ? XELIS_BUFFER_SIZE_V2 : 0;
+    
+    for (size_t j = 0; j < XELIS_BUFFER_SIZE_V2; j += 8) {
+      size_t r_base = j + r_offset;
 
-//     uint64_t *mem_buffer_a = worker.scratchPad;
-//     uint64_t *mem_buffer_b = worker.scratchPad + XELIS_BUFFER_SIZE_V2;
+      PROCESS_ITERATION(0)
+      PROCESS_ITERATION(1)
+      PROCESS_ITERATION(2)
+      PROCESS_ITERATION(3)
+      PROCESS_ITERATION(4)
+      PROCESS_ITERATION(5)
+      PROCESS_ITERATION(6)
+      PROCESS_ITERATION(7)
+      
+    }
+    
+    addr_b = isqrt(addr_a);
+  }
+}
 
-//     worker.addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V2 - 1];
-//     worker.addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - 1] >> 32;
-//     size_t r = 0;
+#undef PROCESS_ITERATION
+#else
 
-//     for (size_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V2; ++i) {
-//         worker.mem_a = mem_buffer_a[worker.addr_a % XELIS_BUFFER_SIZE_V2];
-//         worker.mem_b = mem_buffer_b[worker.addr_b % XELIS_BUFFER_SIZE_V2];
+void stage_3(uint64_t *scratch_pad, workerData_xelis_v2 &worker)
+{
+  const uint8_t key[17] = "xelishash-pow-v2";
+  uint8_t block[16] = {0};
 
-//         // std::copy(&worker.mem_b, &worker.mem_b + 8, block);
-//         // std::copy(&worker.mem_a, &worker.mem_a + 8, block + 8);
-//         uint64_to_le_bytes(worker.mem_b, worker.block);
-// 		    uint64_to_le_bytes(worker.mem_a, worker.block + 8);
+  uint64_t *mem_buffer_a = scratch_pad;
+  uint64_t *mem_buffer_b = scratch_pad + XELIS_BUFFER_SIZE_V2;
 
-//         aes_round(worker.block, worker.key);
+  uint64_t addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V2 - 1];
+  uint64_t addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - 1] >> 32;
+  size_t r = 0;
 
-//         uint64_t hash1 = 0, hash2 = 0;
-//         hash1 = le_bytes_to_uint64(worker.block);
-//         // std::copy(block, block + 8, &hash1);
-//         // hash1 = _byteswap_uint64(hash1);
-//         hash2 = worker.mem_a ^ worker.mem_b;
+  #pragma unroll 3
+  for (size_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V2; ++i) {
+    uint64_t mem_a = mem_buffer_a[addr_a % XELIS_BUFFER_SIZE_V2];
+    uint64_t mem_b = mem_buffer_b[addr_b % XELIS_BUFFER_SIZE_V2];
 
-//         uint64_t result = ~(hash1 ^ hash2);
+    uint64_to_le_bytes(mem_b, block);
+    uint64_to_le_bytes(mem_a, block + 8);
+    aes_round(block, key);
 
-//         // printf("pre result: %llu\n", result);
+    uint64_t hash1 = le_bytes_to_uint64(block);
+    uint64_t hash2 = mem_a ^ mem_b;
 
-//         for (size_t j = 0; j < XELIS_BUFFER_SIZE_V2; ++j) {
-//             worker.a = mem_buffer_a[(result % XELIS_BUFFER_SIZE_V2)];
-//             worker.b = mem_buffer_b[~ROTR(result, r) % XELIS_BUFFER_SIZE_V2];
-//             uint64_t c = (r < XELIS_BUFFER_SIZE_V2) ? mem_buffer_a[r] : mem_buffer_b[r - XELIS_BUFFER_SIZE_V2];
-//             r = (r < XELIS_MEMORY_SIZE_V2 - 1) ? r + 1 : 0;
+    addr_a = ~(hash1 ^ hash2);
 
-//             // printf("a %llu, b %llu, c %llu, ", a, b, c);
-//             uint64_t v;
-//             __uint128_t t1, t2;
-//             int scase = ROTL(result, (uint32_t)c) & 0xF;
-//             switch (ROTL(result, (uint32_t)c) & 0xF) {
-//               case 0: v = ROTL(c, i * j) ^ worker.b; break;
-//               case 1: v = ROTR(c, i * j) ^ worker.a; break;
-//               case 2:
-//                 v = worker.a ^ worker.b ^ c;
-//                 break;
-//               case 3:
-//                 v = ((worker.a + worker.b) * c);
-//                 break;
-//               case 4:
-//                 v = ((worker.b - c) * worker.a);
-//                 break;
-//               case 5:
-//                 v = (c - worker.a + worker.b);
-//                 break;
-//               case 6:
-//                 v = (worker.a - worker.b + c);
-//                 break;
-//               case 7:
-//                 v = (worker.b * c + worker.a);
-//                 break;
-//               case 8:
-//                 v = (c * worker.a + worker.b);
-//                 break;
-//               case 9:
-//                 v = (worker.a * worker.b * c);
-//                 break;
-//               case 10:
-//               {
-//                 v = COMBINE_UINT64(worker.a,worker.b) % (c | 1);
-//               }
-//               break;
-//               case 11:
-//               {
-//                 t2 = COMBINE_UINT64(ROTL(result, r), worker.a | 2);
-//                 v = (t2 > COMBINE_UINT64(worker.b,c)) ? c : COMBINE_UINT64(worker.b,c) % t2;
-//               }
-//               break;
-//               case 12: v = udiv(c, worker.a, worker.b | 4); break;
-//               case 13:
-//               {
-//                 t1 = COMBINE_UINT64(ROTL(result, r), worker.b);
-//                 t2 = COMBINE_UINT64(worker.a, c | 8);
-//                 v = (t1 > t2) ? t1 / t2 : worker.a ^ worker.b;
-//               }
-//               break;
-//               case 14: v = (COMBINE_UINT64(worker.b,worker.a) * c) >> 64; break;
-//               case 15: v = (COMBINE_UINT64(worker.a,c) * COMBINE_UINT64(ROTR(result, r), worker.b)) >> 64; break;
-//             }
+    byte odd = i & 1;
+    uint64_t* buf = odd ? mem_buffer_b : mem_buffer_a;
+    size_t r_offset = odd ? XELIS_BUFFER_SIZE_V2 : 0;
+    
+    for (size_t j = 0; j < XELIS_BUFFER_SIZE_V2; j += 8) {
+      size_t r_base = j + r_offset;
 
-//             result = ROTL(result ^ v, 1);
-
-//             // printf("post result: %llu, case: %d\n", result, scase);
-
-//             uint64_t t = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - j - 1] ^ result;
-//             mem_buffer_a[XELIS_BUFFER_SIZE_V2 - j - 1] = t;
-//             mem_buffer_b[j] ^= ROTR(t, (uint32_t)result);
-//         }
-//         // printf("post result: %llu\n", result);
-//         worker.addr_a = result;
-//         worker.addr_b = isqrt(result);
-//     }
-
-//   // Crc32 crc32;
-//   // crc32.input((uint8_t *)scratch_pad, XELIS_MEMORY_SIZE_V2 * 8);
-//   // printf("%llu\n", crc32.result());
-// }
+      PROCESS_ITERATION(0)
+      PROCESS_ITERATION(1)
+      PROCESS_ITERATION(2)
+      PROCESS_ITERATION(3)
+      PROCESS_ITERATION(4)
+      PROCESS_ITERATION(5)
+      PROCESS_ITERATION(6)
+      PROCESS_ITERATION(7)
+      
+    }
+    
+    addr_b = isqrt(addr_a);
+  }
+}
+#endif
 
 void xelis_hash_v2(byte *input, workerData_xelis_v2 &worker, byte *hashResult)
 {
@@ -784,6 +803,7 @@ namespace xelis_tests_v2
         printf("%02x ", hash_result[i]);
       }
       std::cout << std::endl;
+      fflush(stdout);
       return false;
     }
     return true;
@@ -832,11 +852,13 @@ int xelis_runTests_v2()
   if (all_tests_passed)
   {
     std::cout << "XELIS-HASH-V2: All tests passed!" << std::endl;
+    fflush(stdout);
     return 0;
   }
   else
   {
     std::cout << "XELIS-HASH-V2: Some tests failed!" << std::endl;
+    fflush(stdout);
     return 1;
   }
 }
