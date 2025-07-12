@@ -1297,15 +1297,16 @@ Mining:
   }
   #endif
 
-  #ifdef TNN_XELISHASH
-  if (miningProfile.coin.miningAlgo == ALGO_XELISV2) {
-    applyMSROptimization("RandomX");
-    setcolor(CYAN);
-    printf("NOTE: The RandomX MSR mod may benefit Xelishash as well\n\n");
-    fflush(stdout);
-    setcolor(BRIGHT_WHITE);
-  }
-  #endif
+  // seems to regress after fixing other bottlenecks
+  // #ifdef TNN_XELISHASH
+  // if (miningProfile.coin.miningAlgo == ALGO_XELISV2) {
+  //   applyMSROptimization("RandomX");
+  //   setcolor(CYAN);
+  //   printf("NOTE: The RandomX MSR mod may benefit Xelishash as well\n\n");
+  //   fflush(stdout);
+  //   setcolor(BRIGHT_WHITE);
+  // }
+  // #endif
 
   boost::thread GETWORK(getWork_v2, &miningProfile);
   // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);

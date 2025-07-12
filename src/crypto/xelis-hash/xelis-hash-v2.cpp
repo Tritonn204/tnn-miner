@@ -627,7 +627,7 @@ TNN_TARGET_CLONE(
         PROCESS_ITERATION(6)
         PROCESS_ITERATION(7)
         
-      }
+      }      
       
       addr_b = isqrt(addr_a);
     }
