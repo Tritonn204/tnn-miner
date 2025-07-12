@@ -293,11 +293,12 @@ void mineXelis(int tid)
   alignas(64) thread_local byte devWork[XELIS_TEMPLATE_SIZE] = {0};
   alignas(64) thread_local byte FINALWORK[XELIS_TEMPLATE_SIZE] = {0};
 
-  alignas(64) thread_local workerData_xelis_v2 *worker = (workerData_xelis_v2 *)malloc_huge_pages(sizeof(workerData_xelis));
+  alignas(64) thread_local workerData_xelis_v2 *worker = (workerData_xelis_v2 *)malloc_huge_pages(sizeof(workerData_xelis_v2));
 
   thread_local std::random_device rd;
   thread_local std::mt19937 rng(rd());
   thread_local std::uniform_real_distribution<double> dist(0, 10000);
+  thread_local std::uniform_real_distribution<double> n2(0, 256);
 
 waitForJob:
 
@@ -384,6 +385,7 @@ waitForJob:
 
       while (localJobCounter == jobCounter)
       {
+        CHECK_CLOSE;
         which = dist(rng);
         devMine = (devConnected && devHeight > 0 && which < devFee * 100.0);
         DIFF = devMine ? difficultyDev : difficulty;
@@ -398,7 +400,7 @@ waitForJob:
 
         byte *WORK = (devMine && devConnected) ? &devWork[0] : &work[0];
         byte *nonceBytes = &WORK[40];
-        uint64_t n = ((tid - 1) % (256 * 256)) | ((rand()%256) << 16) | ((*nonce) << 24);
+        uint64_t n = ((tid - 1) % (256 * 256)) | ((int)(n2(rng)) << 16) | ((*nonce) << 24);
         memcpy(nonceBytes, (byte *)&n, 8);
 
         // if (littleEndian())

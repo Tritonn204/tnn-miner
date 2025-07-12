@@ -42,7 +42,6 @@
                         13, 12, 15, 14, 9, 8, 11, 10,                         \
                         5, 4, 7, 6, 1, 0, 3, 2))
 
-__attribute__((target("avx2")))
 TNN_TARGET_CLONE(
   ChaCha20EncryptBytes,
   void,
