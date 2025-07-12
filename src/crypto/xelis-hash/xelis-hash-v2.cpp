@@ -15,6 +15,7 @@
   #include <immintrin.h>
 #elif defined(__aarch64__)
   #include <arm_neon.h>
+  #include <arm_acle.h>
 #endif
 #include <numeric>
 #include <chrono>
@@ -269,11 +270,12 @@ static inline uint64_t isqrt(uint64_t n)
 static inline uint64_t isqrt(uint64_t n)
 {
   if (n < 2) return n;
-  
-  float64x1_t v = vset_lane_f64((double)n, vdup_n_f64(0), 0);
+
+  float64x1_t v = vdup_n_f64((double)n);
   float64x1_t s = vsqrt_f64(v);
-  uint64_t root = (uint64_t)vget_lane_f64(s, 0);
-  
+  double droot;
+  vst1_f64(&droot, s);
+  uint64_t root = (uint64_t)droot;
   if ((root + 1) * (root + 1) <= n) ++root;
   else if (root * root > n) --root;
   return root;
@@ -289,22 +291,6 @@ static inline __uint128_t combine_uint64(uint64_t high, uint64_t low)
 #if defined(__AVX2__)
 __attribute__((target("avx2")))
 void static inline uint64_to_le_bytes(uint64_t value, uint8_t *bytes) {
-    // // Set up the 64-bit value in a 128-bit register
-    // __m128i val = _mm_set1_epi64x(value);
-
-    // // Mask to isolate each byte
-    // __m128i mask = _mm_set_epi8(
-    //     -1, -1, -1, -1, -1, -1, -1, -1,
-    //     7, 6, 5, 4, 3, 2, 1, 0
-    // );
-
-    // // Shuffle bytes into the correct order for little-endian
-    // __m128i shuffled = _mm_shuffle_epi8(_mm_set1_epi64x(value), _mm_set_epi8(
-    //     -1, -1, -1, -1, -1, -1, -1, -1,
-    //     7, 6, 5, 4, 3, 2, 1, 0
-    // ));
-
-    // Store the result
     _mm_storel_epi64((__m128i*)bytes, _mm_shuffle_epi8(_mm_set1_epi64x(value), _mm_set_epi8(
         -1, -1, -1, -1, -1, -1, -1, -1,
         7, 6, 5, 4, 3, 2, 1, 0
@@ -313,24 +299,6 @@ void static inline uint64_to_le_bytes(uint64_t value, uint8_t *bytes) {
 
 __attribute__((target("avx2")))
 uint64_t static inline le_bytes_to_uint64(const uint8_t *bytes) {
-    // // Load the bytes into a 128-bit register
-    // __m128i input = _mm_loadu_si128((const __m128i*)bytes);
-
-    // // Mask to isolate each byte and order them correctly for little-endian
-    // __m128i mask = _mm_set_epi8(
-    //     15, 14, 13, 12, 11, 10, 9, 8,
-    //     7,  6,  5,  4,  3,  2, 1, 0
-    // );
-
-    // // Shuffle bytes into the correct order for 64-bit integer
-    // __m128i shuffled = _mm_shuffle_epi8(_mm_loadu_si128((const __m128i*)bytes), _mm_set_epi8(
-    //     15, 14, 13, 12, 11, 10, 9, 8,
-    //     7,  6,  5,  4,  3,  2, 1, 0
-    // ));
-
-    // Extract the lower 64 bits as a 64-bit integer
-    // uint64_t result = _mm_cvtsi128_si64(shuffled);
-
     return _mm_cvtsi128_si64(_mm_shuffle_epi8(_mm_loadu_si128((const __m128i*)bytes), _mm_set_epi8(
         15, 14, 13, 12, 11, 10, 9, 8,
         7,  6,  5,  4,  3,  2, 1, 0
@@ -340,7 +308,6 @@ uint64_t static inline le_bytes_to_uint64(const uint8_t *bytes) {
 
 #if defined(__x86_64__)
 __attribute__((target("default")))
-#endif
 void static inline uint64_to_le_bytes(uint64_t value, uint8_t *bytes)
 {
 	for (int i = 0; i < 8; i++)
@@ -350,9 +317,7 @@ void static inline uint64_to_le_bytes(uint64_t value, uint8_t *bytes)
 	}
 }
 
-#if defined(__x86_64__)
 __attribute__((target("default")))
-#endif
 uint64_t static inline le_bytes_to_uint64(const uint8_t *bytes)
 {
 	uint64_t value = 0;
@@ -360,9 +325,46 @@ uint64_t static inline le_bytes_to_uint64(const uint8_t *bytes)
 		value = (value << 8) | bytes[i];
 	return value;
 }
+#elif defined(__aarch64__)
+#if defined(__ARM_NEON) || defined(__aarch64__)
+static inline void uint64_to_le_bytes(uint64_t value, uint8_t *bytes) {
+    uint8x8_t val = vreinterpret_u8_u64(vdup_n_u64(value));
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    val = vrev64_u8(val);
+#endif
 
+    vst1_u8(bytes, val);
+}
+
+static inline uint64_t le_bytes_to_uint64(const uint8_t *bytes) {
+    uint8x8_t val = vld1_u8(bytes);
+
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    val = vrev64_u8(val);
+#endif
+
+    return vget_lane_u64(vreinterpret_u64_u8(val), 0);
+}
+#else
+void static inline uint64_to_le_bytes(uint64_t value, uint8_t *bytes)
+{
+	for (int i = 0; i < 8; i++)
+	{
+		bytes[i] = value & 0xFF;
+		value >>= 8;
+	}
+}
+
+uint64_t static inline le_bytes_to_uint64(const uint8_t *bytes)
+{
+	uint64_t value = 0;
+	for (int i = 7; i >= 0; i--)
+		value = (value << 8) | bytes[i];
+	return value;
+}
+#endif
+#endif
 #if defined(__x86_64__)
-
 void static inline aes_single_round(uint8_t *block, const uint8_t *key)
 {
 	// Perform single AES encryption round
@@ -684,39 +686,61 @@ void stage_3(uint64_t* scratch_pad, workerData_xelis_v2& worker) {
   }
 }
 
-#undef PROCESS_ITERATION
 #else
+
+#if defined(__aarch64__) && defined(__ARM_NEON) && defined(__ARM_FEATURE_CRYPTO)
+static inline uint64_t aes_round_register(uint64_t mem_a, uint64_t mem_b, const uint8_t *key_bytes) {
+  uint64x2_t input_u64 = {mem_b, mem_a};
+  uint8x16_t block = vreinterpretq_u8_u64(input_u64);
+
+  uint8x16_t key = vld1q_u8(key_bytes);
+
+  block = vaeseq_u8(block, vdupq_n_u8(0));
+  block = vaesmcq_u8(block);
+  block = veorq_u8(block, key);
+
+  uint64x2_t result_u64 = vreinterpretq_u64_u8(block);
+  return vgetq_lane_u64(result_u64, 0);
+}
+#endif
 
 void stage_3(uint64_t *scratch_pad, workerData_xelis_v2 &worker)
 {
   const uint8_t key[17] = "xelishash-pow-v2";
-  uint8_t block[16] = {0};
 
-  uint64_t *mem_buffer_a = scratch_pad;
-  uint64_t *mem_buffer_b = scratch_pad + XELIS_BUFFER_SIZE_V2;
+#if defined(__aarch64__) && defined(__ARM_NEON) && defined(__ARM_FEATURE_CRYPTO)
+  uint8x16_t key_vec = vld1q_u8(key);
+#endif
+
+  uint64_t* mem_buffer_a = scratch_pad;
+  uint64_t* mem_buffer_b = scratch_pad + XELIS_BUFFER_SIZE_V2;
 
   uint64_t addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V2 - 1];
   uint64_t addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - 1] >> 32;
-  size_t r = 0;
 
-  #pragma unroll 3
   for (size_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V2; ++i) {
     uint64_t mem_a = mem_buffer_a[addr_a % XELIS_BUFFER_SIZE_V2];
     uint64_t mem_b = mem_buffer_b[addr_b % XELIS_BUFFER_SIZE_V2];
 
+    uint64_t hash1;
+
+#if defined(__aarch64__) && defined(__ARM_NEON) && defined(__ARM_FEATURE_CRYPTO)
+    hash1 = aes_round_register(mem_a, mem_b, key);
+#else
+    uint8_t block[16];
     uint64_to_le_bytes(mem_b, block);
     uint64_to_le_bytes(mem_a, block + 8);
     aes_round(block, key);
+    hash1 = le_bytes_to_uint64(block);
+#endif
 
-    uint64_t hash1 = le_bytes_to_uint64(block);
     uint64_t hash2 = mem_a ^ mem_b;
-
     addr_a = ~(hash1 ^ hash2);
 
     byte odd = i & 1;
     uint64_t* buf = odd ? mem_buffer_b : mem_buffer_a;
     size_t r_offset = odd ? XELIS_BUFFER_SIZE_V2 : 0;
-    
+
     for (size_t j = 0; j < XELIS_BUFFER_SIZE_V2; j += 8) {
       size_t r_base = j + r_offset;
 
@@ -728,13 +752,13 @@ void stage_3(uint64_t *scratch_pad, workerData_xelis_v2 &worker)
       PROCESS_ITERATION(5)
       PROCESS_ITERATION(6)
       PROCESS_ITERATION(7)
-      
     }
-    
+
     addr_b = isqrt(addr_a);
   }
 }
 #endif
+#undef PROCESS_ITERATION
 
 void xelis_hash_v2(byte *input, workerData_xelis_v2 &worker, byte *hashResult)
 {
