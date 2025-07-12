@@ -246,21 +246,6 @@ static inline uint64_t isqrt(uint64_t n)
 }
 
 __attribute__((target("default")))
-#endif
-#ifdef __aarch64__
-static inline uint64_t isqrt(uint64_t n)
-{
-  if (n < 2) return n;
-  
-  float64x1_t v = vset_lane_f64((double)n, vdup_n_f64(0), 0);
-  float64x1_t s = vsqrt_f64(v);
-  uint64_t root = (uint64_t)vget_lane_f64(s, 0);
-  
-  if ((root + 1) * (root + 1) <= n) ++root;
-  else if (root * root > n) --root;
-  return root;
-}
-#endif
 static inline uint64_t isqrt(uint64_t n)
 {
   if (n < 2)
@@ -279,6 +264,21 @@ static inline uint64_t isqrt(uint64_t n)
 
   return x;
 }
+#endif
+#ifdef __aarch64__
+static inline uint64_t isqrt(uint64_t n)
+{
+  if (n < 2) return n;
+  
+  float64x1_t v = vset_lane_f64((double)n, vdup_n_f64(0), 0);
+  float64x1_t s = vsqrt_f64(v);
+  uint64_t root = (uint64_t)vget_lane_f64(s, 0);
+  
+  if ((root + 1) * (root + 1) <= n) ++root;
+  else if (root * root > n) --root;
+  return root;
+}
+#endif
 
 #define COMBINE_UINT64(high, low) (((__uint128_t)(high) << 64) | (low))
 static inline __uint128_t combine_uint64(uint64_t high, uint64_t low)
@@ -518,8 +518,6 @@ operation_func operations[] = {
   case_8, case_9, case_10, case_11, case_12, case_13, case_14, case_15,
 };
 
-#ifdef __x86_64__
-
 #define PROCESS_ITERATION(offset) \
 { \
   size_t j_off = j + offset; \
@@ -539,6 +537,8 @@ operation_func operations[] = {
   mem_buffer_a[iA] = t; \
   mem_buffer_b[j_off] ^= ROTR(t, (uint32_t)addr_a); \
 }
+
+#ifdef __x86_64__
 
 __attribute__((target("aes")))
 void stage_3(uint64_t* scratch_pad, workerData_xelis_v2& worker) {
