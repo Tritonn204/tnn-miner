@@ -406,15 +406,41 @@ static inline uint64_t ROTL(uint64_t x, uint32_t r)
 
 #endif
 
-static inline uint64_t udiv(uint64_t high, uint64_t low, uint64_t divisor) {
+static inline __uint128_t d128(tu_int a, uint64_t b) {
+  uint64_t dividend_hi = a >> 64;
+  uint64_t dividend_lo = (uint64_t)a;
+  
 #if defined(__x86_64__)
-  tu_int dividend = ((__uint128_t)high << 64) | low;
-  tu_int result = MyDivMod1(dividend, (__uint128_t)divisor, nullptr);
-  return (uint64_t)result;
+  uint64_t q_hi = 0, q_lo;
+  
+  __asm__(
+    "cmpq %4, %2\n\t"            // Compare dividend_hi with divisor
+    "jb 1f\n\t"                  // Jump if dividend_hi < divisor
+    "xorq %%rdx, %%rdx\n\t"      // Clear rdx for first division
+    "movq %2, %%rax\n\t"         // Load dividend_hi
+    "divq %4\n\t"                // Divide: quotient in rax, remainder in rdx
+    "movq %%rax, %0\n\t"         // Store high quotient
+    "movq %%rdx, %2\n\t"         // Remainder becomes new dividend_hi
+    "1:\n\t"
+    "movq %3, %%rax\n\t"         // Load dividend_lo
+    "movq %2, %%rdx\n\t"         // Load dividend_hi (or remainder)
+    "divq %4\n\t"                // Final division
+    "movq %%rax, %1\n\t"         // Store low quotient
+    : "=&r"(q_hi), "=&r"(q_lo), "+&r"(dividend_hi)
+    : "r"(dividend_lo), "r"(b)
+    : "rax", "rdx", "cc"
+  );
+  
+  return ((tu_int)q_hi << 64) | q_lo;
 #else
-  __uint128_t dividend = ((__uint128_t)high << 64) | low;
-  return (uint64_t)(dividend / divisor);
+  return a / b;
 #endif
+}
+
+static inline uint64_t udiv(uint64_t high, uint64_t low, uint64_t divisor) {
+  tu_int dividend = ((__uint128_t)high << 64) | low;
+  tu_int result = d128(dividend, divisor);
+  return (uint64_t)result;
 }
 
 // __attribute__((noinline))
