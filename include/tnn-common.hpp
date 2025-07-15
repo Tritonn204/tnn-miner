@@ -95,10 +95,10 @@ const TnnDevMinerInfo devInfo[COIN_COUNT] = {
 #endif
   "spectredev:qqhh8ul66g7t6aj5ggzl473cpan25tv6yjm0cl4hffprgtqfvmyaq8q28m4z8"
   },
-  {COIN_RX0,      "stratum+tcp://monerohash.com",               "2222",     "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
-  {COIN_XMR,      "stratum+tcp://monerohash.com",               "2222",     "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
-  {COIN_SAL,      "stratum+tcp://monerohash.com",               "2222",     "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
-  {COIN_ZEPH,     "stratum+tcp://monerohash.com",               "2222",     "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
+  {COIN_RX0,      "stratum+ssl://monerohash.com",               "9999",     "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
+  {COIN_XMR,      "stratum+ssl://monerohash.com",               "9999",     "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
+  {COIN_SAL,      "stratum+ssl://monerohash.com",               "9999",     "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
+  {COIN_ZEPH,     "stratum+ssl://monerohash.com",               "9999",     "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
   {COIN_VERUS,    "",                                           "",         "", ""},
   {COIN_AIX,      "na.mining4people.com",                       "3394",     "astrix:qz2mzpga6qv9uvnpueau7gs29vgu3ynj80xmd2dmja2kelzh6cssymsk3shjx", "astrix:qz2mzpga6qv9uvnpueau7gs29vgu3ynj80xmd2dmja2kelzh6cssymsk3shjx"},
   {COIN_NXL,      "178.16.131.178",                             "5555",     "nexellia:qqq3lwqrnh6alujup2me8gkedvp4w4d8zkjxdzmlrzpju2npdvvmctwl649xr", "nexellia:qqq3lwqrnh6alujup2me8gkedvp4w4d8zkjxdzmlrzpju2npdvvmctwl649xr"},
@@ -107,7 +107,7 @@ const TnnDevMinerInfo devInfo[COIN_COUNT] = {
   {COIN_SHAI,     "shaicoin.viporlab.net",                      "3333",     "sh1qvee0lejv22n7s43q3asw4uzap8d9t32k95cznj", "sh1qvee0lejv22n7s43q3asw4uzap8d9t32k95cznj"},
   {COIN_YESPOWER, "stratum+ssl://stratum-eu.rplant.xyz",        "17149",    "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"}, // Default to ADVC
   {COIN_ADVC,     "stratum+ssl://stratum-eu.rplant.xyz",        "17149",    "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
-  {COIN_TARI,     "stratum+tcp://monerohash.com",               "2222",     "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
+  {COIN_TARI,     "stratum+ssl://monerohash.com",               "9999",     "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
   {COIN_RIN,      "stratum+ssl://stratum-eu.rplant.xyz",        "17148",    "rin1qzcg5vpdypje7f9ql8v4ttwdmmcxr8j64pxfwrv", "rin1qzcg5vpdypje7f9ql8v4ttwdmmcxr8j64pxfwrv"},
   //{COIN_COUNT 17  
 };

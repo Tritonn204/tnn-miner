@@ -328,14 +328,25 @@ void spectre_stratum_session(
     boost::system::error_code jsonEc;
 
     auto endpoint = resolve_host(wsMutex, ioc, yield, host, port);
+    ctx.set_verify_mode(ssl::verify_none);
+
     boost::beast::ssl_stream<boost::beast::tcp_stream> stream(ioc, ctx);
 
     beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
     beast::get_lowest_layer(stream).async_connect(endpoint, yield[ec]);
     if (ec) return fail(ec, "connect");
 
+    if (!SSL_set_tlsext_host_name(stream.native_handle(), host.c_str()))
+    {
+      throw beast::system_error{
+          static_cast<int>(::ERR_get_error()),
+          boost::asio::error::get_ssl_category()};
+    }
+
     stream.async_handshake(ssl::stream_base::client, yield[ec]);
     if (ec) return fail(ec, "handshake");
+
+    fflush(stdout);
 
     std::string minerName = "tnn-miner/" + std::string(versionString);
     boost::json::object packet;
