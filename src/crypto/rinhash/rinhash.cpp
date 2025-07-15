@@ -108,6 +108,8 @@ namespace RinHash {
     printf("\n");
   }
 
+  #define MEM_COST 64*1000
+
   void hash(void* state, const void* input, const blake3_hasher* prehashedPrefix)
   {
     if (rin_ctx == NULL) {
@@ -124,7 +126,7 @@ namespace RinHash {
       const char* salt_str = "RinCoinSalt";
 
       // Allocate memory for Argon2
-      rin_ctx->memory = (block*) aligned_malloc(64 * ARGON2_BLOCK_SIZE, 64);  // m_cost = 64
+      rin_ctx->memory = (block*) aligned_malloc(MEM_COST * ARGON2_BLOCK_SIZE, 64);
       if (!rin_ctx->memory) {
         setcolor(RED);
         fprintf(stderr, "Failed to allocate Argon2 memory\n");
@@ -143,7 +145,7 @@ namespace RinHash {
       rin_ctx->argon.salt = (uint8_t*)salt_str;
       rin_ctx->argon.saltlen = strlen(salt_str);
       rin_ctx->argon.t_cost = 2;
-      rin_ctx->argon.m_cost = 64;
+      rin_ctx->argon.m_cost = MEM_COST;
       rin_ctx->argon.lanes = 1;
       rin_ctx->argon.threads = 1;
       rin_ctx->argon.version = ARGON2_VERSION_13;
@@ -165,13 +167,13 @@ namespace RinHash {
 
     // Attach memory to instance
     instance.memory = rin_ctx->memory;
-    instance.memory_blocks = 64; // must match m_cost
+    instance.memory_blocks = MEM_COST;
     instance.lanes = 1;
     instance.threads = 1;
     instance.version = ctx->version;
     instance.passes = ctx->t_cost;
-    instance.segment_length = 64 / 4;
-    instance.lane_length = 64;
+    instance.segment_length = MEM_COST / 4;
+    instance.lane_length = MEM_COST;
     instance.type = Argon2_d;
     instance.print_internals = 0;
     instance.context_ptr = ctx;
@@ -288,7 +290,7 @@ namespace RinHash {
       const char* salt_str = "RinCoinSalt";
 
       // Allocate memory for Argon2
-      rin_ctx->memory = (block*) aligned_malloc(64 * ARGON2_BLOCK_SIZE, 64);  // m_cost = 64
+      rin_ctx->memory = (block*) aligned_malloc(MEM_COST * ARGON2_BLOCK_SIZE, 64);  // m_cost = 64
       if (!rin_ctx->memory) {
         setcolor(RED);
         fprintf(stderr, "Failed to allocate Argon2 memory\n");
@@ -322,13 +324,13 @@ namespace RinHash {
 
     // Attach memory to instance
     instance.memory = rin_ctx->memory;
-    instance.memory_blocks = 64; // must match m_cost
+    instance.memory_blocks = MEM_COST;
     instance.lanes = 1;
     instance.threads = 1;
     instance.version = ctx->version;
     instance.passes = ctx->t_cost;
-    instance.segment_length = 64 / 4;
-    instance.lane_length = 64;
+    instance.segment_length = MEM_COST / 4;
+    instance.lane_length = MEM_COST;
     instance.type = Argon2_d;
     instance.print_internals = 0;
     instance.context_ptr = ctx;
