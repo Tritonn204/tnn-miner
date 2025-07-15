@@ -170,4 +170,15 @@ void ChaCha20EncryptBytes(uint8_t* state, uint8_t* In, uint8_t* Out, uint64_t Si
 		}
 	}
 }
+
+// DUMMY for compiler
+#if defined(__x86_64__)
+__attribute__((target("default")))
+#endif
+void ChaCha20EncryptXelis(
+      const uint8_t keys[4][32],
+      const uint8_t nonces[4][12],
+      uint8_t* outputs[4],
+      size_t bytes_per_stream,
+      int rounds) {}
 //}

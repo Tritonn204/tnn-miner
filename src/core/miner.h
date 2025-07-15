@@ -124,7 +124,7 @@ inline void printSupported()
   pSupport(" AVX", __builtin_cpu_supports("avx"));
   pSupport(" AVX2", __builtin_cpu_supports("avx2"));
   pSupport(" AVX512", __builtin_cpu_supports("avx512f"));
-  pSupport(" SHA", has_sha_ni_support_cached);
+  pSupport(" SHA", has_sha_ni_support_cached());
   setcolor(BRIGHT_WHITE);
   printf("\n");
 #endif

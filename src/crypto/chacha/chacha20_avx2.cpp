@@ -630,4 +630,296 @@ TNN_TARGET_CLONE(
   TNN_TARGETS_X86_AVX2
 )
 
+__attribute__((target("avx2")))
+void ChaCha20EncryptXelis(
+    const uint8_t keys[4][32],
+    const uint8_t nonces[4][12],
+    uint8_t* outputs[4],
+    size_t bytes_per_stream,
+    int rounds)
+{
+    // Constants
+    const __m256i const0 = _mm256_set1_epi32(0x61707865);
+    const __m256i const1 = _mm256_set1_epi32(0x3320646e);
+    const __m256i const2 = _mm256_set1_epi32(0x79622d32);
+    const __m256i const3 = _mm256_set1_epi32(0x6b206574);
+    
+    // Load and transpose keys using SIMD
+    __m256i k0, k1, k2, k3, k4, k5, k6, k7;
+    {
+        __m128i key0_lo = _mm_loadu_si128((const __m128i*)keys[0]);
+        __m128i key1_lo = _mm_loadu_si128((const __m128i*)keys[1]);
+        __m128i key2_lo = _mm_loadu_si128((const __m128i*)keys[2]);
+        __m128i key3_lo = _mm_loadu_si128((const __m128i*)keys[3]);
+        
+        __m128i key0_hi = _mm_loadu_si128((const __m128i*)(keys[0] + 16));
+        __m128i key1_hi = _mm_loadu_si128((const __m128i*)(keys[1] + 16));
+        __m128i key2_hi = _mm_loadu_si128((const __m128i*)(keys[2] + 16));
+        __m128i key3_hi = _mm_loadu_si128((const __m128i*)(keys[3] + 16));
+        
+        // Transpose first 4 words
+        __m128i t0 = _mm_unpacklo_epi32(key0_lo, key1_lo);
+        __m128i t1 = _mm_unpacklo_epi32(key2_lo, key3_lo);
+        __m128i t2 = _mm_unpackhi_epi32(key0_lo, key1_lo);
+        __m128i t3 = _mm_unpackhi_epi32(key2_lo, key3_lo);
+        
+        __m128i s0 = _mm_unpacklo_epi64(t0, t1);
+        __m128i s1 = _mm_unpackhi_epi64(t0, t1);
+        __m128i s2 = _mm_unpacklo_epi64(t2, t3);
+        __m128i s3 = _mm_unpackhi_epi64(t2, t3);
+        
+        // Transpose second 4 words
+        t0 = _mm_unpacklo_epi32(key0_hi, key1_hi);
+        t1 = _mm_unpacklo_epi32(key2_hi, key3_hi);
+        t2 = _mm_unpackhi_epi32(key0_hi, key1_hi);
+        t3 = _mm_unpackhi_epi32(key2_hi, key3_hi);
+        
+        __m128i s4 = _mm_unpacklo_epi64(t0, t1);
+        __m128i s5 = _mm_unpackhi_epi64(t0, t1);
+        __m128i s6 = _mm_unpacklo_epi64(t2, t3);
+        __m128i s7 = _mm_unpackhi_epi64(t2, t3);
+        
+        // Duplicate to both lanes
+        k0 = _mm256_insertf128_si256(_mm256_castsi128_si256(s0), s0, 1);
+        k1 = _mm256_insertf128_si256(_mm256_castsi128_si256(s1), s1, 1);
+        k2 = _mm256_insertf128_si256(_mm256_castsi128_si256(s2), s2, 1);
+        k3 = _mm256_insertf128_si256(_mm256_castsi128_si256(s3), s3, 1);
+        k4 = _mm256_insertf128_si256(_mm256_castsi128_si256(s4), s4, 1);
+        k5 = _mm256_insertf128_si256(_mm256_castsi128_si256(s5), s5, 1);
+        k6 = _mm256_insertf128_si256(_mm256_castsi128_si256(s6), s6, 1);
+        k7 = _mm256_insertf128_si256(_mm256_castsi128_si256(s7), s7, 1);
+    }
+    
+    // Load and transpose nonces
+    __m256i n0, n1, n2;
+    {
+        __m256i nonces01 = _mm256_loadu2_m128i((const __m128i*)nonces[1], (const __m128i*)nonces[0]);
+        __m256i nonces23 = _mm256_loadu2_m128i((const __m128i*)nonces[3], (const __m128i*)nonces[2]);
+        
+        // Mask the 4th dword in each nonce using 256-bit operation
+        const __m256i mask = _mm256_set_epi32(0, -1, -1, -1, 0, -1, -1, -1);
+        nonces01 = _mm256_and_si256(nonces01, mask);
+        nonces23 = _mm256_and_si256(nonces23, mask);
+        
+        // Rearrange using cross-lane permutes
+        __m256i nonces02 = _mm256_permute2x128_si256(nonces01, nonces23, 0x20);
+        __m256i nonces13 = _mm256_permute2x128_si256(nonces01, nonces23, 0x31);
+        
+        // Transpose using 256-bit unpacks
+        __m256i t0 = _mm256_unpacklo_epi32(nonces02, nonces13);
+        __m256i t1 = _mm256_unpackhi_epi32(nonces02, nonces13);
+        
+        // Use vpermd to get final arrangement and broadcast in one operation
+        const __m256i idx_lo = _mm256_setr_epi32(0, 1, 4, 5, 0, 1, 4, 5);
+        const __m256i idx_hi = _mm256_setr_epi32(2, 3, 6, 7, 2, 3, 6, 7);
+        
+        n0 = _mm256_permutevar8x32_epi32(t0, idx_lo);
+        n1 = _mm256_permutevar8x32_epi32(t0, idx_hi);
+        n2 = _mm256_permutevar8x32_epi32(t1, idx_lo);
+    }
+    
+    // Process exactly 429 iterations (858 blocks total, 2 per iteration)
+    uint32_t counter_base = 0;
+    
+    // Xelis: exactly 429 iterations, no partial blocks
+    for (int iter = 0; iter < 858; iter++) {
+        // Set up counter - block 0 and block 1 for each stream
+        __m256i counter = _mm256_add_epi32(
+            _mm256_set1_epi32(counter_base),
+            _mm256_set_epi32(1, 1, 1, 1, 0, 0, 0, 0)
+        );
+        
+        // Initialize state
+        __m256i x0 = const0;
+        __m256i x1 = const1;
+        __m256i x2 = const2;
+        __m256i x3 = const3;
+        __m256i x4 = k0;
+        __m256i x5 = k1;
+        __m256i x6 = k2;
+        __m256i x7 = k3;
+        __m256i x8 = k4;
+        __m256i x9 = k5;
+        __m256i x10 = k6;
+        __m256i x11 = k7;
+        __m256i x12 = counter;
+        __m256i x13 = n0;
+        __m256i x14 = n1;
+        __m256i x15 = n2;
+        
+        // Save initial state
+        __m256i s0 = x0, s1 = x1, s2 = x2, s3 = x3;
+        __m256i s4 = x4, s5 = x5, s6 = x6, s7 = x7;
+        __m256i s8 = x8, s9 = x9, s10 = x10, s11 = x11;
+        __m256i s12 = x12, s13 = x13, s14 = x14, s15 = x15;
+        
+        // ChaCha rounds
+        for (int i = rounds; i > 0; i -= 2) {
+            // Column round
+            x0 = _mm256_add_epi32(x0, x4); x12 = _mm256_xor_si256(x12, x0); x12 = RotateLeft16(x12);
+            x8 = _mm256_add_epi32(x8, x12); x4 = _mm256_xor_si256(x4, x8); x4 = RotateLeft12(x4);
+            x0 = _mm256_add_epi32(x0, x4); x12 = _mm256_xor_si256(x12, x0); x12 = RotateLeft8(x12);
+            x8 = _mm256_add_epi32(x8, x12); x4 = _mm256_xor_si256(x4, x8); x4 = RotateLeft7(x4);
+            
+            x1 = _mm256_add_epi32(x1, x5); x13 = _mm256_xor_si256(x13, x1); x13 = RotateLeft16(x13);
+            x9 = _mm256_add_epi32(x9, x13); x5 = _mm256_xor_si256(x5, x9); x5 = RotateLeft12(x5);
+            x1 = _mm256_add_epi32(x1, x5); x13 = _mm256_xor_si256(x13, x1); x13 = RotateLeft8(x13);
+            x9 = _mm256_add_epi32(x9, x13); x5 = _mm256_xor_si256(x5, x9); x5 = RotateLeft7(x5);
+            
+            x2 = _mm256_add_epi32(x2, x6); x14 = _mm256_xor_si256(x14, x2); x14 = RotateLeft16(x14);
+            x10 = _mm256_add_epi32(x10, x14); x6 = _mm256_xor_si256(x6, x10); x6 = RotateLeft12(x6);
+            x2 = _mm256_add_epi32(x2, x6); x14 = _mm256_xor_si256(x14, x2); x14 = RotateLeft8(x14);
+            x10 = _mm256_add_epi32(x10, x14); x6 = _mm256_xor_si256(x6, x10); x6 = RotateLeft7(x6);
+            
+            x3 = _mm256_add_epi32(x3, x7); x15 = _mm256_xor_si256(x15, x3); x15 = RotateLeft16(x15);
+            x11 = _mm256_add_epi32(x11, x15); x7 = _mm256_xor_si256(x7, x11); x7 = RotateLeft12(x7);
+            x3 = _mm256_add_epi32(x3, x7); x15 = _mm256_xor_si256(x15, x3); x15 = RotateLeft8(x15);
+            x11 = _mm256_add_epi32(x11, x15); x7 = _mm256_xor_si256(x7, x11); x7 = RotateLeft7(x7);
+            
+            // Diagonal round
+            x0 = _mm256_add_epi32(x0, x5); x15 = _mm256_xor_si256(x15, x0); x15 = RotateLeft16(x15);
+            x10 = _mm256_add_epi32(x10, x15); x5 = _mm256_xor_si256(x5, x10); x5 = RotateLeft12(x5);
+            x0 = _mm256_add_epi32(x0, x5); x15 = _mm256_xor_si256(x15, x0); x15 = RotateLeft8(x15);
+            x10 = _mm256_add_epi32(x10, x15); x5 = _mm256_xor_si256(x5, x10); x5 = RotateLeft7(x5);
+            
+            x1 = _mm256_add_epi32(x1, x6); x12 = _mm256_xor_si256(x12, x1); x12 = RotateLeft16(x12);
+            x11 = _mm256_add_epi32(x11, x12); x6 = _mm256_xor_si256(x6, x11); x6 = RotateLeft12(x6);
+            x1 = _mm256_add_epi32(x1, x6); x12 = _mm256_xor_si256(x12, x1); x12 = RotateLeft8(x12);
+            x11 = _mm256_add_epi32(x11, x12); x6 = _mm256_xor_si256(x6, x11); x6 = RotateLeft7(x6);
+            
+            x2 = _mm256_add_epi32(x2, x7); x13 = _mm256_xor_si256(x13, x2); x13 = RotateLeft16(x13);
+            x8 = _mm256_add_epi32(x8, x13); x7 = _mm256_xor_si256(x7, x8); x7 = RotateLeft12(x7);
+            x2 = _mm256_add_epi32(x2, x7); x13 = _mm256_xor_si256(x13, x2); x13 = RotateLeft8(x13);
+            x8 = _mm256_add_epi32(x8, x13); x7 = _mm256_xor_si256(x7, x8); x7 = RotateLeft7(x7);
+            
+            x3 = _mm256_add_epi32(x3, x4); x14 = _mm256_xor_si256(x14, x3); x14 = RotateLeft16(x14);
+            x9 = _mm256_add_epi32(x9, x14); x4 = _mm256_xor_si256(x4, x9); x4 = RotateLeft12(x4);
+            x3 = _mm256_add_epi32(x3, x4); x14 = _mm256_xor_si256(x14, x3); x14 = RotateLeft8(x14);
+            x9 = _mm256_add_epi32(x9, x14); x4 = _mm256_xor_si256(x4, x9); x4 = RotateLeft7(x4);
+        }
+        
+        // Add initial state
+        x0 = _mm256_add_epi32(x0, s0);
+        x1 = _mm256_add_epi32(x1, s1);
+        x2 = _mm256_add_epi32(x2, s2);
+        x3 = _mm256_add_epi32(x3, s3);
+        x4 = _mm256_add_epi32(x4, s4);
+        x5 = _mm256_add_epi32(x5, s5);
+        x6 = _mm256_add_epi32(x6, s6);
+        x7 = _mm256_add_epi32(x7, s7);
+        x8 = _mm256_add_epi32(x8, s8);
+        x9 = _mm256_add_epi32(x9, s9);
+        x10 = _mm256_add_epi32(x10, s10);
+        x11 = _mm256_add_epi32(x11, s11);
+        x12 = _mm256_add_epi32(x12, s12);
+        x13 = _mm256_add_epi32(x13, s13);
+        x14 = _mm256_add_epi32(x14, s14);
+        x15 = _mm256_add_epi32(x15, s15);
+        
+        // Xelis-optimized extraction: always 128 bytes, no conditionals
+        // Process words 0-3
+        __m256i t0 = _mm256_unpacklo_epi32(x0, x1);
+        __m256i t1 = _mm256_unpackhi_epi32(x0, x1);
+        __m256i t2 = _mm256_unpacklo_epi32(x2, x3);
+        __m256i t3 = _mm256_unpackhi_epi32(x2, x3);
+        
+        __m256i u0 = _mm256_unpacklo_epi64(t0, t2);  // Stream 0, words 0-3
+        __m256i u1 = _mm256_unpackhi_epi64(t0, t2);  // Stream 1, words 0-3
+        __m256i u2 = _mm256_unpacklo_epi64(t1, t3);  // Stream 2, words 0-3
+        __m256i u3 = _mm256_unpackhi_epi64(t1, t3);  // Stream 3, words 0-3
+        
+        // Store words 0-3 for each stream
+        _mm_storeu_si128((__m128i*)outputs[0], _mm256_extracti128_si256(u0, 0));
+        _mm_storeu_si128((__m128i*)(outputs[0] + 64), _mm256_extracti128_si256(u0, 1));
+        
+        _mm_storeu_si128((__m128i*)outputs[1], _mm256_extracti128_si256(u1, 0));
+        _mm_storeu_si128((__m128i*)(outputs[1] + 64), _mm256_extracti128_si256(u1, 1));
+        
+        _mm_storeu_si128((__m128i*)outputs[2], _mm256_extracti128_si256(u2, 0));
+        _mm_storeu_si128((__m128i*)(outputs[2] + 64), _mm256_extracti128_si256(u2, 1));
+        
+        _mm_storeu_si128((__m128i*)outputs[3], _mm256_extracti128_si256(u3, 0));
+        _mm_storeu_si128((__m128i*)(outputs[3] + 64), _mm256_extracti128_si256(u3, 1));
+        
+        // Process words 4-7
+        t0 = _mm256_unpacklo_epi32(x4, x5);
+        t1 = _mm256_unpackhi_epi32(x4, x5);
+        t2 = _mm256_unpacklo_epi32(x6, x7);
+        t3 = _mm256_unpackhi_epi32(x6, x7);
+        
+        u0 = _mm256_unpacklo_epi64(t0, t2);  // Stream 0, words 4-7
+        u1 = _mm256_unpackhi_epi64(t0, t2);  // Stream 1, words 4-7
+        u2 = _mm256_unpacklo_epi64(t1, t3);  // Stream 2, words 4-7
+        u3 = _mm256_unpackhi_epi64(t1, t3);  // Stream 3, words 4-7
+        
+        // Store words 4-7
+        _mm_storeu_si128((__m128i*)(outputs[0] + 16), _mm256_extracti128_si256(u0, 0));
+        _mm_storeu_si128((__m128i*)(outputs[0] + 80), _mm256_extracti128_si256(u0, 1));
+        
+        _mm_storeu_si128((__m128i*)(outputs[1] + 16), _mm256_extracti128_si256(u1, 0));
+        _mm_storeu_si128((__m128i*)(outputs[1] + 80), _mm256_extracti128_si256(u1, 1));
+        
+        _mm_storeu_si128((__m128i*)(outputs[2] + 16), _mm256_extracti128_si256(u2, 0));
+        _mm_storeu_si128((__m128i*)(outputs[2] + 80), _mm256_extracti128_si256(u2, 1));
+        
+        _mm_storeu_si128((__m128i*)(outputs[3] + 16), _mm256_extracti128_si256(u3, 0));
+        _mm_storeu_si128((__m128i*)(outputs[3] + 80), _mm256_extracti128_si256(u3, 1));
+        
+        // Process words 8-11
+        t0 = _mm256_unpacklo_epi32(x8, x9);
+        t1 = _mm256_unpackhi_epi32(x8, x9);
+        t2 = _mm256_unpacklo_epi32(x10, x11);
+        t3 = _mm256_unpackhi_epi32(x10, x11);
+        
+        u0 = _mm256_unpacklo_epi64(t0, t2);
+        u1 = _mm256_unpackhi_epi64(t0, t2);
+        u2 = _mm256_unpacklo_epi64(t1, t3);
+        u3 = _mm256_unpackhi_epi64(t1, t3);
+        
+        // Store words 8-11
+        _mm_storeu_si128((__m128i*)(outputs[0] + 32), _mm256_extracti128_si256(u0, 0));
+        _mm_storeu_si128((__m128i*)(outputs[0] + 96), _mm256_extracti128_si256(u0, 1));
+        
+        _mm_storeu_si128((__m128i*)(outputs[1] + 32), _mm256_extracti128_si256(u1, 0));
+        _mm_storeu_si128((__m128i*)(outputs[1] + 96), _mm256_extracti128_si256(u1, 1));
+        
+        _mm_storeu_si128((__m128i*)(outputs[2] + 32), _mm256_extracti128_si256(u2, 0));
+        _mm_storeu_si128((__m128i*)(outputs[2] + 96), _mm256_extracti128_si256(u2, 1));
+        
+        _mm_storeu_si128((__m128i*)(outputs[3] + 32), _mm256_extracti128_si256(u3, 0));
+        _mm_storeu_si128((__m128i*)(outputs[3] + 96), _mm256_extracti128_si256(u3, 1));
+        
+        // Process words 12-15
+        t0 = _mm256_unpacklo_epi32(x12, x13);
+        t1 = _mm256_unpackhi_epi32(x12, x13);
+        t2 = _mm256_unpacklo_epi32(x14, x15);
+        t3 = _mm256_unpackhi_epi32(x14, x15);
+        
+        u0 = _mm256_unpacklo_epi64(t0, t2);
+        u1 = _mm256_unpackhi_epi64(t0, t2);
+        u2 = _mm256_unpacklo_epi64(t1, t3);
+        u3 = _mm256_unpackhi_epi64(t1, t3);
+        
+        // Store words 12-15
+        _mm_storeu_si128((__m128i*)(outputs[0] + 48), _mm256_extracti128_si256(u0, 0));
+        _mm_storeu_si128((__m128i*)(outputs[0] + 112), _mm256_extracti128_si256(u0, 1));
+        
+        _mm_storeu_si128((__m128i*)(outputs[1] + 48), _mm256_extracti128_si256(u1, 0));
+        _mm_storeu_si128((__m128i*)(outputs[1] + 112), _mm256_extracti128_si256(u1, 1));
+        
+        _mm_storeu_si128((__m128i*)(outputs[2] + 48), _mm256_extracti128_si256(u2, 0));
+        _mm_storeu_si128((__m128i*)(outputs[2] + 112), _mm256_extracti128_si256(u2, 1));
+        
+        _mm_storeu_si128((__m128i*)(outputs[3] + 48), _mm256_extracti128_si256(u3, 0));
+        _mm_storeu_si128((__m128i*)(outputs[3] + 112), _mm256_extracti128_si256(u3, 1));
+        
+        outputs[0] += 128;
+        outputs[1] += 128;
+        outputs[2] += 128;
+        outputs[3] += 128;
+        
+        counter_base += 2;
+    }
+}
+
 #endif

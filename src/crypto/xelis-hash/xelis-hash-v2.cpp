@@ -25,7 +25,6 @@
 #include <cassert>
 #include <chrono>
 
-#include "mydivision1.hpp"
 #include "compile.h"
 
 //#include <sodium.h>
@@ -137,100 +136,110 @@ void chacha_encrypt(uint8_t *key, uint8_t *nonce, uint8_t *in, uint8_t *out, siz
 	ChaCha20EncryptBytes(state, in, out, bytes, rounds);
 }
 
-// #ifdef __x86_64__
-// TNN_TARGET_CLONE(stage_1,
-// void,
-// (const uint8_t *input, uint64_t *sp, size_t input_len),
-// {
-//   const size_t chunk_size = 32;
-//   const size_t nonce_size = 12;
-//   const size_t output_size = XELIS_MEMORY_SIZE_V2 * 8;
-//   const size_t chunks = 4;
+static inline void chacha_get_bytes_at_offset(const uint8_t key[32], const uint8_t nonce[12], 
+                                               size_t offset, uint8_t output[12], int rounds) {
+  uint8_t state[48] = {0};
+  uint8_t block[64];
+  
+  ChaCha20SetKey(state, key);
+  ChaCha20SetNonce(state, nonce);
+  
+  uint32_t block_num = offset / 64;
+  uint32_t* counter = (uint32_t*)(state + 32);
+  *counter = block_num;
+  
+  ChaCha20EncryptBytes(state, NULL, block, 64, rounds);
+  
+  size_t block_offset = offset % 64;
+  memcpy(output, block + block_offset, 12);
+}
 
-//   uint8_t *t = reinterpret_cast<uint8_t *>(sp);
-//   uint8_t key[chunk_size * chunks] = {0};
-//   uint8_t K2[32] = {0};
-//   uint8_t buffer[chunk_size*2] = {0};
-
-//   memcpy(key, input, input_len);
-//   blake3(input, input_len, buffer);
-
-//   memcpy(buffer + chunk_size, key, chunk_size);
-//   blake3(buffer, chunk_size*2, K2);
-//   chacha_encrypt(K2, buffer, NULL, t, output_size / chunks, 8);
-
-//   t += output_size / chunks;
-
-//   memcpy(buffer, K2, chunk_size);
-//   memcpy(buffer + chunk_size, key + chunk_size, chunk_size);
-//   blake3(buffer, chunk_size*2, K2);
-//   chacha_encrypt(K2, t - nonce_size, NULL, t, output_size / chunks, 8);
-
-//   t += output_size / chunks;
-
-//   memcpy(buffer, K2, chunk_size);
-//   memcpy(buffer + chunk_size, key + 2*chunk_size, chunk_size);
-//   blake3(buffer, chunk_size*2, K2);
-//   chacha_encrypt(K2, t - nonce_size, NULL, t, output_size / chunks, 8);
-
-//   t += output_size / chunks;
-
-//   memcpy(buffer, K2, chunk_size);
-//   memcpy(buffer + chunk_size, key + 3*chunk_size, chunk_size);
-//   blake3(buffer, chunk_size*2, K2);
-//   chacha_encrypt(K2, t - nonce_size, NULL, t, output_size / chunks, 8);
-// },
-// "default", TNN_TARGETS_X86_AVX2, TNN_TARGETS_X86_AVX512
-// )
-// #else
-void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
+#ifdef __x86_64__
+TNN_TARGET_CLONE(
+  stage_1,
+  inline void,
+  (const uint8_t *input, uint64_t *sp, size_t input_len),
+  {
+    const size_t chunk_size = 32;
+    const size_t output_size = XELIS_MEMORY_SIZE_V2 * 8;
+    const size_t bytes_per_chunk = output_size / 4;
+    
+    uint8_t *t = reinterpret_cast<uint8_t *>(sp);
+    uint8_t K2_values[4][32];
+    uint8_t nonces[4][12];
+    uint8_t buffer[64] = {0};
+    uint8_t key[128] = {0};
+    
+    memcpy(key, input, input_len);
+    
+    blake3(input, input_len, buffer);
+    memcpy(nonces[0], buffer, 12);
+    
+    for (int i = 0; i < 4; i++) {
+      if (i == 0) {
+        memcpy(buffer + chunk_size, key, chunk_size);
+      } else {
+        memcpy(buffer, K2_values[i-1], chunk_size);
+        memcpy(buffer + chunk_size, key + i*chunk_size, chunk_size);
+      }
+      blake3(buffer, chunk_size*2, K2_values[i]);
+    }
+    
+    for (int i = 0; i < 3; i++) {
+      chacha_get_bytes_at_offset(K2_values[i], nonces[i], 
+                                  bytes_per_chunk - 12, nonces[i+1], 8);
+    }
+    
+    byte* outputs[4];
+    for (int i = 0; i < 4; i++) {
+      outputs[i] = t + i*bytes_per_chunk;
+    }
+    
+    ChaCha20EncryptXelis(K2_values, nonces, outputs, bytes_per_chunk, 8);
+  },
+  "ssse3", "avx2"
+)
+__attribute__((target("default")))
+#endif
+inline void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
 {
   const size_t chunk_size = 32;
-  const size_t nonce_size = 12;
   const size_t output_size = XELIS_MEMORY_SIZE_V2 * 8;
-  const size_t chunks = 4;
-
+  const size_t bytes_per_chunk = output_size / 4;
+  
   uint8_t *t = reinterpret_cast<uint8_t *>(sp);
-  uint8_t key[chunk_size * chunks] = {0};
-  uint8_t K2[32] = {0};
-  uint8_t buffer[chunk_size*2] = {0};
-
+  uint8_t K2_values[4][32];
+  uint8_t nonces[4][12];
+  uint8_t buffer[64] = {0};
+  uint8_t key[128] = {0};
+  
   memcpy(key, input, input_len);
+  
   blake3(input, input_len, buffer);
-
-  memcpy(buffer + chunk_size, key, chunk_size);
-  blake3(buffer, chunk_size*2, K2);
-  chacha_encrypt(K2, buffer, NULL, t, output_size / chunks, 8);
-
-  t += output_size / chunks;
-
-  memcpy(buffer, K2, chunk_size);
-  memcpy(buffer + chunk_size, key + chunk_size, chunk_size);
-  blake3(buffer, chunk_size*2, K2);
-  chacha_encrypt(K2, t - nonce_size, NULL, t, output_size / chunks, 8);
-
-  t += output_size / chunks;
-
-  memcpy(buffer, K2, chunk_size);
-  memcpy(buffer + chunk_size, key + 2*chunk_size, chunk_size);
-  blake3(buffer, chunk_size*2, K2);
-  chacha_encrypt(K2, t - nonce_size, NULL, t, output_size / chunks, 8);
-
-  t += output_size / chunks;
-
-  memcpy(buffer, K2, chunk_size);
-  memcpy(buffer + chunk_size, key + 3*chunk_size, chunk_size);
-  blake3(buffer, chunk_size*2, K2);
-  chacha_encrypt(K2, t - nonce_size, NULL, t, output_size / chunks, 8);
-
-  // Crc32 crc32;
-  // crc32.input((uint8_t *)sp, XELIS_MEMORY_SIZE_V2 * 8);
-  // printf("%lu\n", crc32.result());
-  // Crc32 crc32;
-  // crc32.input(scratch_pad, 10);
-  // std::cout << "Stage 1 scratch pad CRC32: 0x" << std::hex << std::setw(8) << std::setfill('0') << crc32.result() << std::endl;
+  memcpy(nonces[0], buffer, 12);
+  
+  for (int i = 0; i < 4; i++) {
+    if (i == 0) {
+      memcpy(buffer + chunk_size, key, chunk_size);
+    } else {
+      memcpy(buffer, K2_values[i-1], chunk_size);
+      memcpy(buffer + chunk_size, key + i*chunk_size, chunk_size);
+    }
+    blake3(buffer, chunk_size*2, K2_values[i]);
+  }
+  
+  for (int i = 0; i < 3; i++) {
+    chacha_get_bytes_at_offset(K2_values[i], nonces[i], 
+                                bytes_per_chunk - 12, nonces[i+1], 8);
+  }
+  
+  for (int i = 0; i < 4; i++) {
+    uint8_t state[48] = {0};
+    ChaCha20SetKey(state, K2_values[i]);
+    ChaCha20SetNonce(state, nonces[i]);
+    ChaCha20EncryptBytes(state, NULL, t + i * bytes_per_chunk, bytes_per_chunk, 8);
+  }
 }
-// #endif
 
 #ifdef __x86_64__
 __attribute__((target("sse2")))
@@ -372,27 +381,7 @@ void static inline aes_single_round(uint8_t *block, const uint8_t *key)
 	_mm_storeu_si128((__m128i *)block, block_vec);
 }
 
-static inline uint64_t div128(__uint128_t dividend, __uint128_t divisor) {
-  return dividend / divisor;
-}
-
-static inline uint64_t ROTR(uint64_t x, uint32_t r)
-{
-	asm("rorq %%cl, %0" : "+r"(x) : "c"(r));
-	return x;
-}
-
-static inline uint64_t ROTL(uint64_t x, uint32_t r)
-{
-	asm("rolq %%cl, %0" : "+r"(x) : "c"(r));
-	return x;
-}
-
 #else // aarch64
-
-static inline uint64_t div128(__uint128_t dividend, __uint128_t divisor) {
-    return dividend / divisor;
-}
 
 static inline uint64_t ROTR(uint64_t x, uint32_t r)
 {
@@ -408,40 +397,203 @@ static inline uint64_t ROTL(uint64_t x, uint32_t r)
 
 #endif
 
-static inline __uint128_t d128(tu_int a, uint64_t b) {
+static inline uint64_t ROTR(uint64_t x, uint32_t r)
+{
+  return __builtin_rotateright64(x, r);
+}
+
+static inline uint64_t ROTL(uint64_t x, uint32_t r) {
+  return __builtin_rotateleft64(x, r);
+}
+
+static inline __uint128_t d128(__uint128_t a, uint64_t b) {
   uint64_t dividend_hi = a >> 64;
   uint64_t dividend_lo = (uint64_t)a;
   
 #if defined(__x86_64__)
-  uint64_t q_hi = 0, q_lo;
+  uint64_t q_hi = 0, q_lo = 0, remainder = 0;
   
-  __asm__(
-    "cmpq %4, %2\n\t"            // Compare dividend_hi with divisor
-    "jb 1f\n\t"                  // Jump if dividend_hi < divisor
-    "xorq %%rdx, %%rdx\n\t"      // Clear rdx for first division
-    "movq %2, %%rax\n\t"         // Load dividend_hi
-    "divq %4\n\t"                // Divide: quotient in rax, remainder in rdx
-    "movq %%rax, %0\n\t"         // Store high quotient
-    "movq %%rdx, %2\n\t"         // Remainder becomes new dividend_hi
-    "1:\n\t"
-    "movq %3, %%rax\n\t"         // Load dividend_lo
-    "movq %2, %%rdx\n\t"         // Load dividend_hi (or remainder)
-    "divq %4\n\t"                // Final division
-    "movq %%rax, %1\n\t"         // Store low quotient
-    : "=&r"(q_hi), "=&r"(q_lo), "+&r"(dividend_hi)
-    : "r"(dividend_lo), "r"(b)
-    : "rax", "rdx", "cc"
-  );
+  if (dividend_hi < b) {
+    __asm__("divq %[divisor]"
+            : "=a"(q_lo), "=d"(remainder)
+            : [divisor] "r"(b), "a"(dividend_lo), "d"(dividend_hi)
+            : "cc");
+  } else {
+    __asm__("divq %[divisor]"
+            : "=a"(q_hi), "=d"(dividend_hi)
+            : [divisor] "r"(b), "a"(dividend_hi), "d"(0ULL)
+            : "cc");
+    
+    __asm__("divq %[divisor]"
+            : "=a"(q_lo), "=d"(remainder)
+            : [divisor] "r"(b), "a"(dividend_lo), "d"(dividend_hi)
+            : "cc");
+  }
   
-  return ((tu_int)q_hi << 64) | q_lo;
+  return ((__uint128_t)q_hi << 64) | q_lo;
 #else
   return a / b;
 #endif
 }
 
+static inline uint64_t mod128_64(__uint128_t dividend, uint64_t divisor) {
+  uint64_t dividend_hi = dividend >> 64;
+  uint64_t dividend_lo = (uint64_t)dividend;
+  
+#if defined(__x86_64__)
+  uint64_t remainder = 0;
+  uint64_t dummy_quotient;
+  
+  if (dividend_hi < divisor) {
+    __asm__("divq %[divisor]"
+            : "=a"(dummy_quotient), "=d"(remainder)
+            : [divisor] "r"(divisor), "a"(dividend_lo), "d"(dividend_hi)
+            : "cc");
+  } else {
+    __asm__("divq %[divisor]"
+            : "=a"(dummy_quotient), "=d"(dividend_hi)
+            : [divisor] "r"(divisor), "a"(dividend_hi), "d"(0ULL)
+            : "cc");
+    
+    __asm__("divq %[divisor]"
+            : "=a"(dummy_quotient), "=d"(remainder)
+            : [divisor] "r"(divisor), "a"(dividend_lo), "d"(dividend_hi)
+            : "cc");
+  }
+  
+  return remainder;
+#else
+  return (uint64_t)(dividend % divisor);
+#endif
+}
+
+#ifdef __x86_64__
+
+#ifndef TNN_LEGACY_AMD64
+#define div_targets_extra , TNN_TARGETS_X86_AVX2, TNN_TARGETS_X86_AVX512
+#else
+#define div_targets_extra
+#endif
+TNN_TARGET_CLONE(
+  div128_128_clz_improved,
+  static inline __uint128_t,
+  (__uint128_t dividend, __uint128_t divisor),
+  {
+    if (divisor > dividend) return 0;
+    if (divisor == dividend) return 1;
+    if ((divisor >> 64) == 0) return d128(dividend, (uint64_t)divisor);
+    
+    int dividend_clz = (dividend >> 64) ? __builtin_clzll(dividend >> 64) : 
+                      64 + __builtin_clzll((uint64_t)dividend);
+    int divisor_clz = (divisor >> 64) ? __builtin_clzll(divisor >> 64) : 
+                      64 + __builtin_clzll((uint64_t)divisor);
+    
+    int shift = divisor_clz - dividend_clz;
+    if (shift < 0) return 0;
+    
+    __uint128_t shifted_divisor = divisor << shift;
+    __uint128_t quotient = 0;
+    
+    if (shift >= 64) {
+      uint64_t div_hi = shifted_divisor >> 64;
+      uint64_t div_lo = (uint64_t)shifted_divisor;
+      uint64_t rem_hi = dividend >> 64;
+      uint64_t rem_lo = (uint64_t)dividend;
+      
+      for (int i = 0; i <= shift; i++) {
+        quotient <<= 1;
+        
+        if (rem_hi > div_hi || (rem_hi == div_hi && rem_lo >= div_lo)) {
+          __m128i rem = _mm_set_epi64x(rem_hi, rem_lo);
+          __m128i div = _mm_set_epi64x(div_hi, div_lo);
+          
+          uint64_t borrow = (rem_lo < div_lo) ? 1 : 0;
+          rem_lo -= div_lo;
+          rem_hi -= div_hi + borrow;
+          
+          quotient |= 1;
+        }
+        
+        div_lo = (div_lo >> 1) | (div_hi << 63);
+        div_hi >>= 1;
+      }
+      
+      dividend = ((__uint128_t)rem_hi << 64) | rem_lo;
+    } else {
+      for (int i = 0; i <= shift; i++) {
+        quotient <<= 1;
+        if (dividend >= shifted_divisor) {
+          dividend -= shifted_divisor;
+          quotient |= 1;
+        }
+        shifted_divisor >>= 1;
+      }
+    }
+    
+    return quotient;
+  },
+  "sse2", "ssse3" div_targets_extra
+)
+
+__attribute__((target("default")))
+#endif
+static inline __uint128_t div128_128_clz_improved(__uint128_t dividend, __uint128_t divisor) {
+  if (divisor > dividend) return 0;
+  if (divisor == dividend) return 1;
+  if ((divisor >> 64) == 0) return d128(dividend, (uint64_t)divisor);
+  
+  int dividend_clz = (dividend >> 64) ? __builtin_clzll(dividend >> 64) : 
+                    64 + __builtin_clzll((uint64_t)dividend);
+  int divisor_clz = (divisor >> 64) ? __builtin_clzll(divisor >> 64) : 
+                    64 + __builtin_clzll((uint64_t)divisor);
+  
+  int shift = divisor_clz - dividend_clz;
+  if (shift < 0) return 0;
+  
+  __uint128_t shifted_divisor = divisor << shift;
+  __uint128_t quotient = 0;
+  
+  int chunks = (shift + 1) / 8;
+  int remaining = (shift + 1) % 8;
+  
+  for (int chunk = 0; chunk < chunks; chunk++) {
+    __uint128_t chunk_quotient = 0;
+    __uint128_t chunk_divisor = shifted_divisor >> (8 * chunk);
+    
+    for (int bit = 0; bit < 8; bit++) {
+      chunk_quotient <<= 1;
+      if (dividend >= chunk_divisor) {
+        dividend -= chunk_divisor;
+        chunk_quotient |= 1;
+      }
+      chunk_divisor >>= 1;
+    }
+    
+    quotient = (quotient << 8) | chunk_quotient;
+  }
+  
+  if (remaining > 0) {
+    __uint128_t remaining_quotient = 0;
+    __uint128_t remaining_divisor = shifted_divisor >> (8 * chunks);
+    
+    for (int bit = 0; bit < remaining; bit++) {
+      remaining_quotient <<= 1;
+      if (dividend >= remaining_divisor) {
+        dividend -= remaining_divisor;
+        remaining_quotient |= 1;
+      }
+      remaining_divisor >>= 1;
+    }
+    
+    quotient = (quotient << remaining) | remaining_quotient;
+  }
+  
+  return quotient;
+}
+
 static inline uint64_t udiv(uint64_t high, uint64_t low, uint64_t divisor) {
-  tu_int dividend = ((__uint128_t)high << 64) | low;
-  tu_int result = d128(dividend, divisor);
+  __uint128_t dividend = ((__uint128_t)high << 64) | low;
+  __uint128_t result = d128(dividend, divisor);
   return (uint64_t)result;
 }
 
@@ -487,12 +639,26 @@ static inline uint64_t case_9(uint64_t a, uint64_t b, uint64_t c, int r, uint64_
 }
 // __attribute__((noinline))
 static inline uint64_t case_10(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j) { 
-  return COMBINE_UINT64(a,b) % (c | 1); 
+  return mod128_64(COMBINE_UINT64(a, b), c | 1);
 }
 // __attribute__((noinline))
 static inline uint64_t case_11(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j) { 
-  __uint128_t t2 = COMBINE_UINT64(ROTL(result, r), a | 2);
-  return (t2 > COMBINE_UINT64(b,c)) ? c : COMBINE_UINT64(b,c) % t2;
+  uint64_t t2_hi = ROTL(result, r);
+  uint64_t t2_lo = a | 2;
+  
+  if (t2_hi > b || (t2_hi == b && t2_lo > c)) {
+    return c;
+  }
+  
+  if (t2_hi == 0) {
+    return mod128_64(COMBINE_UINT64(b, c), t2_lo);
+  }
+  
+  __uint128_t t2 = COMBINE_UINT64(t2_hi, t2_lo);
+  __uint128_t dividend = COMBINE_UINT64(b, c);
+  
+  __uint128_t quotient = div128_128_clz_improved(dividend, t2);
+  return (uint64_t)(dividend - quotient * t2);
 }
 // __attribute__((noinline))
 static inline uint64_t case_12(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j) { 
@@ -500,17 +666,38 @@ static inline uint64_t case_12(uint64_t a, uint64_t b, uint64_t c, int r, uint64
 }
 // __attribute__((noinline))
 static inline uint64_t case_13(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j) { 
-  __uint128_t t1 = COMBINE_UINT64(ROTL(result, r), b);
-  __uint128_t t2 = COMBINE_UINT64(a, c | 8);
-  return (t1 > t2) ? t1 / t2 : a ^ b;
+  uint64_t t1_hi = ROTL(result, r);
+  uint64_t t1_lo = b;
+  uint64_t t2_hi = a;
+  uint64_t t2_lo = c | 8;
+  
+  if (t1_hi > t2_hi || (t1_hi == t2_hi && t1_lo > t2_lo)) {
+    __uint128_t dividend = ((__uint128_t)t1_hi << 64) | t1_lo;
+    __uint128_t divisor = ((__uint128_t)t2_hi << 64) | t2_lo;
+    return (uint64_t)div128_128_clz_improved(dividend, divisor);
+  } else {
+    return a ^ b;
+  }
 }
 // __attribute__((noinline))
 static inline uint64_t case_14(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j) { 
-  return (COMBINE_UINT64(b,a) * c) >> 64; 
+    __uint128_t ac = (__uint128_t)a * c;
+    uint64_t ac_hi = ac >> 64;
+    uint64_t bc = b * c;
+    return ac_hi + bc;
 }
 // __attribute__((noinline))
 static inline uint64_t case_15(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j) { 
-  return (COMBINE_UINT64(a,c) * COMBINE_UINT64(ROTR(result, r), b)) >> 64; 
+  uint64_t b1 = ROTR(result, r);
+  uint64_t b0 = b;
+  
+  __uint128_t z0 = (__uint128_t)c * b0;
+  __uint128_t z1 = (__uint128_t)a * b0 + (__uint128_t)c * b1;
+  
+  uint64_t z0_hi = z0 >> 64;
+  uint64_t z1_lo = (uint64_t)z1;
+  
+  return z0_hi + z1_lo;
 }
 
 typedef uint64_t (*operation_func)(uint64_t, uint64_t, uint64_t, int, uint64_t, int, int);
@@ -519,6 +706,81 @@ operation_func operations[] = {
   case_0, case_1, case_2, case_3, case_4, case_5, case_6, case_7,
   case_8, case_9, case_10, case_11, case_12, case_13, case_14, case_15,
 };
+
+static inline uint64_t execute_operation_goto(uint32_t idx, uint64_t a, uint64_t b, 
+                                               uint64_t c, int r_next, uint64_t addr_a, 
+                                               int i, int j_off) {
+  uint64_t v;
+  
+  static const void* const dispatch_table[] = {
+    &&op0, &&op1, &&op2, &&op3, &&op4, &&op5, &&op6, &&op7,
+    &&op8, &&op9, &&op10, &&op11, &&op12, &&op13, &&op14, &&op15
+  };
+  
+  goto *dispatch_table[idx];
+  
+  op0:  v = ROTL(c, i * j_off) ^ b; goto done;
+  op1:  v = ROTR(c, i * j_off) ^ a; goto done;
+  op2:  v = a ^ b ^ c; goto done;
+  op3:  v = (a + b) * c; goto done;
+  op4:  v = (b - c) * a; goto done;
+  op5:  v = c - a + b; goto done;
+  op6:  v = a - b + c; goto done;
+  op7:  v = b * c + a; goto done;
+  op8:  v = c * a + b; goto done;
+  op9:  v = a * b * c; goto done;
+  op10: v = mod128_64(COMBINE_UINT64(a, b), c | 1); goto done;
+  op11: {
+    uint64_t t2_hi = ROTL(addr_a, r_next);
+    uint64_t t2_lo = a | 2;
+    if (t2_hi > b || (t2_hi == b && t2_lo > c)) {
+      v = c;
+    } else if (t2_hi == 0) {
+      v = mod128_64(COMBINE_UINT64(b, c), t2_lo);
+    } else {
+      __uint128_t t2 = COMBINE_UINT64(t2_hi, t2_lo);
+      __uint128_t dividend = COMBINE_UINT64(b, c);
+      __uint128_t quotient = div128_128_clz_improved(dividend, t2);
+      v = (uint64_t)(dividend - quotient * t2);
+    }
+    goto done;
+  }
+  op12: v = udiv(c, a, b | 4); goto done;
+  op13: {
+    uint64_t t1_hi = ROTL(addr_a, r_next);
+    uint64_t t1_lo = b;
+    uint64_t t2_hi = a;
+    uint64_t t2_lo = c | 8;
+    if (t1_hi > t2_hi || (t1_hi == t2_hi && t1_lo > t2_lo)) {
+      __uint128_t dividend = ((__uint128_t)t1_hi << 64) | t1_lo;
+      __uint128_t divisor = ((__uint128_t)t2_hi << 64) | t2_lo;
+      v = (uint64_t)div128_128_clz_improved(dividend, divisor);
+    } else {
+      v = a ^ b;
+    }
+    goto done;
+  }
+  op14: {
+    __uint128_t ac = (__uint128_t)a * c;
+    uint64_t ac_hi = ac >> 64;
+    uint64_t bc = b * c;
+    v = ac_hi + bc;
+    goto done;
+  }
+  op15: {
+    uint64_t b1 = ROTR(addr_a, r_next);
+    uint64_t b0 = b;
+    __uint128_t z0 = (__uint128_t)c * b0;
+    __uint128_t z1 = (__uint128_t)a * b0 + (__uint128_t)c * b1;
+    uint64_t z0_hi = z0 >> 64;
+    uint64_t z1_lo = (uint64_t)z1;
+    v = z0_hi + z1_lo;
+    goto done;
+  }
+  
+  done:
+  return v;
+}
 
 #define PROCESS_ITERATION(offset) \
 { \
@@ -531,7 +793,8 @@ operation_func operations[] = {
   uint64_t c = buf[j_off]; \
   \
   uint32_t idx = ROTL(addr_a, (uint32_t)c) & 0xF; \
-  uint64_t v = operations[idx](a, b, c, r_next, addr_a, i, j_off); \
+  uint64_t v = execute_operation_goto(idx, a, b, c, r_next, addr_a, i, j_off); \
+  \
   addr_a = ROTL(addr_a ^ v, 1); \
   \
   size_t iA = XELIS_BUFFER_SIZE_V2 - j_off - 1; \
