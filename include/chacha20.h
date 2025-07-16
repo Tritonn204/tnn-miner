@@ -1,6 +1,7 @@
 
 #pragma once
 #include <stdint.h>
+#include <stddef.h>
 
 #ifdef _MSC_VER
 #include <x86intrin.h>

@@ -1340,7 +1340,7 @@ Mining:
         setAffinity(minerThreads[i].native_handle(), i);
       }
       // if (threads == 1 || (n > 2 && i <= n - 2))
-      // setPriority(t.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+      // setPriority(minerThreads[i].native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
       std::cout << i + 1;
       if(i+1 != threads)
