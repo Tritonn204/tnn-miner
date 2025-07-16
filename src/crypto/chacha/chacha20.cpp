@@ -1,7 +1,7 @@
 #include "chacha20.h"
 #include <memory.h>
 
-#if defined(USE_SSE) || defined (USE_AVX2) || defined(USE_AVX512)
+#if defined(__x86_64__)
   #include <immintrin.h>
 #endif
 

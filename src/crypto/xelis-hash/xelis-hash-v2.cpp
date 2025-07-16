@@ -380,21 +380,6 @@ void static inline aes_single_round(uint8_t *block, const uint8_t *key)
 	__m128i block_vec = _mm_aesenc_si128(_mm_loadu_si128((const __m128i *)block), _mm_loadu_si128((const __m128i *)key));
 	_mm_storeu_si128((__m128i *)block, block_vec);
 }
-
-#else // aarch64
-
-static inline uint64_t ROTR(uint64_t x, uint32_t r)
-{
-    r %= 64;  // Ensure r is within the range [0, 63] for a 64-bit rotate
-    return (x >> r) | (x << (64 - r));
-}
-
-static inline uint64_t ROTL(uint64_t x, uint32_t r)
-{
-    r %= 64;  // Ensure r is within the range [0, 63] for a 64-bit rotate
-    return (x << r) | (x >> (64 - r));
-}
-
 #endif
 
 static inline uint64_t ROTR(uint64_t x, uint32_t r)

@@ -7,44 +7,39 @@
 #if defined(_WIN32)
 
 #include <windows.h>
+
+#ifdef __x86_64__
 #include <immintrin.h>
+#endif
 
 static inline int has_sha_ni_support(void)
 {
+#if defined(__x86_64__)
   int supported = 0;
 
-  // Create anonymous pipe
   HANDLE read_pipe, write_pipe;
   SECURITY_ATTRIBUTES sa = {sizeof(sa), NULL, TRUE};
-  if (!CreatePipe(&read_pipe, &write_pipe, &sa, 0))
-    return 0;
+  if (!CreatePipe(&read_pipe, &write_pipe, &sa, 0)) return 0;
 
-  // Get path to current executable
   char exe_path[MAX_PATH];
-  if (!GetModuleFileNameA(NULL, exe_path, MAX_PATH))
-    return 0;
+  if (!GetModuleFileNameA(NULL, exe_path, MAX_PATH)) return 0;
 
-  // Prepare child startup info
   STARTUPINFOA si = {sizeof(si)};
   PROCESS_INFORMATION pi;
   memset(&pi, 0, sizeof(pi));
 
   si.dwFlags |= STARTF_USESTDHANDLES;
   si.hStdOutput = write_pipe;
-  si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
-  si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+  si.hStdError  = GetStdHandle(STD_ERROR_HANDLE);
+  si.hStdInput  = GetStdHandle(STD_INPUT_HANDLE);
 
-  // Launch child with no arguments
-  if (!CreateProcessA(NULL, exe_path, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi))
-  {
+  if (!CreateProcessA(NULL, exe_path, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) {
     CloseHandle(read_pipe);
     CloseHandle(write_pipe);
     return 0;
   }
 
-  CloseHandle(write_pipe); // Parent doesn't write
-
-  // Wait and read child response
+  CloseHandle(write_pipe);
   WaitForSingleObject(pi.hProcess, INFINITE);
 
   char buf[1] = {0};
@@ -57,20 +52,19 @@ static inline int has_sha_ni_support(void)
   CloseHandle(pi.hThread);
 
   return supported;
+#else
+  return 0; // Not x86_64
+#endif
 }
 
-// Auto-run probe in child
+#ifdef __x86_64__
 __attribute__((constructor)) static void sha_probe_child_windows(void)
 {
-  DWORD ppid = GetCurrentProcessId(); // Can enhance with true parent ID if needed
   HANDLE hStdout = GetStdHandle(STD_OUTPUT_HANDLE);
-  if (hStdout == INVALID_HANDLE_VALUE)
-    return;
+  if (hStdout == INVALID_HANDLE_VALUE) return;
 
   DWORD mode;
-  if (!GetConsoleMode(hStdout, &mode))
-  {
-    // We're likely the probe child (stdout is redirected)
+  if (!GetConsoleMode(hStdout, &mode)) {
     __m128i a = _mm_setzero_si128();
     __m128i b = _mm_setzero_si128();
     __m128i c = _mm_setzero_si128();
@@ -79,29 +73,30 @@ __attribute__((constructor)) static void sha_probe_child_windows(void)
     (void)dummy;
     DWORD written;
     WriteFile(hStdout, "1", 1, &written, NULL);
-    ExitProcess(0); // Do not run main()
+    ExitProcess(0);
   }
 }
+#endif
 
 #elif defined(__unix__) || defined(__APPLE__)
 
 #include <unistd.h>
 #include <sys/wait.h>
+
+#ifdef __x86_64__
 #include <immintrin.h>
+#endif
 
 static inline int has_sha_ni_support(void)
 {
+#if defined(__x86_64__)
   int pipefd[2];
-  if (pipe(pipefd) != 0)
-    return 0;
+  if (pipe(pipefd) != 0) return 0;
 
   pid_t pid = fork();
-  if (pid < 0)
-    return 0;
+  if (pid < 0) return 0;
 
-  if (pid == 0)
-  {
-    // Child: try SHA-NI, send success
+  if (pid == 0) {
     close(pipefd[0]);
 
     __m128i a = _mm_setzero_si128();
@@ -112,11 +107,8 @@ static inline int has_sha_ni_support(void)
     (void)dummy;
 
     write(pipefd[1], "1", 1);
-    _exit(0); // No return to main()
-  }
-  else
-  {
-    // Parent
+    _exit(0);
+  } else {
     close(pipefd[1]);
     char result = 0;
     read(pipefd[0], &result, 1);
@@ -124,6 +116,9 @@ static inline int has_sha_ni_support(void)
     waitpid(pid, NULL, 0);
     return result == '1';
   }
+#else
+  return 0; // Not x86_64
+#endif
 }
 
 #else
