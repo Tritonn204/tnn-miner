@@ -157,7 +157,7 @@ static inline void chacha_get_bytes_at_offset(const uint8_t key[32], const uint8
 #ifdef __x86_64__
 TNN_TARGET_CLONE(
   stage_1,
-  inline void,
+  void,
   (const uint8_t *input, uint64_t *sp, size_t input_len),
   {
     const size_t chunk_size = 32;
@@ -201,7 +201,7 @@ TNN_TARGET_CLONE(
 )
 __attribute__((target("default")))
 #endif
-inline void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
+void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
 {
   const size_t chunk_size = 32;
   const size_t output_size = XELIS_MEMORY_SIZE_V2 * 8;

@@ -453,13 +453,13 @@ waitForJob:
           // boost::lock_guard<boost::mutex> lock(mutex);
           if (devMine)
           {
-            submittingDev = true;
            //  mutex.lock();
             if (localJobCounter != jobCounter || localDevHeight != devHeight)
             {
              //  mutex.unlock();
               break;
             }
+            submittingDev = true;
             setcolor(CYAN);
             std::cout << "\n(DEV) Thread " << tid << " found a dev share\n" << std::flush;
             setcolor(BRIGHT_WHITE);
@@ -487,13 +487,13 @@ waitForJob:
           }
           else
           {
-            submitting = true;
            //  mutex.lock();
             if (localJobCounter != jobCounter || localOurHeight != ourHeight)
             {
              //  mutex.unlock();
               break;
             }
+            submitting = true;
             setcolor(BRIGHT_YELLOW);
             std::cout << "\nThread " << tid << " found a nonce!\n" << std::flush;
             setcolor(BRIGHT_WHITE);
