@@ -300,18 +300,18 @@ static inline __uint128_t combine_uint64(uint64_t high, uint64_t low)
 #if defined(__AVX2__)
 __attribute__((target("avx2")))
 void static inline uint64_to_le_bytes(uint64_t value, uint8_t *bytes) {
-    _mm_storel_epi64((__m128i*)bytes, _mm_shuffle_epi8(_mm_set1_epi64x(value), _mm_set_epi8(
-        -1, -1, -1, -1, -1, -1, -1, -1,
-        7, 6, 5, 4, 3, 2, 1, 0
-    )));
+  _mm_storel_epi64((__m128i*)bytes, _mm_shuffle_epi8(_mm_set1_epi64x(value), _mm_set_epi8(
+    -1, -1, -1, -1, -1, -1, -1, -1,
+    7, 6, 5, 4, 3, 2, 1, 0
+  )));
 }
 
 __attribute__((target("avx2")))
 uint64_t static inline le_bytes_to_uint64(const uint8_t *bytes) {
-    return _mm_cvtsi128_si64(_mm_shuffle_epi8(_mm_loadu_si128((const __m128i*)bytes), _mm_set_epi8(
-        15, 14, 13, 12, 11, 10, 9, 8,
-        7,  6,  5,  4,  3,  2, 1, 0
-    )));
+  return _mm_cvtsi128_si64(_mm_shuffle_epi8(_mm_loadu_si128((const __m128i*)bytes), _mm_set_epi8(
+    15, 14, 13, 12, 11, 10, 9, 8,
+    7,  6,  5,  4,  3,  2, 1, 0
+  )));
 }
 #endif
 
@@ -337,22 +337,22 @@ uint64_t static inline le_bytes_to_uint64(const uint8_t *bytes)
 #elif defined(__aarch64__)
 #if defined(__ARM_NEON) || defined(__aarch64__)
 static inline void uint64_to_le_bytes(uint64_t value, uint8_t *bytes) {
-    uint8x8_t val = vreinterpret_u8_u64(vdup_n_u64(value));
+  uint8x8_t val = vreinterpret_u8_u64(vdup_n_u64(value));
 #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    val = vrev64_u8(val);
+  val = vrev64_u8(val);
 #endif
 
-    vst1_u8(bytes, val);
+  vst1_u8(bytes, val);
 }
 
 static inline uint64_t le_bytes_to_uint64(const uint8_t *bytes) {
-    uint8x8_t val = vld1_u8(bytes);
+  uint8x8_t val = vld1_u8(bytes);
 
 #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    val = vrev64_u8(val);
+  val = vrev64_u8(val);
 #endif
 
-    return vget_lane_u64(vreinterpret_u64_u8(val), 0);
+  return vget_lane_u64(vreinterpret_u64_u8(val), 0);
 }
 #else
 void static inline uint64_to_le_bytes(uint64_t value, uint8_t *bytes)
