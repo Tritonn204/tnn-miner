@@ -201,6 +201,8 @@ static inline void chacha_get_bytes_at_offset(const uint8_t key[32], const uint8
 // )
 // __attribute__((target("default")))
 // #endif
+
+#ifdef __x86_64__
 void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
 {
   const size_t chunk_size = 32;
@@ -240,7 +242,48 @@ void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
   
   ChaCha20EncryptXelis(K2_values, nonces, outputs, bytes_per_chunk, 8);
 }
+#else 
+void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
+{
+  const size_t chunk_size = 32;
+  const size_t output_size = XELIS_MEMORY_SIZE_V2 * 8;
+  const size_t bytes_per_chunk = output_size / 4;
+  
+  uint8_t *t = reinterpret_cast<uint8_t *>(sp);
+  uint8_t K2_values[4][32];
+  uint8_t nonces[4][12];
+  uint8_t buffer[64] = {0};
+  uint8_t key[128] = {0};
+  
+  memcpy(key, input, input_len);
+  
+  blake3(input, input_len, buffer);
+  memcpy(nonces[0], buffer, 12);
+  
+  for (int i = 0; i < 4; i++) {
+    if (i == 0) {
+      memcpy(buffer + chunk_size, key, chunk_size);
+    } else {
+      memcpy(buffer, K2_values[i-1], chunk_size);
+      memcpy(buffer + chunk_size, key + i*chunk_size, chunk_size);
+    }
+    blake3(buffer, chunk_size*2, K2_values[i]);
+  }
+  
+  for (int i = 0; i < 3; i++) {
+    chacha_get_bytes_at_offset(K2_values[i], nonces[i], 
+                                bytes_per_chunk - 12, nonces[i+1], 8);
+  }
+  
+  for (int i = 0; i < 4; i++) {
+    uint8_t state[48] = {0};
+    ChaCha20SetKey(state, K2_values[i]);
+    ChaCha20SetNonce(state, nonces[i]);
+    ChaCha20EncryptBytes(state, NULL, t + i * bytes_per_chunk, bytes_per_chunk, 8);
+  }
+}
 
+#endif
 #ifdef __x86_64__
 __attribute__((target("sse2")))
 static inline uint64_t isqrt(uint64_t n)
