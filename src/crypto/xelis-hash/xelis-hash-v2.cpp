@@ -951,57 +951,57 @@ void stage_3(uint64_t* scratch_pad, workerData_xelis_v2& worker) {
   }
 }
 
-#ifndef TNN_LEGACY_AMD64
-TNN_TARGET_CLONE(
-  stage_3,
-  void,
-  (uint64_t* scratch_pad, workerData_xelis_v2& worker),
-  {
-    const uint8_t key[17] = "xelishash-pow-v2";
-    __m128i key_vec = _mm_loadu_si128((const __m128i *)key);
+// #ifndef TNN_LEGACY_AMD64
+// TNN_TARGET_CLONE(
+//   stage_3,
+//   void,
+//   (uint64_t* scratch_pad, workerData_xelis_v2& worker),
+//   {
+//     const uint8_t key[17] = "xelishash-pow-v2";
+//     __m128i key_vec = _mm_loadu_si128((const __m128i *)key);
 
-    uint64_t* mem_buffer_a = scratch_pad;
-    uint64_t* mem_buffer_b = scratch_pad + XELIS_BUFFER_SIZE_V2;
+//     uint64_t* mem_buffer_a = scratch_pad;
+//     uint64_t* mem_buffer_b = scratch_pad + XELIS_BUFFER_SIZE_V2;
 
-    uint64_t addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V2 - 1];
-    uint64_t addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - 1] >> 32;
+//     uint64_t addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V2 - 1];
+//     uint64_t addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - 1] >> 32;
 
-    for (size_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V2; ++i) {
-      uint64_t mem_a = mem_buffer_a[addr_a % XELIS_BUFFER_SIZE_V2];
-      uint64_t mem_b = mem_buffer_b[addr_b % XELIS_BUFFER_SIZE_V2];
+//     for (size_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V2; ++i) {
+//       uint64_t mem_a = mem_buffer_a[addr_a % XELIS_BUFFER_SIZE_V2];
+//       uint64_t mem_b = mem_buffer_b[addr_b % XELIS_BUFFER_SIZE_V2];
       
-      // Optimized AES using registers - no byte conversions needed
-      __m128i block_vec = _mm_set_epi64x(mem_a, mem_b);
-      block_vec = _mm_aesenc_si128(block_vec, key_vec);
-      uint64_t hash1 = _mm_extract_epi64(block_vec, 0);
+//       // Optimized AES using registers - no byte conversions needed
+//       __m128i block_vec = _mm_set_epi64x(mem_a, mem_b);
+//       block_vec = _mm_aesenc_si128(block_vec, key_vec);
+//       uint64_t hash1 = _mm_extract_epi64(block_vec, 0);
       
-      uint64_t hash2 = mem_a ^ mem_b;
-      addr_a = ~(hash1 ^ hash2);
+//       uint64_t hash2 = mem_a ^ mem_b;
+//       addr_a = ~(hash1 ^ hash2);
 
-      byte odd = i & 1;
-      uint64_t* buf = odd ? mem_buffer_b : mem_buffer_a;
-      size_t r_offset = odd ? XELIS_BUFFER_SIZE_V2 : 0;
+//       byte odd = i & 1;
+//       uint64_t* buf = odd ? mem_buffer_b : mem_buffer_a;
+//       size_t r_offset = odd ? XELIS_BUFFER_SIZE_V2 : 0;
       
-      for (size_t j = 0; j < XELIS_BUFFER_SIZE_V2; j += 8) {
-        size_t r_base = j + r_offset;
+//       for (size_t j = 0; j < XELIS_BUFFER_SIZE_V2; j += 8) {
+//         size_t r_base = j + r_offset;
 
-        PROCESS_ITERATION(0)
-        PROCESS_ITERATION(1)
-        PROCESS_ITERATION(2)
-        PROCESS_ITERATION(3)
-        PROCESS_ITERATION(4)
-        PROCESS_ITERATION(5)
-        PROCESS_ITERATION(6)
-        PROCESS_ITERATION(7)
+//         PROCESS_ITERATION(0)
+//         PROCESS_ITERATION(1)
+//         PROCESS_ITERATION(2)
+//         PROCESS_ITERATION(3)
+//         PROCESS_ITERATION(4)
+//         PROCESS_ITERATION(5)
+//         PROCESS_ITERATION(6)
+//         PROCESS_ITERATION(7)
         
-      }      
+//       }      
       
-      addr_b = isqrt(addr_a);
-    }
-  },
-  TNN_TARGETS_X86_AVX2, TNN_TARGETS_X86_AVX512
-)
-#endif
+//       addr_b = isqrt(addr_a);
+//     }
+//   },
+//   TNN_TARGETS_X86_AVX2, TNN_TARGETS_X86_AVX512
+// )
+// #endif
 
 // Default fallback version using memory-based aes_round
 __attribute__((target("default")))
