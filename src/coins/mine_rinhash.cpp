@@ -33,6 +33,8 @@ void mineRinhash(int tid)
   thread_local bool blake3_main_ready = false;
   thread_local bool blake3_dev_ready = false;
 
+  thread_local uint64_t localCount = 0;
+
 waitForJob:
   while (!isConnected)
   {
@@ -58,10 +60,8 @@ waitForJob:
       if (ourHeight == 0 && devHeight == 0)
         continue;
 
-      // Handle new job data
       if (ourHeight <= 0 || localOurHeight != ourHeight)
       {
-        // Use original hexstrToBytes format
         hexstrToBytes(std::string(myJob.at("template").as_string()), work);
         localOurHeight = ourHeight;
         nonce = 0;
@@ -75,7 +75,6 @@ waitForJob:
       {
         if (devHeight <= 0 || localDevHeight != devHeight)
         {
-          // Use original hexstrToBytes format
           hexstrToBytes(std::string(myJobDev.at("template").as_string()), devWork);
           localDevHeight = devHeight;
           nonce_dev = 0;
@@ -93,13 +92,6 @@ waitForJob:
       BTCStratum::diffToWords(doubleDiff, targetWords);
       BTCStratum::diffToWords(doubleDiffDev, targetWords_dev);
 
-    const uint8_t expected_final[32] = {
-      0xa5, 0x7b, 0x72, 0x38, 0xb9, 0xab, 0x81, 0x8a,
-      0x25, 0xcc, 0xcd, 0xb5, 0x68, 0x34, 0x07, 0x20,
-      0x76, 0x37, 0xbe, 0x79, 0xcc, 0x5c, 0x58, 0x1d,
-      0x8b, 0x16, 0x72, 0xb6, 0xda, 0x89, 0x72, 0x92
-    };
-
       while (localJobCounter == jobCounter)
       {
         CHECK_CLOSE;
@@ -112,22 +104,25 @@ waitForJob:
         byte *WORK = (devMine && devConnected) ? devWork : work;
         memcpy(FINALWORK, WORK, 80);
 
-        // Put nonce in correct position (76-79)
         uint32_t n = ((tid - 1) % (512)) | ((*noncePtr) << 9);
         be32enc(FINALWORK + 76, n);
 
-        if (localJobCounter != jobCounter)
+        if (localJobCounter != jobCounter) {
+          if (localCount) { counter.fetch_add(localCount); localCount = 0; }
           break;
+        }
 
         RinHash::hash(powHash, FINALWORK, devMine ? &blake3_prefix_dev : &blake3_prefix_main);
 
         uint32_t *currentTarget = devMine ? targetWords_dev : targetWords;
-        counter.fetch_add(1);
+        if (++localCount >= 1024) { counter.fetch_add(localCount); localCount = 0; }
 
         submit = (devMine && devConnected) ? !submittingDev : !submitting;
 
-        if (localJobCounter != jobCounter || localOurHeight != ourHeight)
+        if (localJobCounter != jobCounter || localOurHeight != ourHeight) {
+          if (localCount) { counter.fetch_add(localCount); localCount = 0; }
           break;
+        }
 
         if (RinHash::checkHash(powHash, currentTarget))
         {
@@ -147,8 +142,10 @@ waitForJob:
           if (devMine)
           {
             submittingDev = true;
-            if (localJobCounter != jobCounter || localDevHeight != devHeight)
+            if (localJobCounter != jobCounter || localDevHeight != devHeight) {
+              if (localCount) { counter.fetch_add(localCount); localCount = 0; }
               break;
+            }
             setcolor(CYAN);
             std::cout << "\n(DEV) Thread " << tid << " found a dev share\n" << std::flush;
             setcolor(BRIGHT_WHITE);
@@ -160,8 +157,10 @@ waitForJob:
           else
           {
             submitting = true;
-            if (localJobCounter != jobCounter || localOurHeight != ourHeight)
+            if (localJobCounter != jobCounter || localOurHeight != ourHeight) {
+              if (localCount) { counter.fetch_add(localCount); localCount = 0; }
               break;
+            }
             setcolor(BRIGHT_YELLOW);
             std::cout << "\nThread " << tid << " found a nonce!\n" << std::flush;
             setcolor(BRIGHT_WHITE);
@@ -177,15 +176,19 @@ waitForJob:
         {
           data_ready = true;
           cv.notify_all();
+          if (localCount) { counter.fetch_add(localCount); localCount = 0; }
           break;
         }
       }
+      if (localCount) { counter.fetch_add(localCount); localCount = 0; }
     }
     catch (std::exception &e)
     {
       setcolor(RED);
       std::cerr << "Error in POW Function: " << e.what() << std::endl << std::flush;
       setcolor(BRIGHT_WHITE);
+
+      if (localCount) { counter.fetch_add(localCount); localCount = 0; }
 
       localJobCounter = -1;
       localOurHeight = -1;

@@ -382,7 +382,7 @@ extern "C" {
 		machine->resetRoundingMode();
 		for (int chain = 0; chain < RANDOMX_PROGRAM_COUNT - 1; ++chain) {
 			machine->run(&tempHash);
-			blakeResult = blake2b(tempHash, sizeof(tempHash), machine->getRegisterFile(), sizeof(randomx::RegisterFile), nullptr, 0);
+			blakeResult = blake2b_registerfile_hash(tempHash, machine->getRegisterFile());
 			assert(blakeResult == 0);
 		}
 		machine->run(&tempHash);

@@ -388,8 +388,8 @@ void rx0_stratum_session(
             });
             
             if (abort) break;
-            printf("needs update");
-            fflush(stdout);
+            // printf("needs update");
+            // fflush(stdout);
             
             if (globalInDevBatch.load() == isDev) {
               try {

@@ -688,10 +688,12 @@ static inline uint64_t div128_128_large(__uint128_t* dividend, __uint128_t divis
     }
   }
   
-  while (*dividend >= divisor) {
-    *dividend -= divisor;
-    quotient++;
-  }
+  // uint16_t loop_count = 0;
+  // while (*dividend >= divisor && loop_count < 16) {
+  //   *dividend -= divisor;
+  //   quotient++;
+  //   loop_count++;
+  // }
   
   return quotient;
 }

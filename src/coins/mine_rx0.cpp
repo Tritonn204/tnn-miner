@@ -11,10 +11,8 @@
 #include <vector>
 #include <map>
 
-// Change from single datasets to per-NUMA-node datasets
-randomx_dataset* rxDatasets_numa[256];      // One per NUMA node
+randomx_dataset* rxDatasets_numa[256];
 
-// Fallback for non-NUMA systems
 randomx_dataset* rxDataset;
 randomx_dataset* rxDataset_dev;
 
@@ -26,7 +24,6 @@ bool rx_hugePages;
 bool rx_numa_enabled = false;
 int numa_nodes = 1;
 
-// Map thread ID to NUMA node
 std::map<int, int> thread_numa_map;
 std::mutex numa_map_mutex;
 
@@ -88,7 +85,6 @@ void randomx_init_intern(int threadCount) {
     });
   
   if (rx_numa_enabled) {
-    // Initialize separate cache managers for user and dev
     rx_cache_manager.initialize(threads,
       [](int node_id) -> std::unique_ptr<RxCacheWrapper> {
         NUMAOptimizer::ScopedMemoryPolicy policy(node_id);
@@ -109,7 +105,6 @@ void randomx_init_intern(int threadCount) {
     std::cout << " NUMA enabled with " << NUMAOptimizer::getMemoryNodes() << " nodes\n";
     setcolor(BRIGHT_WHITE);
   } else {
-    // Non-NUMA fallback
     rxCache = randomx_alloc_cache(rxFlags);
     rxCache_dev = randomx_alloc_cache(rxFlags);
     if (rxCache == nullptr || rxCache_dev == nullptr) {
@@ -119,19 +114,15 @@ void randomx_init_intern(int threadCount) {
   }
 }
 
-// Wrapper that handles both NUMA and non-NUMA cases
 void randomx_update_data(randomx_cache* rc, randomx_dataset* rd, void *seed, 
                         size_t seedSize, int threadCount, bool isDev) {
   if (rx_numa_enabled) {
-    // Select the appropriate cache manager
     auto& cache_manager = isDev ? rx_cache_dev_manager : rx_cache_manager;
     
-    // Initialize each NUMA cache with the same seed
     cache_manager.forEachNode([&](int node_id, RxCacheWrapper* cache_wrapper) {
       randomx_init_cache(cache_wrapper->ptr, seed, seedSize);
     });
     
-    // Initialize datasets with local caches
     std::vector<std::thread> init_threads;
     
     rx_dataset_manager.forEachNode([&](int node_id, RxDatasetWrapper* dataset_wrapper) {
@@ -268,8 +259,6 @@ int rxRPCTest() {
   randomx_update_data(rxCache, rxDataset, seedBuffer, 32, th, false);
   randomx_vm_set_cache(vm, rxCache);
 
-  // hashing
-
   byte work[RANDOMX_TEMPLATE_SIZE];
   byte powHash[32];
 
@@ -293,16 +282,14 @@ int rxRPCTest() {
   return toRet;
 }
 
-// Global variables for synchronized batch scheduling
 std::atomic<bool> globalInDevBatch(false);
 std::atomic<int64_t> globalNextDevBatchTime(0);
 std::atomic<int64_t> globalDevBatchDuration(0);
 std::atomic<int64_t> globalNextUserBatchDuration;
-std::atomic<uint32_t> globalBatchSalt(0);  // Random salt for batch scheduling
+std::atomic<uint32_t> globalBatchSalt(0);
 std::atomic<bool> batchInit{false};
 
 void initGlobalBatchScheduler() {
-  // Initialize once at program start
   globalBatchSalt = rand() & 0xFFFFFF;
   auto currentTime = std::chrono::steady_clock::now();
   globalNextDevBatchTime = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -321,14 +308,13 @@ void mineRx0(int tid) {
   byte powHash[32];
   byte devWork[RANDOMX_TEMPLATE_SIZE];
   byte work[RANDOMX_TEMPLATE_SIZE];
+  byte nextWork[RANDOMX_TEMPLATE_SIZE];
 
   randomx_vm *vm = nullptr;
   
-  // Batched dev fee constants
   const int64_t MIN_DEV_DURATION_MS = 30000;
   const int64_t MAX_DEV_DURATION_MS = 300000;
 
-  // Initialize batch scheduling if this is the first thread
   if (tid == 1) {
     initGlobalBatchScheduler();
     batchInit.store(true);
@@ -348,6 +334,7 @@ waitForJob:
   }
 
   bool devMine = false;
+  thread_local uint64_t localCount = 0;
 
   while (!ABORT_MINER) {
     fflush(stdout);
@@ -404,7 +391,6 @@ waitForJob:
           if (rxFlags & RANDOMX_FLAG_LARGE_PAGES) {
             throw std::runtime_error("Cannot create user VM with the selected options. Try without --rx-hugepages");
           }
-          throw std::runtime_error("Cannot create user VM");
         }
         localCacheKey = tKey;
       }
@@ -451,10 +437,9 @@ waitForJob:
             int64_t devDuration = devDist(rng);
             globalDevBatchDuration.store(devDuration);
 
-            // Compute user duration to maintain devFee balance
             int64_t userDuration = static_cast<int64_t>(devDuration * ((100.0 - devFee) / devFee));
-            globalNextDevBatchTime.store(currentTimeMs + devDuration);  // When to switch back to user
-            globalNextUserBatchDuration.store(userDuration);            // Save next user duration
+            globalNextDevBatchTime.store(currentTimeMs + devDuration);
+            globalNextUserBatchDuration.store(userDuration);
 
             randomx_vm_set_cache(vm, rxCache_dev);
             needsDatasetUpdate.store(true);
@@ -465,7 +450,7 @@ waitForJob:
           if (globalInDevBatch.exchange(false)) {
             std::mt19937 rng(scheduleSeed + 1);
             int64_t userDuration = globalNextUserBatchDuration.load();
-            globalNextDevBatchTime.store(currentTimeMs + userDuration); // When to switch back to dev
+            globalNextDevBatchTime.store(currentTimeMs + userDuration);
 
             randomx_vm_set_cache(vm, rxCache);
             needsDatasetUpdate.store(true);
@@ -475,141 +460,173 @@ waitForJob:
 
         if (globalInDevBatch.load() != devMine) break;
         
-        if (vm == nullptr) continue; // Skip if VM not ready
+        if (vm == nullptr) continue;
 
         uint64_t *nonce = devMine ? &nonce0_dev : &nonce0;
-        (*nonce)++;
-
         byte *WORK = devMine ? &devWork[0] : &work[0];
         boost::json::value &J = devMine ? myJobDev : myJob;
-
-        uint32_t N = (*nonce) << 11 | tid;
-        memcpy(&WORK[39], &N, 4);
-        
-        if (localJobCounter != jobCounter) {
-          break;
-        }
-        
-        if ((!devMine && localUserHeight != ourHeight) || 
-            (devMine && localDevHeight != devHeight)) {
-          break;
-        }
 
         if(!randomx_ready.load() && !randomx_ready_dev.load()) {
           continue;
         }
 
-        randomx_calculate_hash(vm, WORK, devMine ? devLen : userLen, powHash);
-        counter.fetch_add(1);
-        submit = devMine ? !submittingDev : !submitting;
-
-        if (localJobCounter != jobCounter || 
-            (!devMine && localUserHeight != ourHeight) ||
-            (devMine && localDevHeight != devHeight)) {
-          break;
-        }
-
-        Num cmpTarget = rx0_calcTarget(devMine ? myJobDev : myJob);
+        // ===== SIMPLE BATCHED HASHING (just reduce overhead) =====
         
-        std::reverse(powHash, powHash + 32);
-        if (Num(hexStr(powHash, 32).c_str(), 16) < cmpTarget) {
-          std::reverse(powHash, powHash + 32);
+        // Initialize first hash
+        (*nonce)++;
+        uint32_t N = (*nonce) << 11 | tid;
+        memcpy(&WORK[39], &N, 4);
+        int workLen = devMine ? devLen : userLen;
+        randomx_calculate_hash_first(vm, WORK, workLen);
+        
+        // Process hashes in small batches to reduce overhead
+        constexpr int MINI_BATCH = 32;
+        for (int i = 0; i < MINI_BATCH && localJobCounter == jobCounter; i++) {
+          // Prepare next work
+          (*nonce)++;
+          uint32_t nextN = (*nonce) << 11 | tid;
+          memcpy(nextWork, WORK, workLen);
+          memcpy(&nextWork[39], &nextN, 4);
           
-          if (!submit) {
-            for(;;) {
-              submit = (devMine && devConnected) ? !submittingDev : !submitting;
-              int64_t &rH = devMine ? devHeight : ourHeight;
-              int64_t &lH = devMine ? localDevHeight : localUserHeight;
-              if (submit || localJobCounter != jobCounter || rH != lH)
-                break;
-              boost::this_thread::yield();
-            }
+          // Compute current, prepare next
+          randomx_calculate_hash_next(vm, nextWork, workLen, powHash);
+          
+          localCount++;
+          if (localCount >= 256) { 
+            counter.fetch_add(localCount); 
+            localCount = 0; 
           }
           
-          int64_t &rH = devMine ? devHeight : ourHeight;
-          int64_t &lH = devMine ? localDevHeight : localUserHeight;
-          if (localJobCounter != jobCounter || rH != lH) {
+          // Check solution the normal way
+          submit = devMine ? !submittingDev : !submitting;
+          
+          if (localJobCounter != jobCounter || 
+              (!devMine && localUserHeight != ourHeight) ||
+              (devMine && localDevHeight != devHeight)) {
             break;
           }
-
-          if (devMine) {
-            submittingDev = true;
-
-            if (localJobCounter != jobCounter || localDevHeight != devHeight) {
-              submittingDev = false;
+          
+          Num cmpTarget = rx0_calcTarget(devMine ? myJobDev : myJob);
+          std::reverse(powHash, powHash + 32);
+          if (Num(hexStr(powHash, 32).c_str(), 16) < cmpTarget) {
+            std::reverse(powHash, powHash + 32);
+            
+            if (!submit) {
+              for(;;) {
+                submit = (devMine && devConnected) ? !submittingDev : !submitting;
+                int64_t &rH = devMine ? devHeight : ourHeight;
+                int64_t &lH = devMine ? localDevHeight : localUserHeight;
+                if (submit || localJobCounter != jobCounter || rH != lH)
+                  break;
+                boost::this_thread::yield();
+              }
+            }
+            
+            int64_t &rH = devMine ? devHeight : ourHeight;
+            int64_t &lH = devMine ? localDevHeight : localUserHeight;
+            if (localJobCounter != jobCounter || rH != lH) {
+              if (localCount) { counter.fetch_add(localCount); localCount = 0; }
               break;
             }
 
-            setcolor(CYAN);
-            std::cout << "\n(DEV) Thread " << tid << " found a dev share\n" << std::flush;
-            setcolor(BRIGHT_WHITE);
+            if (devMine) {
+              submittingDev = true;
 
-            N = __builtin_bswap32(N);
-            devShare = {
-              {"method", rx0Stratum::submit.method.c_str()},
-              {"id", rx0Stratum::submit.id},
-              {"params", {
-                {"id", randomx_login_dev.c_str()},
-                {"job_id", myJobDev.at("job_id").as_string().c_str()},
-                {"nonce", uint32ToHex(N).c_str()},
-                {"result", hexStr(powHash, 32).c_str()}
-              }}
-            };
-            data_ready = true;
-          }
-          else {
-            submitting = true;
-
-            if (localJobCounter != jobCounter || localUserHeight  != ourHeight) {
-              submitting = false;
-              break;
-            }
-
-            setcolor(BRIGHT_YELLOW);
-            std::cout << "\nThread " << tid << " found a nonce!\n" << std::flush;
-            setcolor(BRIGHT_WHITE);
-                      
-            switch (miningProfile.protocol) {
-              case PROTO_RX0_SOLO:
-              {
-                int fbSize = myJob.at("template").as_string().size() / 2;
-                byte *fullBlob = new byte[fbSize];
-                hexstrToBytes(std::string(myJob.at("template").as_string()), fullBlob);
-                memcpy(&fullBlob[39], &N, 4);
-
-                share = {
-                  {"jsonrpc", "2.0"},
-                  {"method", "submit_block"},
-                  {"id", 7},
-                  {"params", {hexStr(fullBlob, fbSize).c_str()}}
-                };
-                delete[] fullBlob;
+              if (localJobCounter != jobCounter || localDevHeight != devHeight) {
+                submittingDev = false;
+                if (localCount) { counter.fetch_add(localCount); localCount = 0; }
                 break;
               }
-              case PROTO_RX0_STRATUM:
-              {
-                N = __builtin_bswap32(N);
-                share = {
-                  {"method", rx0Stratum::submit.method.c_str()},
-                  {"id", rx0Stratum::submit.id},
-                  {"params", {
-                    {"id", randomx_login.c_str()},
-                    {"job_id", myJob.at("job_id").as_string().c_str()},
-                    {"nonce", uint32ToHex(N).c_str()},
-                    {"result", hexStr(powHash, 32).c_str()}
-                  }}
-                };
-                break;                
-              }
-            }
-            data_ready = true;
-          }
-          cv.notify_all();
-        }
 
-        if (!isConnected)
+              setcolor(CYAN);
+              std::cout << "\n(DEV) Thread " << tid << " found a dev share\n" << std::flush;
+              setcolor(BRIGHT_WHITE);
+
+              N = __builtin_bswap32(N);
+              devShare = {
+                {"method", rx0Stratum::submit.method.c_str()},
+                {"id", rx0Stratum::submit.id},
+                {"params", {
+                  {"id", randomx_login_dev.c_str()},
+                  {"job_id", myJobDev.at("job_id").as_string().c_str()},
+                  {"nonce", uint32ToHex(N).c_str()},
+                  {"result", hexStr(powHash, 32).c_str()}
+                }}
+              };
+              data_ready = true;
+            }
+            else {
+              submitting = true;
+
+              if (localJobCounter != jobCounter || localUserHeight  != ourHeight) {
+                submitting = false;
+                if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+                break;
+              }
+
+              setcolor(BRIGHT_YELLOW);
+              std::cout << "\nThread " << tid << " found a nonce!\n" << std::flush;
+              setcolor(BRIGHT_WHITE);
+                        
+              switch (miningProfile.protocol) {
+                case PROTO_RX0_SOLO:
+                {
+                  int fbSize = myJob.at("template").as_string().size() / 2;
+                  byte *fullBlob = new byte[fbSize];
+                  hexstrToBytes(std::string(myJob.at("template").as_string()), fullBlob);
+                  memcpy(&fullBlob[39], &N, 4);
+
+                  share = {
+                    {"jsonrpc", "2.0"},
+                    {"method", "submit_block"},
+                    {"id", 7},
+                    {"params", {hexStr(fullBlob, fbSize).c_str()}}
+                  };
+                  delete[] fullBlob;
+                  break;
+                }
+                case PROTO_RX0_STRATUM:
+                {
+                  N = __builtin_bswap32(N);
+                  share = {
+                    {"method", rx0Stratum::submit.method.c_str()},
+                    {"id", rx0Stratum::submit.id},
+                    {"params", {
+                      {"id", randomx_login.c_str()},
+                      {"job_id", myJob.at("job_id").as_string().c_str()},
+                      {"nonce", uint32ToHex(N).c_str()},
+                      {"result", hexStr(powHash, 32).c_str()}
+                    }}
+                  };
+                  break;                
+                }
+              }
+              data_ready = true;
+            }
+            cv.notify_all();
+          }
+          else {
+            std::reverse(powHash, powHash + 32);
+          }
+          
+          // Update work buffer for next iteration
+          memcpy(WORK, nextWork, workLen);
+          N = nextN;
+          
+          if (!isConnected) {
+            break;
+          }
+        }
+        
+        // Finish the mini-batch
+        randomx_calculate_hash_last(vm, powHash);
+        
+        if (!isConnected) {
+          if (localCount) { counter.fetch_add(localCount); localCount = 0; }
           break;
+        }
       }
+      
       if (!isConnected)
         break;
       
@@ -618,6 +635,7 @@ waitForJob:
           globalBatchSalt = (globalBatchSalt + jobCounter) ^ (rand() & 0xFFFFFF);
         }
       }
+      if (localCount) { counter.fetch_add(localCount); localCount = 0; }
     }
     catch (std::exception& e) {
       setcolor(RED);
@@ -629,25 +647,23 @@ waitForJob:
       localUserHeight = -1;
       localDevHeight = -1;
       
-      // Cleanup VMs on error
       if (vm) {
         randomx_destroy_vm(vm);
         vm = nullptr;
       }
       localCacheKey = "";
-      
-      // Reset batch state
       globalInDevBatch.store(false);
+      if (localCount) { counter.fetch_add(localCount); localCount = 0; }
     }
     if (!isConnected)
       break;
   }
  
-  // Cleanup before waiting for job
   if (vm) {
     randomx_destroy_vm(vm);
     vm = nullptr;
   }
+  if (localCount) { counter.fetch_add(localCount); localCount = 0; }
   localCacheKey = "";
  
   goto waitForJob;

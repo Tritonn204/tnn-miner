@@ -108,7 +108,7 @@ namespace RinHash {
     printf("\n");
   }
 
-  #define MEM_COST 64*1000
+  #define MEM_COST 64
 
   void hash(void* state, const void* input, const blake3_hasher* prehashedPrefix)
   {

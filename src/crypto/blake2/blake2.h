@@ -113,6 +113,20 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   int blake2b(void *out, size_t outlen, const void *in, size_t inlen,
     const void *key, size_t keylen);
 
+  #define RANDOMX_REGISTERFILE_SIZE 256
+
+  #ifdef __x86_64__
+  TNN_TARGET_CLONE(
+    blake2b_registerfile_hash,
+    int,
+    (void *out, const void *regfile),
+    ;,  // Just declaration, no implementation
+    TNN_TARGETS_X86_AVX2, TNN_TARGETS_X86_AVX512
+  )
+  __attribute__((target("default")))
+  #endif
+  int blake2b_registerfile_hash(void *out, const void *regfile);
+
 	/* Argon2 Team - Begin Code */
 	int blake2b_long(void *out, size_t outlen, const void *in, size_t inlen);
 	/* Argon2 Team - End Code */

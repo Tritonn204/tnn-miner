@@ -801,6 +801,57 @@ fail:
   return ret;
 }
 
+#ifdef __x86_64__
+#ifndef TNN_LEGACY_AMD64
+TNN_TARGET_CLONE(
+  blake2b_registerfile_hash,
+  int,
+  (void *out, const void *regfile),
+  {
+    blake2b_state S;
+    blake2b_init(&S, 64);  // 64-byte output
+    
+    // Process first 128-byte block
+    blake2b_increment_counter(&S, 128);
+    blake2b_compress(&S, (const uint8_t*)regfile);
+    
+    // Process second 128-byte block (final)
+    blake2b_increment_counter(&S, 128);  // Total: 256 bytes
+    blake2b_set_lastblock(&S);
+    blake2b_compress(&S, (const uint8_t*)regfile + 128);
+    
+    // Direct output (avoid blake2b_final overhead)
+    for (unsigned int i = 0; i < 8; ++i) {
+      store64((uint8_t*)out + i * 8, S.h[i]);
+    }
+    return 0;
+  },
+  TNN_TARGETS_X86_AVX2, TNN_TARGETS_X86_AVX512
+)
+#endif
+
+__attribute__((target("default")))
+#endif
+int blake2b_registerfile_hash(void *out, const void *regfile) {
+  blake2b_state S;
+  blake2b_init(&S, 64);
+  
+  // Process first 128-byte block
+  blake2b_increment_counter(&S, 128);
+  blake2b_compress(&S, (const uint8_t*)regfile);
+  
+  // Process second 128-byte block (final)
+  blake2b_increment_counter(&S, 128);
+  blake2b_set_lastblock(&S);
+  blake2b_compress(&S, (const uint8_t*)regfile + 128);
+  
+  // Direct output
+  for (unsigned int i = 0; i < 8; ++i) {
+    store64((uint8_t*)out + i * 8, S.h[i]);
+  }
+  return 0;
+}
+
 /* Argon2 Team - Begin Code */
 int blake2b_long(void *pout, size_t outlen, const void *in, size_t inlen) {
 	uint8_t *out = (uint8_t *)pout;

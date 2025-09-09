@@ -12,7 +12,6 @@
 
 void mineYespower(int tid)
 {
-  // Thread-local RNG (no global contention)
   thread_local std::random_device rd;
   thread_local std::mt19937 rng(rd());
   thread_local std::uniform_real_distribution<double> dist(0, 10000);
@@ -32,12 +31,10 @@ void mineYespower(int tid)
   uint32_t targetWords[8];
   uint32_t targetWords_dev[8];
 
-  // Pre-allocate yespower contexts (will use NUMA-local memory)
   yespower_local_t yespower_local;
   yespower_local_t yespower_dev_local;
   yespower_binary_t result;
   
-  // Initialize contexts
   if (yespower_init_local(&yespower_local) != 0) {
     setcolor(RED);
     std::cerr << "Failed to initialize yespower context for thread " << tid << std::endl;
@@ -53,13 +50,14 @@ void mineYespower(int tid)
     return;
   }
 
-  // Optimize memory for mining workloads
   if (yespower_local.aligned) {
     NUMAOptimizer::optimizeMemoryForMining(yespower_local.aligned, yespower_local.aligned_size);
   }
   if (yespower_dev_local.aligned) {
     NUMAOptimizer::optimizeMemoryForMining(yespower_dev_local.aligned, yespower_dev_local.aligned_size);
   }
+
+  thread_local uint64_t localCount = 0;
 
 waitForJob:
   while (!isConnected)
@@ -86,15 +84,12 @@ waitForJob:
       if (ourHeight == 0 && devHeight == 0)
         continue;
 
-      // Handle new job data
       if (ourHeight == 0 || localOurHeight != ourHeight)
       {
-        // Use original hexstrToBytes format
         hexstrToBytes(std::string(myJob.at("template").as_string()), work);
         localOurHeight = ourHeight;
         nonce = 0;
 
-        // Optimize endian conversion
         uint32_t *work_words = (uint32_t *)work;
         for (int i = 0; i < 19; i++) {
           work_words[i] = __builtin_bswap32(work_words[i]);
@@ -105,7 +100,6 @@ waitForJob:
       {
         if (devHeight == 0 || localDevHeight != devHeight)
         {
-          // Use original hexstrToBytes format
           hexstrToBytes(std::string(myJobDev.at("template").as_string()), devWork);
           localDevHeight = devHeight;
           nonce_dev = 0;
@@ -127,7 +121,7 @@ waitForJob:
       while (localJobCounter == jobCounter)
       {
         CHECK_CLOSE;
-        which = dist(rng); // Thread-local RNG
+        which = dist(rng);
         devMine = (devConnected && devHeight > 0 && which < devFee * 100.0);
 
         uint32_t *noncePtr = devMine ? &nonce_dev : &nonce;
@@ -136,14 +130,14 @@ waitForJob:
         byte *WORK = (devMine && devConnected) ? devWork : work;
         memcpy(FINALWORK, WORK, 80);
 
-        // Put nonce in correct position (76-79)
         uint32_t n = ((tid - 1) % (256 * 256)) | ((*noncePtr) << 16);
         be32enc(FINALWORK + 76, n);
 
-        if (localJobCounter != jobCounter)
+        if (localJobCounter != jobCounter) {
+          if (localCount) { counter.fetch_add(localCount); localCount = 0; }
           break;
+        }
 
-        // Hash with NUMA-local context
         yespower_local_t *local = devMine ? &yespower_dev_local : &yespower_local;
         const yespower_params_t *params = devMine ? &devYespowerParams : &currentYespowerParams;
         
@@ -151,16 +145,19 @@ waitForJob:
           setcolor(RED);
           std::cerr << "yespower computation failed for thread " << tid << std::endl;
           setcolor(BRIGHT_WHITE);
+          if (localCount) { counter.fetch_add(localCount); localCount = 0; }
           break;
         }
 
         uint32_t *currentTarget = devMine ? targetWords_dev : targetWords;
-        counter.fetch_add(1);
+        if (++localCount >= 1024) { counter.fetch_add(localCount); localCount = 0; }
 
         submit = (devMine && devConnected) ? !submittingDev : !submitting;
 
-        if (localJobCounter != jobCounter || localOurHeight != ourHeight)
+        if (localJobCounter != jobCounter || localOurHeight != ourHeight) {
+          if (localCount) { counter.fetch_add(localCount); localCount = 0; }
           break;
+        }
 
         if (checkYespowerHash(result.uc, currentTarget))
         {
@@ -181,8 +178,10 @@ waitForJob:
           if (devMine)
           {
             submittingDev = true;
-            if (localJobCounter != jobCounter || localDevHeight != devHeight)
+            if (localJobCounter != jobCounter || localDevHeight != devHeight) {
+              if (localCount) { counter.fetch_add(localCount); localCount = 0; }
               break;
+            }
             setcolor(CYAN);
             std::cout << "\n(DEV) Thread " << tid << " found a dev share\n" << std::flush;
             setcolor(BRIGHT_WHITE);
@@ -194,8 +193,10 @@ waitForJob:
           else
           {
             submitting = true;
-            if (localJobCounter != jobCounter || localOurHeight != ourHeight)
+            if (localJobCounter != jobCounter || localOurHeight != ourHeight) {
+              if (localCount) { counter.fetch_add(localCount); localCount = 0; }
               break;
+            }
             setcolor(BRIGHT_YELLOW);
             std::cout << "\nThread " << tid << " found a nonce!\n" << std::flush;
             setcolor(BRIGHT_WHITE);
@@ -211,9 +212,11 @@ waitForJob:
         {
           data_ready = true;
           cv.notify_all();
+          if (localCount) { counter.fetch_add(localCount); localCount = 0; }
           break;
         }
       }
+      if (localCount) { counter.fetch_add(localCount); localCount = 0; }
     }
     catch (std::exception &e)
     {
@@ -221,13 +224,14 @@ waitForJob:
       std::cerr << "Error in POW Function: " << e.what() << std::endl << std::flush;
       setcolor(BRIGHT_WHITE);
 
+      if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+
       localJobCounter = -1;
       localOurHeight = -1;
       localDevHeight = -1;
     }
   }
 
-  // Cleanup
   yespower_free_local(&yespower_local);
   yespower_free_local(&yespower_dev_local);
   
