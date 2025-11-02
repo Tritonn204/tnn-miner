@@ -441,12 +441,12 @@ static inline uint64_t ROTL(uint64_t x, uint32_t r)
 
 static inline uint64_t ROTR(uint64_t x, uint32_t r)
 {
-  __builtin_rotateright64(x, r);
+  return __builtin_rotateright64(x, r);
 }
 
 static inline uint64_t ROTL(uint64_t x, uint32_t r)
 {
-  __builtin_rotateleft64(x, r);
+  return __builtin_rotateleft64(x, r);
 }
 
 #endif
