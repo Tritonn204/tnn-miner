@@ -1309,12 +1309,12 @@ Mining:
   // #endif
 
   boost::thread GETWORK(getWork_v2, &miningProfile);
-  // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+  setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
   devMiningProfile = miningProfile;
   devMiningProfile.setDev(vm.count("testnet"));
   boost::thread DEVWORK(getWork_v2, &devMiningProfile);
-  // setPriority(DEVWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+  setPriority(DEVWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
   // Create worker threads and set CPU affinity
  //  mutex.lock();

@@ -1295,6 +1295,7 @@ static inline uint64x2_t aes_round_v3_register(uint64_t mem_a, uint64_t mem_b,
 
   return vreinterpretq_u64_u8(block);
 }
+#endif
 
 static void stage_3(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
 {
