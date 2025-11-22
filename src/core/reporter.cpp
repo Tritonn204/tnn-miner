@@ -119,6 +119,7 @@ int update_handler(const boost::system::error_code& error)
     switch(miningProfile.coin.miningAlgo) {
       case ALGO_ASTROBWTV3:
       case ALGO_XELISV2:
+      case ALGO_XELISV3:
       case ALGO_RX0:
       case ALGO_VERUS:
       case ALGO_SHAI_HIVE:

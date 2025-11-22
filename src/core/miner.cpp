@@ -229,7 +229,7 @@ int enhanceWallet(MiningProfile *currentProfile, bool checkWallet) {
       std::cout << "Provided wallet address is not valid for Dero" << std::endl;
       return EXIT_FAILURE;
     }
-    if (currentProfile->coin.miningAlgo == ALGO_XELISV2 && !(currentProfile->wallet.find("xel") == std::string::npos || currentProfile->wallet.find("xet") == std::string::npos || currentProfile->wallet.find("Kr") == std::string::npos))
+    if (currentProfile->coin.miningAlgo == ALGO_XELISV3 && !(currentProfile->wallet.find("xel") == std::string::npos || currentProfile->wallet.find("xet") == std::string::npos || currentProfile->wallet.find("Kr") == std::string::npos))
     {
       std::cout << "Provided wallet address is not valid for Xelis" << std::endl;
       return EXIT_FAILURE;
@@ -672,7 +672,7 @@ int main(int argc, char **argv)
   if (vm.count("test-xelis"))
   {
     #if defined(TNN_XELISHASH)
-    int rc = xelis_runTests_v2();
+    int rc = xelis_runTests_v3();
     return rc;
     #else
     setcolor(RED);
@@ -779,7 +779,7 @@ int main(int argc, char **argv)
   if (vm.count("bench-xelis"))
   {
     #if defined(TNN_XELISHASH)
-    boost::thread t(xelis_benchmark_cpu_hash_v2);
+    boost::thread t(xelis_benchmark_cpu_hash_v3);
     setPriority(t.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
     t.join();
     return 0;
@@ -1299,7 +1299,7 @@ Mining:
 
   // seems to regress after fixing other bottlenecks
   // #ifdef TNN_XELISHASH
-  // if (miningProfile.coin.miningAlgo == ALGO_XELISV2) {
+  // if (miningProfile.coin.miningAlgo == ALGO_XELISV3) {
   //   applyMSROptimization("RandomX");
   //   setcolor(CYAN);
   //   printf("NOTE: The RandomX MSR mod may benefit Xelishash as well\n\n");
@@ -1717,6 +1717,7 @@ connectionAttempt:
           break;
         }
         case ALGO_XELISV2:
+        case ALGO_XELISV3:
         case ALGO_SPECTRE_X:
         {
           miningProf->workerName = "tnn-dev";

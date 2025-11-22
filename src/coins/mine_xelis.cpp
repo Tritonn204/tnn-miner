@@ -117,7 +117,7 @@ waitForJob:
         DIFF = devMine ? difficultyDev : difficulty;
         if (DIFF == 0)
           continue;
-        cmpDiff = ConvertDifficultyToBig(DIFF, ALGO_XELISV2);
+        cmpDiff = ConvertDifficultyToBig(DIFF, ALGO_XELISV3);
 
         uint64_t *nonce = devMine ? &i_dev : &i;
         (*nonce)++;
@@ -148,7 +148,7 @@ waitForJob:
           break;
         }
 
-        if (CheckHash(powHash, cmpDiff, ALGO_XELISV2))
+        if (CheckHash(powHash, cmpDiff, ALGO_XELISV3))
         {
           if (!submit) {
             for(;;) {
@@ -274,7 +274,7 @@ void mineXelis(int tid)
   alignas(64) thread_local byte devWork[XELIS_TEMPLATE_SIZE] = {0};
   alignas(64) thread_local byte FINALWORK[XELIS_TEMPLATE_SIZE] = {0};
 
-  alignas(64) thread_local workerData_xelis_v2 *worker = (workerData_xelis_v2 *)malloc_huge_pages(sizeof(workerData_xelis_v2));
+  alignas(64) thread_local workerData_xelis_v3 *worker = (workerData_xelis_v3 *)malloc_huge_pages(sizeof(workerData_xelis_v3));
 
   thread_local std::random_device rd;
   thread_local std::mt19937 rng(rd());
@@ -374,7 +374,7 @@ waitForJob:
         DIFF = devMine ? difficultyDev : difficulty;
         if (DIFF == 0)
           continue;
-        cmpDiff = ConvertDifficultyToBig(DIFF, ALGO_XELISV2);
+        cmpDiff = ConvertDifficultyToBig(DIFF, ALGO_XELISV3);
 
         uint64_t *nonce = devMine ? &i_dev : &i;
         (*nonce)++;
@@ -390,7 +390,7 @@ waitForJob:
         }
 
         memcpy(FINALWORK, WORK, XELIS_TEMPLATE_SIZE);
-        xelis_hash_v2(FINALWORK, *worker, powHash);
+        xelis_hash_v3(FINALWORK, *worker, powHash);
 
         if (littleEndian())
         {
@@ -405,7 +405,7 @@ waitForJob:
           break;
         }
 
-        if (CheckHash(powHash, cmpDiff, ALGO_XELISV2))
+        if (CheckHash(powHash, cmpDiff, ALGO_XELISV3))
         {
           if (!submit) {
             for(;;) {

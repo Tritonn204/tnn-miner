@@ -128,7 +128,7 @@ inline void aes_round(uint8_t *block, const uint8_t *key) {
 
 const uint8_t chaIn[XELIS_MEMORY_SIZE_V2 * 2] = {0};
 
-void chacha_encrypt(uint8_t *key, uint8_t *nonce, uint8_t *in, uint8_t *out, size_t bytes, uint32_t rounds)
+static void chacha_encrypt(uint8_t *key, uint8_t *nonce, uint8_t *in, uint8_t *out, size_t bytes, uint32_t rounds)
 {
 	uint8_t state[48] = {0};
 	ChaCha20SetKey(state, key);
@@ -203,7 +203,7 @@ static inline void chacha_get_bytes_at_offset(const uint8_t key[32], const uint8
 // #endif
 
 #ifdef __x86_64__
-void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
+static void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
 {
   const size_t chunk_size = 32;
   const size_t output_size = XELIS_MEMORY_SIZE_V2 * 8;
@@ -243,7 +243,7 @@ void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
   ChaCha20EncryptXelis(K2_values, nonces, outputs, bytes_per_chunk, 8);
 }
 #else 
-void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
+static void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
 {
   const size_t chunk_size = 32;
   const size_t output_size = XELIS_MEMORY_SIZE_V2 * 8;
@@ -808,7 +808,7 @@ static inline uint64_t case_15(uint64_t a, uint64_t b, uint64_t c, int r, uint64
 
 typedef uint64_t (*operation_func)(uint64_t, uint64_t, uint64_t, int, uint64_t, int, int);
 
-operation_func operations[] = {
+static operation_func operations[] = {
   case_0, case_1, case_2, case_3, case_4, case_5, case_6, case_7,
   case_8, case_9, case_10, case_11, case_12, case_13, case_14, case_15,
 };
@@ -818,13 +818,14 @@ static inline uint64_t execute_operation_goto(uint32_t idx, uint64_t a, uint64_t
                                                int i, int j_off) {
   uint64_t v;
   
-  static const void* const dispatch_table[] = {
-    &&op0, &&op1, &&op2, &&op3, &&op4, &&op5, &&op6, &&op7,
-    &&op8, &&op9, &&op10, &&op11, &&op12, &&op13, &&op14, &&op15
+  static void *const dispatch_table[] = {
+      &&op0, &&op1, &&op2, &&op3, &&op4, &&op5, &&op6, &&op7,
+      &&op8, &&op9, &&op10, &&op11, &&op12, &&op13, &&op14, &&op15
   };
-  
-  goto *dispatch_table[idx];
-  
+
+  void *target = (void *)dispatch_table[idx];
+  goto *target;
+    
   op0:  v = ROTL(c, i * j_off) ^ b; goto done;
   op1:  v = ROTR(c, i * j_off) ^ a; goto done;
   op2:  v = a ^ b ^ c; goto done;
@@ -910,7 +911,7 @@ static inline uint64_t execute_operation_goto(uint32_t idx, uint64_t a, uint64_t
 #ifdef __x86_64__
 
 __attribute__((target("aes")))
-void stage_3(uint64_t* scratch_pad, workerData_xelis_v2& worker) {
+static void stage_3(uint64_t* scratch_pad, workerData_xelis_v2& worker) {
   const uint8_t key[17] = "xelishash-pow-v2";
   __m128i key_vec = _mm_loadu_si128((const __m128i *)key);
 
@@ -1007,7 +1008,7 @@ void stage_3(uint64_t* scratch_pad, workerData_xelis_v2& worker) {
 
 // Default fallback version using memory-based aes_round
 __attribute__((target("default")))
-void stage_3(uint64_t* scratch_pad, workerData_xelis_v2& worker) {
+static void stage_3(uint64_t* scratch_pad, workerData_xelis_v2& worker) {
   const uint8_t key[17] = "xelishash-pow-v2";
   uint8_t block[16] = {0};
   
@@ -1071,7 +1072,7 @@ static inline uint64_t aes_round_register(uint64_t mem_a, uint64_t mem_b, const 
 }
 #endif
 
-void stage_3(uint64_t *scratch_pad, workerData_xelis_v2 &worker)
+static void stage_3(uint64_t *scratch_pad, workerData_xelis_v2 &worker)
 {
   const uint8_t key[17] = "xelishash-pow-v2";
 

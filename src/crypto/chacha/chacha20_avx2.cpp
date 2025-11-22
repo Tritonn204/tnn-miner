@@ -635,7 +635,7 @@ void ChaCha20EncryptXelis(
     const uint8_t keys[4][32],
     const uint8_t nonces[4][12],
     uint8_t* outputs[4],
-    size_t bytes_per_stream,
+    const size_t bytes_per_stream,
     int rounds)
 {
     // Constants
@@ -718,11 +718,11 @@ void ChaCha20EncryptXelis(
         n2 = _mm256_permutevar8x32_epi32(t1, idx_lo);
     }
     
-    // Process exactly 429 iterations (858 blocks total, 2 per iteration)
+    size_t iterations = bytes_per_stream / 128;
     uint32_t counter_base = 0;
     
     // Xelis: exactly 429 iterations, no partial blocks
-    for (int iter = 0; iter < 858; iter++) {
+    for (int iter = 0; iter < iterations; iter++) {
         // Set up counter - block 0 and block 1 for each stream
         __m256i counter = _mm256_add_epi32(
             _mm256_set1_epi32(counter_base),

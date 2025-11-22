@@ -17,6 +17,7 @@ inline Num ConvertDifficultyToBig(Num d, int algo)
     case ALGO_ASTROBWTV3:
       return oneLsh256 / d;
     case ALGO_XELISV2:
+    case ALGO_XELISV3:
       return maxU256 / d;
     case ALGO_SPECTRE_X:
       return oneLsh256 / (d+1);
@@ -110,7 +111,7 @@ inline mineFunc getMiningFunc(int algoNum, bool gpu) {
     case ALGO_ASTROBWTV3:
       return mineDero;
       break;
-    case ALGO_XELISV2:
+    case ALGO_XELISV3:
       return mineXelis;
       break;
     case ALGO_SPECTRE_X:

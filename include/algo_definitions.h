@@ -54,6 +54,7 @@
 #define ALGO_UNSUPPORTED 0
 #define ALGO_ASTROBWTV3 10
 #define ALGO_XELISV2 20
+#define ALGO_XELISV3 21
 #define ALGO_SPECTRE_X 30
 #define ALGO_RX0 40
 #define ALGO_VERUS 50
@@ -71,6 +72,8 @@ inline const char* algoName(int algo) {
       return "AstroBWTv3";
     case ALGO_XELISV2:
       return "XelisHashV2";
+    case ALGO_XELISV3:
+      return "XelisHashV3";
     case ALGO_SPECTRE_X:
       return "SpectreX";
     case ALGO_RX0:

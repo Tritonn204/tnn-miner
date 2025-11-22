@@ -80,7 +80,7 @@ const TnnDevMinerInfo devInfo[COIN_COUNT] = {
 #endif
   "dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw4wjqqp6y2n7"
   },
-  {COIN_XELIS,    "stratum+ssl://usw.vipor.net", "5177",    "xel:xz9574c80c4xegnvurazpmxhw5dlg2n0g9qm60uwgt75uqyx3pcsqzzra9m"},
+  {COIN_XELIS,    "stratum+ssl://usw.vipor.net", "5177",    "xel:xz9574c80c4xegnvurazpmxhw5dlg2n0g9qm60uwgt75uqyx3pcsqzzra9m" },
   //{COIN_SPECTRE,  "51.81.211.69",  "5555",
   //{COIN_SPECTRE,  "localhost",  "5555",
   {COIN_SPECTRE,  "stratum+tcp://spectre.cedric-crispin.com",  "4364",
@@ -123,7 +123,7 @@ const Coin unknownCoin = {COIN_UNKNOWN, ALGO_UNSUPPORTED, "unknown", "unknown"};
 const Coin coins[COIN_COUNT] = {
   // Coin         Algo              Symbol      Name
   {COIN_DERO,     ALGO_ASTROBWTV3,  "DERO",     "Dero"},
-  {COIN_XELIS,    ALGO_XELISV2,     "XEL",      "Xelis"},
+  {COIN_XELIS,    ALGO_XELISV3,     "XEL",      "Xelis"},
   {COIN_SPECTRE,  ALGO_SPECTRE_X,   "SPR",      "Spectre"},
   {COIN_RX0,      ALGO_RX0,         "RX0",      "RandomX"},
   {COIN_XMR,      ALGO_RX0,         "XMR",      "Monero"},
@@ -210,6 +210,7 @@ class MiningProfile {
         switch (this->coin.miningAlgo)
         {
           case ALGO_XELISV2:
+          case ALGO_XELISV3:
             this->protocol = PROTO_XELIS_STRATUM;
             break;
           case ALGO_SPECTRE_X:
@@ -229,8 +230,9 @@ class MiningProfile {
         switch (this->coin.miningAlgo)
         {
           case ALGO_XELISV2:
+          case ALGO_XELISV3:
             this->protocol = PROTO_XELIS_SOLO;
-            break;
+            break;            
           case ALGO_RX0:
             this->protocol = PROTO_RX0_SOLO;
             break;

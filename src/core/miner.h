@@ -89,6 +89,7 @@ inline Num ConvertDifficultyToBig(int64_t d, int algo)
     case ALGO_ASTROBWTV3:
       return oneLsh256 / difficulty;
     case ALGO_XELISV2:
+    case ALGO_XELISV3:
       return maxU256 / difficulty;
     case ALGO_SPECTRE_X:
       return (oneLsh256-1) / difficulty;

@@ -167,6 +167,7 @@ inline void do_session_v2(
   #endif
   #ifdef TNN_XELISHASH
   case ALGO_XELISV2:
+  case ALGO_XELISV3:
   {
     switch (miningProf->protocol)
     {
