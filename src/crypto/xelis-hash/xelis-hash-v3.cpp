@@ -1371,7 +1371,6 @@ static void stage_3(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
   }
 }
 #endif
-#endif
 
 void xelis_hash_v3(byte *input, workerData_xelis_v3 &worker, byte *hashResult)
 {
