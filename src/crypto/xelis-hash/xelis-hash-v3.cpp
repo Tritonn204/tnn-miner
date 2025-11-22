@@ -1283,25 +1283,26 @@ __attribute__((target("default"))) static void stage_3(uint64_t *scratch_pad, wo
 
 #if defined(__aarch64__) && defined(__ARM_NEON) && defined(__ARM_FEATURE_CRYPTO)
 
-static inline void aes_round_v3(uint64_t mem_a, uint64_t mem_b, const uint8_t *key_bytes,
-                                uint64_t *hash1, uint64_t *hash2)
+static inline uint64x2_t aes_round_v3_register(uint64_t mem_a, uint64_t mem_b,
+                                               const uint8x16_t key_vec)
 {
   uint64x2_t input_u64 = {mem_b, mem_a};
   uint8x16_t block = vreinterpretq_u8_u64(input_u64);
-  uint8x16_t key = vld1q_u8(key_bytes);
 
   block = vaeseq_u8(block, vdupq_n_u8(0));
   block = vaesmcq_u8(block);
-  block = veorq_u8(block, key);
+  block = veorq_u8(block, key_vec);
 
-  uint64x2_t result_u64 = vreinterpretq_u64_u8(block);
-  *hash1 = vgetq_lane_u64(result_u64, 0);
-  *hash2 = vgetq_lane_u64(result_u64, 1);
+  return vreinterpretq_u64_u8(block);
 }
 
 static void stage_3(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
 {
   const uint8_t key[17] = "xelishash-pow-v3";
+
+#if defined(__aarch64__) && defined(__ARM_NEON) && defined(__ARM_FEATURE_CRYPTO)
+  uint8x16_t key_vec = vld1q_u8(key);
+#endif
 
   uint64_t *__restrict mem_buffer_a = scratch_pad;
   uint64_t *__restrict mem_buffer_b = scratch_pad + XELIS_BUFFER_SIZE_V3;
@@ -1317,7 +1318,21 @@ static void stage_3(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
     uint64_t mem_b = mem_buffer_b[map_index(mem_a ^ addr_b)];
 
     uint64_t hash1, hash2;
-    aes_round_v3(mem_a, mem_b, key, &hash1, &hash2);
+
+#if defined(__aarch64__) && defined(__ARM_NEON) && defined(__ARM_FEATURE_CRYPTO)
+    {
+      uint64x2_t result_u64 = aes_round_v3_register(mem_a, mem_b, key_vec);
+      hash1 = vgetq_lane_u64(result_u64, 0);
+      hash2 = vgetq_lane_u64(result_u64, 1);
+    }
+#else
+    uint8_t block_bytes[16];
+    uint64_to_le_bytes(mem_b, block_bytes);
+    uint64_to_le_bytes(mem_a, block_bytes + 8);
+    aes_round(block_bytes, key);
+    hash1 = le_bytes_to_uint64(block_bytes);
+    hash2 = le_bytes_to_uint64(block_bytes + 8);
+#endif
 
     uint64_t result = ~(hash1 ^ hash2);
 
