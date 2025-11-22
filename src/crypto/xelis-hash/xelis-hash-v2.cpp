@@ -1057,75 +1057,96 @@ static void stage_3(uint64_t* scratch_pad, workerData_xelis_v2& worker) {
 #else
 
 #if defined(__aarch64__) && defined(__ARM_NEON) && defined(__ARM_FEATURE_CRYPTO)
-static inline uint64_t aes_round_register(uint64_t mem_a, uint64_t mem_b, const uint8_t *key_bytes) {
+
+static inline uint64x2_t aes_round_v3_register(uint64_t mem_a, uint64_t mem_b,
+                                               const uint8x16_t key_vec)
+{
   uint64x2_t input_u64 = {mem_b, mem_a};
   uint8x16_t block = vreinterpretq_u8_u64(input_u64);
 
-  uint8x16_t key = vld1q_u8(key_bytes);
-
   block = vaeseq_u8(block, vdupq_n_u8(0));
   block = vaesmcq_u8(block);
-  block = veorq_u8(block, key);
+  block = veorq_u8(block, key_vec);
 
-  uint64x2_t result_u64 = vreinterpretq_u64_u8(block);
-  return vgetq_lane_u64(result_u64, 0);
+  return vreinterpretq_u64_u8(block);
 }
-#endif
 
-static void stage_3(uint64_t *scratch_pad, workerData_xelis_v2 &worker)
+static void stage_3(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
 {
-  const uint8_t key[17] = "xelishash-pow-v2";
+  const uint8_t key[17] = "xelishash-pow-v3";
 
 #if defined(__aarch64__) && defined(__ARM_NEON) && defined(__ARM_FEATURE_CRYPTO)
   uint8x16_t key_vec = vld1q_u8(key);
 #endif
 
-  uint64_t* mem_buffer_a = scratch_pad;
-  uint64_t* mem_buffer_b = scratch_pad + XELIS_BUFFER_SIZE_V2;
+  uint64_t *__restrict mem_buffer_a = scratch_pad;
+  uint64_t *__restrict mem_buffer_b = scratch_pad + XELIS_BUFFER_SIZE_V3;
 
-  uint64_t addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V2 - 1];
-  uint64_t addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V2 - 1] >> 32;
+  uint64_t addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V3 - 1];
+  uint64_t addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V3 - 1] >> 32;
 
-  for (size_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V2; ++i) {
-    uint64_t mem_a = mem_buffer_a[addr_a % XELIS_BUFFER_SIZE_V2];
-    uint64_t mem_b = mem_buffer_b[addr_b % XELIS_BUFFER_SIZE_V2];
+  size_t r = 0;
 
-    uint64_t hash1;
+  for (size_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V3; ++i)
+  {
+    uint64_t mem_a = mem_buffer_a[map_index(addr_a)];
+    uint64_t mem_b = mem_buffer_b[map_index(mem_a ^ addr_b)];
+
+    uint64_t hash1, hash2;
 
 #if defined(__aarch64__) && defined(__ARM_NEON) && defined(__ARM_FEATURE_CRYPTO)
-    hash1 = aes_round_register(mem_a, mem_b, key);
+    {
+      uint64x2_t result_u64 = aes_round_v3_register(mem_a, mem_b, key_vec);
+      hash1 = vgetq_lane_u64(result_u64, 0);
+      hash2 = vgetq_lane_u64(result_u64, 1);
+    }
 #else
-    uint8_t block[16];
-    uint64_to_le_bytes(mem_b, block);
-    uint64_to_le_bytes(mem_a, block + 8);
-    aes_round(block, key);
-    hash1 = le_bytes_to_uint64(block);
+    uint8_t block_bytes[16];
+    uint64_to_le_bytes(mem_b, block_bytes);
+    uint64_to_le_bytes(mem_a, block_bytes + 8);
+    aes_round(block_bytes, key);
+    hash1 = le_bytes_to_uint64(block_bytes);
+    hash2 = le_bytes_to_uint64(block_bytes + 8);
 #endif
 
-    uint64_t hash2 = mem_a ^ mem_b;
-    addr_a = ~(hash1 ^ hash2);
+    uint64_t result = ~(hash1 ^ hash2);
 
-    byte odd = i & 1;
-    uint64_t* buf = odd ? mem_buffer_b : mem_buffer_a;
-    size_t r_offset = odd ? XELIS_BUFFER_SIZE_V2 : 0;
+    for (size_t j = 0; j < XELIS_BUFFER_SIZE_V3; ++j)
+    {
+      uint64_t a = mem_buffer_a[map_index(result)];
+      uint64_t b = mem_buffer_b[map_index(a ^ ~ROTR(result, r))];
+      uint64_t c = scratch_pad[r];
 
-    for (size_t j = 0; j < XELIS_BUFFER_SIZE_V2; j += 8) {
-      size_t r_base = j + r_offset;
+      r = (r + 1) % XELIS_MEMORY_SIZE_V3;
 
-      PROCESS_ITERATION(0)
-      PROCESS_ITERATION(1)
-      PROCESS_ITERATION(2)
-      PROCESS_ITERATION(3)
-      PROCESS_ITERATION(4)
-      PROCESS_ITERATION(5)
-      PROCESS_ITERATION(6)
-      PROCESS_ITERATION(7)
+      uint32_t op_idx = ROTL(result, (uint32_t)c) & 0xF;
+      uint64_t v = execute_operation_goto(op_idx, a, b, c, r, result, i, j);
+
+      uint64_t idx_seed = v ^ result;
+      result = ROTL(idx_seed, r);
+
+      int use_buffer_b = pick_half(v);
+      uint64_t idx_t = map_index(idx_seed);
+      uint64_t t = (use_buffer_b ? mem_buffer_b[idx_t] : mem_buffer_a[idx_t]) ^ result;
+
+      uint64_t idx_a = map_index(t ^ result ^ XELIS_GOLDEN_RATIO);
+      uint64_t idx_b = map_index(idx_a ^ ~result ^ XELIS_SCATTER_CONST);
+
+      // __builtin_prefetch(&mem_buffer_a[idx_a], 1, 0);
+      // __builtin_prefetch(&mem_buffer_b[idx_b], 1, 0);
+
+      uint64_t mem_a_tmp = mem_buffer_a[idx_a];
+      mem_buffer_a[idx_a] = t;
+      mem_buffer_b[idx_b] ^= mem_a_tmp ^ ROTR(t, i + j);
     }
 
-    addr_b = isqrt(addr_a);
+    addr_a = modular_power(addr_a, addr_b, result);
+    addr_b = isqrt(result) * (r + 1) * isqrt(addr_a);
   }
 }
 #endif
+#endif
+
 #undef PROCESS_ITERATION
 
 void xelis_hash_v2(byte *input, workerData_xelis_v2 &worker, byte *hashResult)
