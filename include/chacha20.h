@@ -37,7 +37,7 @@ void ChaCha20SetCtr(uint8_t * state, const uint8_t *Ctr);
       size_t bytes_per_stream,
       int rounds),
     ;,
-    "ssse3", "avx2", TNN_TARGETS_X86_CHACHA512  // Added AVX-512 targets
+    "ssse3", "avx2"//, TNN_TARGETS_X86_CHACHA512  // Added AVX-512 targets
   )
 #endif
 
