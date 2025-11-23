@@ -160,9 +160,9 @@ static inline void chacha_get_bytes_at_offset(const uint8_t key[32], const uint8
 //   void,
 //   (const uint8_t *input, uint64_t *sp, size_t input_len),
 //   {
-//     const size_t chunk_size = 32;
-//     const size_t output_size = XELIS_MEMORY_SIZE_V2 * 8;
-//     const size_t bytes_per_chunk = output_size / 4;
+//     constexpr size_t chunk_size = 32;
+//     constexpr size_t output_size = XELIS_MEMORY_SIZE_V2 * 8;
+//     constexpr size_t bytes_per_chunk = output_size / 4;
     
 //     uint8_t *t = reinterpret_cast<uint8_t *>(sp);
 //     uint8_t K2_values[4][32];
@@ -205,9 +205,9 @@ static inline void chacha_get_bytes_at_offset(const uint8_t key[32], const uint8
 #ifdef __x86_64__
 static void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
 {
-  const size_t chunk_size = 32;
-  const size_t output_size = XELIS_MEMORY_SIZE_V2 * 8;
-  const size_t bytes_per_chunk = output_size / 4;
+  constexpr size_t chunk_size = 32;
+  constexpr size_t output_size = XELIS_MEMORY_SIZE_V2 * 8;
+  constexpr size_t bytes_per_chunk = output_size / 4;
   
   uint8_t *t = reinterpret_cast<uint8_t *>(sp);
   uint8_t K2_values[4][32];
@@ -245,9 +245,9 @@ static void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
 #else 
 static void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
 {
-  const size_t chunk_size = 32;
-  const size_t output_size = XELIS_MEMORY_SIZE_V2 * 8;
-  const size_t bytes_per_chunk = output_size / 4;
+  constexpr size_t chunk_size = 32;
+  constexpr size_t output_size = XELIS_MEMORY_SIZE_V2 * 8;
+  constexpr size_t bytes_per_chunk = output_size / 4;
   
   uint8_t *t = reinterpret_cast<uint8_t *>(sp);
   uint8_t K2_values[4][32];
@@ -912,7 +912,7 @@ static inline uint64_t execute_operation_goto(uint32_t idx, uint64_t a, uint64_t
 
 __attribute__((target("aes")))
 static void stage_3(uint64_t* scratch_pad, workerData_xelis_v2& worker) {
-  const uint8_t key[17] = "xelishash-pow-v2";
+  constexpr uint8_t key[17] = "xelishash-pow-v2";
   __m128i key_vec = _mm_loadu_si128((const __m128i *)key);
 
   uint64_t* mem_buffer_a = scratch_pad;
@@ -960,7 +960,7 @@ static void stage_3(uint64_t* scratch_pad, workerData_xelis_v2& worker) {
 //   void,
 //   (uint64_t* scratch_pad, workerData_xelis_v2& worker),
 //   {
-//     const uint8_t key[17] = "xelishash-pow-v2";
+//     constexpr uint8_t key[17] = "xelishash-pow-v2";
 //     __m128i key_vec = _mm_loadu_si128((const __m128i *)key);
 
 //     uint64_t* mem_buffer_a = scratch_pad;
@@ -1009,7 +1009,7 @@ static void stage_3(uint64_t* scratch_pad, workerData_xelis_v2& worker) {
 // Default fallback version using memory-based aes_round
 __attribute__((target("default")))
 static void stage_3(uint64_t* scratch_pad, workerData_xelis_v2& worker) {
-  const uint8_t key[17] = "xelishash-pow-v2";
+  constexpr uint8_t key[17] = "xelishash-pow-v2";
   uint8_t block[16] = {0};
   
   uint64_t* mem_buffer_a = scratch_pad;
@@ -1072,7 +1072,7 @@ static inline uint64_t aes_round_register(uint64_t mem_a, uint64_t mem_b, const 
 
 static void stage_3(uint64_t *scratch_pad, workerData_xelis_v2 &worker)
 {
-  const uint8_t key[17] = "xelishash-pow-v2";
+  constexpr uint8_t key[17] = "xelishash-pow-v2";
 
 #if defined(__aarch64__) && defined(__ARM_NEON) && defined(__ARM_FEATURE_CRYPTO)
   uint8x16_t key_vec = vld1q_u8(key);

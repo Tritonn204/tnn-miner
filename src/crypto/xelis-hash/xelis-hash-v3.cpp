@@ -128,7 +128,7 @@ __attribute__((target("default"))) inline void aes_round(uint8_t *block, const u
 
 #endif
 
-const uint8_t chaIn[XELIS_MEMORY_SIZE_V3 * 2] = {0};
+constexpr uint8_t chaIn[XELIS_MEMORY_SIZE_V3 * 2] = {0};
 
 static void chacha_encrypt(uint8_t *key, uint8_t *nonce, uint8_t *in, uint8_t *out, size_t bytes, uint32_t rounds)
 {
@@ -211,9 +211,9 @@ TNN_TARGET_CLONE(
   static void,
   (const uint8_t *input, uint64_t *sp, size_t input_len),
   {
-    const size_t chunk_size = XELIS_CHUNK_SIZE;
-    const size_t output_size = XELIS_OUTPUT_SIZE_V3;
-    const size_t bytes_per_chunk = XELIS_BYTES_PER_CHUNK_V3;
+    constexpr size_t chunk_size = XELIS_CHUNK_SIZE;
+    constexpr size_t output_size = XELIS_OUTPUT_SIZE_V3;
+    constexpr size_t bytes_per_chunk = XELIS_BYTES_PER_CHUNK_V3;
 
     uint8_t *t = reinterpret_cast<uint8_t *>(sp);
     uint8_t K2_values[4][32];
@@ -259,8 +259,8 @@ TNN_TARGET_CLONE(
 
 __attribute__((target("default"))) static void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
 {
-  const size_t chunk_size = XELIS_CHUNK_SIZE;                  // 32
-  const size_t output_size = XELIS_OUTPUT_SIZE_V3;             // XELIS_MEMORY_SIZE_V3 * 8
+  constexpr size_t chunk_size = XELIS_CHUNK_SIZE;                  // 32
+  constexpr size_t output_size = XELIS_OUTPUT_SIZE_V3;             // XELIS_MEMORY_SIZE_V3 * 8
   constexpr size_t bytes_per_chunk = XELIS_BYTES_PER_CHUNK_V3; // output_size / 4
 
   uint8_t *t = reinterpret_cast<uint8_t *>(sp);
@@ -305,9 +305,9 @@ __attribute__((target("default"))) static void stage_1(const uint8_t *input, uin
 #else
 static void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
 {
-  const size_t chunk_size = XELIS_CHUNK_SIZE;
-  const size_t output_size = XELIS_OUTPUT_SIZE_V3;
-  const size_t bytes_per_chunk = XELIS_BYTES_PER_CHUNK_V3;
+  constexpr size_t chunk_size = XELIS_CHUNK_SIZE;
+  constexpr size_t output_size = XELIS_OUTPUT_SIZE_V3;
+  constexpr size_t bytes_per_chunk = XELIS_BYTES_PER_CHUNK_V3;
 
   uint8_t *t = reinterpret_cast<uint8_t *>(sp);
   uint8_t K2_values[4][32];
@@ -396,7 +396,7 @@ static inline uint64_t modular_power(uint64_t base, uint64_t exp, uint64_t mod)
   return result;
 }
 
-alignas(64) static const uint8_t isqrt_lut[256] = {
+alignas(64) static constexpr uint8_t isqrt_lut[256] = {
     0, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3,
     4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5,
     5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
@@ -1162,7 +1162,7 @@ static inline int pick_half_fast(uint64_t v)
 
 __attribute__((target("aes"))) static void stage_3(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
 {
-  const uint8_t key[17] = "xelishash-pow-v3";
+  constexpr uint8_t key[17] = "xelishash-pow-v3";
   __m128i key_vec = _mm_loadu_si128((const __m128i *)key);
 
   uint64_t *__restrict mem_buffer_a = scratch_pad;
@@ -1221,7 +1221,7 @@ __attribute__((target("aes"))) static void stage_3(uint64_t *scratch_pad, worker
 
 __attribute__((target("default"))) static void stage_3(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
 {
-  const uint8_t key[17] = "xelishash-pow-v3";
+  constexpr uint8_t key[17] = "xelishash-pow-v3";
   uint8_t block[16];
 
   uint64_t *__restrict mem_buffer_a = scratch_pad;
@@ -1284,7 +1284,7 @@ __attribute__((target("default"))) static void stage_3(uint64_t *scratch_pad, wo
 #if defined(__aarch64__) && defined(__ARM_NEON) && defined(__ARM_FEATURE_CRYPTO)
 
 static inline uint64x2_t aes_round_v3_register(uint64_t mem_a, uint64_t mem_b,
-                                               const uint8x16_t key_vec)
+                                               constexpr uint8x16_t key_vec)
 {
   uint64x2_t input_u64 = {mem_b, mem_a};
   uint8x16_t block = vreinterpretq_u8_u64(input_u64);
@@ -1299,7 +1299,7 @@ static inline uint64x2_t aes_round_v3_register(uint64_t mem_a, uint64_t mem_b,
 
 static void stage_3(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
 {
-  const uint8_t key[17] = "xelishash-pow-v3";
+  constexpr uint8_t key[17] = "xelishash-pow-v3";
 
 #if defined(__aarch64__) && defined(__ARM_NEON) && defined(__ARM_FEATURE_CRYPTO)
   uint8x16_t key_vec = vld1q_u8(key);
@@ -1381,7 +1381,7 @@ void xelis_hash_v3(byte *input, workerData_xelis_v3 &worker, byte *hashResult)
 
 void xelis_benchmark_cpu_hash_v3()
 {
-  const uint32_t ITERATIONS = 10000;
+  constexpr uint32_t ITERATIONS = 10000;
   byte input[112] = {0};
   workerData_xelis_v3 worker; // V3 worker type
   byte hash_result[XELIS_HASH_SIZE] = {0};

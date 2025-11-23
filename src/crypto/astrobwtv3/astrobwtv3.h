@@ -60,7 +60,7 @@
 #define TERM	((1+OVER)*sizeof(unsigned long))
 #define LCPART	8
 #define ABIT	7
-const int AMASK	= (1<<ABIT)-1;
+constexpr int AMASK	= (1<<ABIT)-1;
 
 #if defined(__AVX2__)
 #ifdef __GNUC__ 
@@ -83,7 +83,7 @@ alignas(32) inline __m256i g_maskTable[32];
 
 #define rl8(x, y) ((x << (y%8) | x >> (8-(y%8))))
 
-const int MINIBLOCK_SIZE = 48;
+constexpr int MINIBLOCK_SIZE = 48;
 
 typedef unsigned int suffix;
 typedef unsigned int t_index;
@@ -91,7 +91,7 @@ typedef unsigned char byte;
 typedef unsigned short dbyte;
 typedef unsigned long word;
 
-const int sus_op = 1;
+constexpr int sus_op = 1;
 
 const std::vector<unsigned char> branchedOps_global = {
 1,3,5,9,11,13,15,17,20,21,23,27,29,30,35,39,40,43,45,47,51,54,58,60,62,64,68,70,72,74,75,80,82,85,91,92,93,94,103,108,109,115,116,117,119,120,123,124,127,132,133,134,136,138,140,142,143,146,148,149,150,154,155,159,161,165,168,169,176,177,178,180,182,184,187,189,190,193,194,195,199,202,203,204,212,214,215,216,219,221,222,223,226,227,230,231,234,236,239,240,241,242,250,253
@@ -108,7 +108,7 @@ const std::vector<unsigned char> branchedOps_global = {
 //   0xFFFFFFFFFFFFFF00,
 // };
 
-const uint64_t maskTips[8] = {
+constexpr uint64_t maskTips[8] = {
   0x00,         // n%8 = 0 
   0xFF,         // n%8 = 1
   0xFFFF,       // n%8 = 2 
@@ -119,7 +119,7 @@ const uint64_t maskTips[8] = {
   0xFFFFFFFFFFFFFFF // n%8 = 7
 };
 
-const uint32_t sha_standard[8] = {
+constexpr uint32_t sha_standard[8] = {
     0x6a09e667, 
     0xbb67ae85, 
     0x3c6ef372,
@@ -130,12 +130,12 @@ const uint32_t sha_standard[8] = {
     0x5be0cd19
 };
 
-const int deviceAllocMB = 5;
+constexpr int deviceAllocMB = 5;
 
 #endif
 
-static const bool sInduction = true;
-static const bool sTracking = true;
+static constexpr bool sInduction = true;
+static constexpr bool sTracking = true;
 
 #ifndef TNN_LEGACY_AMD64
 #ifdef __x86_64__
