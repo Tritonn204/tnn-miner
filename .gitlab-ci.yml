@@ -145,6 +145,7 @@ build-linux-aarch64:
   variables:
     CMAKE_ARGS: "${CMAKE_ARGS}"
     TARGZ_FILE: "${LINUX_ARM64_TGZ}"
+    CPU_ARCHTARGET: "armv8-a+crypto"
   before_script:
     - until docker info; do sleep 1; done
     - chmod +x *.sh
