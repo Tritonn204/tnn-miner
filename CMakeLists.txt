@@ -389,9 +389,9 @@ endif()
 
 if(Boost_FOUND AND NOT USE_CPM_BOOST)
   message("OS-provided Boost found")
-  set(TNN_BOOST_INCLUDES ${BOOST_INCLUDE_DIRS})
+  set(TNN_BOOST_INCLUDES ${Boost_INCLUDE_DIRS})
   include_directories(${TNN_BOOST_INCLUDES})
-  set(TNN_BOOST_LIBDIRS ${BOOST_LIBRARY_DIRS})
+  set(TNN_BOOST_LIBDIRS ${Boost_LIBRARY_DIRS})
 
   message(STATUS "Boost library directories: ${TNN_BOOST_LIBDIRS}")
 
