@@ -167,7 +167,9 @@ inline po::options_description get_prog_opts()
 
   po::options_description coins("Coin Selection", col_width);
   coins.add_options()
-    ("<symbol>", "Will mine the coin corresponding to <symbol> if supported")
+    ("<symbol>", "Mine the coin corresponding to <symbol>. "
+                "For versioned algorithms, append version: --xel-v3, --xel=v2, etc. "
+                "Supported versioned coins: XEL (v1/v2/v3, default v3)")
     ("randomx", "For mining RandomX coins")
     ("yespower", po::value<std::string>(), "Mine with custom yespower parameters (format: N=2048,R=32,pers=string)")
   ;

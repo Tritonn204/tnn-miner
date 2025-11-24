@@ -15,12 +15,15 @@
 
 #include <xelis-hash/xelis-hash.hpp>
 
-namespace beast = boost::beast;         // from <boost/beast.hpp>
-namespace http = beast::http;           // from <boost/beast/http.hpp>
-namespace websocket = beast::websocket; // from <boost/beast/websocket.hpp>
-namespace net = boost::asio;            // from <boost/asio.hpp>
-namespace ssl = boost::asio::ssl;       // from <boost/asio/ssl.hpp>
-using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
+#include <atomic>
+#include <queue>
+
+namespace beast = boost::beast;
+namespace http = beast::http;
+namespace websocket = beast::websocket;
+namespace net = boost::asio;
+namespace ssl = boost::asio::ssl;
+using tcp = boost::asio::ip::tcp;
 
 void xelis_session(
     std::string host,
@@ -33,22 +36,22 @@ void xelis_session(
 {
   beast::error_code ec;
   auto endpoint = resolve_host(wsMutex, ioc, yield, host, port);
-  websocket::stream<beast::tcp_stream> ws(ioc);
+  
+  // Create strand for thread-safe operations
+  auto strand = net::make_strand(ioc);
+  websocket::stream<beast::tcp_stream> ws(strand);
 
   fflush(stdout);
 
   // Make the connection on the IP address we get from a lookup
-  beast::get_lowest_layer(ws).connect(endpoint);
+  beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(30));
+  beast::get_lowest_layer(ws).async_connect(endpoint, yield[ec]);
+  if (ec) return fail(ec, "connect-xelis");
+
   fflush(stdout);
 
-
-  // Update the host string. This will provide the value of the
-  // Host HTTP header during the WebSocket handshake.
-  // See https://tools.ietf.org/html/rfc7230#section-5.4
-  host += ':' + port; //std::to_string(daemon.port());
-
-  // Set a timeout on the operation
-  beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(30));
+  // Update the host string
+  host += ':' + port;
 
   // Set a decorator to change the User-Agent of the handshake
   ws.set_option(websocket::stream_base::decorator(
@@ -59,8 +62,7 @@ void xelis_session(
                     " websocket-client-coro");
       }));
 
-  // Turn off the timeout on the tcp_stream, because
-  // the websocket stream has its own timeout system.
+  // Turn off the timeout on the tcp_stream
   beast::get_lowest_layer(ws).expires_never();
 
   // Set suggested timeout settings for the websocket
@@ -81,34 +83,64 @@ void xelis_session(
   beast::flat_buffer buffer;
   std::stringstream workInfo;
 
-  bool submitThread = false;
-  bool abort = false;
+  // Thread-safe queue for submissions
+  std::queue<std::string> submitQueue;
+  boost::mutex submitMutex;
+  std::atomic<bool> abort{false};
+
+  auto process_write_queue = [&]() {
+    // Post to strand to process entire queue
+    net::post(strand, [&]() {
+      while (!abort.load()) {
+        std::string msg;
+        
+        // Get next message
+        {
+          boost::lock_guard<boost::mutex> qlock(submitMutex);
+          if (submitQueue.empty()) {
+            return;
+          }
+          msg = std::move(submitQueue.front());
+          submitQueue.pop();
+        }
+        
+        // Synchronous write (safe because we're in the strand)
+        beast::error_code ec;
+        beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(30));
+        ws.write(boost::asio::buffer(msg), ec);
+        
+        if (ec) {
+          printf("error on write: %s\n", ec.message().c_str());
+          fflush(stdout);
+          abort = true;
+          return;
+        }
+      }
+    });
+  };
+
+  bool submitThreadRunning = true;
 
   boost::thread subThread([&](){
-    submitThread = true;
-    while(!abort) {
+    while(!abort.load()) {
       boost::unique_lock<boost::mutex> lock(mutex);
       bool *B = isDev ? &submittingDev : &submitting;
-      cv.wait(lock, [&]{ return (data_ready && (*B)) || abort; });
-      if (abort) break;
-      try {
-        bool err = false;
-        boost::json::object *S = &share;
-        if (isDev)
-          S = &devShare;
+      cv.wait(lock, [&]{ return (data_ready && (*B)) || abort.load(); });
+      if (abort.load()) break;
 
-        std::string msg = boost::json::serialize((*S)) + "\n";
-        // std::cout << "sending in: " << msg << std::endl;
-        beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(1));
-        ws.async_write(boost::asio::buffer(msg), [&](const boost::system::error_code& error, std::size_t bytes_transferred) {
-          if (error) {
-            printf("error on write: %s\n", error.message().c_str());
-            fflush(stdout);
-            abort = true;
-          }
-        });
-        (*B) = false;
-        data_ready = false;
+      try {
+        boost::json::object &S = isDev ? devShare : share;
+        std::string msg = boost::json::serialize(S) + "\n";
+        
+        // Queue the message for thread-safe sending
+        {
+          boost::lock_guard<boost::mutex> qlock(submitMutex);
+          submitQueue.push(std::move(msg));
+        }
+        
+        // Trigger write processing
+        process_write_queue();
+        
       } catch (const std::exception &e) {
         setcolor(RED);
         printf("\nSubmit thread error: %s\n", e.what());
@@ -116,19 +148,20 @@ void xelis_session(
         setcolor(BRIGHT_WHITE);
         break;
       }
+      *B = false;
+      data_ready = false;
       boost::this_thread::yield();
     }
-    submitThread = false;
+    submitThreadRunning = false;
   });
 
   fflush(stdout);
 
-  while (!ABORT_MINER)
+  while (!ABORT_MINER && !abort.load())
   {
     bool *B = isDev ? &submittingDev : &submitting;
     try
     {
-
       buffer.clear();
       workInfo.str("");
       workInfo.clear();
@@ -140,89 +173,97 @@ void xelis_session(
         // handle getwork feed
         workInfo << beast::make_printable(buffer.data());
 
-        // std::cout << "Received data: " << workInfo.str() << std::endl;
         boost::system::error_code jsonEc;
         boost::json::value response = boost::json::parse(workInfo.str(), jsonEc);
         if (!jsonEc)
         {
           if(response.is_string()) {
             std::string resp = std::string(response.as_string());
-            if(resp.compare("block_accepted") == 0) {
+            if(resp == "block_accepted") {
               accepted++;
               setcolor(BRIGHT_YELLOW);
-              if (!isDev) printf("Block Accepted!\n");
-              fflush(stdout);
+              if (!isDev) {
+                printf("Block Accepted!\n");
+                fflush(stdout);
+              }
               setcolor(BRIGHT_WHITE);
             }
           } 
-          else if(!response.as_object()["block_rejected"].is_null()) {
+          else if(response.is_object() && response.as_object().contains("block_rejected")) {
             rejected++;
             setcolor(RED);
-            if (!isDev) printf("Block Rejected: %s\n", response.as_object()["block_rejected"].as_string().c_str());
-            fflush(stdout);
+            if (!isDev) {
+              std::string rejectReason = std::string(response.as_object()["block_rejected"].as_string());
+              printf("Block Rejected: %s\n", rejectReason.c_str());
+              fflush(stdout);
+            }
             setcolor(BRIGHT_WHITE);
           }
-          else if (response.as_object().contains("new_job") || response.as_object().contains("miner_work"))
+          else if (response.is_object() && 
+                   (response.as_object().contains("new_job") || 
+                    response.as_object().contains("miner_work")))
           {
             boost::json::value workData;
             if (response.as_object().contains("new_job")) {
               workData = response.at("new_job");
-            //} else if (response.as_object().contains("miner_work")) {
-            //  workData = response;
             }
 
-            if ((isDev ? (workData.at("height").to_number<int64_t>() != devHeight) : (workData.at("height").to_number<int64_t>() != ourHeight)))
+            int64_t newHeight = workData.at("height").to_number<int64_t>();
+            int64_t currentHeight = isDev ? devHeight : ourHeight;
+
+            if (newHeight != currentHeight)
             {
               if (isDev)
                 devJob = workData;
               else
                 job = workData;
+              
               boost::json::value *J = isDev ? &devJob : &job;
 
               auto lasterror = (*J).as_object().if_contains("lasterror");
               if (nullptr != lasterror)
               {
-                std::cerr << "received error: " << (*lasterror).as_string() << std::endl
+                std::string errorStr = std::string(lasterror->as_string());
+                std::cerr << "received error: " << errorStr << std::endl
                           << consoleLine << "v" << versionString << " ";
               }
 
               std::scoped_lock<boost::mutex> lockGuard(mutex);
               if (!isDev)
               {
-                currentBlob = (*J).at("miner_work").as_string();
+                currentBlob = std::string((*J).at("miner_work").as_string());
                 ourHeight++;
-                difficulty = std::stoull(std::string((*J).at("difficulty").as_string().c_str()));
+                
+                std::string diffStr = std::string((*J).at("difficulty").as_string());
+                difficulty = std::stoull(diffStr);
 
                 if (!isConnected)
                 {
-                  // mutex.lock();
                   setcolor(BRIGHT_YELLOW);
                   printf("Mining at: %s/getwork/%s/%s\n", host.c_str(), wallet.c_str(), worker.c_str());
                   fflush(stdout);
                   setcolor(CYAN);
                   printf("Dev fee: %.2f%% of your total hashrate\n", devFee);
-          
                   fflush(stdout);
                   setcolor(BRIGHT_WHITE);
-                  // mutex.unlock();
                 }
                 isConnected = true;
                 jobCounter++;
               }
               else
               {
-                devBlob = (*J).at("miner_work").as_string();
+                devBlob = std::string((*J).at("miner_work").as_string());
                 devHeight++;
-                difficultyDev = std::stoull(std::string((*J).at("difficulty").as_string().c_str()));
+                
+                std::string diffStr = std::string((*J).at("difficulty").as_string());
+                difficultyDev = std::stoull(diffStr);
 
                 if (!devConnected)
                 {
-                  // mutex.lock();
                   setcolor(CYAN);
                   printf("Connected to dev node: %s\n", host.c_str());
                   fflush(stdout);
                   setcolor(BRIGHT_WHITE);
-                  // mutex.unlock();
                 }
                 devConnected = true;
                 jobCounter++;
@@ -230,38 +271,48 @@ void xelis_session(
             }
           }
         }
+        else
+        {
+          setcolor(RED);
+          printf("\nJSON parse error in xelis_session: %s\n", jsonEc.message().c_str());
+          setcolor(BRIGHT_WHITE);
+          fflush(stdout);
+        }
       }
       else
       {
         bool *C = isDev ? &devConnected : &isConnected;
         setForDisconnected(C, B, &abort, &data_ready, &cv);
-        
-        for (;;) {
-          if (!submitThread) break;
-          boost::this_thread::yield();
-        }
-        
-        return fail(ec, "async_read");
+        break;
       }
     }
     catch (const std::exception &e)
     {
       setcolor(RED);
-      std::cout << "ws error: " << e.what() << std::endl;
+      std::cout << "\nws error: " << e.what() << std::endl;
       fflush(stdout);
       setcolor(BRIGHT_WHITE);
-      // submission_thread.interrupt();
+      
+      bool *C = isDev ? &devConnected : &isConnected;
+      setForDisconnected(C, B, &abort, &data_ready, &cv);
+      break;
     }
     boost::this_thread::yield();
-    if(ABORT_MINER) {
-      bool *connPtr = isDev ? &devConnected : &isConnected;
-      bool *submitPtr = isDev ? &submittingDev : &submitting;
-      setForDisconnected(connPtr, submitPtr, &abort, &data_ready, &cv);
-      ioc.stop();
+  }
+
+  // Clean shutdown
+  abort = true;
+  cv.notify_all();
+  
+  if (submitThreadRunning) {
+    subThread.interrupt();
+    if (subThread.joinable()) {
+      subThread.join();
     }
   }
-  cv.notify_all();
 
-  subThread.interrupt();
-  subThread.join();
+  // Close websocket gracefully
+  beast::error_code close_ec;
+  ws.async_close(websocket::close_code::normal, yield[close_ec]);
+  // Ignore close errors
 }

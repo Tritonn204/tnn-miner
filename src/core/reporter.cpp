@@ -3,6 +3,9 @@
 #include <iostream>
 
 const std::string units[] = {" ", " K", " M", " G", " T", " P"}; // Note the space
+#ifdef TNN_RANDOMX
+extern std::atomic<bool> datasetInitInProgress;
+#endif
 
 int update_handler(const boost::system::error_code& error)
 {
@@ -20,6 +23,12 @@ int update_handler(const boost::system::error_code& error)
   if (!isConnected) {
     return 1;
   }
+
+  #ifdef TNN_RANDOMX
+  if (datasetInitInProgress.load()) {
+    return 1;
+  }
+  #endif
 
   reportCounter++;
 

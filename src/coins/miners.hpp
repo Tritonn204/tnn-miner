@@ -111,6 +111,9 @@ inline mineFunc getMiningFunc(int algoNum, bool gpu) {
     case ALGO_ASTROBWTV3:
       return mineDero;
       break;
+    // case ALGO_XELISV1:
+    //   return mineXelis_v1; 
+    case ALGO_XELISV2:
     case ALGO_XELISV3:
       return mineXelis;
       break;

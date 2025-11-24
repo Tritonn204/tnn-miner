@@ -222,14 +222,25 @@ void initializeExterns() {
 }
 #endif
 
+inline void preserveAlgoOverride(MiningProfile& profile, int coinId) {
+  int savedAlgo = profile.coin.miningAlgo;
+  bool hadOverride = (savedAlgo != coins[coinId].miningAlgo && savedAlgo != ALGO_UNSUPPORTED);
+  
+  profile.coin = coins[coinId];
+  
+  if (hadOverride) {
+    profile.coin.miningAlgo = savedAlgo;
+  }
+}
+
 int enhanceWallet(MiningProfile *currentProfile, bool checkWallet) {
   if(checkWallet) {
-    if (currentProfile->coin.miningAlgo == ALGO_ASTROBWTV3 && !(currentProfile->wallet.find("der") == std::string::npos || currentProfile->wallet.find("det") == std::string::npos))
+    if (currentProfile->coin.coinSymbol == "DERO" && !(currentProfile->wallet.find("der") == std::string::npos || currentProfile->wallet.find("det") == std::string::npos))
     {
       std::cout << "Provided wallet address is not valid for Dero" << std::endl;
       return EXIT_FAILURE;
     }
-    if (currentProfile->coin.miningAlgo == ALGO_XELISV3 && !(currentProfile->wallet.find("xel") == std::string::npos || currentProfile->wallet.find("xet") == std::string::npos || currentProfile->wallet.find("Kr") == std::string::npos))
+    if ((currentProfile->coin.coinSymbol == "XEL") && !(currentProfile->wallet.find("xel") == std::string::npos || currentProfile->wallet.find("xet") == std::string::npos || currentProfile->wallet.find("Kr") == std::string::npos))
     {
       std::cout << "Provided wallet address is not valid for Xelis" << std::endl;
       return EXIT_FAILURE;
@@ -242,13 +253,13 @@ int enhanceWallet(MiningProfile *currentProfile, bool checkWallet) {
   }
 
   if(currentProfile->wallet.find("dero", 0) != std::string::npos) {
-    currentProfile->coin = coins[COIN_DERO];
+    preserveAlgoOverride(*currentProfile, COIN_DERO);
   }
   if(currentProfile->wallet.find("xel:", 0) != std::string::npos || currentProfile->wallet.find("xet:", 0) != std::string::npos) {
-    currentProfile->coin = coins[COIN_XELIS];
+    preserveAlgoOverride(*currentProfile, COIN_XELIS);
   }
   if(currentProfile->wallet.find("spectre", 0) != std::string::npos) {
-    currentProfile->coin = coins[COIN_SPECTRE];
+    preserveAlgoOverride(*currentProfile, COIN_SPECTRE);
     currentProfile->protocol = PROTO_SPECTRE_STRATUM;
   }
   return EXIT_SUCCESS;
@@ -380,7 +391,7 @@ int main(int argc, char **argv)
 
     // Check if any unrecognized option is a coin symbol
     std::vector<std::string> stillUnrecognized;
-    
+
     for (const auto& arg : unrecognized) { 
       std::string cleanArg = arg;
       
@@ -389,30 +400,34 @@ int main(int argc, char **argv)
         cleanArg = cleanArg.substr(1);
       }
       
-      // Convert to uppercase for comparison
-      std::string upperArg = cleanArg;
-      std::transform(upperArg.begin(), upperArg.end(), upperArg.begin(), ::toupper);
+      // Try to parse as a (possibly versioned) coin
+      CoinParseResult parseResult = parseCoinWithVersion(cleanArg);
       
-      // Check against coin symbols
-      bool found = false;
-      for(int x = 0; x < COIN_COUNT; x++) {
-        if(boost::iequals(coins[x].coinSymbol, upperArg)) {
-          miningProfile.coin = coins[x];
-          setcolor(BRIGHT_YELLOW);
-          printf("Set to mine %s from command line argument '%s'\n\n", 
-                miningProfile.coin.coinPrettyName.c_str(), arg.c_str());
-          fflush(stdout);
-          setcolor(BRIGHT_WHITE);
-          found = true;
-          break;
+      // Look up the base coin
+      const Coin* foundCoin = findCoinBySymbol(parseResult.baseSymbol);
+      
+      if (foundCoin) {
+        miningProfile.setCoin(*foundCoin, parseResult.algoOverride);
+        
+        // Build display string
+        std::string versionStr = "";
+        if (parseResult.isVersioned && !parseResult.versionDisplay.empty()) {
+          versionStr = " (" + parseResult.versionDisplay + ")";
         }
+                
+        setcolor(BRIGHT_YELLOW);
+        printf("Set to mine %s%s from command line argument '%s'\n\n", 
+              miningProfile.coin.coinPrettyName.c_str(),
+              versionStr.c_str(),
+              arg.c_str());
+        fflush(stdout);
+        setcolor(BRIGHT_WHITE);
       }
-      
-      if (!found) {
+      else {
         stillUnrecognized.push_back(arg);
       }
     }
-    
+
     if (!stillUnrecognized.empty()) {
       std::string errorMsg = "unrecognized option";
       if (stillUnrecognized.size() > 1) {
@@ -477,131 +492,99 @@ int main(int argc, char **argv)
     return 0;
   }
 
-  if (miningProfile.coin.coinId == COIN_DERO)
-  {
-    #if defined(TNN_ASTROBWTV3)
-    miningProfile.coin = coins[COIN_DERO];
-    #else
-    setcolor(RED);
-    printf("%s", unsupported_astro);
-    fflush(stdout);
-    setcolor(BRIGHT_WHITE);
+  #define UNSUPPORTED_ALGO_ERROR(ERROR_MSG) \
+    setcolor(RED); \
+    printf("%s", ERROR_MSG); \
+    fflush(stdout); \
+    setcolor(BRIGHT_WHITE); \
     return 1;
+
+  // Complete coin validation section:
+  if (miningProfile.coin.coinId == COIN_DERO) {
+    #if defined(TNN_ASTROBWTV3)
+    preserveAlgoOverride(miningProfile, COIN_DERO);
+    #else
+    UNSUPPORTED_ALGO_ERROR(unsupported_astro);
     #endif
   }
 
-  if (miningProfile.coin.coinId == COIN_XELIS)
-  {
+  if (miningProfile.coin.coinId == COIN_XELIS) {
     #if defined(TNN_XELISHASH)
-    miningProfile.coin = coins[COIN_XELIS];
+    preserveAlgoOverride(miningProfile, COIN_XELIS);
     #else
-    setcolor(RED);
-    printf("%s", unsupported_xelishash);
-    fflush(stdout);
-    setcolor(BRIGHT_WHITE);
-    return 1;
+    UNSUPPORTED_ALGO_ERROR(unsupported_xelishash);
     #endif
   }
 
-  if (miningProfile.coin.coinId == COIN_SPECTRE)
-  {
+  if (miningProfile.coin.coinId == COIN_SPECTRE) {
     #if defined(TNN_ASTROBWTV3)
+    preserveAlgoOverride(miningProfile, COIN_SPECTRE);
     miningProfile.protocol = PROTO_SPECTRE_STRATUM;
     #else
-    setcolor(RED);
-    printf("%s", unsupported_astro);
-    fflush(stdout);
-    setcolor(BRIGHT_WHITE);
-    return 1;
+    UNSUPPORTED_ALGO_ERROR(unsupported_astro);
     #endif
   }
 
-  if (miningProfile.coin.coinId == COIN_AIX)
-  {
+  if (miningProfile.coin.coinId == COIN_AIX) {
     #if defined(TNN_ASTRIXHASH)
+    preserveAlgoOverride(miningProfile, COIN_AIX);
     miningProfile.protocol = PROTO_KAS_STRATUM;
     #else
-    setcolor(RED);
-    printf("%s", unsupported_astrix);
-    fflush(stdout);
-    setcolor(BRIGHT_WHITE);
-    return 1;
+    UNSUPPORTED_ALGO_ERROR(unsupported_astrix);
     #endif
   }
 
-  if (miningProfile.coin.coinId == COIN_NXL)
-  {
+  if (miningProfile.coin.coinId == COIN_NXL) {
     #if defined(TNN_ASTRIXHASH)
+    preserveAlgoOverride(miningProfile, COIN_NXL);
     miningProfile.protocol = PROTO_KAS_STRATUM;
     #else
-    setcolor(RED);
-    printf("%s", unsupported_astrix);
-    fflush(stdout);
-    setcolor(BRIGHT_WHITE);
-    return 1;
+    UNSUPPORTED_ALGO_ERROR(unsupported_astrix);
     #endif
   }
 
-  if (miningProfile.coin.coinId == COIN_HTN)
-  {
+  if (miningProfile.coin.coinId == COIN_HTN) {
     #if defined(TNN_HOOHASH)
+    preserveAlgoOverride(miningProfile, COIN_HTN);
     miningProfile.protocol = PROTO_KAS_STRATUM;
     #else
-    setcolor(RED);
-    printf("%s", unsupported_hoohash);
-    fflush(stdout);
-    setcolor(BRIGHT_WHITE);
-    return 1;
+    UNSUPPORTED_ALGO_ERROR(unsupported_hoohash);
     #endif
   }
 
-  if (miningProfile.coin.coinId == COIN_WALA)
-  {
+  if (miningProfile.coin.coinId == COIN_WALA) {
     #if defined(TNN_WALAHASH)
+    preserveAlgoOverride(miningProfile, COIN_WALA);
     miningProfile.protocol = PROTO_KAS_STRATUM;
     #else
-    setcolor(RED);
-    printf("%s", unsupported_waglayla);
-    fflush(stdout);
-    setcolor(BRIGHT_WHITE);
-    return 1;
+    UNSUPPORTED_ALGO_ERROR(unsupported_waglayla);
     #endif
   }
 
-  if (vm.count("randomx") || miningProfile.coin.miningAlgo == ALGO_RX0)
-  {
+  if (vm.count("randomx") || miningProfile.coin.miningAlgo == ALGO_RX0) {
     fflush(stdout);
     #if defined(TNN_RANDOMX)
-    miningProfile.coin = coins[COIN_RX0];
+    preserveAlgoOverride(miningProfile, COIN_RX0);
     #else
-    setcolor(RED);
-    printf("%s", unsupported_randomx);
-    fflush(stdout);
-    setcolor(BRIGHT_WHITE);
-    return 1;
+    UNSUPPORTED_ALGO_ERROR(unsupported_randomx);
     #endif
   }
 
-  if (miningProfile.coin.coinId == COIN_ADVC)
-  {
+  if (miningProfile.coin.coinId == COIN_ADVC) {
     #if defined(TNN_YESPOWER)
+    preserveAlgoOverride(miningProfile, COIN_ADVC);
     miningProfile.protocol = PROTO_BTC_STRATUM;
     current_algo_config = algo_configs[CONFIG_ENDIAN_YESPOWER];
-
     initADVCParams(&currentYespowerParams);
     initADVCParams(&devYespowerParams);
     #else
-    setcolor(RED);
-    printf("%s", unsupported_yespower);
-    fflush(stdout);
-    setcolor(BRIGHT_WHITE);
-    return 1;
+    UNSUPPORTED_ALGO_ERROR(unsupported_yespower);
     #endif
   }
 
   if (vm.count("yespower")) {
     #if defined(TNN_YESPOWER)
-    miningProfile.coin = coins[COIN_YESPOWER];
+    preserveAlgoOverride(miningProfile, COIN_YESPOWER);
     miningProfile.protocol = PROTO_BTC_STRATUM;
     current_algo_config = algo_configs[CONFIG_ENDIAN_YESPOWER];
     
@@ -627,25 +610,17 @@ int main(int argc, char **argv)
     setManualYespowerParams(&currentYespowerParams, N, R, pers);
     initADVCParams(&devYespowerParams);
     #else
-    setcolor(RED);
-    printf("%s", unsupported_yespower);
-    fflush(stdout);
-    setcolor(BRIGHT_WHITE);
-    return 1;
+    UNSUPPORTED_ALGO_ERROR(unsupported_yespower);
     #endif
   }
 
-  if (miningProfile.coin.coinId == COIN_RIN)
-  {
+  if (miningProfile.coin.coinId == COIN_RIN) {
     #if defined(TNN_RINHASH)
+    preserveAlgoOverride(miningProfile, COIN_RIN);
     miningProfile.protocol = PROTO_BTC_STRATUM;
     current_algo_config = algo_configs[CONFIG_ENDIAN_SCRYPT];
     #else
-    setcolor(RED);
-    printf("%s", unsupported_rinhash);
-    fflush(stdout);
-    setcolor(BRIGHT_WHITE);
-    return 1;
+    UNSUPPORTED_ALGO_ERROR(unsupported_rinhash);
     #endif
   }
 
@@ -824,29 +799,29 @@ int main(int argc, char **argv)
   {
     miningProfile.wallet = vm["wallet"].as<std::string>();
     if(miningProfile.wallet.find("dero", 0) != std::string::npos) {
-      miningProfile.coin = coins[COIN_DERO];
+      preserveAlgoOverride(miningProfile, COIN_DERO);
     }
     if(miningProfile.wallet.find("xel:", 0) != std::string::npos || miningProfile.wallet.find("xet:", 0) != std::string::npos) {
-      miningProfile.coin = coins[COIN_XELIS];
+      preserveAlgoOverride(miningProfile, COIN_XELIS);
     }
     if(miningProfile.wallet.find("spectre", 0) != std::string::npos || miningProfile.wallet.find("spectretest", 0) != std::string::npos) {
-      miningProfile.coin = coins[COIN_SPECTRE];
+      preserveAlgoOverride(miningProfile, COIN_SPECTRE);
       miningProfile.protocol = PROTO_SPECTRE_STRATUM;
     }
     if(miningProfile.wallet.find("astrix", 0) != std::string::npos || miningProfile.wallet.find("astrixtest", 0) != std::string::npos) {
-      miningProfile.coin = coins[COIN_AIX];
+      preserveAlgoOverride(miningProfile, COIN_AIX);
       miningProfile.protocol = PROTO_KAS_STRATUM;
     }
     if(miningProfile.wallet.find("nexellia", 0) != std::string::npos || miningProfile.wallet.find("nexelliatest", 0) != std::string::npos) {
-      miningProfile.coin = coins[COIN_NXL];
+      preserveAlgoOverride(miningProfile, COIN_NXL);
       miningProfile.protocol = PROTO_KAS_STRATUM;
     }
     if(miningProfile.wallet.find("hoosat", 0) != std::string::npos || miningProfile.wallet.find("hoosattest", 0) != std::string::npos) {
-      miningProfile.coin = coins[COIN_HTN];
+      preserveAlgoOverride(miningProfile, COIN_HTN);
       miningProfile.protocol = PROTO_KAS_STRATUM;
     }
     if(miningProfile.wallet.find("ZEPHYR", 0) != std::string::npos) {
-      miningProfile.coin = coins[COIN_ZEPH];
+      preserveAlgoOverride(miningProfile, COIN_ZEPH);
     }
 
     boost::char_separator<char> sep(".");
@@ -1309,12 +1284,12 @@ Mining:
   // #endif
 
   boost::thread GETWORK(getWork_v2, &miningProfile);
-  setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+  // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
   devMiningProfile = miningProfile;
   devMiningProfile.setDev(vm.count("testnet"));
   boost::thread DEVWORK(getWork_v2, &devMiningProfile);
-  setPriority(DEVWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+  // setPriority(DEVWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
 
   // Create worker threads and set CPU affinity
  //  mutex.lock();

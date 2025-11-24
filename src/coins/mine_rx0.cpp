@@ -37,6 +37,9 @@ std::mutex cacheSwitchMutex;
 std::atomic<bool> isDevOnActiveCache{false};
 std::atomic<bool> firstBatch{false};
 
+extern std::atomic<int> datasetInitProgress;
+extern std::atomic<bool> datasetInitInProgress;
+
 typedef struct RxDatasetWrapper {
     randomx_dataset* ptr = nullptr;
     int numa_node = -1;
@@ -123,10 +126,16 @@ void randomx_update_data(randomx_cache* rc, randomx_dataset* rd, void *seed,
       randomx_init_cache(cache_wrapper->ptr, seed, seedSize);
     });
     
+    // NUMA progress tracking
+    std::atomic<int> completedNodes{0};
+    int totalNodes = 0;
+    
+    rx_dataset_manager.forEachNode([&](int, RxDatasetWrapper*) { totalNodes++; });
+    
     std::vector<std::thread> init_threads;
     
     rx_dataset_manager.forEachNode([&](int node_id, RxDatasetWrapper* dataset_wrapper) {
-      init_threads.emplace_back([&, node_id, dataset_wrapper]() {
+      init_threads.emplace_back([&, node_id, dataset_wrapper, totalNodes]() {
         NUMAOptimizer::ScopedMemoryPolicy policy(node_id);
         
         auto* cache_wrapper = cache_manager.getResourceForNode(node_id);
@@ -136,31 +145,62 @@ void randomx_update_data(randomx_cache* rc, randomx_dataset* rd, void *seed,
                            cache_wrapper->ptr, 
                            0, 
                            randomx_dataset_item_count());
+        
+        int done = completedNodes.fetch_add(1) + 1;
+        int progress = (done * 100) / totalNodes;
+        datasetInitProgress.store(progress);
+        
+        printf("\r%sInitializing RandomX dataset... %d%% (NUMA node %d/%d)   ", 
+               isDev ? "DEV | " : "", progress, done, totalNodes);
+        fflush(stdout);
       });
     });
     
     for (auto& t : init_threads) t.join();
+    
   } else {
     randomx_init_cache(rc, seed, seedSize);
+    
     uint32_t datasetItemCount = randomx_dataset_item_count();
-    std::vector<std::thread> threads;
+    
+    const int PROGRESS_STEPS = 20;
+    uint32_t itemsPerStep = datasetItemCount / PROGRESS_STEPS;
+    
+    printf("\r%sInitializing RandomX dataset... 0%%   ", isDev ? "DEV | " : "");
+    fflush(stdout);
+    
+    for (int step = 0; step < PROGRESS_STEPS; step++) {
+      uint32_t stepStart = step * itemsPerStep;
+      uint32_t stepEnd = (step == PROGRESS_STEPS - 1) ? datasetItemCount : (step + 1) * itemsPerStep;
+      uint32_t stepItems = stepEnd - stepStart;
+      
+      if (threadCount > 1) {
+        std::vector<std::thread> threads;
+        auto perThread = stepItems / threadCount;
+        auto remainder = stepItems % threadCount;
+        uint32_t startItem = stepStart;
 
-    if (threadCount > 1) {
-      auto perThread = datasetItemCount / threadCount;
-      auto remainder = datasetItemCount % threadCount;
-      uint32_t startItem = 0;
-
-      for (int i = 0; i < threadCount; ++i) {
-        auto count = perThread + (i == threadCount - 1 ? remainder : 0);
-        threads.push_back(std::thread(&randomx_init_dataset, rd, rc, startItem, count));
-        startItem += count;
+        for (int i = 0; i < threadCount; ++i) {
+          auto count = perThread + (i == threadCount - 1 ? remainder : 0);
+          threads.push_back(std::thread(&randomx_init_dataset, rd, rc, startItem, count));
+          startItem += count;
+        }
+        
+        for (auto& t : threads) {
+          t.join();
+        }
+      } else {
+        randomx_init_dataset(rd, rc, stepStart, stepItems);
       }
-      for (unsigned i = 0; i < threads.size(); ++i) {
-        threads[i].join();
-      }
-    } else {
-      randomx_init_dataset(rd, rc, 0, datasetItemCount);
+      
+      int progress = ((step + 1) * 100) / PROGRESS_STEPS;
+      datasetInitProgress.store(progress);
+      
+      printf("\r%sInitializing RandomX dataset... %d%%   ", isDev ? "DEV | " : "", progress);
+      fflush(stdout);
     }
+    
+    printf("\n");
   }
 }
 

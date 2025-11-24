@@ -13,12 +13,15 @@
 #include <boost/asio/ip/host_name.hpp>
 #include <boost/json.hpp>
 
-namespace beast = boost::beast;         // from <boost/beast.hpp>
-namespace http = beast::http;           // from <boost/beast/http.hpp>
-namespace websocket = beast::websocket; // from <boost/beast/websocket.hpp>
-namespace net = boost::asio;            // from <boost/asio.hpp>
-namespace ssl = boost::asio::ssl;       // from <boost/asio/ssl.hpp>
-using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
+#include <atomic>
+#include <queue>
+
+namespace beast = boost::beast;
+namespace http = beast::http;
+namespace websocket = beast::websocket;
+namespace net = boost::asio;
+namespace ssl = boost::asio::ssl;
+using tcp = boost::asio::ip::tcp;
 
 void dero_session(
     std::string host,
@@ -32,10 +35,17 @@ void dero_session(
 {
   beast::error_code ec;
   auto endpoint = resolve_host(wsMutex, ioc, yield, host, port);
-  websocket::stream<beast::ssl_stream<beast::tcp_stream>> ws(ioc, ctx);
+  
+  // Create strand for thread-safe operations
+  auto strand = net::make_strand(ioc);
+  websocket::stream<beast::ssl_stream<beast::tcp_stream>> ws(strand, ctx);
+
+  // Set a timeout on the operation
+  beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(30));
 
   // Make the connection on the IP address we get from a lookup
-  beast::get_lowest_layer(ws).connect(endpoint);
+  beast::get_lowest_layer(ws).async_connect(endpoint, yield[ec]);
+  if (ec) return fail(ec, "connect-dero");
 
   // Set SNI Hostname (many hosts need this to handshake successfully)
   if (!SSL_set_tlsext_host_name(
@@ -44,16 +54,13 @@ void dero_session(
   {
     ec = beast::error_code(static_cast<int>(::ERR_get_error()),
                           net::error::get_ssl_category());
-    return fail(ec, "connect");
+    return fail(ec, "sni-hostname");
   }
 
   // Update the host string. This will provide the value of the
   // Host HTTP header during the WebSocket handshake.
   // See https://tools.ietf.org/html/rfc7230#section-5.4
   host += ':' + port;
-
-  // Set a timeout on the operation
-  beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(30));
 
   // Set a decorator to change the User-Agent of the handshake
   ws.set_option(websocket::stream_base::decorator(
@@ -65,6 +72,7 @@ void dero_session(
       }));
 
   // Perform the SSL/TLS handshake
+  beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(30));
   ws.next_layer().async_handshake(ssl::stream_base::client, yield[ec]);
   if (ec)
     return fail(ec, "tls_handshake");
@@ -100,45 +108,75 @@ void dero_session(
     url = "/ws/" + wallet;
     ws.async_handshake(host, url.c_str(), yield[ec]);
     if (ec) {
-      ws.async_close(websocket::close_code::normal, yield[ec]);
-      fail(ec, "handshake");
+      beast::error_code close_ec;
+      ws.async_close(websocket::close_code::normal, yield[close_ec]);
+      fail(ec, "handshake-dero");
       return;
     }
   }
+
   // This buffer will hold the incoming message
   beast::flat_buffer buffer;
   std::stringstream workInfo;
-  boost::system::error_code jsonEc;
-  boost::json::value workData;
 
-  bool submitThread = false;
-  bool abort = false;
+  // Thread-safe queue for submissions
+  std::queue<std::string> submitQueue;
+  boost::mutex submitMutex;
+  std::atomic<bool> abort{false};
+
+  auto process_write_queue = [&]() {
+    // Post to strand to process entire queue
+    net::post(strand, [&]() {
+      while (!abort.load()) {
+        std::string msg;
+        
+        // Get next message
+        {
+          boost::lock_guard<boost::mutex> qlock(submitMutex);
+          if (submitQueue.empty()) {
+            return;
+          }
+          msg = std::move(submitQueue.front());
+          submitQueue.pop();
+        }
+        
+        // Synchronous write (safe because we're in the strand)
+        beast::error_code wec;
+        beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(30));
+        ws.write(boost::asio::buffer(msg), wec);
+        
+        if (wec) {
+          printf("error on write: %s\n", wec.message().c_str());
+          fflush(stdout);
+          abort = true;
+          return;
+        }
+      }
+    });
+  };
+
+  bool submitThreadRunning = true;
 
   boost::thread subThread([&](){
-    submitThread = true;
-    while(!abort) {
+    while(!abort.load()) {
       boost::unique_lock<boost::mutex> lock(mutex);
       bool *B = isDev ? &submittingDev : &submitting;
-      cv.wait(lock, [&]{ return (data_ready && (*B)) || abort; });
-      if (abort) break;
-      try {
-        bool err = false;
-        boost::json::object *S = &share;
-        if (isDev)
-          S = &devShare;
+      cv.wait(lock, [&]{ return (data_ready && (*B)) || abort.load(); });
+      if (abort.load()) break;
 
-        std::string msg = boost::json::serialize((*S)) + "\n";
-        // std::cout << "sending in: " << msg << std::endl;
-        beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(1));
-        ws.async_write(boost::asio::buffer(msg), [&](const boost::system::error_code& error, std::size_t bytes_transferred) {
-          if (error) {
-            printf("error on write: %s\n", error.message().c_str());
-            fflush(stdout);
-            abort = true;
-          }
-        });
-        (*B) = false;
-        data_ready = false;
+      try {
+        boost::json::object &S = isDev ? devShare : share;
+        std::string msg = boost::json::serialize(S) + "\n";
+        
+        // Queue the message for thread-safe sending
+        {
+          boost::lock_guard<boost::mutex> qlock(submitMutex);
+          submitQueue.push(std::move(msg));
+        }
+        
+        // Trigger write processing
+        process_write_queue();
+        
       } catch (const std::exception &e) {
         setcolor(RED);
         printf("\nSubmit thread error: %s\n", e.what());
@@ -146,16 +184,18 @@ void dero_session(
         setcolor(BRIGHT_WHITE);
         break;
       }
+      *B = false;
+      data_ready = false;
       boost::this_thread::yield();
     }
-    submitThread = false;
+    submitThreadRunning = false;
   });
 
-  while (!ABORT_MINER)
+  while (!ABORT_MINER && !abort.load())
   {
+    bool *B = isDev ? &submittingDev : &submitting;
     try
     {
-      bool *B = isDev ? &submittingDev : &submitting;
       buffer.clear();
       workInfo.str("");
       workInfo.clear();
@@ -165,110 +205,111 @@ void dero_session(
       if (!ec)
       {
         // handle getwork feed
-
         workInfo << beast::make_printable(buffer.data());
 
-        // std::cout << workInfo.str() << std::endl;
-
-        workData = boost::json::parse(workInfo.str(), jsonEc);
+        boost::system::error_code jsonEc;
+        boost::json::value workData = boost::json::parse(workInfo.str(), jsonEc);
         if (!jsonEc)
         {
-          // if ((isDev ? (workData.at("height") != devHeight) : (workData.at("height") != ourHeight)))
-          // {
-            // mutex.lock();
-            if (isDev)
-              devJob = workData;
-            else
-              job = workData;
-            boost::json::value *J = isDev ? &devJob : &job;
-            // mutex.unlock();
+          if (isDev)
+            devJob = workData;
+          else
+            job = workData;
+          
+          boost::json::value *J = isDev ? &devJob : &job;
 
-            if ((*J).at("lasterror") != "")
+          // Safely extract lasterror
+          if ((*J).as_object().contains("lasterror")) {
+            std::string lastError = std::string((*J).at("lasterror").as_string());
+            if (!lastError.empty())
             {
-              std::cerr << "received error: " << (*J).at("lasterror") << std::endl
+              std::cerr << "received error: " << lastError << std::endl
                         << consoleLine << versionString << " ";
             }
+          }
 
-            if (!isDev)
+          if (!isDev)
+          {
+            // Safely copy strings
+            currentBlob = std::string((*J).at("blockhashing_blob").as_string());
+            ourHeight = (*J).at("height").to_number<int64_t>();
+            difficulty = (*J).at("difficultyuint64").to_number<int64_t>();
+            accepted = (*J).at("miniblocks").to_number<int64_t>();
+            rejected = (*J).at("rejected").to_number<int64_t>();
+            
+            if (!isConnected)
             {
-              currentBlob = (*J).at("blockhashing_blob").as_string();
-              //blockCounter = (*J).at("blocks");
-              //miniBlockCounter = (*J).at("miniblocks");
-              //rejected = (*J).at("rejected");
-              //hashrate = (*J).at("difficultyuint64");
-              ourHeight = (*J).at("height").to_number<int64_t>();
-              difficulty = (*J).at("difficultyuint64").to_number<int64_t>();
-              // printf("NEW JOB RECEIVED | Height: %d | Difficulty %" PRIu64 "\n", ourHeight, difficulty);
-              accepted = (*J).at("miniblocks").to_number<int64_t>();
-              rejected = (*J).at("rejected").to_number<int64_t>();
-              if (!isConnected)
-              {
-                // mutex.lock();
-                setcolor(BRIGHT_YELLOW);
-                printf("Mining at: %s%s\n", host.c_str(), url.c_str());
-                fflush(stdout);
-                setcolor(CYAN);
-                printf("Dev fee: %.2f%% of your total hashrate\n", devFee);
-        
-                fflush(stdout);
-                setcolor(BRIGHT_WHITE);
-                // mutex.unlock();
-              }
-              isConnected = isConnected || true;
-              jobCounter++;
+              setcolor(BRIGHT_YELLOW);
+              printf("Mining at: %s%s\n", host.c_str(), url.c_str());
+              fflush(stdout);
+              setcolor(CYAN);
+              printf("Dev fee: %.2f%% of your total hashrate\n", devFee);
+              fflush(stdout);
+              setcolor(BRIGHT_WHITE);
             }
-            else
+            isConnected = true;
+            jobCounter++;
+          }
+          else
+          {
+            // Safely copy strings
+            devBlob = std::string((*J).at("blockhashing_blob").as_string());
+            devHeight = (*J).at("height").to_number<int64_t>();
+            difficultyDev = (*J).at("difficultyuint64").to_number<int64_t>();
+            
+            if (!devConnected)
             {
-              difficultyDev = (*J).at("difficultyuint64").to_number<int64_t>();
-              devBlob = (*J).at("blockhashing_blob").as_string();
-              devHeight = (*J).at("height").to_number<int64_t>();
-              if (!devConnected)
-              {
-                // mutex.lock();
-                setcolor(CYAN);
-                printf("Connected to dev node: %s\n", host.c_str());
-                fflush(stdout);
-                setcolor(BRIGHT_WHITE);
-                // mutex.unlock();
-              }
-              devConnected = devConnected || true;
-              jobCounter++;
+              setcolor(CYAN);
+              printf("Connected to dev node: %s\n", host.c_str());
+              fflush(stdout);
+              setcolor(BRIGHT_WHITE);
             }
-          // }
+            devConnected = true;
+            jobCounter++;
+          }
+        }
+        else
+        {
+          setcolor(RED);
+          printf("\nJSON parse error in dero_session: %s\n", jsonEc.message().c_str());
+          setcolor(BRIGHT_WHITE);
+          fflush(stdout);
         }
       }
       else
       {
         bool *C = isDev ? &devConnected : &isConnected;
         setForDisconnected(C, B, &abort, &data_ready, &cv);
-        // printf("DISCONNECT at read\n");
-        // fflush(stdout);
-
-        for (;;) {
-          if (!submitThread) break;
-          boost::this_thread::yield();
-        }
-        
-        return fail(ec, "async_read");
+        break;
       }
     }
     catch (const std::exception &e)
     {
       setcolor(RED);
-      std::cout << "ws error: " << e.what() << std::endl;
+      std::cout << "\nws error: " << e.what() << std::endl;
       fflush(stdout);
       setcolor(BRIGHT_WHITE);
+      
+      bool *C = isDev ? &devConnected : &isConnected;
+      setForDisconnected(C, B, &abort, &data_ready, &cv);
+      break;
     }
     boost::this_thread::yield();
-    if(ABORT_MINER) {
-      bool *connPtr = isDev ? &devConnected : &isConnected;
-      bool *submitPtr = isDev ? &submittingDev : &submitting;
-      setForDisconnected(connPtr, submitPtr, &abort, &data_ready, &cv);
-      ioc.stop();
+  }
+
+  // Clean shutdown
+  abort = true;
+  cv.notify_all();
+  
+  if (submitThreadRunning) {
+    subThread.interrupt();
+    if (subThread.joinable()) {
+      subThread.join();
     }
   }
-  cv.notify_all();
 
-  subThread.interrupt();
-  subThread.join();
+  // Close websocket gracefully
+  beast::error_code close_ec;
+  ws.async_close(websocket::close_code::normal, yield[close_ec]);
+  // Ignore close errors
 }

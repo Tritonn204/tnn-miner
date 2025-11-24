@@ -117,7 +117,7 @@ waitForJob:
         DIFF = devMine ? difficultyDev : difficulty;
         if (DIFF == 0)
           continue;
-        cmpDiff = ConvertDifficultyToBig(DIFF, ALGO_XELISV3);
+        cmpDiff = ConvertDifficultyToBig(DIFF, ALGO_XELISV2);
 
         uint64_t *nonce = devMine ? &i_dev : &i;
         (*nonce)++;
@@ -148,7 +148,7 @@ waitForJob:
           break;
         }
 
-        if (CheckHash(powHash, cmpDiff, ALGO_XELISV3))
+        if (CheckHash(powHash, cmpDiff, ALGO_XELISV2))
         {
           if (!submit) {
             for(;;) {
@@ -274,7 +274,16 @@ void mineXelis(int tid)
   alignas(64) thread_local byte devWork[XELIS_TEMPLATE_SIZE] = {0};
   alignas(64) thread_local byte FINALWORK[XELIS_TEMPLATE_SIZE] = {0};
 
-  alignas(64) thread_local workerData_xelis_v3 *worker = (workerData_xelis_v3 *)malloc_huge_pages(sizeof(workerData_xelis_v3));
+  // Determine which version to use based on the mining profile
+  bool useV3 = (miningProfile.coin.miningAlgo == ALGO_XELISV3);
+  
+  // Allocate the appropriate worker struct based on version
+  alignas(64) thread_local void* worker = nullptr;
+  if (useV3) {
+    worker = malloc_huge_pages(sizeof(workerData_xelis_v3));
+  } else {
+    worker = malloc_huge_pages(sizeof(workerData_xelis_v2));
+  }
 
   thread_local std::random_device rd;
   thread_local std::mt19937 rng(rd());
@@ -365,16 +374,31 @@ waitForJob:
       bool submit = false;
       uint64_t DIFF;
       Num cmpDiff;
+      
+      // Check if we need to update the version during mining
+      // This handles the case where dev mining might use a different version
+      bool currentUseV3 = useV3;
 
       while (localJobCounter == jobCounter)
       {
         CHECK_CLOSE;
         which = dist(rng);
         devMine = (devConnected && devHeight > 0 && which < devFee * 100.0);
+        
+        // Determine which algorithm version to use for this iteration
+        if (devMine) {
+          currentUseV3 = (devMiningProfile.coin.miningAlgo == ALGO_XELISV3);
+        } else {
+          currentUseV3 = (miningProfile.coin.miningAlgo == ALGO_XELISV3);
+        }
+        
         DIFF = devMine ? difficultyDev : difficulty;
         if (DIFF == 0)
           continue;
-        cmpDiff = ConvertDifficultyToBig(DIFF, ALGO_XELISV3);
+        
+        // Use the appropriate algorithm constant for difficulty conversion
+        int algoForDiff = currentUseV3 ? ALGO_XELISV3 : ALGO_XELISV2;
+        cmpDiff = ConvertDifficultyToBig(DIFF, algoForDiff);
 
         uint64_t *nonce = devMine ? &i_dev : &i;
         (*nonce)++;
@@ -390,7 +414,13 @@ waitForJob:
         }
 
         memcpy(FINALWORK, WORK, XELIS_TEMPLATE_SIZE);
-        xelis_hash_v3(FINALWORK, *worker, powHash);
+        
+        // Call the appropriate hash function based on version
+        if (currentUseV3) {
+          xelis_hash_v3(FINALWORK, *(workerData_xelis_v3*)worker, powHash);
+        } else {
+          xelis_hash_v2(FINALWORK, *(workerData_xelis_v2*)worker, powHash);
+        }
 
         if (littleEndian())
         {
@@ -405,7 +435,7 @@ waitForJob:
           break;
         }
 
-        if (CheckHash(powHash, cmpDiff, ALGO_XELISV3))
+        if (CheckHash(powHash, cmpDiff, algoForDiff))
         {
           if (!submit) {
             for(;;) {
