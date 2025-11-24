@@ -1284,7 +1284,7 @@ __attribute__((target("default"))) static void stage_3(uint64_t *scratch_pad, wo
 #if defined(__aarch64__) && defined(__ARM_NEON) && defined(__ARM_FEATURE_CRYPTO)
 
 static inline uint64x2_t aes_round_v3_register(uint64_t mem_a, uint64_t mem_b,
-                                               constexpr uint8x16_t key_vec)
+                                               uint8x16_t key_vec)
 {
   uint64x2_t input_u64 = {mem_b, mem_a};
   uint8x16_t block = vreinterpretq_u8_u64(input_u64);
