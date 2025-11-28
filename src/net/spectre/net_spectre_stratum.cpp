@@ -303,6 +303,7 @@ void spectre_stratum_session(
     net::yield_context yield,
     bool isDev)
 {
+  SpectreStratum::lastReceivedJobTime = 0;
   ctx.set_options(boost::asio::ssl::context::default_workarounds |
                   boost::asio::ssl::context::no_sslv2 |
                   boost::asio::ssl::context::no_sslv3 |
@@ -612,6 +613,7 @@ void spectre_stratum_session_nossl(
     net::yield_context yield,
     bool isDev)
 {
+  SpectreStratum::lastReceivedJobTime = 0;
   beast::error_code ec;
 
   auto endpoint = resolve_host(wsMutex, ioc, yield, host, port);

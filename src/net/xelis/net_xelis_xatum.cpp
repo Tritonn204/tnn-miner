@@ -192,6 +192,7 @@ void xatum_session(
     net::yield_context yield,
     bool isDev)
 {
+  Xatum::lastReceivedJobTime = 0;
   ctx.set_options(boost::asio::ssl::context::default_workarounds |
                   boost::asio::ssl::context::no_sslv2 |
                   boost::asio::ssl::context::no_sslv3 |

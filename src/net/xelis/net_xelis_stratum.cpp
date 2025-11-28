@@ -277,6 +277,7 @@ void xelis_stratum_session(
     net::yield_context yield,
     bool isDev)
 {
+  XelisStratum::lastReceivedJobTime = 0;
   beast::error_code ec;
   auto endpoint = resolve_host(wsMutex, ioc, yield, host, port);
   
@@ -376,6 +377,8 @@ void xelis_stratum_session(
   auth["method"] = XelisStratum::authorize.method;
   auth["params"] = { wallet, worker, isDev ? "d=10000" : stratumPassword };
   send_json(auth);
+
+  XelisStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
   std::string packetBuffer;
   bool submitThreadRunning = true;
@@ -542,6 +545,7 @@ void xelis_stratum_session_nossl(
     net::yield_context yield,
     bool isDev)
 {
+  XelisStratum::lastReceivedJobTime = 0;
   beast::error_code ec;
   auto endpoint = resolve_host(wsMutex, ioc, yield, host, port);
   
@@ -635,6 +639,8 @@ void xelis_stratum_session_nossl(
   auth["method"] = XelisStratum::authorize.method;
   auth["params"] = { wallet, worker, isDev ? "d=10000" : stratumPassword };
   send_json(auth);
+
+  XelisStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
   std::string packetBuffer;
   bool submitThreadRunning = true;

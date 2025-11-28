@@ -420,6 +420,7 @@ void btc_stratum_session(
     net::yield_context yield,
     bool isDev)
 {
+  BTCStratum::lastReceivedJobTime = 0;
   beast::error_code ec;
   boost::system::error_code jsonEc;
 
@@ -659,6 +660,7 @@ void btc_stratum_session_nossl(
     net::yield_context yield,
     bool isDev)
 {
+  BTCStratum::lastReceivedJobTime = 0;
   beast::error_code ec;
   boost::system::error_code jsonEc;
 
