@@ -1,5 +1,5 @@
 #include "miners.hpp"
-#include "tnn-hugepages.h"
+#include "numa_optimizer.h"
 #include <astrobwtv3/astrobwtv3.h>
 #include <astrobwtv3/lookupcompute.h>
 #include <spectrex/spectrex.h>
@@ -18,14 +18,18 @@ void mineSpectre(int tid)
   thread_local byte diffBytes[32];
   thread_local byte diffBytes_dev[32];
 
-  thread_local workerData *astroWorker = (workerData *)malloc_huge_pages(sizeof(workerData));
-  thread_local SpectreX::worker *worker = (SpectreX::worker *)malloc_huge_pages(sizeof(SpectreX::worker));
+  thread_local workerData *astroWorker =
+      (workerData *)malloc_huge_pages(sizeof(workerData));
+  thread_local SpectreX::worker *worker =
+      (SpectreX::worker *)malloc_huge_pages(sizeof(SpectreX::worker));
   initWorker(*astroWorker);
   lookupGen(*astroWorker, nullptr, nullptr);
   worker->astroWorker = astroWorker;
 
-  thread_local workerData *devAstroWorker = (workerData *)malloc_huge_pages(sizeof(workerData));
-  thread_local SpectreX::worker *devWorker = (SpectreX::worker *)malloc_huge_pages(sizeof(SpectreX::worker));
+  thread_local workerData *devAstroWorker =
+      (workerData *)malloc_huge_pages(sizeof(workerData));
+  thread_local SpectreX::worker *devWorker =
+      (SpectreX::worker *)malloc_huge_pages(sizeof(SpectreX::worker));
   initWorker(*devAstroWorker);
   lookupGen(*devAstroWorker, nullptr, nullptr);
   devWorker->astroWorker = devAstroWorker;
@@ -127,7 +131,7 @@ waitForJob:
         SpectreX::worker &usedWorker = devMine ? *devWorker : *worker;
         SpectreX::hash(usedWorker, WORK, SpectreX::INPUT_SIZE, powHash);
 
-        if (++localCount >= 1024) { counter.fetch_add(localCount); localCount = 0; }
+        if (++localCount >= 512) { counter.fetch_add(localCount); localCount = 0; }
         submit = (devMine && devConnected) ? !submittingDev : !submitting;
 
         if (localJobCounter != jobCounter || localOurHeight != ourHeight) {

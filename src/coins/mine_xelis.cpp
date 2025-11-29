@@ -140,7 +140,7 @@ waitForJob:
           std::reverse(powHash, powHash + 32);
         }
 
-        if (++localCount >= 1024) { counter.fetch_add(localCount); localCount = 0; }
+        if (++localCount >= 512) { counter.fetch_add(localCount); localCount = 0; }
         submit = (devMine && devConnected) ? !submittingDev : !submitting;
 
         if (localJobCounter != jobCounter || localOurHeight != ourHeight) {
@@ -427,7 +427,7 @@ waitForJob:
           std::reverse(powHash, powHash + 32);
         }
 
-        if (++localCount >= 1024) { counter.fetch_add(localCount); localCount = 0; }
+        if (++localCount >= 512) { counter.fetch_add(localCount); localCount = 0; }
         submit = (devMine && devConnected) ? !submittingDev : !submitting;
 
         if (localJobCounter != jobCounter || localOurHeight != ourHeight) {

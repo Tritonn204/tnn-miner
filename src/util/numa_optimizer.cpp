@@ -80,6 +80,11 @@ bool NUMAOptimizer::initialize() {
     
     std::cout << "NUMA initialized: " << memory_nodes << " memory nodes, " 
               << total_cpus << " CPUs total" << std::endl;
+    
+    // Print huge page availability
+    std::cout << "Huge pages: 2MB=" << (vmem_isHugePagesAvailable() ? "available" : "unavailable")
+              << ", 1GB=" << (vmem_isOneGbPagesAvailable() ? "available" : "unavailable") 
+              << std::endl;
     fflush(stdout);
     
     // Print topology
@@ -404,8 +409,6 @@ bool NUMAOptimizer::setMemoryPolicy(int node) {
     return true;
     
 #elif defined(_WIN32)
-    // Windows doesn't have a direct equivalent to numa_set_preferred
-    // But we can bind the thread to the NUMA node which influences allocations
     if (!numa_initialized) {
         return false;
     }
@@ -436,7 +439,6 @@ void NUMAOptimizer::restoreMemoryPolicy() {
         return;
     }
     
-    // Restore default local allocation policy+
     numa_run_on_node(-1);
     numa_set_localalloc();
     
@@ -461,4 +463,29 @@ void NUMAOptimizer::restoreMemoryPolicy() {
         g_SetThreadGroupAffinity(thread, &all_processors, nullptr);
     }
 #endif
+}
+
+void NUMAOptimizer::printAllocInfo(const vmem_alloc_info_t& info) {
+    const char* page_type_str;
+    switch (info.page_type) {
+        case VMEM_PAGE_1GB:
+            page_type_str = "1GB hugepages";
+            break;
+        case VMEM_PAGE_2MB:
+            page_type_str = "2MB hugepages";
+            break;
+        default:
+            page_type_str = "regular pages";
+            break;
+    }
+    
+    std::cout << "Allocation: " << page_type_str;
+    if (info.numa_node >= 0) {
+        std::cout << " on NUMA node " << info.numa_node;
+    }
+    if (info.is_locked) {
+        std::cout << " (locked)";
+    }
+    std::cout << std::endl;
+    fflush(stdout);
 }

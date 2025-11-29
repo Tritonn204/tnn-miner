@@ -12,6 +12,11 @@
 #include <unistd.h>
 #endif
 
+/* Include virtual_memory.h for TLS NUMA context integration */
+extern "C" {
+#include <randomx/virtual_memory.h>
+}
+
 class NUMAOptimizer {
 public:
     struct NodeInfo {
@@ -47,6 +52,10 @@ public:
     
     // Check if NUMA is available on this system
     static bool isAvailable();
+    
+    // Feature detection - exposed from virtual_memory
+    static bool isOneGbPagesAvailable() { return vmem_isOneGbPagesAvailable(); }
+    static bool isHugePagesAvailable() { return vmem_isHugePagesAvailable(); }
 
     // Set memory allocation policy for current thread
     static bool setMemoryPolicy(int node);
@@ -54,19 +63,51 @@ public:
     // Restore default memory allocation policy
     static void restoreMemoryPolicy();
     
-    // RAII helper for automatic policy restoration
+    // Get info about what the last allocation actually used
+    static vmem_alloc_info_t getLastAllocInfo() { return vmem_getLastAllocInfo(); }
+    
+    // Print allocation info in human-readable form
+    static void printAllocInfo(const vmem_alloc_info_t& info);
+    
+    /**
+     * RAII helper for automatic NUMA policy management.
+     * 
+     * When constructed with a NUMA node:
+     * 1. Sets the thread-local NUMA context in virtual_memory (vmem_setNumaNode)
+     * 2. Sets the libnuma memory policy (numa_set_membind, etc.)
+     * 
+     * Any calls to allocLargePagesMemory() while this is in scope will:
+     * - Automatically try 1GB pages first (if available and size >= 1GB)
+     * - Fall back to 2MB pages
+     * - Fall back to regular pages on the target NUMA node
+     * - Apply madvise(MADV_RANDOM | MADV_WILLNEED) and mlock()
+     * 
+     * On destruction, both policies are restored to defaults.
+     */
     class ScopedMemoryPolicy {
     private:
         bool need_restore;
+        int target_node;
     public:
-        ScopedMemoryPolicy(int node) : need_restore(false) {
-            need_restore = NUMAOptimizer::setMemoryPolicy(node);
+        ScopedMemoryPolicy(int node) : need_restore(false), target_node(node) {
+            if (node >= 0) {
+                // Set thread-local context for virtual_memory.c
+                vmem_setNumaNode(node);
+                // Set libnuma policy
+                need_restore = NUMAOptimizer::setMemoryPolicy(node);
+            }
         }
         ~ScopedMemoryPolicy() {
+            // Always clear the TLS context
+            vmem_clearNumaNode();
+            // Restore libnuma policy if we changed it
             if (need_restore) {
                 NUMAOptimizer::restoreMemoryPolicy();
             }
         }
+        
+        // Get what node this policy is targeting
+        int getNode() const { return target_node; }
     };
 
 private:

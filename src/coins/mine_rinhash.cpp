@@ -1,5 +1,5 @@
-// mine_yespower.cpp
 #include "miners.hpp"
+#include "numa_optimizer.h"
 
 #include <rinhash/rinhash.h>
 #include <stratum/btc-stratum.h>
@@ -9,6 +9,13 @@
 
 void mineRinhash(int tid)
 {
+  int numa_nodes = NUMAOptimizer::getMemoryNodes();
+  if (numa_nodes > 0) {
+      int node = tid % numa_nodes;
+      NUMAOptimizer::setMemoryPolicy(node);
+      NUMAOptimizer::printThreadBinding(tid);
+  }
+
   thread_local std::random_device rd;
   thread_local std::mt19937 rng(rd());
   thread_local std::uniform_real_distribution<double> dist(0, 10000);
@@ -115,7 +122,7 @@ waitForJob:
         RinHash::hash(powHash, FINALWORK, devMine ? &blake3_prefix_dev : &blake3_prefix_main);
 
         uint32_t *currentTarget = devMine ? targetWords_dev : targetWords;
-        if (++localCount >= 1024) { counter.fetch_add(localCount); localCount = 0; }
+        if (++localCount >= 512) { counter.fetch_add(localCount); localCount = 0; }
 
         submit = (devMine && devConnected) ? !submittingDev : !submitting;
 
@@ -195,6 +202,9 @@ waitForJob:
       localDevHeight = -1;
     }
   }
+
+  // ⭐ NUMA: restore thread policy when mining thread ends
+  NUMAOptimizer::restoreMemoryPolicy();
 
   goto waitForJob;
 }

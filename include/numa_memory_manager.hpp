@@ -84,6 +84,11 @@ public:
             if (!m_nodes[node].resource) {
                 return false;
             }
+            
+            // Print what type of pages were actually allocated
+            auto info = NUMAOptimizer::getLastAllocInfo();
+            std::cout << "  Node " << node << ": ";
+            NUMAOptimizer::printAllocInfo(info);
         }
         
         m_initialized = true;

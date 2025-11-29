@@ -405,6 +405,7 @@ waitForJob:
 
         randomx_cache* tCache = nullptr;
         randomx_dataset* RXD = nullptr;
+        int numa_node = -1;
         
         if (rx_numa_enabled) {
           auto* cache_wrapper = devMine ? 
@@ -416,13 +417,20 @@ waitForJob:
           if (cache_wrapper && dataset_wrapper) {
             tCache = cache_wrapper->ptr;
             RXD = dataset_wrapper->ptr;
+            numa_node = dataset_wrapper->numa_node;
           }
         } else {
           tCache = devMine ? rxCache_dev : rxCache;
           RXD = rxDataset;
         }
 
-        vm = randomx_create_vm(rxFlags, tCache, RXD);
+        // Create VM with NUMA-aware scratchpad allocation
+        // ScopedMemoryPolicy ensures the 2MB scratchpad is allocated on the same
+        // NUMA node as the dataset this thread will use
+        {
+          NUMAOptimizer::ScopedMemoryPolicy policy(numa_node);
+          vm = randomx_create_vm(rxFlags, tCache, RXD);
+        }
 
         if (vm == nullptr) {
           if ((rxFlags & RANDOMX_FLAG_HARD_AES)) {

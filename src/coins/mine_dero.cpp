@@ -1,5 +1,5 @@
 #include "miners.hpp"
-#include "tnn-hugepages.h"
+#include "numa_optimizer.h"
 #include <astrobwtv3/astrobwtv3.h>
 #include <astrobwtv3/lookupcompute.h>
 
@@ -11,16 +11,9 @@
 #include <cstdint>
 #include <cstring>
 #include <random>
+#include <cstdlib>
 
 namespace {
-
-struct ThreadCtx {
-  byte   work[MINIBLOCK_SIZE];
-  byte   devWork[MINIBLOCK_SIZE];
-  byte   powHash[32];
-  workerData* worker;
-  uint64_t localCount;
-};
 
 static inline void write_nonce_be(byte* WORK, uint32_t N) {
   WORK[MINIBLOCK_SIZE - 5] = (byte)((N >> 24) & 0xFF);
@@ -29,7 +22,7 @@ static inline void write_nonce_be(byte* WORK, uint32_t N) {
   WORK[MINIBLOCK_SIZE - 2] = (byte)((N      ) & 0xFF);
 }
 
-}
+} // namespace
 
 void mineDero(int tid)
 {
@@ -40,14 +33,31 @@ void mineDero(int tid)
   thread_local std::mt19937 gen_local(rd());
   thread_local std::uniform_real_distribution<double> dev_dist(0, 10000);
 
-  thread_local ThreadCtx* ctx = nullptr;
-  if (!ctx) {
-    ctx = (ThreadCtx*)malloc_huge_pages(sizeof(ThreadCtx));
-    std::memset(ctx, 0, sizeof(ThreadCtx));
-    ctx->worker = (workerData*)malloc_huge_pages(sizeof(workerData));
-    initWorker(*ctx->worker);
-    lookupGen(*ctx->worker, nullptr, nullptr);
-    ctx->localCount = 0;
+  // NUMA-aware worker context and counters
+  thread_local workerData* worker = nullptr;
+  thread_local uint64_t localCount = 0;
+
+  // Per-thread mining buffers
+  thread_local std::array<byte, MINIBLOCK_SIZE> work;
+  thread_local std::array<byte, MINIBLOCK_SIZE> devWork;
+  thread_local std::array<byte, 32> powHash;
+
+  if (!worker) {
+    worker = static_cast<workerData*>(NUMAOptimizer::allocateLocal(sizeof(workerData)));
+    if (!worker) {
+      worker = static_cast<workerData*>(std::malloc(sizeof(workerData)));
+    }
+    if (!worker) {
+      setcolor(RED);
+      std::cerr << "Failed to allocate workerData for DERO miner" << std::endl << std::flush;
+      setcolor(BRIGHT_WHITE);
+      return;
+    }
+
+    NUMAOptimizer::optimizeMemoryForMining(worker, sizeof(workerData));
+    initWorker(*worker);
+    lookupGen(*worker, nullptr, nullptr);
+    localCount = 0;
   }
 
   byte random_tail[12];
@@ -83,21 +93,21 @@ waitForJob:
         diffDevSnapshot  = difficultyDev;
       }
 
-      hexstrToBytes(std::string(myJob.at("blockhashing_blob").as_string()), ctx->work);
+      hexstrToBytes(std::string(myJob.at("blockhashing_blob").as_string()), work.data());
       if (devConnected) {
-        hexstrToBytes(std::string(myJobDev.at("blockhashing_blob").as_string()), ctx->devWork);
+        hexstrToBytes(std::string(myJobDev.at("blockhashing_blob").as_string()), devWork.data());
       }
 
-      std::memcpy(&ctx->work[MINIBLOCK_SIZE - 12], random_tail, 12);
-      ctx->work[MINIBLOCK_SIZE - 1] = (byte)tid;
+      std::memcpy(&work[MINIBLOCK_SIZE - 12], random_tail, 12);
+      work[MINIBLOCK_SIZE - 1] = (byte)tid;
       if (devConnected) {
-        std::memcpy(&ctx->devWork[MINIBLOCK_SIZE - 12], random_tail, 12);
-        ctx->devWork[MINIBLOCK_SIZE - 1] = (byte)tid;
+        std::memcpy(&devWork[MINIBLOCK_SIZE - 12], random_tail, 12);
+        devWork[MINIBLOCK_SIZE - 1] = (byte)tid;
       }
 
-      if ((ctx->work[0] & 0x0F) != 1) {
+      if ((work[0] & 0x0F) != 1) {
         std::cerr << "Unknown version, please check for updates: version"
-                  << (ctx->work[0] & 0x1F) << std::endl;
+                  << (work[0] & 0x1F) << std::endl;
         boost::this_thread::sleep_for(boost::chrono::milliseconds(500));
         continue;
       }
@@ -112,21 +122,21 @@ waitForJob:
         CHECK_CLOSE;
 
         const bool devMine = (devConnected && (dev_dist(gen_local) < devFee * 100.0));
-        byte*       WORK   = devMine ? ctx->devWork : ctx->work;
-        const Num&  cmp    = devMine ? cmpDiffDev   : cmpDiffUser;
+        byte*      WORK    = devMine ? devWork.data() : work.data();
+        const Num& cmp     = devMine ? cmpDiffDev    : cmpDiffUser;
 
         ++nonce;
         write_nonce_be(WORK, nonce);
 
-        AstroBWTv3(WORK, MINIBLOCK_SIZE, ctx->powHash, *ctx->worker, useLookupMine);
+        AstroBWTv3(WORK, MINIBLOCK_SIZE, powHash.data(), *worker, useLookupMine);
 
-        if (++ctx->localCount >= 1024) {
-          counter.fetch_add(ctx->localCount);
-          ctx->localCount = 0;
+        if (++localCount >= 512) {
+          counter.fetch_add(localCount);
+          localCount = 0;
         }
         // counter.fetch_add(1);
 
-        if (CheckHash(ctx->powHash, cmp, ALGO_ASTROBWTV3)) {
+        if (CheckHash(powHash.data(), cmp, ALGO_ASTROBWTV3)) {
           bool submit = devMine ? !submittingDev : !submitting;
           if (!submit) {
             for (;;) {
@@ -164,9 +174,9 @@ waitForJob:
         if (!isConnected) break;
       }
 
-      if (ctx->localCount) {
-        counter.fetch_add(ctx->localCount);
-        ctx->localCount = 0;
+      if (localCount) {
+        counter.fetch_add(localCount);
+        localCount = 0;
       }
 
       if (!isConnected) break;
@@ -177,9 +187,9 @@ waitForJob:
       setcolor(BRIGHT_WHITE);
 
       localJobCounter = -1;
-      if (ctx && ctx->localCount) {
-        counter.fetch_add(ctx->localCount);
-        ctx->localCount = 0;
+      if (localCount) {
+        counter.fetch_add(localCount);
+        localCount = 0;
       }
     }
 
