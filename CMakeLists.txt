@@ -148,7 +148,6 @@ else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -target x86_64-pc-windows-msvc")
 
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Xlinker /errorlimit:0")
-    # add_compile_definitions(_MT)
     # endif()
   endif()
   file(GLOB HIP_MODULES 
@@ -621,59 +620,136 @@ if (WITH_HIP)
   # STAGE 1: Create static library with all regular C++ code and dependencies using normal linking
   set(TNN_CORE_LIB "tnn-core-lib")
   add_library(${TNN_CORE_LIB} STATIC
-    ${SOURCES_CORE} ${SOURCES_NET} ${SOURCES_CRYPTO} ${HEADERS_CRYPTO}
+    ${SOURCES_CORE}
+    ${SOURCES_NET}
+    ${SOURCES_CRYPTO}
+    ${HEADERS_CRYPTO}
   )
 
   # Apply normal C++ linking to the static library (no HIP linking issues here)
   setup_target_libraries(${TNN_CORE_LIB})
 
-  if (HIP_PLATFORM MATCHES amd)
-    set(CMAKE_HIP_ARCHITECTURES
-      "gfx900;gfx902;gfx904;gfx906;"
-      "gfx1010;gfx1011;gfx1012;gfx1013;"
-      "gfx1030;gfx1031;gfx1032;gfx1033;gfx1034;gfx1035;gfx1036;"
-      "gfx1100;gfx1101;gfx1102;gfx1103;gfx1150;gfx1151"
-    )
-    set(TNN_OUTPUT_NAME "tnn-miner-rocm")
-  else()
-    set(CMAKE_HIP_ARCHITECTURES "61;70;75;80;89;90")
+  #
+  # Windows + NVIDIA HIP: manual hipcc compilation of HIP sources
+  #
+  if (WIN32 AND HIP_PLATFORM MATCHES "nvidia")
+    message(STATUS "Configuring HIP (NVIDIA backend) on Windows using manual hipcc compilation")
+
+    # Path to hipcc – can be overridden on the CMake command line
+    if (NOT DEFINED HIPCC_EXECUTABLE)
+      set(HIPCC_EXECUTABLE "$ENV{HIP_PATH}/bin/hipcc.bin.exe")
+    endif()
+
+    if (NOT EXISTS "${HIPCC_EXECUTABLE}")
+      message(FATAL_ERROR "HIPCC_EXECUTABLE not found: ${HIPCC_EXECUTABLE}")
+    endif()
+
+    # Output name for CUDA backend via HIP
     set(TNN_OUTPUT_NAME "tnn-miner-cuda")
+
+    # Adjust architectures as desired
+    set(HIPCC_ARCH_FLAGS
+      "-gencode=arch=compute_61,code=sm_61"
+      "-gencode=arch=compute_70,code=sm_70"
+      "-gencode=arch=compute_75,code=sm_75"
+      "-gencode=arch=compute_80,code=sm_80"
+      "-gencode=arch=compute_89,code=sm_89"
+      "-gencode=arch=compute_90,code=sm_90"
+    )
+
+    set(TNN_HIP_OBJS "")
+
+    foreach(src ${TNN_HIP_SOURCES})
+      get_filename_component(src_name "${src}" NAME_WE)
+      set(obj "${CMAKE_CURRENT_BINARY_DIR}/${src_name}.obj")
+
+      add_custom_command(
+        OUTPUT ${obj}
+        COMMAND ${HIPCC_EXECUTABLE}
+                -std=c++20
+                -O3
+                -Xcompiler=/MD
+                -t4
+                ${HIPCC_ARCH_FLAGS}
+                -I"${HIP_PATH}/include"
+                -I"${PROJECT_SOURCE_DIR}/include"
+                -I"${PROJECT_SOURCE_DIR}/src"
+                -c "${src}" -o "${obj}" -x cu
+        DEPENDS "${src}"
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        VERBATIM
+      )
+
+      list(APPEND TNN_HIP_OBJS "${obj}")
+    endforeach()
+
+    add_executable(${TNN_OUTPUT_NAME}
+      ${TNN_HIP_OBJS}
+    )
+
+    if (NOT DEFINED ENV{CUDA_PATH})
+      message(FATAL_ERROR
+        "===============================================\n"
+        " CUDA backend requires CUDA_PATH to be defined.\n"
+        " On Windows this is normally set by the installer:\n"
+        "   setx CUDA_PATH \"C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.X\"\n"
+        "==============================================="
+      )
+    endif()
+
+    # Link with core C++ library and HIP runtime
+    target_link_libraries(${TNN_OUTPUT_NAME}
+      PRIVATE
+        ${TNN_CORE_LIB}
+        "$ENV{CUDA_PATH}/lib/x64/cudart_static.lib"
+        "$ENV{CUDA_PATH}/lib/x64/cuda.lib"
+    )
+
+  #
+  # All other HIP platforms: use proper HIP language integration
+  #
+  else()
+    if (HIP_PLATFORM MATCHES "amd")
+      set(CMAKE_HIP_ARCHITECTURES
+        "gfx900;gfx902;gfx904;gfx906;"
+        "gfx1010;gfx1011;gfx1012;gfx1013;"
+        "gfx1030;gfx1031;gfx1032;gfx1033;gfx1034;gfx1035;gfx1036;"
+        "gfx1100;gfx1101;gfx1102;gfx1103;gfx1150;gfx1151"
+      )
+      set(TNN_OUTPUT_NAME "tnn-miner-rocm")
+    else()
+      # e.g. Linux + NVIDIA HIP, or any non-Windows NVIDIA setup
+      set(CMAKE_HIP_ARCHITECTURES "61;70;75;80;89;90")
+      set(TNN_OUTPUT_NAME "tnn-miner-cuda")
+    endif()
+
+    set(HIP_LANG HIP)
+    set(CMAKE_HIP_COMPILER_WORKS 1)
+    enable_language(${HIP_LANG})
+
+    add_executable(${TNN_OUTPUT_NAME}
+      ${TNN_HIP_SOURCES}
+    )
+
+    target_link_libraries(${TNN_OUTPUT_NAME}
+      PRIVATE
+        ${TNN_CORE_LIB}
+        amdhip64
+    )
+
+    # Global HIP flags
+    set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -O3 -ffast-math")
   endif()
 
-  enable_language(${HIP_LANG})
-  # STAGE 2: Create HIP executable with only HIP sources, link to pre-built static library
-  add_executable(${TNN_OUTPUT_NAME}
-    ${TNN_HIP_SOURCES}
-  )
-
-  # Link only to our pre-built static library and minimal HIP dependencies
-  target_link_libraries(${TNN_OUTPUT_NAME} ${TNN_CORE_LIB})
-
-  # Add only essential HIP libraries, avoiding symbol conflicts
-  target_link_libraries(${TNN_OUTPUT_NAME} amdhip64)
-
-  get_target_property(TNN_LIBS ${TNN_OUTPUT_NAME} LINK_LIBRARIES)
-  
-  # include(ExternalProject)
-  # set(hip_DIR "${HIP_PATH}/cmake")
-  # message(STATUS "hip_DIR = ${hip_DIR}")
-  # include_directories(${hip_INCLUDE_DIRS})
-  # link_directories(${hip_LIBRARY_DIRS})
-  set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -O3 -ffast-math")
-
-  # ExternalProject_Add(tnn_hip_project
-  #   SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/tnn_hip
-  #   CMAKE_ARGS -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_HIP_COMPILER_WORKS=1 -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}
-  #   BUILD_ALWAYS TRUE
-  # )
-
-  # add_dependencies(${PROJECT_NAME}-${PROJECT_VERSION} tnn_hip_project)
-  # target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} ${CMAKE_BINARY_DIR}/tnn_hip.lib)
-  # target_link_libraries(${PROJECT_NAME}-${PROJECT_VERSION} ${CMAKE_BINARY_DIR}/libtnn_hip.a)
-else() 
-  # set(TNN_OUTPUT_NAME "tnn-miner-${INTERNAL_TNN_VERSION}_cpu")
+else()
+  # CPU-only build path
   set(TNN_OUTPUT_NAME "tnn-miner-cpu")
-  add_executable(${TNN_OUTPUT_NAME} ${SOURCES_CORE} ${SOURCES_NET} ${SOURCES_CRYPTO} ${HEADERS_CRYPTO})
+  add_executable(${TNN_OUTPUT_NAME}
+    ${SOURCES_CORE}
+    ${SOURCES_NET}
+    ${SOURCES_CRYPTO}
+    ${HEADERS_CRYPTO}
+  )
 
   setup_target_libraries(${TNN_OUTPUT_NAME})
 
@@ -683,7 +759,6 @@ else()
 
   # Set output name
   set_target_properties(${TNN_OUTPUT_NAME} PROPERTIES OUTPUT_NAME ${TNN_OUTPUT_NAME})
-
 endif()
 
 unset(HIP_LANG CACHE)

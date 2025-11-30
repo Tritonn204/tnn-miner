@@ -1,43 +1,63 @@
 #pragma once
-#ifdef WIN32
-#include <windows.h> /* WinAPI */
 
-/* Windows sleep in 100ns units */
-inline BOOLEAN nanosleep_simple(LONGLONG ns)
-{
-  // Convert true nanoseconds to 100-nanosecond intervals
-  LONGLONG hundred_ns_intervals = ns / 100;
+#include <stdint.h>
 
-  /* Create and set the high-resolution timer */
-  HANDLE timer = CreateWaitableTimerEx(NULL, NULL, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
-  if (!timer)
-    return FALSE;
+// This function is HOST-ONLY. Never call it from __device__ / kernels.
+#ifdef _WIN32
+    #include <windows.h>
 
-  LARGE_INTEGER li;
-  li.QuadPart = -hundred_ns_intervals; // Negative to indicate relative time
-  if (!SetWaitableTimer(timer, &li, 0, NULL, NULL, FALSE))
-  {
-    CloseHandle(timer);
-    return FALSE;
-  }
+    inline void nanosleep_simple(int64_t ns)
+    {
+        if (ns <= 0) return;
 
-  WaitForSingleObject(timer, INFINITE); // Wait for the timer to expire
-  CloseHandle(timer);                   // Clean up
-  return TRUE;
-}
+        // Convert true nanoseconds to 100-nanosecond intervals
+        int64_t hundred_ns_intervals = ns / 100;
 
-#else
-#include <time.h>
+        // Fallback: if high-res timer creation fails, use Sleep(ms)
+        auto fallback_sleep = [ns]() {
+            DWORD ms = (DWORD)((ns + 999999) / 1000000); // round up
+            ::Sleep(ms);
+        };
 
-inline void nanosleep_simple(long ns)
-{
-  struct timespec req;
+        HANDLE timer = CreateWaitableTimerExW(
+            nullptr,
+            nullptr,
+            CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+            TIMER_ALL_ACCESS
+        );
 
-  // Convert nanoseconds into seconds and nanoseconds
-  req.tv_sec = ns / 1000000000L;  // Seconds
-  req.tv_nsec = ns % 1000000000L; // Nanoseconds
+        if (!timer) {
+            fallback_sleep();
+            return;
+        }
 
-  // Call nanosleep with requested time, no need to store remaining time
-  nanosleep(&req, NULL);
-}
+        LARGE_INTEGER li;
+        // Negative to indicate relative time
+        li.QuadPart = -hundred_ns_intervals;
+
+        if (!SetWaitableTimer(timer, &li, 0, nullptr, nullptr, FALSE)) {
+            CloseHandle(timer);
+            fallback_sleep();
+            return;
+        }
+
+        WaitForSingleObject(timer, INFINITE);
+        CloseHandle(timer);
+    }
+
+#else  // POSIX (Linux, etc.)
+
+    #include <time.h>
+
+    inline void nanosleep_simple(int64_t ns)
+    {
+        if (ns <= 0) return;
+
+        struct timespec req;
+        req.tv_sec  = ns / 1000000000LL;      // seconds
+        req.tv_nsec = ns % 1000000000LL;      // nanoseconds
+
+        nanosleep(&req, nullptr);
+    }
+
 #endif

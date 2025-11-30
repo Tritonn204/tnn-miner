@@ -140,7 +140,7 @@ typedef uint64_t        u64b_t;             /* 64-bit unsigned integer */
 #define BIG_ENDIAN 0x4321
 #endif
 
-#if !defined(BYTE_ORDER) && (defined(__LITTLE_ENDIAN__) || defined(__arm__) || defined(WIN32))
+#if !defined(BYTE_ORDER) && (defined(__LITTLE_ENDIAN__) || defined(__arm__) || defined(WIN32) || defined(_WIN32))
 #define BYTE_ORDER LITTLE_ENDIAN
 #endif
 

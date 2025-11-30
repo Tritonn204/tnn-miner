@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hip_platform.h"
+
 #define BLAKE3_KEY_LEN 32
 #define BLAKE3_OUT_LEN 32
 #define BLAKE3_BLOCK_LEN 64

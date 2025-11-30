@@ -2,6 +2,8 @@
 #include <assert.h>
 
 #include <hip/hip_runtime.h>
+
+#include "hip_platform.h"
 #include "nxl_archdef.h"
 #include "nxl-hash.hip.h"
 
@@ -341,7 +343,7 @@ namespace Nxl_HIP {
     hipEventCreate(&stop_event);
 
     if (isDev) {
-      hipLaunchKernelGGL(nxlHash_hip<true>, dim3(blocks), dim3(Nxl_HIP::THREAD_DIM), 0, 0,
+      TNN_HIP_LAUNCH_KERNEL(nxlHash_hip<true>, dim3(blocks), dim3(Nxl_HIP::THREAD_DIM), 0, 0,
                         nonce_mask, nonce_fixed, kIndex, batchSize, final_nonces, nonce_count, dataBuf);
 
       hipError_t err = hipGetLastError();
@@ -350,7 +352,7 @@ namespace Nxl_HIP {
         printf("Kernel launch failed: %s\n", hipGetErrorString(err));
       }
     } else {
-      hipLaunchKernelGGL(nxlHash_hip<false>, dim3(blocks), dim3(Nxl_HIP::THREAD_DIM), 0, 0,
+      TNN_HIP_LAUNCH_KERNEL(nxlHash_hip<false>, dim3(blocks), dim3(Nxl_HIP::THREAD_DIM), 0, 0,
                         nonce_mask, nonce_fixed, kIndex, batchSize, final_nonces, nonce_count, dataBuf);
 
       hipError_t err = hipGetLastError();
@@ -561,7 +563,7 @@ void benchNxlHip()
   {
     hipMemset(d_nonce_count, 0, sizeof(int));
 
-    // hipLaunchKernelGGL(nxlShake_hip<false>, dim3(blocks), dim3(Nxl_HIP::THREAD_DIM), 0, 0,
+    // TNN_HIP_LAUNCH_KERNEL(nxlShake_hip<false>, dim3(blocks), dim3(Nxl_HIP::THREAD_DIM), 0, 0,
     //                    nonce_mask, nonce_fixed, i, batchSize, d_dataBuf);
 
     // hipError_t err = hipGetLastError();
@@ -571,7 +573,7 @@ void benchNxlHip()
     //   break;
     // }
 
-    hipLaunchKernelGGL(nxlHash_hip<false>, dim3(blocks), dim3(Nxl_HIP::THREAD_DIM), 0, 0,
+    TNN_HIP_LAUNCH_KERNEL(nxlHash_hip<false>, dim3(blocks), dim3(Nxl_HIP::THREAD_DIM), 0, 0,
                        nonce_mask, nonce_fixed, i, batchSize, d_final_nonces, d_nonce_count, d_dataBuf);
 
     // Check for errors after the kernel launch

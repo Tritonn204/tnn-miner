@@ -133,6 +133,63 @@ function Get-NvccPath {
     return $null
 }
 
+function Import-MsvcEnvironment {
+    param(
+        [string]$Architecture = "x64"
+    )
+
+    # Try to find vswhere
+    $vswhereDefault = Join-Path "${env:ProgramFiles(x86)}" "Microsoft Visual Studio\Installer\vswhere.exe"
+    if (-not (Test-Path $vswhereDefault)) {
+        Write-Host "vswhere.exe not found at $vswhereDefault. Make sure Visual Studio with C++ tools is installed."
+        return $false
+    }
+
+    # Find latest VS with C++ tools
+    $vsInstallPath = & $vswhereDefault `
+        -latest `
+        -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+        -property installationPath `
+        -nologo
+
+    if (-not $vsInstallPath) {
+        Write-Host "No Visual Studio installation with C++ tools found."
+        return $false
+    }
+
+    $vcvarsall = Join-Path $vsInstallPath "VC\Auxiliary\Build\vcvarsall.bat"
+    if (-not (Test-Path $vcvarsall)) {
+        Write-Host "vcvarsall.bat not found under $vsInstallPath."
+        return $false
+    }
+
+    Write-Host "Using Visual Studio at: $vsInstallPath"
+    Write-Host "Running vcvarsall.bat $Architecture to populate MSVC environment..."
+
+    # Call vcvarsall + dump environment
+    $cmdOutput = & cmd.exe /c "`"$vcvarsall`" $Architecture >nul && set" 2>$null
+
+    if (-not $cmdOutput) {
+        Write-Host "Failed to run vcvarsall.bat or capture environment."
+        return $false
+    }
+
+    # Import environment into PowerShell
+    foreach ($line in $cmdOutput) {
+        $pair = $line -split "=", 2
+        if ($pair.Length -eq 2) {
+            $name  = $pair[0]
+            $value = $pair[1]
+
+            # Correct PowerShell environment variable assignment
+            Set-Item -Path "Env:$name" -Value $value
+        }
+    }
+
+    Write-Host "MSVC environment imported (PATH, INCLUDE, LIB, etc.)."
+    return $true
+}
+
 function Build-Target {
     param (
         [string]$TargetDir,
@@ -193,23 +250,8 @@ function Build-Target {
 
     if ($env:HIP_PATH) {
         $cmakeArgs += "-DHIP_PATH=""$($env:HIP_PATH)"""
-        # Pre-seed ROCm root so CMakeDetermineHIPCompiler.cmake
-        # doesn't fail on hipconfig --rocmpath when HIP_PLATFORM=nvidia.
-        $cmakeArgs += "-DCMAKE_HIP_COMPILER_ROCM_ROOT=""$($env:HIP_PATH)"""
-
         # Let CMake find hip-lang (and other HIP packages) under the ROCm tree
         $cmakeArgs += "-DCMAKE_PREFIX_PATH=""$($env:HIP_PATH)"""
-
-        # Optional but robust: point directly at hip-lang-config.cmake if it exists
-        $hipLangDir = Join-Path $env:HIP_PATH "lib\cmake\hip-lang"
-        if (Test-Path $hipLangDir) {
-            $cmakeArgs += "-Dhip-lang_DIR=""$hipLangDir"""
-        }
-    }
-
-    if ($nvccPath) {
-        # Tell CMake explicitly which HIP compiler to use for NVIDIA backend
-        $cmakeArgs += "-DCMAKE_HIP_COMPILER=""$nvccPath"""
     }
 
     Write-Host ""
@@ -279,6 +321,11 @@ try {
 
     # Build for NVIDIA using HIP (HIP_PLATFORM=nvidia)
     if ($targetToBuild -eq "" -or $targetToBuild -eq "nvidia") {
+        # Make sure MSVC env (cl.exe etc.) is available just for this build
+        if (-not (Import-MsvcEnvironment -Architecture "x64")) {
+            Write-Host "WARNING: Could not import MSVC environment. NVIDIA HIP build may fail if cl.exe is not in PATH."
+        }
+
         if (-not (Build-Target "nvidia" "ON" "nvidia")) {
             Write-Host "Failed to build for NVIDIA."
         }

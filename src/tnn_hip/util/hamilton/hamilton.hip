@@ -1,5 +1,7 @@
 // hamilton.hip
 
+#include "hip_platform.h"
+
 #include <hip/hip_runtime.h>
 #include <cstdint>
 #include <vector>
@@ -100,7 +102,7 @@ std::vector<uint16_t> findHamiltonianCycle(const std::vector<std::vector<bool>>&
             int blockSize = 256;
             int gridSize  = (pos + blockSize - 1) / blockSize;
 
-            hipLaunchKernelGGL(isSafeKernel,
+            TNN_HIP_LAUNCH_KERNEL(isSafeKernel,
                                dim3(gridSize),
                                dim3(blockSize),
                                0,
