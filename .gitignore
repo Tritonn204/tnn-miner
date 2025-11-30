@@ -26,6 +26,7 @@ build/*
 
 # Directories
 /bin
+/hip-build
 /hooks
 /info
 /CMakeFiles

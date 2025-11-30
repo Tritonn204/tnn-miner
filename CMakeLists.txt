@@ -23,8 +23,8 @@ endif()
 
 set(TARGET_ARCH "amd64")
 set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   -Ofast -flto -DNDEBUG")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Ofast -flto  -Wuninitialized -DNDEBUG")
+set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   -Ofast -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Ofast -Wuninitialized -DNDEBUG")
 
 option(USE_GCC        "Use GCC instead of Clang" OFF)
 option(USE_ASTRO_SPSA "Use Astro Stamped Permutation Suffix Array library" ON)
@@ -115,7 +115,11 @@ option(ARM_V8               "Force ARMv8 (64 bit) architecture, use with caution
 option(ARM_V7               "Force ARMv7 (32 bit) architecture, use with caution if automatic detection fails, but you sure it may work" OFF)
 # End of XMRig options
 
-if (WITH_HIP)
+if (NOT WITH_HIP)
+    message(STATUS "Enabling LTO for non-HIP build")
+    set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -flto")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flto")
+else()
   set(USE_ASTRO_SPSA OFF)
   # if (WIN32)
   #   set(CMAKE_C_COMPILER clang-cl)
@@ -125,17 +129,26 @@ if (WITH_HIP)
   # set(CMAKE_CXX_COMPILER "C:/Program Files/LLVM/bin/clang-cl.exe")  # Adjust path as needed
 
   if (WIN32)
+    if (NOT CMAKE_GENERATOR MATCHES "Ninja")
+      message(FATAL_ERROR
+        "WITH_HIP=ON on Windows requires the Ninja generator.\n"
+        "Current generator: '${CMAKE_GENERATOR}'.\n"
+        "Run CMake like:\n"
+        "  cmake -S . -B hip-build/win32 -G \"Ninja\" -DWITH_HIP=ON -DHIP_PATH=\"C:/Program Files/AMD/ROCm/6.1\""
+      )
+    endif()
+
     add_definitions(-DBOOST_ALL_NO_LIB)
-    set(CMAKE_C_COMPILER $ENV{HIP_PATH}/bin/clang.exe)
-    set(CMAKE_CXX_COMPILER $ENV{HIP_PATH}/bin/clang++.exe)
+    add_definitions(-D_WIN32_WINNT=0x0A00)
 
-    #   set(CMAKE_C_COMPILER "cl")  # Adjust path as needed
-    #   set(CMAKE_CXX_COMPILER "cl")  # Adjust path as needed
+    set(CMAKE_C_COMPILER   "$ENV{HIP_PATH}/bin/clang.exe")
+    set(CMAKE_CXX_COMPILER "$ENV{HIP_PATH}/bin/clang++.exe")
 
-    #   link_directories($ENV{LIB})
-    # else()
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -target x86_64-pc-windows-msvc")
+    set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -target x86_64-pc-windows-msvc")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -target x86_64-pc-windows-msvc")
+
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Xlinker /errorlimit:0")
+    # add_compile_definitions(_MT)
     # endif()
   endif()
   file(GLOB HIP_MODULES 
@@ -214,7 +227,6 @@ if(CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
   # We cannot use static linking on OSX.
   set(DO_STATIC " ")
 endif()
-
 
 if(DEFINED ENV{CPU_ARCHTARGET})
   set(CPU_ARCHTARGET "$ENV{CPU_ARCHTARGET}")
@@ -318,7 +330,15 @@ if(WIN32)
 endif()
 
 # This stores downloaded dependencies so we do not need to re-download them
-set(CPM_SOURCE_CACHE "${PROJECT_SOURCE_DIR}/_deps/CPM")
+string(MAKE_C_IDENTIFIER "${CMAKE_CXX_COMPILER_ID}-${CMAKE_CXX_COMPILER_VERSION}" COMPILER_TAG)
+
+if (WITH_HIP)
+  set(CPM_SOURCE_CACHE
+      "${PROJECT_SOURCE_DIR}/_deps/CPM-hip-${CMAKE_SYSTEM_NAME}-${COMPILER_TAG}")
+else()
+  set(CPM_SOURCE_CACHE
+      "${PROJECT_SOURCE_DIR}/_deps/CPM-cpu-${CMAKE_SYSTEM_NAME}-${COMPILER_TAG}")
+endif()
 cmake_print_variables(CPM_SOURCE_CACHE)
 
 set(CPM_DOWNLOAD_VERSION 0.40.8)
@@ -412,20 +432,24 @@ else()
   if(WIN32)
     set(CMAKE_ASM_FLAGS -Wno-unused-command-line-argument) # adding this flag as an example
   endif()
+
+  # Use normal compiled Boost libs for the core library (standard C++ linking)
+  set(BOOST_STATIC_SETTING "BOOST_USE_STATIC_LIBS ON")
+
   CPMAddPackage(
     NAME Boost
     VERSION 1.86.0 # Versions less than 1.85.0 may need patches for installation targets.
     URL "${PROJECT_SOURCE_DIR}/_deps/boost-1.86.0-cmake.tar.xz"
     URL_HASH SHA256=2c5ec5edcdff47ff55e27ed9560b0a0b94b07bd07ed9928b476150e16b0efc57
-    OPTIONS 
+    OPTIONS
       "BOOST_ENABLE_CMAKE ON"
       "BOOST_SKIP_INSTALL_RULES ON" # Set `OFF` for installation
-      "BOOST_USE_STATIC_LIBS ON"
+      "${BOOST_STATIC_SETTING}"
       "BOOST_INSTALL_LAYOUT system"
       "BOOST_INCLUDE_LIBRARIES chrono\\\;context\\\;coroutine\\\;multiprecision\\\;json\\\;thread\\\;atomic\\\;program_options"
       "${BOOST_TOOLSET_OPTS}"  # Specify Clang toolset
-      # ${CPM_COMPILER}  
-      # "CMAKE_CXX_FLAGS /DCLANG_COMPILER=1 /fms-compatibility"
+      "CMAKE_CXX_FLAGS -fms-compatibility"
+      # ${CPM_COMPILER}
     # Maintain build compatibility between find_package and CMakeLists.txt variants
   )
 
@@ -464,13 +488,15 @@ if(WIN_CROSS)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L${TNN_BOOST_LIBDIRS}")
   #set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Xlinker /force")
   set(LINK_OPTIONS "${CMAKE_EXE_LINKER_FLAGS}")
-elseif(CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin" OR USE_GCC)
+elseif (CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin" OR USE_GCC)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lc++ -fuse-ld=ld")
 elseif (CMAKE_HOST_SYSTEM_NAME MATCHES "Linux")
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -v -fuse-ld=lld-${CXX_MAJOR_VERSION}")
 elseif (CMAKE_HOST_SYSTEM_NAME MATCHES "Windows")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=C:/mingw64/bin/ld.lld.exe")
-  #set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld-link")
+  if (NOT WITH_HIP)
+    # CPU builds: use MinGW's linker
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=C:/mingw64/bin/ld.lld.exe")
+  endif()
 endif()
 cmake_print_variables(CMAKE_EXE_LINKER_FLAGS)
 
@@ -521,15 +547,25 @@ file(GLOB_RECURSE SOURCES_CORE
   "${PROJECT_SOURCE_DIR}/src/core/*.c"
   "${PROJECT_SOURCE_DIR}/src/crypto/cshake/*.c"
   "${PROJECT_SOURCE_DIR}/src/crypto/skein/*.c"
-  "${PROJECT_SOURCE_DIR}/src/crypto/salsa-simd/*.c"
   "${PROJECT_SOURCE_DIR}/src/crypto/sha3/*.c"
-  "${PROJECT_SOURCE_DIR}/src/crypto/argon2/*.c"
-  "${PROJECT_SOURCE_DIR}/src/crypto/argon2/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/broadcast/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/coins/dummy_miners.cpp"
   "${PROJECT_SOURCE_DIR}/src/util/*.c"
   "${PROJECT_SOURCE_DIR}/src/util/*.cpp"
 )
+
+if (NOT WITH_HIP)
+  file(GLOB SOURCES_CORE_CRYPTO_SALSA
+       "${PROJECT_SOURCE_DIR}/src/crypto/salsa-simd/*.c")
+
+  file(GLOB SOURCES_CORE_ARGON2
+       "${PROJECT_SOURCE_DIR}/src/crypto/argon2/*.c"
+       "${PROJECT_SOURCE_DIR}/src/crypto/argon2/*.cpp")
+
+  list(APPEND SOURCES_CORE
+       ${SOURCES_CORE_CRYPTO_SALSA}
+       ${SOURCES_CORE_ARGON2})
+endif()
 
 file(GLOB SOURCES_NET
   "${PROJECT_SOURCE_DIR}/src/net/*.cpp"
@@ -582,24 +618,41 @@ endif()
 include(cmake/setup.cmake)
 
 if (WITH_HIP)
-  enable_language(${HIP_LANG})
-  if (HIP_PLATFORM MATCHES amd)
-    set(CMAKE_HIP_ARCHITECTURES 
-    "gfx900;gfx902;gfx904;gfx906;"
-    "gfx1010;gfx1011;gfx1012;gfx1013;"
-    "gfx1030;gfx1031;gfx1032;gfx1033;gfx1034;gfx1035;gfx1036;"
-    "gfx1100;gfx1101;gfx1102;gfx1103;gfx1150;gfx1151"
-    )
+  # STAGE 1: Create static library with all regular C++ code and dependencies using normal linking
+  set(TNN_CORE_LIB "tnn-core-lib")
+  add_library(${TNN_CORE_LIB} STATIC
+    ${SOURCES_CORE} ${SOURCES_NET} ${SOURCES_CRYPTO} ${HEADERS_CRYPTO}
+  )
 
+  # Apply normal C++ linking to the static library (no HIP linking issues here)
+  setup_target_libraries(${TNN_CORE_LIB})
+
+  if (HIP_PLATFORM MATCHES amd)
+    set(CMAKE_HIP_ARCHITECTURES
+      "gfx900;gfx902;gfx904;gfx906;"
+      "gfx1010;gfx1011;gfx1012;gfx1013;"
+      "gfx1030;gfx1031;gfx1032;gfx1033;gfx1034;gfx1035;gfx1036;"
+      "gfx1100;gfx1101;gfx1102;gfx1103;gfx1150;gfx1151"
+    )
     set(TNN_OUTPUT_NAME "tnn-miner-rocm")
-    add_executable(${TNN_OUTPUT_NAME} ${SOURCES_CORE} ${SOURCES_NET} ${SOURCES_CRYPTO} ${HEADERS_CRYPTO})
-    setup_target_libraries(${TNN_OUTPUT_NAME})
-  else ()
-    set(TNN_OUTPUT_NAME "tnn-miner-cuda")
+  else()
     set(CMAKE_HIP_ARCHITECTURES "61;70;75;80;89;90")
-    add_executable(${TNN_OUTPUT_NAME} ${SOURCES_CORE} ${SOURCES_NET} ${SOURCES_CRYPTO} ${HEADERS_CRYPTO})
-    setup_target_libraries(${TNN_OUTPUT_NAME})
-  endif ()
+    set(TNN_OUTPUT_NAME "tnn-miner-cuda")
+  endif()
+
+  enable_language(${HIP_LANG})
+  # STAGE 2: Create HIP executable with only HIP sources, link to pre-built static library
+  add_executable(${TNN_OUTPUT_NAME}
+    ${TNN_HIP_SOURCES}
+  )
+
+  # Link only to our pre-built static library and minimal HIP dependencies
+  target_link_libraries(${TNN_OUTPUT_NAME} ${TNN_CORE_LIB})
+
+  # Add only essential HIP libraries, avoiding symbol conflicts
+  target_link_libraries(${TNN_OUTPUT_NAME} amdhip64)
+
+  get_target_property(TNN_LIBS ${TNN_OUTPUT_NAME} LINK_LIBRARIES)
   
   # include(ExternalProject)
   # set(hip_DIR "${HIP_PATH}/cmake")

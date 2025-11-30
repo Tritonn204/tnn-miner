@@ -13,6 +13,7 @@
 //
 //------------------------------------------------------------------------------
 
+#include "miner_main.h"
 #include "tnn-common.hpp"
 #include "tnn-hugepages.h"
 #include "numa_optimizer.h"
@@ -59,6 +60,10 @@
 #include <coins/miners.hpp>
 #include <tnn_hip/core/devInfo.hip.h>
 #include <boost/algorithm/string.hpp>
+
+#ifdef TNN_HIP
+#include <boost/json/src.hpp>
+#endif
 
 #ifdef TNN_YESPOWER
 #include <crypto/yespower/yespower_algo.h>
@@ -314,7 +319,7 @@ void sigint(int signum) {
   exit(signum);
 }
 
-int main(int argc, char **argv)
+int tnn_main(int argc, char** argv)
 {
   // test_cshake256();
 
@@ -562,7 +567,6 @@ int main(int argc, char **argv)
   }
 
   if (vm.count("randomx") || miningProfile.coin.miningAlgo == ALGO_RX0) {
-    fflush(stdout);
     #if defined(TNN_RANDOMX)
     preserveAlgoOverride(miningProfile, COIN_RX0);
     #else
@@ -1060,6 +1064,7 @@ fillBlanks:
 
   switch (miningProfile.coin.miningAlgo)
   {
+    #if defined(TNN_YESPOWER)
     case ALGO_YESPOWER:
       miningProfile.protocol = PROTO_BTC_STRATUM;
 
@@ -1070,6 +1075,7 @@ fillBlanks:
         initADVCParams(&devYespowerParams);
       }
       break;
+    #endif
     default:
       break;
   }
@@ -1829,3 +1835,9 @@ connectionAttempt:
   ioc.restart();
   goto connectionAttempt;
 }
+
+#ifndef TNN_HIP
+int main(int argc, char** argv) {
+    return tnn_main(argc, argv);
+}
+#endif

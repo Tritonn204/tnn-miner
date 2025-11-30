@@ -53,6 +53,11 @@ blankfunc(mineShai);
 blankfunc(mineYespower);
 #endif
 
+// Rinhash
+#ifndef TNN_RINHASH
+blankfunc(mineRinhash);
+#endif
+
 #ifndef TNN_HIP
 blankfunc(mineAstrix_hip);
 blankfunc(mineNexellia_hip);

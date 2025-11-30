@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(nm:*)",
+      "Bash(llvm-ar t:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(xargs cat:*)",
+      "Read(//c/openssl_msvc/**)",
+      "Bash(cd:*)",
+      "Bash(powershell:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
