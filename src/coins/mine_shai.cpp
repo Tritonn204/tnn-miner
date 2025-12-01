@@ -1,8 +1,8 @@
 #include <string>
 #include "miners.hpp"
-#include "tnn-hugepages.h"
+#include "tnn-hugepages.hpp"
 #include "hex.h"
-#include "numa_optimizer.h"   // ⭐ NUMA
+#include "numa_optimizer.hpp"   // ⭐ NUMA
 
 #include <crypto/shai/shai-hive.h>
 

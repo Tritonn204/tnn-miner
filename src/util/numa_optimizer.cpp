@@ -1,4 +1,5 @@
-#include "numa_optimizer.h"
+#include "tnn-hugepages.hpp"
+#include "numa_optimizer.hpp"
 
 #include <vector>
 #include <fstream>
@@ -82,8 +83,8 @@ bool NUMAOptimizer::initialize() {
               << total_cpus << " CPUs total" << std::endl;
     
     // Print huge page availability
-    std::cout << "Huge pages: 2MB=" << (vmem_isHugePagesAvailable() ? "available" : "unavailable")
-              << ", 1GB=" << (vmem_isOneGbPagesAvailable() ? "available" : "unavailable") 
+    std::cout << "Huge pages: 2MB=" << (isHugePagesAvailable() ? "available" : "unavailable")
+              << ", 1GB=" << (isOneGbPagesAvailable() ? "available" : "unavailable") 
               << std::endl;
     fflush(stdout);
     
@@ -465,27 +466,15 @@ void NUMAOptimizer::restoreMemoryPolicy() {
 #endif
 }
 
-void NUMAOptimizer::printAllocInfo(const vmem_alloc_info_t& info) {
+void NUMAOptimizer::printAllocInfo(const TnnAllocInfo & info) {
     const char* page_type_str;
     switch (info.page_type) {
-        case VMEM_PAGE_1GB:
-            page_type_str = "1GB hugepages";
-            break;
-        case VMEM_PAGE_2MB:
-            page_type_str = "2MB hugepages";
-            break;
-        default:
-            page_type_str = "regular pages";
-            break;
+      case TNN_PAGE_1GB:    page_type_str = "1GB huge pages"; break;
+      case TNN_PAGE_2MB:    page_type_str = "2MB huge pages"; break;
+      default:              page_type_str = "regular pages"; break;
     }
     
-    std::cout << "Allocation: " << page_type_str;
-    if (info.numa_node >= 0) {
-        std::cout << " on NUMA node " << info.numa_node;
-    }
-    if (info.is_locked) {
-        std::cout << " (locked)";
-    }
-    std::cout << std::endl;
-    fflush(stdout);
+    std::cout << "  Page type: " << page_type_str << std::endl;
+    std::cout << "  NUMA node: " << (info.numa_node >= 0 ? std::to_string(info.numa_node) : "any") << std::endl;
+    std::cout << "  Memory locked: " << (info.is_locked ? "yes" : "no") << std::endl;
 }

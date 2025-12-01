@@ -26,53 +26,48 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#pragma once
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+#ifndef VIRTUAL_MEMORY_HPP
+#define VIRTUAL_MEMORY_HPP
 
 #include <stddef.h>
-#include <stdbool.h>
+#include <stdint.h>
 
-#define alignSize(pos, align) (((pos - 1) / align + 1) * align)
+/* Page types for allocation info */
+typedef enum {
+    VMEM_PAGE_REGULAR = 0,
+    VMEM_PAGE_2MB = 1,
+    VMEM_PAGE_1GB = 2
+} vmem_page_type_t;
 
-/* Original API - unchanged for compatibility */
-void* allocMemoryPages(size_t);
-void setPagesRW(void*, size_t);
-void setPagesRX(void*, size_t);
-void setPagesRWX(void*, size_t);
-void* allocLargePagesMemory(size_t);
-void freePagedMemory(void*, size_t);
+/* Allocation result info */
+typedef struct {
+    vmem_page_type_t page_type;
+    int numa_node;
+    bool is_locked;
+} vmem_alloc_info_t;
 
-/* NUMA-aware thread-local context
- * Set by NUMAOptimizer::ScopedMemoryPolicy to make allocLargePagesMemory() 
- * automatically allocate on the correct NUMA node with optimal page sizes.
- */
+/* NUMA context - compatibility shims */
 void vmem_setNumaNode(int node);
 void vmem_clearNumaNode(void);
 int vmem_getNumaNode(void);
-
-/* Feature detection */
-bool vmem_isOneGbPagesAvailable(void);
-bool vmem_isHugePagesAvailable(void);
-
-/* Allocation info for diagnostics */
-typedef enum {
-	VMEM_PAGE_REGULAR = 0,
-	VMEM_PAGE_2MB = 1,
-	VMEM_PAGE_1GB = 2
-} vmem_page_type_t;
-
-typedef struct {
-	vmem_page_type_t page_type;
-	int numa_node;        /* -1 if not NUMA-bound */
-	bool is_locked;       /* mlock succeeded */
-} vmem_alloc_info_t;
-
-/* Get info about last allocation (thread-local) */
 vmem_alloc_info_t vmem_getLastAllocInfo(void);
 
-#ifdef __cplusplus
+/* Memory allocation */
+void* allocMemoryPages(size_t bytes);
+
+extern "C" {
+void* allocLargePagesMemory(size_t bytes);
+void freePagedMemory(void* ptr, size_t bytes);
 }
-#endif
+
+/* Page protection */
+void setPagesRW(void* ptr, size_t bytes);
+void setPagesRX(void* ptr, size_t bytes);
+void setPagesRWX(void* ptr, size_t bytes);
+
+/* Utility */
+inline constexpr size_t alignSize(size_t size, size_t align) {
+    return (size + align - 1) & ~(align - 1);
+}
+
+#endif // VIRTUAL_MEMORY_HPP

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <vector>
 #include <string>
 #include <algorithm>
 #include <boost/program_options.hpp>
@@ -96,11 +95,9 @@ static const char* threadPrompt = "Please provide the desired amount of mining t
 static const char* inputIntro = "Please provide your mining settings (leave fields blank to use defaults)";
 
 static int colorPreTable[] = {
-//  BLK  RED  GRN  YEL  BLU  MAG  CYN  WHT  | BRIGHT variants
     0,   0,   0,   0,   0,   0,   0,   0,     1,   1,   1,   1,   1,   1,   1,   1
 };
 static int colorTable[] = {
-//  BLK  RED  GRN  YEL  BLU  MAG  CYN  WHT  | BRIGHT variants  
     30,  31,  32,  33,  34,  35,  36,  37,    90,  91,  92,  93,  94,  95,  96,  97
 };
 
@@ -122,10 +119,28 @@ static int colorTable[] = {
 #define BRIGHT_WHITE    15
 
 #if defined(_WIN32)
-inline void setcolor(WORD color)
+static WORD winColorTable[] = {
+    0,                                                                      // BLACK
+    FOREGROUND_RED,                                                         // RED
+    FOREGROUND_GREEN,                                                       // GREEN
+    FOREGROUND_RED | FOREGROUND_GREEN,                                      // YELLOW
+    FOREGROUND_BLUE,                                                        // BLUE
+    FOREGROUND_RED | FOREGROUND_BLUE,                                       // MAGENTA
+    FOREGROUND_GREEN | FOREGROUND_BLUE,                                     // CYAN
+    FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE,                    // WHITE
+    FOREGROUND_INTENSITY,                                                   // BRIGHT_BLACK
+    FOREGROUND_RED | FOREGROUND_INTENSITY,                                  // BRIGHT_RED
+    FOREGROUND_GREEN | FOREGROUND_INTENSITY,                                // BRIGHT_GREEN
+    FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY,               // BRIGHT_YELLOW
+    FOREGROUND_BLUE | FOREGROUND_INTENSITY,                                 // BRIGHT_BLUE
+    FOREGROUND_RED | FOREGROUND_BLUE | FOREGROUND_INTENSITY,                // BRIGHT_MAGENTA
+    FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY,              // BRIGHT_CYAN
+    FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY  // BRIGHT_WHITE
+};
+
+inline void setcolor(int color)
 {
-    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE),color);
-    return;
+    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), winColorTable[color]);
 }
 #else
 inline void setcolor(int color)

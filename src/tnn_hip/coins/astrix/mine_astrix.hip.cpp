@@ -1,6 +1,6 @@
 // The order is important here for WIN32 builds: https://stackoverflow.com/a/16288859
 #include <coins/miners.hpp>
-#include "tnn-hugepages.h"
+#include "tnn-hugepages.hpp"
 #include <stratum/stratum.h>
 
 #include <astrix-hash/astrix-hash.h>

@@ -13,7 +13,7 @@ if (WITH_RANDOMX)
       src/crypto/randomx/cpu.cpp
       src/crypto/randomx/dataset.cpp
       src/crypto/randomx/soft_aes.cpp
-      src/crypto/randomx/virtual_memory.c
+      src/crypto/randomx/virtual_memory.cpp
       src/crypto/randomx/vm_interpreted.cpp
       src/crypto/randomx/allocator.cpp
       src/crypto/randomx/assembly_generator_x86.cpp

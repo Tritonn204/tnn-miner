@@ -11,7 +11,7 @@
 #include <signal.h>
 #include <mutex>
 
-#include "terminal.h"
+#include "terminal.hpp"
 
 #ifdef __x86_64__
 #include <cpuid.h>

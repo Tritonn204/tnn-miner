@@ -1,5 +1,5 @@
 #include "miners.hpp"
-#include "numa_optimizer.h"
+#include "numa_optimizer.hpp"
 
 #include <rinhash/rinhash.h>
 #include <stratum/btc-stratum.h>

@@ -19,7 +19,7 @@
 
 #include "rx0_jobCache.hpp"
 #include <randomx/randomx.h>
-#include "numa_optimizer.h"
+#include "numa_optimizer.hpp"
 
 #include <atomic>
 

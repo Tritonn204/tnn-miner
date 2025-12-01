@@ -1,5 +1,5 @@
 #include "miners.hpp"
-#include "tnn-hugepages.h"
+#include "tnn-hugepages.hpp"
 #include <astrix-hash/astrix-hash.h>
 #include <stratum/stratum.h>
 

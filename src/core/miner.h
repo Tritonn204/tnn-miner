@@ -13,7 +13,7 @@
 #include <endian.hpp>
 #include <boost/thread.hpp>
 #include <vector>
-#include <terminal.h>
+#include <terminal.hpp>
 #include <string>
 #include <num.h>
 #include "sha_detect.h"

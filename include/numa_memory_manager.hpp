@@ -1,7 +1,7 @@
 #pragma once
 
 #include "tnn-common.hpp"
-#include "numa_optimizer.h"
+#include "numa_optimizer.hpp"
 
 template<typename Resource>
 class NUMAMemoryManager {

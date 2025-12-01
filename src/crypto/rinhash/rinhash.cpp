@@ -11,7 +11,7 @@
 
 #include "rinhash.h"
 
-#include "terminal.h"
+#include "terminal.hpp"
 #include <crypto/tiny-keccak/tiny-keccak.h>
 #include "argon2/argon2.h"
 #include "argon2/argon2_core.h"

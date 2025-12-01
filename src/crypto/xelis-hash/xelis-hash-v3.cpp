@@ -9,7 +9,8 @@
 
 #include <byteswap.h>
 #include <chacha20.h>
-#include <cmath> // NEW: needed for sqrt() in isqrt
+#include <cmath>
+#include <memory>
 
 #if defined(__x86_64__)
 #include <emmintrin.h>

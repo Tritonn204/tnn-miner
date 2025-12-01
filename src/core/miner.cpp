@@ -15,8 +15,8 @@
 
 #include "miner_main.h"
 #include "tnn-common.hpp"
-#include "tnn-hugepages.h"
-#include "numa_optimizer.h"
+#include "tnn-hugepages.hpp"
+#include "numa_optimizer.hpp"
 #include "msr.hpp"
 #include "gpulibs.h"
 #include "hipkill.h"
@@ -928,7 +928,7 @@ int tnn_main(int argc, char** argv)
     useLookupMine = true;
   }
 
-  // We can do this because we've set default in terminal.h
+  // We can do this because we've set default in terminal.hpp
   tuneWarmupSec = vm["tune-warmup"].as<int>();
   tuneDurationSec = vm["tune-duration"].as<int>();
 

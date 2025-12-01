@@ -4,11 +4,12 @@
 #include <iostream>
 #include <cstdlib>
 #include <string>
+#include <fstream>
 #endif
 
 #include <assert.h>
 
-#include "terminal.h"
+#include "terminal.hpp"
 
 extern bool printHugepagesError;
 
@@ -20,6 +21,8 @@ extern bool printHugepagesError;
   #include <errno.h>
   #include <string.h>
   #include <unistd.h>
+  #include <csignal>
+  #include <cstdlib>
 #endif
 
 #define HUGE_META_PAGE_SIZE (2ULL * 1024 * 1024)
@@ -27,6 +30,21 @@ extern bool printHugepagesError;
 #define HUGE_PAGE_1GB       (1024ULL * 1024 * 1024)
 
 #define ALIGN_UP(x, a)  ( ((x) + (a) - 1) & ~((size_t)((a) - 1)) )
+
+struct HugePagesInfo {
+  size_t page_size_2mb = 0;
+  size_t total_2mb = 0;
+  size_t free_2mb = 0;
+  size_t page_size_1gb = 0;
+  size_t total_1gb = 0;
+  size_t free_1gb = 0;
+};
+
+enum TnnPageType {
+  TNN_PAGE_REGULAR = 0,
+  TNN_PAGE_2MB = 1,
+  TNN_PAGE_1GB = 2
+};
 
 #ifdef _WIN32
 
@@ -274,27 +292,9 @@ inline void free_huge_pages(void* ptr)
     }
 }
 
-#ifdef __linux__
-#include <unistd.h>
-#include <csignal>
-#include <cstdlib>
-
-struct HugePagesInfo {
-    size_t page_size_2mb = 0;
-    size_t total_2mb = 0;
-    size_t free_2mb = 0;
-    size_t page_size_1gb = 0;
-    size_t total_1gb = 0;
-    size_t free_1gb = 0;
-};
-
-inline size_t rx_original_hugepages = 0;
-inline bool rx_hugepages_modified = false;
-inline bool rx_use_1gb_pages = false;
-
 inline HugePagesInfo getHugePagesInfo() {
     HugePagesInfo info;
-    
+#ifdef __linux__
     // Get default huge page info from /proc/meminfo
     std::ifstream meminfo("/proc/meminfo");
     std::string line;
@@ -347,6 +347,23 @@ inline HugePagesInfo getHugePagesInfo() {
         info.free_2mb = default_free;
     }
     
+#elif defined(_WIN32)
+    // Windows only has one large page size
+    SIZE_T largePageSize = GetLargePageMinimum();
+    if (largePageSize > 0) {
+        info.page_size_2mb = largePageSize;
+        // Windows doesn't expose total/free counts like Linux
+        // We can only know if large pages are available
+        info.total_2mb = SIZE_MAX;  // Unknown, set to max to indicate "available"
+        info.free_2mb = SIZE_MAX;
+    }
+#endif
+    
     return info;
 }
-#endif
+
+// Helper to check if huge pages are available at all
+inline bool hugePagesAvailable() {
+    HugePagesInfo info = getHugePagesInfo();
+    return (info.page_size_2mb > 0 || info.page_size_1gb > 0);
+}

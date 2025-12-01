@@ -17,7 +17,7 @@
 #include <fnv1a.h>
 #include <xxhash64.h>
 #include "astrobwtv3.h"
-#include "tnn-hugepages.h"
+#include "tnn-hugepages.hpp"
 #include "astrotest.hpp"
 // #include "branched_AVX2.h"
 

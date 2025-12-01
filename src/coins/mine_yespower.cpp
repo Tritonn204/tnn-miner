@@ -1,7 +1,7 @@
 // mine_yespower.cpp
 #include "miners.hpp"
-#include "tnn-hugepages.h"
-#include "numa_optimizer.h"
+#include "tnn-hugepages.hpp"
+#include "numa_optimizer.hpp"
 
 #include <yespower/yespower.h>
 #include <yespower/yespower_algo.h>

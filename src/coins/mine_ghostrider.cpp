@@ -1,7 +1,7 @@
 // mine_ghostrider.cpp
 #include "miners.hpp"
-#include "tnn-hugepages.h"
-#include "numa_optimizer.h"
+#include "tnn-hugepages.hpp"
+#include "numa_optimizer.hpp"
 
 // GhostRider includes
 #include <ghostrider/gr-gate.h>

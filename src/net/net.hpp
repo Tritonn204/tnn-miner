@@ -17,7 +17,7 @@
 
 #include "sessions.hpp"
 
-#include "terminal.h"
+#include "terminal.hpp"
 #include "DNSResolver.hpp"
 
 using tcp = boost::asio::ip::tcp;

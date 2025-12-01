@@ -1,5 +1,5 @@
 #include "miners.hpp"
-#include "numa_optimizer.h"
+#include "numa_optimizer.hpp"
 #include <astrobwtv3/astrobwtv3.h>
 #include <astrobwtv3/lookupcompute.h>
 #include <spectrex/spectrex.h>

@@ -5,7 +5,7 @@
 #include <num.h>
 #include <hex.h>
 #include <endian.hpp>
-#include <terminal.h>
+#include <terminal.hpp>
 
 using byte = unsigned char;
 

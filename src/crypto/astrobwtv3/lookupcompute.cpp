@@ -1,5 +1,5 @@
 #include "lookupcompute.h"
-#include "tnn-hugepages.h"
+#include "tnn-hugepages.hpp"
 
 #include <lookup.h>
 #include <algorithm>

@@ -34,7 +34,7 @@
 #else
 #include <arpa/inet.h>
 #endif
-#include "tnn-hugepages.h"
+#include "tnn-hugepages.hpp"
 
 #include <atomic>
 #include <libcubwt.cuh>

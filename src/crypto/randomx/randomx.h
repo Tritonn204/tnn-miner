@@ -32,9 +32,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stddef.h>
 #include <stdint.h>
 
-#include "numa_optimizer.h"
-#include "terminal.h"
-
 #define RANDOMX_HASH_SIZE 32
 #define RANDOMX_DATASET_ITEM_SIZE 64
 
@@ -292,6 +289,7 @@ extern "C"
    */
   RANDOMX_EXPORT void randomx_calculate_commitment(const void *input, size_t inputSize, const void *hash_in, void *com_out);
 
+// Why in the hell did I commit the sorcery seen below instead of just putting it in randomx.cpp? REVIEWME later
 #if defined(__cplusplus)
 }
 
@@ -300,7 +298,8 @@ extern "C"
 #endif
 
 #include <fstream>
-#include "tnn-hugepages.h"
+#include "numa_optimizer.hpp"
+#include "terminal.hpp"
 
 inline bool setupHugePagesRX()
 {
@@ -376,7 +375,6 @@ inline bool setupHugePagesRX()
 
       if (new_available >= required_memory)
       {
-        rx_hugepages_modified = true;
         setcolor(GREEN);
         std::cout << " Successfully allocated huge pages" << std::endl;
         fflush(stdout);
