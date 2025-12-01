@@ -411,9 +411,6 @@ inline bool setupHugePagesRX()
   fflush(stdout);
   setcolor(BRIGHT_WHITE);
   return false;
-}
-
-return true;
 
 #elif defined(_WIN32)
   // Check if we have SeLockMemoryPrivilege
