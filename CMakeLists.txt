@@ -435,6 +435,14 @@ else()
   # Use normal compiled Boost libs for the core library (standard C++ linking)
   set(BOOST_STATIC_SETTING "BOOST_USE_STATIC_LIBS ON")
 
+  # Only use MSVC compatibility for HIP builds on Windows
+  # CPU builds use GNU/MinGW which is incompatible with -fms-compatibility
+  if(WITH_HIP AND WIN32)
+    set(BOOST_MS_COMPAT "CMAKE_CXX_FLAGS -fms-compatibility")
+  else()
+    set(BOOST_MS_COMPAT "")
+  endif()
+
   CPMAddPackage(
     NAME Boost
     VERSION 1.86.0 # Versions less than 1.85.0 may need patches for installation targets.
@@ -447,7 +455,7 @@ else()
       "BOOST_INSTALL_LAYOUT system"
       "BOOST_INCLUDE_LIBRARIES chrono\\\;context\\\;coroutine\\\;multiprecision\\\;json\\\;thread\\\;atomic\\\;program_options"
       "${BOOST_TOOLSET_OPTS}"  # Specify Clang toolset
-      "CMAKE_CXX_FLAGS -fms-compatibility"
+      "${BOOST_MS_COMPAT}"
       # ${CPM_COMPILER}
     # Maintain build compatibility between find_package and CMakeLists.txt variants
   )

@@ -512,6 +512,7 @@ waitForJob:
                         {"params", {workerName,
                                     myJob.at("jobId").as_string().c_str(),
                                     hexStr((byte *)&n, 8).c_str()}}}};
+                                    
               std::vector<char> diffHex;
               cmpDiff.print(diffHex, 16);
               break;
