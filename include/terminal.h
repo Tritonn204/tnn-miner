@@ -96,22 +96,30 @@ static const char* threadPrompt = "Please provide the desired amount of mining t
 static const char* inputIntro = "Please provide your mining settings (leave fields blank to use defaults)";
 
 static int colorPreTable[] = {
-  0,0,0,0,91,
-  0,0,0,0,1,
-  0,0,0,0,1,
-  0
+//  BLK  RED  GRN  YEL  BLU  MAG  CYN  WHT  | BRIGHT variants
+    0,   0,   0,   0,   0,   0,   0,   0,     1,   1,   1,   1,   1,   1,   1,   1
 };
 static int colorTable[] = {
-  0,0,0,36,91,
-  0,0,0,0,91,
-  0,0,0,0,93,
-  37
+//  BLK  RED  GRN  YEL  BLU  MAG  CYN  WHT  | BRIGHT variants  
+    30,  31,  32,  33,  34,  35,  36,  37,    90,  91,  92,  93,  94,  95,  96,  97
 };
 
-#define CYAN 3
-#define RED 4
-#define BRIGHT_YELLOW 14
-#define BRIGHT_WHITE 15
+#define BLACK           0
+#define RED             1
+#define GREEN           2
+#define YELLOW          3
+#define BLUE            4
+#define MAGENTA         5
+#define CYAN            6
+#define WHITE           7
+#define BRIGHT_BLACK    8
+#define BRIGHT_RED      9
+#define BRIGHT_GREEN    10
+#define BRIGHT_YELLOW   11
+#define BRIGHT_BLUE     12
+#define BRIGHT_MAGENTA  13
+#define BRIGHT_CYAN     14
+#define BRIGHT_WHITE    15
 
 #if defined(_WIN32)
 inline void setcolor(WORD color)

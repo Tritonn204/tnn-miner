@@ -300,7 +300,6 @@ extern "C"
 #endif
 
 #include <fstream>
-#include "terminal.h"
 #include "tnn-hugepages.h"
 
 inline bool setupHugePagesRX()
@@ -378,7 +377,7 @@ inline bool setupHugePagesRX()
       if (new_available >= required_memory)
       {
         rx_hugepages_modified = true;
-        setcolor(BRIGHT_GREEN);
+        setcolor(GREEN);
         std::cout << " Successfully allocated huge pages" << std::endl;
         fflush(stdout);
         setcolor(BRIGHT_WHITE);
