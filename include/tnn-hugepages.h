@@ -273,3 +273,80 @@ inline void free_huge_pages(void* ptr)
         std::free(real_ptr);
     }
 }
+
+#ifdef __linux__
+#include <unistd.h>
+#include <csignal>
+#include <cstdlib>
+
+struct HugePagesInfo {
+    size_t page_size_2mb = 0;
+    size_t total_2mb = 0;
+    size_t free_2mb = 0;
+    size_t page_size_1gb = 0;
+    size_t total_1gb = 0;
+    size_t free_1gb = 0;
+};
+
+inline size_t rx_original_hugepages = 0;
+inline bool rx_hugepages_modified = false;
+inline bool rx_use_1gb_pages = false;
+
+inline HugePagesInfo getHugePagesInfo() {
+    HugePagesInfo info;
+    
+    // Get default huge page info from /proc/meminfo
+    std::ifstream meminfo("/proc/meminfo");
+    std::string line;
+    size_t default_size = 0;
+    size_t default_total = 0;
+    size_t default_free = 0;
+    
+    while (std::getline(meminfo, line)) {
+        if (line.find("Hugepagesize:") != std::string::npos) {
+            sscanf(line.c_str(), "Hugepagesize: %zu kB", &default_size);
+            default_size *= 1024;
+        } else if (line.find("HugePages_Total:") != std::string::npos) {
+            sscanf(line.c_str(), "HugePages_Total: %zu", &default_total);
+        } else if (line.find("HugePages_Free:") != std::string::npos) {
+            sscanf(line.c_str(), "HugePages_Free: %zu", &default_free);
+        }
+    }
+    meminfo.close();
+    
+    // Check /sys/kernel/mm/hugepages/ for all available sizes
+    const char* hugepages_2mb = "/sys/kernel/mm/hugepages/hugepages-2048kB";
+    const char* hugepages_1gb = "/sys/kernel/mm/hugepages/hugepages-1048576kB";
+    
+    // 2MB pages
+    std::ifstream f2mb_total(std::string(hugepages_2mb) + "/nr_hugepages");
+    std::ifstream f2mb_free(std::string(hugepages_2mb) + "/free_hugepages");
+    if (f2mb_total.is_open() && f2mb_free.is_open()) {
+        info.page_size_2mb = 2ULL * 1024 * 1024;
+        f2mb_total >> info.total_2mb;
+        f2mb_free >> info.free_2mb;
+    }
+    f2mb_total.close();
+    f2mb_free.close();
+    
+    // 1GB pages
+    std::ifstream f1gb_total(std::string(hugepages_1gb) + "/nr_hugepages");
+    std::ifstream f1gb_free(std::string(hugepages_1gb) + "/free_hugepages");
+    if (f1gb_total.is_open() && f1gb_free.is_open()) {
+        info.page_size_1gb = 1ULL * 1024 * 1024 * 1024;
+        f1gb_total >> info.total_1gb;
+        f1gb_free >> info.free_1gb;
+    }
+    f1gb_total.close();
+    f1gb_free.close();
+    
+    // Fallback to /proc/meminfo if /sys wasn't available
+    if (info.page_size_2mb == 0 && default_size == 2097152) {
+        info.page_size_2mb = default_size;
+        info.total_2mb = default_total;
+        info.free_2mb = default_free;
+    }
+    
+    return info;
+}
+#endif
