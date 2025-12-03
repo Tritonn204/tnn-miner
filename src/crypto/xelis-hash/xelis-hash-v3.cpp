@@ -1028,135 +1028,96 @@ static operation_func operations[] = {
     case_15,
 };
 
-static inline uint64_t execute_operation_goto(uint32_t idx, uint64_t a, uint64_t b,
-                                              uint64_t c, int r_next, uint64_t result,
-                                              int i, int j_off)
+static inline uint64_t execute_operation_branchless(uint32_t idx, uint64_t a, uint64_t b,
+                                                    uint64_t c, int r_next, uint64_t result,
+                                                    int i, int j_off)
 {
-  uint64_t v;
+  uint32_t offset_op = (idx + 13) & 0xF;
 
-  static void *const dispatch_table[] = {
-      &&op0, &&op1, &&op2, &&op3, &&op4, &&op5, &&op6, &&op7,
-      &&op8, &&op9, &&op10, &&op11, &&op12, &&op13, &&op14, &&op15};
+  if (offset_op < 7) {
+    uint64_t ab = a * b;
+    uint64_t ac = a * c;
+    uint64_t bc = b * c;
 
-  void *target = (void *)dispatch_table[idx];
-  goto *target;
+    uint64_t r0 = ac + bc;
+    uint64_t r1 = ab - ac;
+    uint64_t r2 = c - a + b;
+    uint64_t r3 = a - b + c;
+    uint64_t r4 = bc + a;
+    uint64_t r5 = ac + b;
+    uint64_t r6 = ab * c;
 
-op0:
-{
-  __uint128_t t1 = combine_uint64(a + i, isqrt(b + j_off));
-  uint64_t denom = murmurhash3(c ^ result ^ i ^ j_off) | 1;
-  v = (uint64_t)(t1 % denom);
-  goto done;
-}
-op1:
-{
-  uint64_t input_b = b | 2;
-  uint64_t input_a = a + j_off;
+    uint64_t m0 = -(uint64_t)(offset_op == 0);
+    uint64_t m1 = -(uint64_t)(offset_op == 1);
+    uint64_t m2 = -(uint64_t)(offset_op == 2);
+    uint64_t m3 = -(uint64_t)(offset_op == 3);
+    uint64_t m4 = -(uint64_t)(offset_op == 4);
+    uint64_t m5 = -(uint64_t)(offset_op == 5);
+    uint64_t m6 = -(uint64_t)(offset_op == 6);
 
-  uint64_t sqrt_b, sqrt_a;
-  sqrt_b = isqrt(input_b);
-  sqrt_a = isqrt(input_a);
-
-  v = ROTL((c + i) % sqrt_b, i + j_off) * sqrt_a;
-  goto done;
-}
-op2:
-{
-  v = (isqrt(a + i) * isqrt(c + j_off)) ^ (b + i + j_off);
-  goto done;
-}
-op3:
-  v = (a + b) * c;
-  goto done;
-op4:
-  v = (b - c) * a;
-  goto done;
-op5:
-  v = c - a + b;
-  goto done;
-op6:
-  v = a - b + c;
-  goto done;
-op7:
-  v = b * c + a;
-  goto done;
-op8:
-  v = c * a + b;
-  goto done;
-op9:
-  v = a * b * c;
-  goto done;
-op10:
-  v = mod128_64_fast(COMBINE_UINT64(a, b), c | 1);
-  goto done;
-op11:
-{
-  uint64_t t2_hi = ROTL(result, r_next);
-  uint64_t t2_lo = a | 2;
-  if (t2_hi > b || (t2_hi == b && t2_lo > c))
-  {
-    v = c;
+    return (r0 & m0) | (r1 & m1) | (r2 & m2) | (r3 & m3) |
+           (r4 & m4) | (r5 & m5) | (r6 & m6);
   }
-  else
-  {
-    __uint128_t t2 = COMBINE_UINT64(t2_hi, t2_lo);
-    __uint128_t dividend = COMBINE_UINT64(b, c);
-    div128_128_large(&dividend, t2);
-    v = dividend;
-  }
-  goto done;
-}
-op12:
-  v = udiv(c, a, b | 4);
-  goto done;
-op13:
-{
-  uint64_t t1_hi = ROTL(result, r_next);
-  uint64_t t1_lo = b;
-  uint64_t t2_hi = a;
-  uint64_t t2_lo = c | 8;
-  if (t1_hi > t2_hi || (t1_hi == t2_hi && t1_lo > t2_lo))
-  {
-    __uint128_t dividend = ((__uint128_t)t1_hi << 64) | t1_lo;
-    __uint128_t divisor = ((__uint128_t)t2_hi << 64) | t2_lo;
-    v = div128_128_large(&dividend, divisor);
-  }
-  else
-  {
-    v = a ^ b;
-  }
-  goto done;
-}
-op14:
-{
-  __uint128_t ac = (__uint128_t)a * c;
-  uint64_t ac_hi = ac >> 64;
-  uint64_t bc = b * c;
-  v = ac_hi + bc;
-  goto done;
-}
-op15:
-{
-  uint64_t b1 = ROTR(result, r_next);
-  uint64_t b0 = b;
-  __uint128_t z0 = (__uint128_t)c * b0;
-  __uint128_t z1 = (__uint128_t)a * b0 + (__uint128_t)c * b1;
-  uint64_t z0_hi = z0 >> 64;
-  uint64_t z1_lo = (uint64_t)z1;
-  v = z0_hi + z1_lo;
-  goto done;
-}
 
-done:
-  return v;
-}
-
-static inline int pick_half_fast(uint64_t v)
-{
-  v ^= v >> 55;
-  v *= XELIS_MURMUR_CONST1;
-  v ^= v >> 32;
-  return (v & XELIS_PICK_HALF_BIT) != 0;
+  switch (offset_op) {
+    case 7:
+      return mod128_64_fast(COMBINE_UINT64(a, b), c | 1);
+    case 8: {
+      uint64_t t2_hi = ROTL(result, r_next);
+      uint64_t t2_lo = a | 2;
+      if (t2_hi > b || (t2_hi == b && t2_lo > c)) {
+        return c;
+      } else {
+        __uint128_t t2 = COMBINE_UINT64(t2_hi, t2_lo);
+        __uint128_t dividend = COMBINE_UINT64(b, c);
+        div128_128_large(&dividend, t2);
+        return dividend;
+      }
+    }
+    case 9:
+      return udiv(c, a, b | 4);
+    case 10: {
+      uint64_t t1_hi = ROTL(result, r_next);
+      uint64_t t1_lo = b;
+      uint64_t t2_hi = a;
+      uint64_t t2_lo = c | 8;
+      if (t1_hi > t2_hi || (t1_hi == t2_hi && t1_lo > t2_lo)) {
+        __uint128_t dividend = ((__uint128_t)t1_hi << 64) | t1_lo;
+        __uint128_t divisor = ((__uint128_t)t2_hi << 64) | t2_lo;
+        return div128_128_large(&dividend, divisor);
+      } else {
+        return a ^ b;
+      }
+    }
+    case 11: {
+      __uint128_t ac = (__uint128_t)a * c;
+      uint64_t ac_hi = ac >> 64;
+      uint64_t bc = b * c;
+      return ac_hi + bc;
+    }
+    case 12: {
+      uint64_t b1 = ROTR(result, r_next);
+      uint64_t b0 = b;
+      __uint128_t z0 = (__uint128_t)c * b0;
+      __uint128_t z1 = (__uint128_t)a * b0 + (__uint128_t)c * b1;
+      uint64_t z0_hi = z0 >> 64;
+      uint64_t z1_lo = (uint64_t)z1;
+      return z0_hi + z1_lo;
+    }
+    case 13: {
+      __uint128_t t1 = combine_uint64(a + i, isqrt(b + j_off));
+      uint64_t denom = murmurhash3(c ^ result ^ i ^ j_off) | 1;
+      return (uint64_t)(t1 % denom);
+    }
+    case 14: {
+      uint64_t sqrt_b = isqrt(b | 2);
+      uint64_t sqrt_a = isqrt(a + j_off);
+      return ROTL((c + i) % sqrt_b, i + j_off) * sqrt_a;
+    }
+    default: {
+      return (isqrt(a + i) * isqrt(c + j_off)) ^ (b + i + j_off);
+    }
+  }
 }
 
 #ifdef __x86_64__
@@ -1195,7 +1156,7 @@ __attribute__((target("aes"))) static void stage_3(uint64_t *scratch_pad, worker
       r = (r + 1) % XELIS_MEMORY_SIZE_V3;
 
       uint32_t op_idx = ROTL(result, (uint32_t)c) & 0xF;
-      uint64_t v = execute_operation_goto(op_idx, a, b, c, r, result, i, j);
+      uint64_t v = execute_operation_branchless(op_idx, a, b, c, r, result, i, j);
 
       uint64_t idx_seed = v ^ result;
       result = ROTL(idx_seed, r);
@@ -1206,9 +1167,6 @@ __attribute__((target("aes"))) static void stage_3(uint64_t *scratch_pad, worker
 
       uint64_t idx_a = map_index(t ^ result ^ XELIS_GOLDEN_RATIO);
       uint64_t idx_b = map_index(idx_a ^ ~result ^ XELIS_SCATTER_CONST);
-
-      // __builtin_prefetch(&mem_buffer_a[idx_a], 1, 0);
-      // __builtin_prefetch(&mem_buffer_b[idx_b], 1, 0);
 
       uint64_t mem_a_tmp = mem_buffer_a[idx_a];
       mem_buffer_a[idx_a] = t;
@@ -1255,7 +1213,7 @@ __attribute__((target("default"))) static void stage_3(uint64_t *scratch_pad, wo
       r = (r + 1) % XELIS_MEMORY_SIZE_V3;
 
       uint32_t op_idx = ROTL(result, (uint32_t)c) & 0xF;
-      uint64_t v = execute_operation_goto(op_idx, a, b, c, r, result, i, j);
+      uint64_t v = execute_operation_branchless(op_idx, a, b, c, r, result, i, j);
 
       uint64_t idx_seed = v ^ result;
       result = ROTL(idx_seed, r);
@@ -1266,9 +1224,6 @@ __attribute__((target("default"))) static void stage_3(uint64_t *scratch_pad, wo
 
       uint64_t idx_a = map_index(t ^ result ^ XELIS_GOLDEN_RATIO);
       uint64_t idx_b = map_index(idx_a ^ ~result ^ XELIS_SCATTER_CONST);
-
-      // __builtin_prefetch(&mem_buffer_a[idx_a], 1, 0);
-      // __builtin_prefetch(&mem_buffer_b[idx_b], 1, 0);
 
       uint64_t mem_a_tmp = mem_buffer_a[idx_a];
       mem_buffer_a[idx_a] = t;
@@ -1347,7 +1302,7 @@ static void stage_3(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
       r = (r + 1) % XELIS_MEMORY_SIZE_V3;
 
       uint32_t op_idx = ROTL(result, (uint32_t)c) & 0xF;
-      uint64_t v = execute_operation_goto(op_idx, a, b, c, r, result, i, j);
+      uint64_t v = execute_operation_branchless(op_idx, a, b, c, r, result, i, j);
 
       uint64_t idx_seed = v ^ result;
       result = ROTL(idx_seed, r);
@@ -1358,9 +1313,6 @@ static void stage_3(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
 
       uint64_t idx_a = map_index(t ^ result ^ XELIS_GOLDEN_RATIO);
       uint64_t idx_b = map_index(idx_a ^ ~result ^ XELIS_SCATTER_CONST);
-
-      // __builtin_prefetch(&mem_buffer_a[idx_a], 1, 0);
-      // __builtin_prefetch(&mem_buffer_b[idx_b], 1, 0);
 
       uint64_t mem_a_tmp = mem_buffer_a[idx_a];
       mem_buffer_a[idx_a] = t;
@@ -1540,78 +1492,6 @@ namespace xelis_tests_v3
     return true;
   }
 
-  bool test_stage3_single_iteration()
-  {
-    byte input[112] = {0};
-    workerData_xelis_v3 worker;
-    memset(worker.scratchPad, 0, XELIS_MEMORY_SIZE_V3 * 8);
-
-    stage_1(input, worker.scratchPad, 112);
-
-    uint64_t *mem_buffer_a = worker.scratchPad;
-    uint64_t *mem_buffer_b = worker.scratchPad + XELIS_BUFFER_SIZE_V3;
-
-    uint64_t addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V3 - 1];
-    uint64_t addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V3 - 1] >> 32;
-
-    printf("\nInitial values:\n");
-    printf("  addr_a = 0x%016llx\n", (unsigned long long)addr_a);
-    printf("  addr_b = 0x%016llx\n", (unsigned long long)addr_b);
-
-    // First AES round
-    uint64_t mem_a = mem_buffer_a[addr_a % XELIS_BUFFER_SIZE_V3];
-    uint64_t mem_b = mem_buffer_b[addr_b % XELIS_BUFFER_SIZE_V3];
-
-    printf("  mem_a = 0x%016llx (from idx %llu)\n",
-           (unsigned long long)mem_a, (unsigned long long)(addr_a % XELIS_BUFFER_SIZE_V3));
-    printf("  mem_b = 0x%016llx (from idx %llu)\n",
-           (unsigned long long)mem_b, (unsigned long long)(addr_b % XELIS_BUFFER_SIZE_V3));
-
-    // AES round
-    uint8_t key[17] = "xelishash-pow-v3";
-    uint8_t block[16];
-    uint64_to_le_bytes(mem_b, block);
-    uint64_to_le_bytes(mem_a, block + 8);
-    aes_round(block, key);
-    uint64_t hash1 = le_bytes_to_uint64(block);
-    uint64_t hash2 = le_bytes_to_uint64(block + 8);
-    uint64_t result = ~(hash1 ^ hash2);
-
-    printf("  hash1 = 0x%016llx\n", (unsigned long long)hash1);
-    printf("  hash2 = 0x%016llx\n", (unsigned long long)hash2);
-    printf("  result = 0x%016llx\n", (unsigned long long)result);
-
-    // First few iterations of inner loop
-    size_t r = 0;
-    printf("\nFirst 5 inner loop iterations (i=0):\n");
-    for (size_t j = 0; j < 5; ++j)
-    {
-      uint64_t a = mem_buffer_a[map_index(result)];
-      uint64_t b = mem_buffer_b[map_index(~ROTR(result, r))];
-      uint64_t c = (r < XELIS_BUFFER_SIZE_V3) ? mem_buffer_a[r] : mem_buffer_b[r - XELIS_BUFFER_SIZE_V3];
-
-      size_t r_before = r;
-      r = (r + 1) % XELIS_MEMORY_SIZE_V3;
-
-      uint32_t op_idx = ROTL(result, (uint32_t)c) & 0xF;
-
-      printf("  j=%zu: r_before=%zu, r_after=%zu\n", j, r_before, r);
-      printf("        a=0x%016llx (idx=%llu)\n", (unsigned long long)a, (unsigned long long)map_index(result));
-      printf("        b=0x%016llx (idx=%llu)\n", (unsigned long long)b, (unsigned long long)map_index(~ROTR(result, r_before)));
-      printf("        c=0x%016llx (idx=%zu)\n", (unsigned long long)c, r_before);
-      printf("        op_idx=%u\n", op_idx);
-
-      uint64_t v = execute_operation_goto(op_idx, a, b, c, r, result, 0, j);
-      printf("        v=0x%016llx\n", (unsigned long long)v);
-
-      uint64_t idx_seed = v ^ result;
-      result = ROTL(idx_seed, r);
-      printf("        new result=0x%016llx\n", (unsigned long long)result);
-    }
-
-    return true;
-  }
-
   bool test_map_index()
   {
     // Test that map_index always returns valid indices
@@ -1731,7 +1611,6 @@ int xelis_runTests_v3()
   all_tests_passed &= xelis_tests_v3::test_pick_half();
   all_tests_passed &= xelis_tests_v3::test_isqrt_correctness();
   all_tests_passed &= xelis_tests_v3::test_modular_power();
-  all_tests_passed &= xelis_tests_v3::test_stage3_single_iteration();
 
   if (all_tests_passed)
   {
