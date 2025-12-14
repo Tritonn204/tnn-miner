@@ -213,7 +213,7 @@ __global__ void walaHash_hip(const uint64_t nonce_mask, const uint64_t nonce_fix
     product1 = (product1 & 0xF) ^ ((product1 >> 4) & 0xF) ^ ((product1 >> 8) & 0xF);
     product2 = (product2 & 0xF) ^ ((product2 >> 4) & 0xF) ^ ((product2 >> 8) & 0xF);
 
-#ifdef __HIP_PLATFORM_NVIDIA__
+#if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
     nextInput[rowId] = input[rowId] ^ ((uint8_t)(product1 << 4) | (uint8_t)(product2));
 #else
     nextInput[rowId] = input[rowId] ^ bitselect(product1 << 4, product2, 0x0000000FU);

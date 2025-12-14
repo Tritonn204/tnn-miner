@@ -10,11 +10,13 @@
 #include <map>
 
 #include <boost/program_options.hpp>
+
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/ssl/error.hpp>
 #include <boost/asio/ip/host_name.hpp>
+
 #include <boost/json.hpp>
 
 #include <boost/thread.hpp>
@@ -414,8 +416,9 @@ extern double doubleDiffDev;
 extern int HIP_deviceCount;
 extern std::string HIP_names[32];
 extern std::string HIP_pcieID[32];
-extern uint64_t HIP_kIndex[32];
-extern uint64_t HIP_kIndex_dev[32];
+extern std::vector<std::atomic<uint64_t>> HIP_kIndex;
+extern std::vector<std::atomic<uint64_t>> HIP_kIndex_dev;
+extern std::vector<std::atomic<uint64_t>> HIP_counters;
 extern std::vector<std::atomic<uint64_t>> HIP_counters;
 extern std::vector<std::vector<int64_t>> HIP_rates5min;
 extern std::vector<std::vector<int64_t>> HIP_rates1min;
@@ -435,9 +438,9 @@ extern bool beQuiet;
 
 extern boost::asio::io_context my_context;
 extern boost::asio::steady_timer update_timer;
+extern boost::asio::steady_timer mine_duration_timer;
 extern std::chrono::time_point<std::chrono::steady_clock> g_start_time;
 extern int mine_time;
-extern boost::asio::steady_timer mine_duration_timer;
 
 inline std::string cpp_int_toHex(boost::multiprecision::cpp_int in) {
   std::ostringstream oss;

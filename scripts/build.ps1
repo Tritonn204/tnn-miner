@@ -27,10 +27,10 @@ if (-not $version -eq "") {
 
 # Determine CMake command based on argument
 #& c:\mingw64\bin\cmake.exe $VER_SETTING -DCMAKE_MAKE_PROGRAM=c:/mingw64/bin/ninja.exe --debug-trycompile -G "Ninja" ..
-& c:\mingw64\bin\cmake.exe $VER_SETTING -Wno-dev -DWITH_HIP=OFF --trace-expand --trace-redirect=./trace.txt -G "Ninja" ..
+& cmake $VER_SETTING -Wno-dev -DWITH_HIP=OFF --trace-expand --trace-redirect=./trace.txt -G "Ninja" ..
 
 # Run Ninja build
-& c:\mingw64\bin\ninja.exe -j (Get-CimInstance -ClassName Win32_ComputerSystem).NumberOfLogicalProcessors
+& ninja -j (Get-CimInstance -ClassName Win32_ComputerSystem).NumberOfLogicalProcessors
 
 # Return to original directory
 popd

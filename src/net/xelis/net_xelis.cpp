@@ -128,6 +128,9 @@ void xelis_session(
       cv.wait(lock, [&]{ return (data_ready && (*B)) || abort.load(); });
       if (abort.load()) break;
 
+      printf("\nSubmit thread triggered");
+      fflush(stdout);
+
       try {
         boost::json::object &S = isDev ? devShare : share;
         std::string msg = boost::json::serialize(S) + "\n";

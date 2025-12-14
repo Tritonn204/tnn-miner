@@ -15,8 +15,9 @@ if (WITH_NXLHASH)
       src/net/nxl/*.cpp
     )
     
+    # New unified CPU mining infrastructure
     list(APPEND nxlHashSources
-      src/coins/mine_nexellia.cpp
+      src/tnn_cpu/mine_kas_unified.cpp
     )
 
     list(APPEND HEADERS_CRYPTO

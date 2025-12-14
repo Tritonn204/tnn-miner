@@ -1,7 +1,9 @@
 #pragma once
 
 #include "tnn-common.hpp"
+
 #include <net.hpp>
+
 #include <num.h>
 #include <hex.h>
 #include <endian.hpp>
@@ -58,7 +60,9 @@ static inline void unsupportedGpu(int tid) {
 
 void mineDero(int tid);
 
-void mineXelis(int tid);
+#if defined(TNN_XELISHASH) && !defined(TNN_HIP)
+void mineXelis_unified(int tid);
+#endif
 
 void mineSpectre(int tid);
 
@@ -71,13 +75,21 @@ void mineRx0(int tid);
 
 void mineVerus(int tid);
 
-void mineAstrix(int tid);
+#if defined(TNN_ASTRIXHASH) && !defined(TNN_HIP)
+void mineAstrix_unified(int tid);
+#endif
 
-void mineNexellia(int tid);
+#if defined(TNN_NXLHASH) && !defined(TNN_HIP)
+void mineNexellia_unified(int tid);
+#endif
 
-void mineHoosat(int tid);
+#if defined(TNN_HOOHASH) && !defined(TNN_HIP)
+void mineHoosat_unified(int tid);
+#endif
 
-void mineWaglayla(int tid);
+#if defined(TNN_WALAHASH) && !defined(TNN_HIP)
+void mineWaglayla_unified(int tid);
+#endif
 
 void mineShai(int tid);
 
@@ -88,11 +100,18 @@ void mineRinhash(int tid);
 void mineAstrix_hip(int tid);
 void mineNexellia_hip(int tid);
 void mineWaglayla_hip(int tid);
+void mineXelis_hip(int tid);
 
 typedef void (*mineFunc)(int);
 inline mineFunc getMiningFunc(int algoNum, bool gpu) {
+
+  #ifdef TNN_HIP
   if(gpu) {
     switch(algoNum) {
+      case ALGO_XELISV2:
+      case ALGO_XELISV3:
+        return mineXelis_hip;
+        break;
       case ALGO_ASTRIX_HASH:
         return mineAstrix_hip;
         break;
@@ -107,16 +126,20 @@ inline mineFunc getMiningFunc(int algoNum, bool gpu) {
         break;
     }
   }
+  #endif
+
   switch(algoNum) {
     case ALGO_ASTROBWTV3:
       return mineDero;
       break;
     // case ALGO_XELISV1:
-    //   return mineXelis_v1; 
+    //   return mineXelis_v1;
+#if defined(TNN_XELISHASH) && !defined(TNN_HIP)
     case ALGO_XELISV2:
     case ALGO_XELISV3:
-      return mineXelis;
+      return mineXelis_unified;
       break;
+#endif
     case ALGO_SPECTRE_X:
       return mineSpectre;
       break;
@@ -126,18 +149,26 @@ inline mineFunc getMiningFunc(int algoNum, bool gpu) {
     case ALGO_VERUS:
       return mineVerus;
       break;
+#if defined(TNN_ASTRIXHASH) && !defined(TNN_HIP)
     case ALGO_ASTRIX_HASH:
-      return mineAstrix;
+      return mineAstrix_unified;
       break;
+#endif
+#if defined(TNN_NXLHASH) && !defined(TNN_HIP)
     case ALGO_NXL_HASH:
-      return mineNexellia;
+      return mineNexellia_unified;
       break;
+#endif
+#if defined(TNN_HOOHASH) && !defined(TNN_HIP)
     case ALGO_HOOHASH:
-      return mineHoosat;
+      return mineHoosat_unified;
       break;
+#endif
+#if defined(TNN_WALAHASH) && !defined(TNN_HIP)
     case ALGO_WALA_HASH:
-      return mineWaglayla;
+      return mineWaglayla_unified;
       break;
+#endif
     case ALGO_SHAI_HIVE:
       return mineShai;
       break;

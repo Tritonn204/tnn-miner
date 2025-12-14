@@ -63,6 +63,8 @@
 
 #ifdef TNN_HIP
 #include <boost/json/src.hpp>
+#include <tnn_hip/common/gpu_rtc.hpp>
+#include <tnn_hip/common/gpu_algo.hpp>
 #endif
 
 #ifdef TNN_YESPOWER
@@ -99,8 +101,8 @@ uint64_t nonce0_dev = 0;
 
 std::string HIP_names[32];
 std::string HIP_pcieID[32];
-uint64_t HIP_kIndex[32] = {0};
-uint64_t HIP_kIndex_dev[32] = {0};
+std::vector<std::atomic<uint64_t>> HIP_kIndex(32);
+std::vector<std::atomic<uint64_t>> HIP_kIndex_dev(32);
 std::vector<std::atomic<uint64_t>> HIP_counters(32);
 std::vector<std::vector<int64_t>> HIP_rates5min(32);
 std::vector<std::vector<int64_t>> HIP_rates1min(32);
@@ -119,6 +121,10 @@ Num oneLsh256 = Num(1) << 256;
 Num maxU256 = Num(2).pow(256) - 1;
 
 const auto processor_count = std::thread::hardware_concurrency();
+#ifdef TNN_HIP
+GPUTuningOverrides g_tuning_overrides;
+std::atomic<bool> g_mining_started{false};
+#endif
 
 /* Start definitions from tnn-common.hpp */
 
@@ -318,6 +324,34 @@ void sigint(int signum) {
   std::cout << "\n\nInterrupt signal (" << signum << ") received." << std::flush;
   exit(signum);
 }
+
+#ifdef TNN_HIP
+void parse_gpu_batch_sizes(const std::string& arg) {
+    std::stringstream ss(arg);
+    std::string item;
+    while (std::getline(ss, item, ',')) {
+        g_tuning_overrides.gpu_batch_sizes.push_back(
+            item.empty() ? 0 : std::stoul(item)
+        );
+    }
+}
+
+// Parse --gpu-block-sizes=64,128,64
+void parse_gpu_block_sizes(const std::string& arg) {
+    std::stringstream ss(arg);
+    std::string item;
+    while (std::getline(ss, item, ',')) {
+        g_tuning_overrides.gpu_block_sizes.push_back(
+            item.empty() ? 0 : std::stoi(item)
+        );
+    }
+}
+
+// Parse --no-autotune
+void disable_autotune() {
+    g_tuning_overrides.disable_autotune = true;
+}
+#endif
 
 int tnn_main(int argc, char** argv)
 {
@@ -651,7 +685,11 @@ int tnn_main(int argc, char** argv)
   if (vm.count("test-xelis"))
   {
     #if defined(TNN_XELISHASH)
-    int rc = xelis_runTests_v3();
+    #ifdef TNN_HIP
+      int rc = 0;
+    #else
+      int rc = xelis_runTests_v3();
+    #endif
     return rc;
     #else
     setcolor(RED);
@@ -757,7 +795,7 @@ int tnn_main(int argc, char** argv)
 
   if (vm.count("bench-xelis"))
   {
-    #if defined(TNN_XELISHASH)
+    #if defined(TNN_XELISHASH) && !defined(TNN_HIP)
     boost::thread t(xelis_benchmark_cpu_hash_v3);
     setPriority(t.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
     t.join();
@@ -1224,6 +1262,7 @@ Mining:
     printSupported();
   #else
     gpuMine = true;
+    precompile_all_kernels();
   #endif
  //  mutex.unlock();1
   int rc = enhanceWallet(&miningProfile, checkWallet);

@@ -13,11 +13,11 @@ if (WITH_XELISHASH)
     file(GLOB_RECURSE xelisSources
       src/crypto/xelis-hash/*.cpp
       src/crypto/xelis-hash/*.c
-      src/net/xelis/*.cpp
     )
 
+    # New unified CPU mining infrastructure
     list(APPEND xelisSources
-      src/coins/mine_xelis.cpp
+      src/tnn_cpu/mine_xelis_unified.cpp
     )
 
     list(FILTER xelisSources EXCLUDE REGEX src/xelis-hash/target/*)

@@ -35,7 +35,7 @@
 #include <random>
 #include <chrono>
 
-#include <sodium.h>
+// #include <sodium.h>
 #include <Salsa20.h>
 
 // #include <alcp/digest.h>

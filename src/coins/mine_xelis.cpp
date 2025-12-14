@@ -1,5 +1,5 @@
 #include "miners.hpp"
-#include "tnn-hugepages.hpp"
+#include "tnn-hugepages.h"
 #include <xelis-hash/xelis-hash.hpp>
 #include <base64.hpp>
 #include <stratum/stratum.h>
@@ -140,7 +140,7 @@ waitForJob:
           std::reverse(powHash, powHash + 32);
         }
 
-        if (++localCount >= 512) { counter.fetch_add(localCount); localCount = 0; }
+        if (++localCount >= 1024) { counter.fetch_add(localCount); localCount = 0; }
         submit = (devMine && devConnected) ? !submittingDev : !submitting;
 
         if (localJobCounter != jobCounter || localOurHeight != ourHeight) {
@@ -427,7 +427,7 @@ waitForJob:
           std::reverse(powHash, powHash + 32);
         }
 
-        if (++localCount >= 512) { counter.fetch_add(localCount); localCount = 0; }
+        if (++localCount >= 1024) { counter.fetch_add(localCount); localCount = 0; }
         submit = (devMine && devConnected) ? !submittingDev : !submitting;
 
         if (localJobCounter != jobCounter || localOurHeight != ourHeight) {
@@ -512,7 +512,6 @@ waitForJob:
                         {"params", {workerName,
                                     myJob.at("jobId").as_string().c_str(),
                                     hexStr((byte *)&n, 8).c_str()}}}};
-                                    
               std::vector<char> diffHex;
               cmpDiff.print(diffHex, 16);
               break;

@@ -95,7 +95,11 @@ if (WITH_RANDOMX)
         list(APPEND randomx_sources src/crypto/randomx/jit_compiler_x86_static.S)
 
         # cheat because cmake and ccache hate each other
-        set_property(SOURCE src/crypto/randomx/jit_compiler_x86_static.S PROPERTY LANGUAGE C)
+        set_source_files_properties(src/crypto/randomx/jit_compiler_x86static.S
+          PROPERTIES
+            LANGUAGE C
+            COMPILE_OPTIONS "-x;assembler-with-cpp"
+        )
         set_property(SOURCE src/crypto/randomx/jit_compiler_x86_static.S PROPERTY XCODE_EXPLICIT_FILE_TYPE sourcecode.asm)
 
         if(ARCH STREQUAL "native")
@@ -129,7 +133,11 @@ if (WITH_RANDOMX)
         src/crypto/randomx/jit_compiler_a64_static.S
         src/crypto/randomx/jit_compiler_a64.cpp)
       # cheat because cmake and ccache hate each other
-      set_property(SOURCE src/crypto/randomx/jit_compiler_a64_static.S PROPERTY LANGUAGE C)
+      set_source_files_properties(src/crypto/randomx/jit_compiler_a64_static.S
+        PROPERTIES
+          LANGUAGE C
+          COMPILE_OPTIONS "-x;assembler-with-cpp"
+      )
       set_property(SOURCE src/crypto/randomx/jit_compiler_a64_static.S PROPERTY XCODE_EXPLICIT_FILE_TYPE sourcecode.asm)
 
       # not sure if this check is needed
@@ -153,7 +161,11 @@ if (WITH_RANDOMX)
         src/crypto/randomx/jit_compiler_rv64_static.S
         src/crypto/randomx/jit_compiler_rv64.cpp)
       # cheat because cmake and ccache hate each other
-      set_property(SOURCE src/crypto/randomx/jit_compiler_rv64_static.S PROPERTY LANGUAGE C)
+      set_source_files_properties(src/crypto/randomx/jit_compiler_rv64_static.S
+        PROPERTIES
+          LANGUAGE C
+          COMPILE_OPTIONS "-x;assembler-with-cpp"
+      )
       set_property(SOURCE src/crypto/randomx/jit_compiler_rv64_static.S PROPERTY XCODE_EXPLICIT_FILE_TYPE sourcecode.asm)
 
       # default build uses the RV64GC baseline

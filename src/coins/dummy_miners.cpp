@@ -9,7 +9,7 @@ blankfunc(mineSpectre);
 #endif
 
 // XelisHash v1/v2 coins
-#ifndef TNN_XELISHASH
+#if !defined(TNN_XELISHASH) || defined(TNN_HIP)
 blankfunc(mineXelis);
 #endif
 

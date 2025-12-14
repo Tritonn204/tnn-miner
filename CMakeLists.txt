@@ -1,5 +1,5 @@
 # HIP support was added in CMake 3.21
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.30)
 
 #cmake_policy(SET CMP0156 NEW)
 
@@ -11,15 +11,7 @@ cmake_print_variables(CMAKE_HOST_SYSTEM_NAME)
 # Specify C++ standard
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
-
-if(CMAKE_HOST_SYSTEM_NAME MATCHES Windows)
-  message(STATUS "Target system is Windows!")
-  set(CMAKE_C_COMPILER clang)
-  set(CMAKE_CXX_COMPILER clang++)
-  set(BOOST_TOOLSET_OPTS "BOOST_TOOLSET clang")
-  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -Wno-unused-command-line-argument")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-unused-command-line-argument")
-endif()
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 set(TARGET_ARCH "amd64")
 set(CMAKE_BUILD_TYPE Release)
@@ -30,31 +22,66 @@ option(USE_GCC        "Use GCC instead of Clang" OFF)
 option(USE_ASTRO_SPSA "Use Astro Stamped Permutation Suffix Array library" ON)
 option(WIN_CROSS      "Whether we are cross-compiling on Linux for Windows" OFF)
 
-# if (WIN32)
-#   if(WITH_HIP)
-#     message(STATUS "HIP compilation is not currently support for TNN Miner on Windows.")
-#   endif()
-#   set(WITH_HIP OFF)
-# endif()
+# HIP_PLATFORM: "" (none), "amd", or "nvidia"
+set(HIP_PLATFORM "${HIP_PLATFORM}" CACHE STRING "HIP platform: amd or nvidia")
+set_property(CACHE HIP_PLATFORM PROPERTY STRINGS "" "amd" "nvidia")
 
-if(USE_GCC)
-  if(NOT CMAKE_C_COMPILER)
-    set(CMAKE_C_COMPILER gcc)
+# ----------------- Select C / C++ / HIP compilers -----------------
+if (WIN32)
+
+  # ---------- Windows + HIP (MSVC / clang-cl toolchain) ----------
+  if (WITH_HIP)
+    # Resolve HIP_PATH from CMake var or environment
+      if (NOT DEFINED HIP_PATH AND DEFINED ENV{HIP_PATH})
+        set(HIP_PATH "$ENV{HIP_PATH}" CACHE PATH "HIP root" FORCE)
+      endif()
+
+      if (NOT DEFINED HIP_PATH)
+        message(FATAL_ERROR "WITH_HIP=ON on Windows but HIP_PATH is not set (CMake or ENV).")
+      endif()
+
+      if (HIP_PLATFORM STREQUAL "")
+        set(HIP_PLATFORM "amd" CACHE STRING "HIP platform" FORCE)
+      endif()
+
+      # HIP CMake modules + ROCm libs
+      file(GLOB _hip_modules "${HIP_PATH}/lib/cmake/*")
+      list(APPEND CMAKE_MODULE_PATH ${_hip_modules})
+      link_directories("${HIP_PATH}/lib")
+
+# ---------- Windows CPU-only ----------
+  else()
+    message(STATUS "Target system is Windows (CPU-only build)")
+
+    if (USE_GCC)
+      set(CMAKE_C_COMPILER   gcc   CACHE FILEPATH "" FORCE)
+      set(CMAKE_CXX_COMPILER g++   CACHE FILEPATH "" FORCE)
+      set(CMAKE_ASM_COMPILER gcc   CACHE FILEPATH "" FORCE)
+    else()
+      # MinGW/Clang flow
+      set(CMAKE_C_COMPILER   clang   CACHE FILEPATH "" FORCE)
+      set(CMAKE_CXX_COMPILER clang++ CACHE FILEPATH "" FORCE)
+      set(CMAKE_ASM_COMPILER clang   CACHE FILEPATH "" FORCE)
+    endif()
+
+    # Use MinGW lld if available
+    if (EXISTS "C:/mingw64/bin/ld.lld.exe")
+      set(CMAKE_LINKER "C:/mingw64/bin/ld.lld.exe" CACHE FILEPATH "" FORCE)
+    endif()
   endif()
-  if(NOT CMAKE_CXX_COMPILER)
-    set(CMAKE_CXX_COMPILER g++)
-  endif()
+
+# ----------------- Non-Windows platforms -----------------
 else()
-  if(NOT CMAKE_C_COMPILER)
-    set(CMAKE_C_COMPILER clang)
-  endif()
-  if(NOT CMAKE_CXX_COMPILER)
-    set(CMAKE_CXX_COMPILER clang++)
+  if (USE_GCC)
+    set(CMAKE_C_COMPILER   gcc   CACHE FILEPATH "" FORCE)
+    set(CMAKE_CXX_COMPILER g++   CACHE FILEPATH "" FORCE)
+    set(CMAKE_ASM_COMPILER gcc   CACHE FILEPATH "" FORCE)
+  else()
+    set(CMAKE_C_COMPILER   clang   CACHE FILEPATH "" FORCE)
+    set(CMAKE_CXX_COMPILER clang++ CACHE FILEPATH "" FORCE)
+    set(CMAKE_ASM_COMPILER clang   CACHE FILEPATH "" FORCE)
   endif()
 endif()
-
-# set(CMAKE_C_COMPILER_WORKS 1)
-# set(CMAKE_CXX_COMPILER_WORKS 1)
 
 set(CMAKE_COLOR_DIAGNOSTICS ON)
 # force C colored diagnostic output
@@ -116,79 +143,79 @@ option(ARM_V7               "Force ARMv7 (32 bit) architecture, use with caution
 # End of XMRig options
 
 if (NOT WITH_HIP)
-    message(STATUS "Enabling LTO for non-HIP build")
-    set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -flto")
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flto")
+  message(STATUS "Enabling LTO for non-HIP build")
+  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -flto")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flto")
+
 else()
   set(USE_ASTRO_SPSA OFF)
-  # if (WIN32)
-  #   set(CMAKE_C_COMPILER clang-cl)
-  #   set(CMAKE_CXX_COMPILER clang-cl)
-  # endif()
-  # set(CMAKE_C_COMPILER "C:/Program Files/LLVM/bin/clang-cl.exe")  # Adjust path as needed
-  # set(CMAKE_CXX_COMPILER "C:/Program Files/LLVM/bin/clang-cl.exe")  # Adjust path as needed
 
+  # ----- HIP on Windows: use clang-cl / MSVC-style toolchain -----
   if (WIN32)
     if (NOT CMAKE_GENERATOR MATCHES "Ninja")
       message(FATAL_ERROR
         "WITH_HIP=ON on Windows requires the Ninja generator.\n"
         "Current generator: '${CMAKE_GENERATOR}'.\n"
         "Run CMake like:\n"
-        "  cmake -S . -B hip-build/win32 -G \"Ninja\" -DWITH_HIP=ON -DHIP_PATH=\"C:/Program Files/AMD/ROCm/6.1\""
+        "  cmake -S . -B hip-build/win32 -G \"Ninja\" -DWITH_HIP=ON -DHIP_PATH=\"C:/Program Files/AMD/ROCm/6.x\""
       )
     endif()
 
     add_definitions(-DBOOST_ALL_NO_LIB)
     add_definitions(-D_WIN32_WINNT=0x0A00)
-
-    set(CMAKE_C_COMPILER   "$ENV{HIP_PATH}/bin/clang.exe")
-    set(CMAKE_CXX_COMPILER "$ENV{HIP_PATH}/bin/clang++.exe")
-
-    set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -target x86_64-pc-windows-msvc")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -target x86_64-pc-windows-msvc")
-
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Xlinker /errorlimit:0")
-    # endif()
   endif()
-  file(GLOB HIP_MODULES 
-    "${HIP_PATH}/lib/cmake/*"
-  )
-  list(APPEND CMAKE_MODULE_PATH ${HIP_MODULES})
+
+  # ----- Common HIP CMake modules / library dirs (all platforms) -----
+  if (DEFINED HIP_PATH)
+    file(GLOB HIP_MODULES
+      "${HIP_PATH}/lib/cmake/*"
+    )
+    list(APPEND CMAKE_MODULE_PATH ${HIP_MODULES})
+
+    link_directories("${HIP_PATH}/lib")
+  endif()
+
   set(HIP_LANG HIP)
-
-  link_directories(
-    $ENV{HIP_PATH}/lib
-  )
-
-  # set(HIP_PLATFORM $ENV{HIP_PLATFORM})
 endif()
 
 project(
   Tnn-miner
-  LANGUAGES C CXX
+  LANGUAGES C CXX ASM
   DESCRIPTION "Open Source Dero/Spectre/Xelis Miner"
 )
+
+if (WIN32 AND (MSVC OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
+             AND WITH_HIP AND HIP_PLATFORM MATCHES "nvidia")))
+
+  message(STATUS "MSVC WHY?... ${MSVC}, ${CMAKE_CXX_SIMULATE_ID}, ${HIP_PLATFORM}")
+
+  add_compile_options(
+    $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CXX>>:/EHa>
+    $<$<AND:$<NOT:$<CONFIG:Debug>>,$<COMPILE_LANGUAGE:CXX>>:/EHsc>
+  )
+
+  add_compile_options(
+    $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:C>>:/MT>
+    $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CXX>>:/MT>
+    $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:C>>:/MTd>
+    $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CXX>>:/MTd>
+  )
+
+  if (NOT WITH_HIP)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedStatic$<$<CONFIG:Debug>:Debug>")
+  else()
+    unset(CMAKE_MSVC_RUNTIME_LIBRARY CACHE)
+    unset(CMAKE_MSVC_RUNTIME_LIBRARY)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "")
+  endif()
+endif()
 
 set(PROJECT_VERSION ${INTERNAL_TNN_VERSION})
 
 if(USE_GCC)
-  if(NOT CMAKE_C_COMPILER)
-    set(CMAKE_C_COMPILER gcc)
-  endif()
-  if(NOT CMAKE_CXX_COMPILER)
-    set(CMAKE_CXX_COMPILER g++)
-  endif()
-
   set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Wno-deprecated-declarations")
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-deprecated-declarations")
 else()
-  if(NOT CMAKE_C_COMPILER)
-    set(CMAKE_C_COMPILER clang)
-  endif()
-  if(NOT CMAKE_CXX_COMPILER)
-    set(CMAKE_CXX_COMPILER clang++)
-  endif()
-
   # TODO: Rename this to SPSA_LIB_SUFFIX
   set(CMAKE_LIB_SUFFIX "")
   set(CMAKE_DO_OPAQUE "")
@@ -221,11 +248,19 @@ cmake_print_variables(INTERNAL_TNN_VERSION)
 cmake_print_variables(CMAKE_SYSTEM_PROCESSOR)
 
 # This CMAKE variable isn't defined until 'project' is called.
-set(DO_STATIC " -static ")
-if(CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
-  # We cannot use static linking on OSX.
-  set(DO_STATIC " ")
+set(DO_STATIC " ")
+
+# No static linking on macOS, ever
+if (NOT CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
+  # If this is NOT an MSVC-style compiler, we can use -static
+  if (NOT (MSVC
+           OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
+               AND CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")))
+    set(DO_STATIC " -static ")
+  endif()
 endif()
+
+message(STATUS "DO_STATIC='${DO_STATIC}'")
 
 if(DEFINED ENV{CPU_ARCHTARGET})
   set(CPU_ARCHTARGET "$ENV{CPU_ARCHTARGET}")
@@ -287,12 +322,8 @@ cmake_print_variables(CMAKE_CXX_FLAGS_RELEASE)
 # set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
 # endif()
 
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fstack-protector")
-
 set (CMAKE_CXX_STANDARD 20)
 set (CMAKE_STANDARD_REQUIRED TRUE)
-
-enable_language(ASM)
 
 set(OPENSSL_USE_STATIC_LIBS TRUE)
 
@@ -311,6 +342,10 @@ if(WIN32)
       "C:/mingw64/x86_64-w64-mingw32/lib"
     )
   else()
+    if (HIP_PLATFORM MATCHES "nvidia")
+      add_compile_definitions(BOOST_HAS_THREADS=1)
+    endif()
+
     set(OPENSSL_ROOT_DIR "C:/openssl_msvc")
     add_library(OpenSSL::Crypto UNKNOWN IMPORTED)
     set_target_properties(OpenSSL::Crypto PROPERTIES IMPORTED_LOCATION "${OPENSSL_ROOT_DIR}/lib/libcrypto_static.lib")
@@ -331,12 +366,29 @@ endif()
 # This stores downloaded dependencies so we do not need to re-download them
 string(MAKE_C_IDENTIFIER "${CMAKE_CXX_COMPILER_ID}-${CMAKE_CXX_COMPILER_VERSION}" COMPILER_TAG)
 
-if (WITH_HIP)
-  set(CPM_SOURCE_CACHE
-      "${PROJECT_SOURCE_DIR}/_deps/CPM-hip-${CMAKE_SYSTEM_NAME}-${COMPILER_TAG}")
+if(UNIX)
+  if(DEFINED ENV{XDG_CACHE_HOME})
+    set(_cache_root "$ENV{XDG_CACHE_HOME}")
+  else()
+    set(_cache_root "$ENV{HOME}/.cache")
+  endif()
+
+  if (WITH_HIP)
+    set(CPM_SOURCE_CACHE
+        "${_cache_root}/Tnn-miner/CPM-hip-${CMAKE_SYSTEM_NAME}-${COMPILER_TAG}")
+  else()
+    set(CPM_SOURCE_CACHE
+        "${_cache_root}/Tnn-miner/CPM-cpu-${CMAKE_SYSTEM_NAME}-${COMPILER_TAG}")
+  endif()
+
 else()
-  set(CPM_SOURCE_CACHE
-      "${PROJECT_SOURCE_DIR}/_deps/CPM-cpu-${CMAKE_SYSTEM_NAME}-${COMPILER_TAG}")
+  if (WITH_HIP)
+    set(CPM_SOURCE_CACHE
+        "${PROJECT_SOURCE_DIR}/_deps/CPM-hip-${CMAKE_SYSTEM_NAME}-${COMPILER_TAG}")
+  else()
+    set(CPM_SOURCE_CACHE
+        "${PROJECT_SOURCE_DIR}/_deps/CPM-cpu-${CMAKE_SYSTEM_NAME}-${COMPILER_TAG}")
+  endif()
 endif()
 cmake_print_variables(CPM_SOURCE_CACHE)
 
@@ -385,6 +437,7 @@ if (WIN_CROSS)
 endif()
 
 set(Boost_USE_STATIC_LIBS ON)
+set(Boost_USE_STATIC_RUNTIME ON)
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_NO_WARN_NEW_VERSIONS ON)
 
@@ -418,22 +471,18 @@ if(Boost_FOUND AND NOT USE_CPM_BOOST)
   message(${Boost_VERSION})
 else()
   message("Boost not found. Using CPM to add it")
-  # if (WIN32 AND WITH_HIP)
-  #   set(CPM_COMPILER 
-  #     "CMAKE_C_COMPILER clang-cl"
-  #     "CMAKE_CXX_COMPILER clang-cl"
-  #   )
-  # endif()
 
-  file(DOWNLOAD https://github.com/boostorg/boost/releases/download/boost-1.86.0/boost-1.86.0-cmake.tar.xz
-       "${PROJECT_SOURCE_DIR}/_deps/boost-1.86.0-cmake.tar.xz"
-       EXPECTED_HASH SHA256=2c5ec5edcdff47ff55e27ed9560b0a0b94b07bd07ed9928b476150e16b0efc57)
-  if(WIN32)
-    set(CMAKE_ASM_FLAGS -Wno-unused-command-line-argument) # adding this flag as an example
+  set(BOOST_TARBALL "${PROJECT_SOURCE_DIR}/_deps/boost-1.86.0-cmake.tar.xz")
+  if(NOT EXISTS "${BOOST_TARBALL}")
+    message(STATUS "Downloading Boost archive to ${BOOST_TARBALL}")
+    file(DOWNLOAD
+        https://github.com/boostorg/boost/releases/download/boost-1.86.0/boost-1.86.0-cmake.tar.xz
+        "${BOOST_TARBALL}"
+        EXPECTED_HASH SHA256=2c5ec5edcdff47ff55e27ed9560b0a0b94b07bd07ed9928b476150e16b0efc57)
+    message(STATUS "Boost 1.86.0 has been downloaded successfully in the CPM cache directory!")
+  else()
+    message(STATUS "Using cached Boost archive at ${BOOST_TARBALL}")
   endif()
-
-  # Use normal compiled Boost libs for the core library (standard C++ linking)
-  set(BOOST_STATIC_SETTING "BOOST_USE_STATIC_LIBS ON")
 
   # Only use MSVC compatibility for HIP builds on Windows
   # CPU builds use GNU/MinGW which is incompatible with -fms-compatibility
@@ -451,13 +500,13 @@ else()
     OPTIONS
       "BOOST_ENABLE_CMAKE ON"
       "BOOST_SKIP_INSTALL_RULES ON" # Set `OFF` for installation
-      "${BOOST_STATIC_SETTING}"
+      "BOOST_USE_STATIC_LIBS ON"
+      "BOOST_USE_STATIC_RUNTIME ON"
+      "BOOST_USE_MULTITHREADED ON"
       "BOOST_INSTALL_LAYOUT system"
       "BOOST_INCLUDE_LIBRARIES chrono\\\;context\\\;coroutine\\\;multiprecision\\\;json\\\;thread\\\;atomic\\\;program_options"
       "${BOOST_TOOLSET_OPTS}"  # Specify Clang toolset
       "${BOOST_MS_COMPAT}"
-      # ${CPM_COMPILER}
-    # Maintain build compatibility between find_package and CMakeLists.txt variants
   )
 
   if(Boost_ADDED)
@@ -470,10 +519,14 @@ else()
     foreach(filename ${files})
       include_directories(${filename})
     endforeach()
+
+    file(GLOB_RECURSE BOOST_CMAKELISTS
+      "${Boost_SOURCE_DIR}/CMakeLists.txt"
+      "${Boost_SOURCE_DIR}/libs/*/CMakeLists.txt"
+    )
   else()
     message(FATAL_ERROR "Boost was neither found nor added.")
   endif()
-
 endif()
 
 # This is universal regardless of how wheter we compiled or found Boost
@@ -498,25 +551,42 @@ if(WIN_CROSS)
 elseif (CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin" OR USE_GCC)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lc++ -fuse-ld=ld")
 elseif (CMAKE_HOST_SYSTEM_NAME MATCHES "Linux")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -v -fuse-ld=lld-${CXX_MAJOR_VERSION}")
+  if (NOT WITH_HIP OR HIP_PLATFORM MATCHES "amd")
+    find_program(LLD_PROG NAMES ld.lld ld.lld-19 lld-19)
+
+    if (LLD_PROG)
+      get_filename_component(LLD_DIR "${LLD_PROG}" DIRECTORY)
+      message(STATUS "Using lld at ${LLD_PROG}")
+      set(CMAKE_EXE_LINKER_FLAGS
+        "${CMAKE_EXE_LINKER_FLAGS} -v -B${LLD_DIR} -fuse-ld=lld")
+    else()
+      message(STATUS "lld not found, falling back to default linker")
+      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -v")
+    endif()
+  else()
+    # HIP + NVIDIA
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -v")
+  endif()
 elseif (CMAKE_HOST_SYSTEM_NAME MATCHES "Windows")
   if (NOT WITH_HIP)
     # CPU builds: use MinGW's linker
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=C:/mingw64/bin/ld.lld.exe")
+    set(CMAKE_LINKER "C:/mingw64/bin/ld.lld.exe")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
   endif()
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -v")
 endif()
 cmake_print_variables(CMAKE_EXE_LINKER_FLAGS)
 
-if(WITH_HIP)
-CPMAddPackage(
-  NAME sodium
-  GITHUB_REPOSITORY robinlinden/libsodium-cmake
-  GIT_TAG f568ff02f1bed155ea598c0e803ef3c9db2703d2
-  OPTIONS 
-    "CMAKE_C_FLAGS_RELEASE -msse3 -mssse3 -maes -mpclmul -mavx2" 
-    "CMAKE_CXX_FLAGS_RELEASE -msse3 -mssse3 -maes -mpclmul -mavx2"
-)
-endif()
+# if(WITH_HIP)
+# CPMAddPackage(
+#   NAME sodium
+#   GITHUB_REPOSITORY robinlinden/libsodium-cmake
+#   GIT_TAG f568ff02f1bed155ea598c0e803ef3c9db2703d2
+#   OPTIONS 
+#     "CMAKE_C_FLAGS_RELEASE -msse3 -mssse3 -maes -mpclmul -mavx2" 
+#     "CMAKE_CXX_FLAGS_RELEASE -msse3 -mssse3 -maes -mpclmul -mavx2"
+# )
+# endif()
 
 # if (TARGET sodium)
 #   # Add SSSE3 and PCLMUL flags for sodium target
@@ -578,6 +648,7 @@ file(GLOB SOURCES_NET
   "${PROJECT_SOURCE_DIR}/src/net/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/net/*.c"
   "${PROJECT_SOURCE_DIR}/src/net/kas/*.cpp"
+  "${PROJECT_SOURCE_DIR}/src/net/xelis/*.cpp"
 )
 
 include(cmake/spsa.cmake)
@@ -640,12 +711,19 @@ if (WITH_HIP)
   #
   # Windows + NVIDIA HIP: manual hipcc compilation of HIP sources
   #
-  if (WIN32 AND HIP_PLATFORM MATCHES "nvidia")
+  find_package(hip REQUIRED)
+
+  # if (WIN32 AND HIP_PLATFORM MATCHES "nvidia")
+  if (FALSE)
     message(STATUS "Configuring HIP (NVIDIA backend) on Windows using manual hipcc compilation")
 
     # Path to hipcc – can be overridden on the CMake command line
+    if(WIN32)
+      set(HIPCC_EXT ".exe")
+    endif()
+
     if (NOT DEFINED HIPCC_EXECUTABLE)
-      set(HIPCC_EXECUTABLE "$ENV{HIP_PATH}/bin/hipcc.bin.exe")
+      set(HIPCC_EXECUTABLE "$ENV{HIP_PATH}/bin/hipcc${HIPCC_EXT}")
     endif()
 
     if (NOT EXISTS "${HIPCC_EXECUTABLE}")
@@ -656,33 +734,44 @@ if (WITH_HIP)
     set(TNN_OUTPUT_NAME "tnn-miner-cuda")
 
     # Adjust architectures as desired
-    set(HIPCC_ARCH_FLAGS
-      "-gencode=arch=compute_61,code=sm_61"
-      "-gencode=arch=compute_70,code=sm_70"
-      "-gencode=arch=compute_75,code=sm_75"
-      "-gencode=arch=compute_80,code=sm_80"
-      "-gencode=arch=compute_89,code=sm_89"
-      "-gencode=arch=compute_90,code=sm_90"
-    )
 
     set(TNN_HIP_OBJS "")
+
+    set(HIPCC_INCLUDES_RSP
+        "${CMAKE_CURRENT_BINARY_DIR}/hipcc_includes_$<CONFIG>.rsp")
+
+    get_target_property(TNN_CORE_INCS ${TNN_CORE_LIB} INCLUDE_DIRECTORIES)
+
+    set(HIPCC_INCLUDES_RSP "${CMAKE_CURRENT_BINARY_DIR}/hipcc_includes_$<CONFIG>.rsp")
+
+    set(HIPCC_INCLUDES_CONTENT "")
+    foreach(inc IN LISTS TNN_CORE_INCS)
+      string(APPEND HIPCC_INCLUDES_CONTENT "-I\"${inc}\"\n")
+    endforeach()
+
+    file(GENERATE
+      OUTPUT  "${HIPCC_INCLUDES_RSP}"
+      CONTENT "${HIPCC_INCLUDES_CONTENT}"
+    )
 
     foreach(src ${TNN_HIP_SOURCES})
       get_filename_component(src_name "${src}" NAME_WE)
       set(obj "${CMAKE_CURRENT_BINARY_DIR}/${src_name}.obj")
+
+      set(HIPCC_ARCH_FLAGS
+        "-gencode=arch=compute_90,code=sm_90"
+      )
 
       add_custom_command(
         OUTPUT ${obj}
         COMMAND ${HIPCC_EXECUTABLE}
                 -std=c++20
                 -O3
-                -Xcompiler=/MD
-                -t4
+                -x cu
                 ${HIPCC_ARCH_FLAGS}
                 -I"${HIP_PATH}/include"
-                -I"${PROJECT_SOURCE_DIR}/include"
-                -I"${PROJECT_SOURCE_DIR}/src"
-                -c "${src}" -o "${obj}" -x cu
+                --options-file="${HIPCC_INCLUDES_RSP}"
+                -c "${src}" -o "${obj}"
         DEPENDS "${src}"
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         VERBATIM
@@ -711,6 +800,7 @@ if (WITH_HIP)
         ${TNN_CORE_LIB}
         "$ENV{CUDA_PATH}/lib/x64/cudart_static.lib"
         "$ENV{CUDA_PATH}/lib/x64/cuda.lib"
+        cuda hiprtc nvrtc
     )
 
   #
@@ -719,34 +809,130 @@ if (WITH_HIP)
   else()
     if (HIP_PLATFORM MATCHES "amd")
       set(CMAKE_HIP_ARCHITECTURES
-        "gfx900;gfx902;gfx904;gfx906;"
-        "gfx1010;gfx1011;gfx1012;gfx1013;"
-        "gfx1030;gfx1031;gfx1032;gfx1033;gfx1034;gfx1035;gfx1036;"
-        "gfx1100;gfx1101;gfx1102;gfx1103;gfx1150;gfx1151"
+        "gfx1100"
       )
+      set(HIPRTC_LIB hiprtc)
       set(TNN_OUTPUT_NAME "tnn-miner-rocm")
+      set(HIPRT_LIB hip::host)
     else()
-      # e.g. Linux + NVIDIA HIP, or any non-Windows NVIDIA setup
-      set(CMAKE_HIP_ARCHITECTURES "61;70;75;80;89;90")
-      set(TNN_OUTPUT_NAME "tnn-miner-cuda")
+      if(WIN32)
+        if (NOT DEFINED ENV{CUDA_PATH})
+          message(FATAL_ERROR
+            "HIP_PLATFORM=nvidia requires CUDA_PATH environment variable "
+            "pointing to the CUDA Toolkit root (e.g. C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.1)."
+          )
+        endif()
+
+        set(CMAKE_HIP_ARCHITECTURES "90")
+        set(TNN_OUTPUT_NAME "tnn-miner-cuda")
+
+        set(CUDA_LIB_DIR "$ENV{CUDA_PATH}/lib/x64")
+
+        set(HIPRT_LIB
+          "${CUDA_LIB_DIR}/cudart_static.lib"
+          "${CUDA_LIB_DIR}/cudadevrt.lib"
+          "${CUDA_LIB_DIR}/cuda.lib"
+        )
+
+        set(HIPRTC_LIB 
+          "${CUDA_LIB_DIR}/nvrtc.lib" 
+        )
+      else()
+        set(CMAKE_HIP_ARCHITECTURES "90")
+        set(TNN_OUTPUT_NAME "tnn-miner-cuda")
+
+        set(HIPRT_LIB  cudart_static cudadevrt cuda)
+        set(HIPRTC_LIB nvrtc)
+      endif()
     endif()
 
     set(HIP_LANG HIP)
     set(CMAKE_HIP_COMPILER_WORKS 1)
+
     enable_language(${HIP_LANG})
 
     add_executable(${TNN_OUTPUT_NAME}
       ${TNN_HIP_SOURCES}
     )
 
-    target_link_libraries(${TNN_OUTPUT_NAME}
+    if (WIN32 AND HIP_PLATFORM MATCHES "nvidia")
+      set(CMAKE_HIP_LINK_EXECUTABLE
+        "<CMAKE_LINKER> /machine:x64 /INCREMENTAL:NO <LINK_FLAGS> <OBJECTS> /OUT:<TARGET> <LINK_LIBRARIES>"
+      )
+    endif()
+
+    # Collect HIP (and optionally CUDA) include dirs in one variable
+    set(_tnn_hip_includes "")
+
+    # HIP includes (needed on both AMD and NVIDIA HIP backends)
+    if(DEFINED ENV{HIP_PATH})
+      list(APPEND _tnn_hip_includes "$ENV{HIP_PATH}/include")
+    else()
+      message(WARNING "HIP_PATH is not set; HIP headers may not be found.")
+    endif()
+
+    # On NVIDIA backend, also add CUDA includes
+    if(HIP_PLATFORM MATCHES "nvidia")
+      if(DEFINED ENV{CUDA_PATH})
+        list(APPEND _tnn_hip_includes "$ENV{CUDA_PATH}/include")
+      else()
+        message(FATAL_ERROR
+          "HIP_PLATFORM=nvidia but CUDA_PATH is not set. "
+          "CUDA headers are required for the NVIDIA HIP backend."
+        )
+      endif()
+      set(HIPRTC_DLL_DIR "${CMAKE_SOURCE_DIR}/lib/nvrtc")
+    else()
+      set(HIPRTC_DLL_DIR "${CMAKE_SOURCE_DIR}/lib/hiprtc")
+    endif()
+
+    # Single include directive, works for both AMD and NVIDIA
+    target_include_directories(${TNN_CORE_LIB}
       PRIVATE
-        ${TNN_CORE_LIB}
-        amdhip64
+        ${_tnn_hip_includes}
     )
 
+    target_include_directories(${TNN_OUTPUT_NAME}
+      PRIVATE
+        ${_tnn_hip_includes}
+    )
+
+    if (WIN32)
+      target_link_libraries(${TNN_OUTPUT_NAME}
+        PRIVATE
+          ${TNN_CORE_LIB}
+          ${HIPRT_LIB}
+          ${HIPRTC_LIB}
+          user32.lib
+      )
+    else()
+      target_link_libraries(${TNN_OUTPUT_NAME}
+        PRIVATE
+          ${TNN_CORE_LIB}
+          ${HIPRT_LIB}
+          ${HIPRTC_LIB}
+      )
+    endif()
+
     # Global HIP flags
-    set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -O3 -ffast-math")
+    if (HIP_PLATFORM MATCHES "amd")
+      # ROCm/clang backend
+      set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -O3 -ffast-math")
+    elseif (HIP_PLATFORM MATCHES "nvidia")
+      # CUDA/nvcc backend
+      set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -O3 --use_fast_math")
+    else()
+      set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -O3")
+    endif()
+  endif()
+
+  if (WIN32)
+    add_custom_command(
+      TARGET ${TNN_OUTPUT_NAME} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${HIPRTC_DLL_DIR}"
+        "$<TARGET_FILE_DIR:${TNN_OUTPUT_NAME}>"
+    )
   endif()
 
 else()

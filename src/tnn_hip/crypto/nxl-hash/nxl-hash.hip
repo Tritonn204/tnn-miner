@@ -144,7 +144,7 @@ __global__ void nxlHash_hip(const uint64_t nonce_mask, const uint64_t nonce_fixe
       printf("\n");
     }
 
-  blake3_inline_hash_80(input, input);
+  blake3_inline_hash(input, 80, input);
 
   // SKEIN GOES HERE
   skein_hash(256, input, 256, input);
@@ -206,7 +206,7 @@ __global__ void nxlHash_hip(const uint64_t nonce_mask, const uint64_t nonce_fixe
     product1 >>= 10;
     product2 >>= 10;
 
-#ifdef __HIP_PLATFORM_NVIDIA__
+#if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
     nextInput[rowId] = input[rowId] ^ ((uint8_t)(product1 << 4) | (uint8_t)(product2));
 #else
     nextInput[rowId] = input[rowId] ^ bitselect(product1 << 4, product2, 0x0000000FU);

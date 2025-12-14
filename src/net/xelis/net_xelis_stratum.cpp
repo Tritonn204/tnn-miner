@@ -128,9 +128,9 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
     int enLen = enStr.size();
 
     // Safely manipulate the blob string
-    std::fill(blobStr.begin() + 96, blobStr.begin() + 160, '0');
+    std::fill(blobStr.begin() + 48, blobStr.begin() + 112, '0');
     if (enLen > 0 && enLen <= 64) {
-        std::copy(enStr.begin(), enStr.begin() + enLen, blobStr.begin() + 96);
+      std::copy(enStr.begin(), enStr.end(), blobStr.begin() + 48);
     }
 
     J["miner_work"] = blobStr;
@@ -363,7 +363,7 @@ void xelis_stratum_session(
   boost::json::object subscribe = XelisStratum::stratumCall;
   subscribe["id"] = XelisStratum::subscribe.id;
   subscribe["method"] = XelisStratum::subscribe.method;
-  subscribe["params"] = { "tnn-miner/" + std::string(versionString), {"xel/3"} };
+  subscribe["params"] = { "tnn-miner/" + std::string(versionString), {"xel/v3"} };
   send_json(subscribe);
   auto subResStr = send_and_recv_line();
   if (!subResStr.empty()) {
@@ -624,7 +624,7 @@ void xelis_stratum_session_nossl(
   boost::json::object subscribe = XelisStratum::stratumCall;
   subscribe["id"] = XelisStratum::subscribe.id;
   subscribe["method"] = XelisStratum::subscribe.method;
-  subscribe["params"] = { "tnn-miner/" + std::string(versionString), {"xel/3"} };
+  subscribe["params"] = { "tnn-miner/" + std::string(versionString), {"xel/v3"} };
   send_json(subscribe);
 
   auto subResStr = send_and_recv_line();

@@ -59,6 +59,9 @@ build/*
 # Misc
 **.txt
 **.DS_Store
+hiprtc_standalone_test/
+nvidia_bench/
+nvrtc_debug/
 
 !CMakeLists.txt
 # Winring0
@@ -69,3 +72,5 @@ build/*
 !/src/astrobwtv3/CMakeLists.txt
 # tnn-hip
 !/src/tnn_hip/CMakeLists.txt
+# hiprtc
+!/lib/hiprtc/*.dll

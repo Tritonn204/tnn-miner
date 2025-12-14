@@ -15,8 +15,9 @@ if (WITH_HOOHASH)
       src/net/hoohash/*.cpp
     )
     
+    # New unified CPU mining infrastructure
     list(APPEND HooHashSources
-      src/coins/mine_hoosat.cpp
+      src/tnn_cpu/mine_kas_unified.cpp
     )
 
     list(APPEND HEADERS_CRYPTO

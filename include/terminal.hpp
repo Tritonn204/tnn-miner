@@ -8,7 +8,7 @@
   #include <sys/ioctl.h>
 #endif
 
-#if defined(__WIN32)
+#if defined(_WIN32)
 #include <Windows.h>
 #endif
 
@@ -18,7 +18,7 @@ namespace po = boost::program_options;  // from <boost/program_options.hpp>
 #define XSTR(x) STR(x)
 #define STR(x) #x
 
-#ifdef __WIN32
+#ifdef _WIN32
 #define RUN_EXTENSION ".exe"
 #define SCRIPT_EXTENSION ".bat"
 #else

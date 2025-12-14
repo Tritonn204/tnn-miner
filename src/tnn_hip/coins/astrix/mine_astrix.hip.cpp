@@ -39,7 +39,7 @@ void jobThread(
       break;
     }
 
-    uint64_t &N = devMine ? HIP_kIndex_dev[d] : HIP_kIndex[d];
+    auto &N = devMine ? HIP_kIndex_dev[d] : HIP_kIndex[d];
 
     Astrix_HIP::astrixHash_wrapper(
         ctx.blocks[d],
@@ -48,7 +48,7 @@ void jobThread(
         ctx.d_nonceBuffer,
         ctx.d_nonceCount,
         ctx.d_hashBuffer,
-        N,
+        N.load(),
         ctx.batchSizes[d],
         d,
         devMine);

@@ -203,6 +203,14 @@ function Build-Target {
     Write-Host "HIP Platform: $HipPlatform"
     Write-Host "==============================================="
 
+    if ($HipFlag -eq "ON" -and $HipPlatform) {
+        Write-Host "Setting HIP_PLATFORM env to '$HipPlatform' for this build."
+        $env:HIP_PLATFORM = $HipPlatform
+    } else {
+        Write-Host "Clearing HIP_PLATFORM env for this build."
+        Remove-Item Env:HIP_PLATFORM -ErrorAction SilentlyContinue
+    }
+
     $buildDir = Join-Path $RepoRoot ("hip-build\win32\" + $TargetDir)
 
     # Ensure build directory exists
@@ -241,6 +249,7 @@ function Build-Target {
         "-S", $RepoRoot,
         "-B", $buildDir,
         "-G", "Ninja",
+        "-DCMAKE_HIP_COMPILER_ROCM_ROOT=$hip_path_quoted"
         "-DCMAKE_HIP_PLATFORM=$HipPlatform",
         "-DWITH_HIP=$HipFlag",
         "-DHIP_PLATFORM=$HipPlatform",
@@ -252,6 +261,36 @@ function Build-Target {
         $cmakeArgs += "-DHIP_PATH=""$($env:HIP_PATH)"""
         # Let CMake find hip-lang (and other HIP packages) under the ROCm tree
         $cmakeArgs += "-DCMAKE_PREFIX_PATH=""$($env:HIP_PATH)"""
+    }
+
+    if ($HipFlag -eq "ON") {
+        if ($targetToBuild -eq "nvidia") {
+            $clangCl = Join-Path $env:HIP_PATH "bin\clang-cl.exe"
+
+            if (Test-Path $clangCl) {
+                Write-Host "Using ROCm clang-cl: $clangCl"
+
+                $cmakeArgs += "-DCMAKE_C_COMPILER=""$clangCl"""
+                $cmakeArgs += "-DCMAKE_CXX_COMPILER=""$clangCl"""
+            }
+            else {
+                Write-Host "ROCm clang-cl.exe not found, falling back to cl.exe from MSVC."
+                # No extra args -> CMake just uses cl.exe from the imported MSVC env
+            }
+        } else {
+            $clang = Join-Path $env:HIP_PATH "bin\clang.exe"
+            $clangXX = Join-Path $env:HIP_PATH "bin\clang++.exe"
+
+            if (Test-Path $clang) {
+                Write-Host "Using ROCm clang: $clang"
+
+                $cmakeArgs += "-DCMAKE_C_COMPILER=""$clang"""
+                $cmakeArgs += "-DCMAKE_CXX_COMPILER=""$clangXX"""
+            }
+            else {
+                Write-Host "ROCm clang.exe not found..., falling back to CMake defaults."
+            }
+        }
     }
 
     Write-Host ""
@@ -310,10 +349,18 @@ try {
 
     # Get HIP path and handle spaces in the path
     $env:HIP_PATH = (& hipconfig --path).Trim()
-    Write-Host "HIP_PATH: $env:HIP_PATH"
+    Write-Host "HIP_PATH (raw): $env:HIP_PATH"
+
+    # Convert backslashes to forward slashes for CMake
+    $env:HIP_PATH = ($env:HIP_PATH -replace '\\', '/')
+    Write-Host "HIP_PATH (cmake-friendly): $env:HIP_PATH"
 
     # Build for AMD using ROCm
     if ($targetToBuild -eq "" -or $targetToBuild -eq "amd") {
+        if (-not (Import-MsvcEnvironment -Architecture "x64")) {
+            Write-Host "WARNING: Could not import MSVC environment. AMD HIP build may fail if mt.exe / SDK libs are not in PATH."
+        }
+
         if (-not (Build-Target "amd" "ON" "amd")) {
             Write-Host "Failed to build for AMD."
         }
@@ -341,5 +388,6 @@ try {
 finally {
     # Always restore original PATH
     $env:PATH = $originalPath
+    Remove-Item Env:HIP_PLATFORM -ErrorAction SilentlyContinue
     Write-Host "PATH restored to original value."
 }

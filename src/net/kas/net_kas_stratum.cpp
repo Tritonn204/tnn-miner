@@ -58,8 +58,8 @@ int handleKasStratumPacket(boost::json::object packet, KasStratum::jobCache *cac
 
       if (gpuMine) {
         for (int i = 0; i < HIP_deviceCount; i++) {
-          uint64_t &K = isDev ? HIP_kIndex_dev[i] : HIP_kIndex[i];
-          K = 0;
+          auto &K = isDev ? HIP_kIndex_dev[i] : HIP_kIndex[i];
+          K.store(0);
         }
       }
     }
