@@ -178,6 +178,23 @@ else()
   set(HIP_LANG HIP)
 endif()
 
+if(APPLE)
+  set(_LLVM_BIN "/opt/homebrew/opt/llvm@18/bin")
+
+  find_program(_HB_LLVM_AR     NAMES llvm-ar     PATHS "${_LLVM_BIN}" NO_DEFAULT_PATH)
+  find_program(_HB_LLVM_RANLIB NAMES llvm-ranlib PATHS "${_LLVM_BIN}" NO_DEFAULT_PATH)
+  find_program(_HB_LLVM_NM     NAMES llvm-nm     PATHS "${_LLVM_BIN}" NO_DEFAULT_PATH)
+
+  if(_HB_LLVM_AR AND _HB_LLVM_RANLIB)
+    set(CMAKE_AR     "${_HB_LLVM_AR}"     CACHE FILEPATH "Archiver" FORCE)
+    set(CMAKE_RANLIB "${_HB_LLVM_RANLIB}" CACHE FILEPATH "Ranlib"   FORCE)
+  endif()
+
+  if(_HB_LLVM_NM)
+    set(CMAKE_NM "${_HB_LLVM_NM}" CACHE FILEPATH "NM" FORCE)
+  endif()
+endif()
+
 project(
   Tnn-miner
   LANGUAGES C CXX ASM
@@ -212,30 +229,41 @@ endif()
 
 set(PROJECT_VERSION ${INTERNAL_TNN_VERSION})
 
-if(USE_GCC)
-  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Wno-deprecated-declarations")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-deprecated-declarations")
-else()
-  # TODO: Rename this to SPSA_LIB_SUFFIX
+if(NOT USE_GCC)
   set(CMAKE_LIB_SUFFIX "")
   set(CMAKE_DO_OPAQUE "")
+
   if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     string(REGEX MATCH "^([0-9]+)" CXX_MAJOR_VERSION "${CMAKE_CXX_COMPILER_VERSION}")
 
-    find_program(LLVM_AR_PROG NAMES llvm-ar-${CXX_MAJOR_VERSION} llvm-ar)
-    find_program(LLVM_RANLIB_PROG NAMES llvm-ranlib-${CXX_MAJOR_VERSION} llvm-ranlib)
-
-    if(LLVM_AR_PROG)
-      set(CMAKE_AR "${LLVM_AR_PROG}" CACHE FILEPATH "Archiver" FORCE)
+    # Only try to (re)set if not already set by the Apple/Homebrew block
+    if(NOT DEFINED CMAKE_AR OR CMAKE_AR STREQUAL "" OR CMAKE_AR MATCHES "XcodeDefault")
+      # Prefer Homebrew location first, then fallback to PATH
+      find_program(LLVM_AR_PROG
+        NAMES llvm-ar-${CXX_MAJOR_VERSION} llvm-ar
+        PATHS /opt/homebrew/opt/llvm@18/bin
+      )
+      if(LLVM_AR_PROG)
+        set(CMAKE_AR "${LLVM_AR_PROG}" CACHE FILEPATH "Archiver" FORCE)
+      endif()
     endif()
 
-    if(LLVM_RANLIB_PROG)
-      set(CMAKE_RANLIB "${LLVM_RANLIB_PROG}" CACHE FILEPATH "Ranlib" FORCE)
+    if(NOT DEFINED CMAKE_RANLIB OR CMAKE_RANLIB STREQUAL "" OR CMAKE_RANLIB MATCHES "XcodeDefault")
+      find_program(LLVM_RANLIB_PROG
+        NAMES llvm-ranlib-${CXX_MAJOR_VERSION} llvm-ranlib
+        PATHS /opt/homebrew/opt/llvm@18/bin
+      )
+      if(LLVM_RANLIB_PROG)
+        set(CMAKE_RANLIB "${LLVM_RANLIB_PROG}" CACHE FILEPATH "Ranlib" FORCE)
+      endif()
     endif()
   endif()
 
-  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Wno-deprecated -Wno-nan-infinity-disabled ${CMAKE_DO_OPAQUE}")
+  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -Wno-deprecated -Wno-nan-infinity-disabled ${CMAKE_DO_OPAQUE}")
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-deprecated -Wno-nan-infinity-disabled ${CMAKE_DO_OPAQUE}")
+else()
+  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -Wno-deprecated-declarations")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-deprecated-declarations")
 endif()
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
