@@ -97,14 +97,18 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
       }
     }
 
-    (*JV) = J;
-
-    *C = true;
-    (*h)++;
-    jobCounter++;
+    // Acquire lock BEFORE modifying job/devJob to prevent race condition
+    {
+      std::scoped_lock<boost::mutex> lockGuard(mutex);
+      (*JV) = J;
+      *C = true;
+      (*h)++;
+      jobCounter++;
+    }
   }
   else if (M == XelisStratum::s_setDifficulty)
   {
+    std::scoped_lock<boost::mutex> lockGuard(mutex);
     int64_t *d = isDev ? &difficultyDev : &difficulty;
     (*d) = packet["params"].as_array()[0].get_double();
     if ((*d) == 0)
@@ -123,7 +127,7 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
       blobStr = std::string(J["miner_work"].as_string());
     }
     blobStr.resize(XELIS_TEMPLATE_SIZE * 2, '0');
-    
+
     std::string enStr = std::string(packet["params"].as_array()[0].as_string());
     int enLen = enStr.size();
 
@@ -135,10 +139,13 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
 
     J["miner_work"] = blobStr;
 
-    (*JV) = J;
-
-    (*h)++;
-    jobCounter++;
+    // Acquire lock BEFORE modifying job/devJob to prevent race condition
+    {
+      std::scoped_lock<boost::mutex> lockGuard(mutex);
+      (*JV) = J;
+      (*h)++;
+      jobCounter++;
+    }
   }
   else if (M == XelisStratum::s_print)
   {
@@ -227,7 +234,12 @@ int handleXStratumResponse(boost::json::object packet, bool isDev)
     }
 
     J["miner_work"] = blobStr;
-    (*JV) = J;
+
+    // Acquire lock BEFORE modifying job/devJob to prevent race condition
+    {
+      std::scoped_lock<boost::mutex> lockGuard(mutex);
+      (*JV) = J;
+    }
   }
   break;
   case XelisStratum::submitID:

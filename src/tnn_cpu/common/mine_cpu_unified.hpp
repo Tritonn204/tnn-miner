@@ -74,8 +74,12 @@ waitForJob:
                 jobFieldName = "miner_work";  // Xelis uses different field
             }
 
-            // Validate job
-            if (!myJob.at(jobFieldName).is_string()) {
+            // Validate job - safely check if field exists and is valid
+            if (!myJob.is_object()) {
+                continue;
+            }
+            auto* jobField = myJob.as_object().if_contains(jobFieldName);
+            if (!jobField || !jobField->is_string()) {
                 continue;
             }
             if (ourHeight == 0 && devHeight == 0) {
@@ -133,7 +137,14 @@ waitForJob:
                 devJobFieldName = "miner_work";
             }
 
-            if (devConnected && myJobDev.at(devJobFieldName).is_string()) {
+            // Safely check dev job validity
+            bool devJobValid = false;
+            if (devConnected && myJobDev.is_object()) {
+                auto* devJobField = myJobDev.as_object().if_contains(devJobFieldName);
+                devJobValid = (devJobField && devJobField->is_string());
+            }
+
+            if (devJobValid) {
                 if (devHeight > 0 && localDevHeight != devHeight) {
                     std::vector<uint8_t> dev_work_data(config.template_size);
 
@@ -258,16 +269,24 @@ waitForJob:
                         break;
                     }
                     case PROTO_XELIS_STRATUM:
-                        shareTarget = {{
-                            {"id", XelisStratum::submitID},
-                            {"method", XelisStratum::submit.method.c_str()},
-                            {"params", {
-                                workerNameStr,
-                                jobData.at("jobId").as_string().c_str(),
-                                hexStr((byte*)&found_nonce, 8).c_str()
-                            }}
-                        }};
+                    {
+                        auto* jobId = jobData.as_object().if_contains("jobId");
+                        if (jobId && jobId->is_string()) {
+                            shareTarget = {{
+                                {"id", XelisStratum::submitID},
+                                {"method", XelisStratum::submit.method.c_str()},
+                                {"params", {
+                                    workerNameStr,
+                                    jobId->as_string().c_str(),
+                                    hexStr((byte*)&found_nonce, 8).c_str()
+                                }}
+                            }};
+                        } else {
+                            submittingFlag = false;
+                            continue;
+                        }
                         break;
+                    }
 
                     // KAS-family protocols
                     case PROTO_KAS_SOLO:
@@ -275,17 +294,23 @@ waitForJob:
                         break;
                     case PROTO_KAS_STRATUM:
                     {
-                        std::vector<char> nonceStr;
-                        Num(std::to_string(found_nonce).c_str(), 10).print(nonceStr, 16);
-                        shareTarget = {{
-                            {"id", KasStratum::submitID},
-                            {"method", KasStratum::submit.method.c_str()},
-                            {"params", {
-                                workerNameStr,
-                                jobData.at("jobId").as_string().c_str(),
-                                std::string(nonceStr.data()).c_str()
-                            }}
-                        }};
+                        auto* jobId = jobData.as_object().if_contains("jobId");
+                        if (jobId && jobId->is_string()) {
+                            std::vector<char> nonceStr;
+                            Num(std::to_string(found_nonce).c_str(), 10).print(nonceStr, 16);
+                            shareTarget = {{
+                                {"id", KasStratum::submitID},
+                                {"method", KasStratum::submit.method.c_str()},
+                                {"params", {
+                                    workerNameStr,
+                                    jobId->as_string().c_str(),
+                                    std::string(nonceStr.data()).c_str()
+                                }}
+                            }};
+                        } else {
+                            submittingFlag = false;
+                            continue;
+                        }
                         break;
                     }
 

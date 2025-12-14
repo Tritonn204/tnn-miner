@@ -216,11 +216,14 @@ void xelis_session(
 
             if (newHeight != currentHeight)
             {
+              // Acquire lock BEFORE modifying job/devJob to prevent race condition
+              std::scoped_lock<boost::mutex> lockGuard(mutex);
+
               if (isDev)
                 devJob = workData;
               else
                 job = workData;
-              
+
               boost::json::value *J = isDev ? &devJob : &job;
 
               auto lasterror = (*J).as_object().if_contains("lasterror");
@@ -230,8 +233,6 @@ void xelis_session(
                 std::cerr << "received error: " << errorStr << std::endl
                           << consoleLine << "v" << versionString << " ";
               }
-
-              std::scoped_lock<boost::mutex> lockGuard(mutex);
               if (!isDev)
               {
                 currentBlob = std::string((*J).at("miner_work").as_string());

@@ -211,11 +211,14 @@ void dero_session(
         boost::json::value workData = boost::json::parse(workInfo.str(), jsonEc);
         if (!jsonEc)
         {
+          // Acquire lock BEFORE modifying job/devJob to prevent race condition
+          std::scoped_lock<boost::mutex> lockGuard(mutex);
+
           if (isDev)
             devJob = workData;
           else
             job = workData;
-          
+
           boost::json::value *J = isDev ? &devJob : &job;
 
           // Safely extract lasterror
@@ -236,7 +239,7 @@ void dero_session(
             difficulty = (*J).at("difficultyuint64").to_number<int64_t>();
             accepted = (*J).at("miniblocks").to_number<int64_t>();
             rejected = (*J).at("rejected").to_number<int64_t>();
-            
+
             if (!isConnected)
             {
               setcolor(BRIGHT_YELLOW);
@@ -256,7 +259,7 @@ void dero_session(
             devBlob = std::string((*J).at("blockhashing_blob").as_string());
             devHeight = (*J).at("height").to_number<int64_t>();
             difficultyDev = (*J).at("difficultyuint64").to_number<int64_t>();
-            
+
             if (!devConnected)
             {
               setcolor(CYAN);
