@@ -4,6 +4,7 @@
 #include "aes.hpp"
 #include "chacha20.h"
 #include <crc32.h>
+#include <memory>
 
 #include <BLAKE3/c/blake3.h>
 

@@ -13,7 +13,7 @@ fi
 
 mkdir build18
 pushd build18
-  cmake -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 $VER_SETTING ..
+  cmake $VER_SETTING ..
   #ret=$?
   #if [[ "$ret" != "0" ]]; then
   #  rm -rf ./*
