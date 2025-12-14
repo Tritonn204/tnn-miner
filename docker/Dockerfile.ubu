@@ -1,9 +1,7 @@
 # syntax=docker/dockerfile:1.4
 
 ARG BUILDER_BASE=amd64
-ARG BUILDER_PLATFORM=linux/${BUILDER_BASE}
-
-FROM --platform=$BUILDER_PLATFORM docker.io/tritonn204/tnn-builder-${BUILDER_BASE}:latest AS base
+FROM docker.io/tritonn204/tnn-builder-${BUILDER_BASE}:latest AS base
 #FROM tnn-builder-${BUILDER_BASE}:latest AS base
 
 # Set environment variable to avoid interactive prompts
