@@ -442,6 +442,10 @@ set(Boost_USE_STATIC_RUNTIME ON)
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_NO_WARN_NEW_VERSIONS ON)
 
+if(APPLE)
+  set(USE_CPM_BOOST ON CACHE BOOL "" FORCE)
+endif()
+
 if (NOT USE_CPM_BOOST)
 find_package(Boost 1.80 COMPONENTS
   chrono
