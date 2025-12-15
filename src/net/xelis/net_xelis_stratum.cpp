@@ -97,7 +97,6 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
       }
     }
 
-    // Acquire lock BEFORE modifying job/devJob to prevent race condition
     {
       std::scoped_lock<boost::mutex> lockGuard(mutex);
       (*JV) = J;
@@ -121,7 +120,6 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
 
     int64_t *h = isDev ? &devHeight : &ourHeight;
 
-    // Safely extract strings
     std::string blobStr;
     if (!J["miner_work"].is_null()) {
       blobStr = std::string(J["miner_work"].as_string());
@@ -131,7 +129,6 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
     std::string enStr = std::string(packet["params"].as_array()[0].as_string());
     int enLen = enStr.size();
 
-    // Safely manipulate the blob string
     std::fill(blobStr.begin() + 48, blobStr.begin() + 112, '0');
     if (enLen > 0 && enLen <= 64) {
       std::copy(enStr.begin(), enStr.end(), blobStr.begin() + 48);
@@ -139,7 +136,6 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
 
     J["miner_work"] = blobStr;
 
-    // Acquire lock BEFORE modifying job/devJob to prevent race condition
     {
       std::scoped_lock<boost::mutex> lockGuard(mutex);
       (*JV) = J;
@@ -234,8 +230,6 @@ int handleXStratumResponse(boost::json::object packet, bool isDev)
     }
 
     J["miner_work"] = blobStr;
-
-    // Acquire lock BEFORE modifying job/devJob to prevent race condition
     {
       std::scoped_lock<boost::mutex> lockGuard(mutex);
       (*JV) = J;
@@ -389,6 +383,11 @@ void xelis_stratum_session(
   auth["method"] = XelisStratum::authorize.method;
   auth["params"] = { wallet, worker, isDev ? "d=10000" : stratumPassword };
   send_json(auth);
+  auto authResStr = send_and_recv_line();
+  if (!authResStr.empty()) {
+    auto authResJson = boost::json::parse(authResStr).as_object();
+    handleXStratumResponse(authResJson, isDev);
+  }
 
   XelisStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
@@ -651,6 +650,11 @@ void xelis_stratum_session_nossl(
   auth["method"] = XelisStratum::authorize.method;
   auth["params"] = { wallet, worker, isDev ? "d=10000" : stratumPassword };
   send_json(auth);
+  auto authResStr = send_and_recv_line();
+  if (!authResStr.empty()) {
+    auto authResJson = boost::json::parse(authResStr).as_object();
+    handleXStratumResponse(authResJson, isDev);
+  }
 
   XelisStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
@@ -790,12 +794,6 @@ void xelis_stratum_session_nossl(
     }
 
     boost::this_thread::yield();
-
-    if (ABORT_MINER) {
-      setForDisconnected(C, B, &abort, &data_ready, &cv);
-      ioc.stop();
-      break;
-    }
   }
 
   // Clean shutdown

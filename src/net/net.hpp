@@ -190,7 +190,7 @@ inline void do_session_v2(
 {
     bool use_ssl = miningProf->transportLayer.find("wss", 0) != std::string::npos;
     use_ssl |= miningProf->transportLayer.find("ssl", 0) != std::string::npos;
-    
+
     switch (miningProf->coin.miningAlgo)
     {
 #ifdef TNN_ASTROBWTV3
@@ -216,10 +216,10 @@ inline void do_session_v2(
             break;
         case PROTO_XELIS_STRATUM:
             if (use_ssl) {
-                xelis_stratum_session(miningProf->host, miningProf->port, miningProf->wallet, 
+                xelis_stratum_session(miningProf->host, miningProf->port, miningProf->wallet,
                                       miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
             } else {
-                xelis_stratum_session_nossl(miningProf->host, miningProf->port, miningProf->wallet, 
+                xelis_stratum_session_nossl(miningProf->host, miningProf->port, miningProf->wallet,
                                             miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
             }
             break;

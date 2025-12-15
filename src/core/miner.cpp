@@ -273,6 +273,10 @@ int enhanceWallet(MiningProfile *currentProfile, bool checkWallet) {
     preserveAlgoOverride(*currentProfile, COIN_SPECTRE);
     currentProfile->protocol = PROTO_SPECTRE_STRATUM;
   }
+
+  // Recalculate protocol after wallet autodetect
+  currentProfile->setProtocol();
+
   return EXIT_SUCCESS;
 }
 
@@ -866,6 +870,9 @@ int tnn_main(int argc, char** argv)
       preserveAlgoOverride(miningProfile, COIN_ZEPH);
     }
 
+    // Recalculate protocol after wallet autodetect
+    miningProfile.setProtocol();
+
     boost::char_separator<char> sep(".");
     boost::tokenizer<boost::char_separator<char>> tok(miningProfile.wallet, sep);
     std::vector<std::string> tokens;
@@ -1041,6 +1048,9 @@ fillBlanks:
       printf(" Set to mine %s\n\n", miningProfile.coin.coinPrettyName.c_str());
       fflush(stdout);
       setcolor(BRIGHT_WHITE);
+
+      // Recalculate protocol now that coin is set
+      miningProfile.setProtocol();
     }
   }
   if(miningProfile.coin.coinId == unknownCoin.coinId)
