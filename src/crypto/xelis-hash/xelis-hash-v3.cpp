@@ -158,54 +158,6 @@ static inline void chacha_get_bytes_at_offset(const uint8_t key[32], const uint8
   memcpy(output, block + block_offset, 12);
 }
 
-// #ifdef __x86_64__
-// TNN_TARGET_CLONE(
-//   stage_1,
-//   void,
-//   (const uint8_t *input, uint64_t *sp, size_t input_len),
-//   {
-//     const size_t chunk_size = 32;
-//     const size_t output_size = XELIS_MEMORY_SIZE_V2 * 8;
-//     const size_t bytes_per_chunk = output_size / 4;
-
-//     uint8_t *t = reinterpret_cast<uint8_t *>(sp);
-//     uint8_t K2_values[4][32];
-//     uint8_t nonces[4][12];
-//     uint8_t buffer[64] = {0};
-//     uint8_t key[128] = {0};
-
-//     memcpy(key, input, input_len);
-
-//     blake3(input, input_len, buffer);
-//     memcpy(nonces[0], buffer, 12);
-
-//     for (int i = 0; i < 4; i++) {
-//       if (i == 0) {
-//         memcpy(buffer + chunk_size, key, chunk_size);
-//       } else {
-//         memcpy(buffer, K2_values[i-1], chunk_size);
-//         memcpy(buffer + chunk_size, key + i*chunk_size, chunk_size);
-//       }
-//       blake3(buffer, chunk_size*2, K2_values[i]);
-//     }
-
-//     for (int i = 0; i < 3; i++) {
-//       chacha_get_bytes_at_offset(K2_values[i], nonces[i],
-//                                   bytes_per_chunk - 12, nonces[i+1], 8);
-//     }
-
-//     byte* outputs[4];
-//     for (int i = 0; i < 4; i++) {
-//       outputs[i] = t + i*bytes_per_chunk;
-//     }
-
-//     ChaCha20EncryptXelis(K2_values, nonces, outputs, bytes_per_chunk, 8);
-//   },
-//   "ssse3", "avx2"
-// )
-// __attribute__((target("default")))
-// #endif
-
 #ifdef __x86_64__
 TNN_TARGET_CLONE(
   stage_1,
@@ -256,6 +208,57 @@ TNN_TARGET_CLONE(
     }
   },
   TNN_TARGETS_X86_CHACHA512
+)
+
+TNN_TARGET_CLONE(
+  stage_1,
+  static void,
+  (const uint8_t *input, uint64_t *sp, size_t input_len),
+  {
+    constexpr size_t chunk_size      = XELIS_CHUNK_SIZE;
+    constexpr size_t output_size     = XELIS_OUTPUT_SIZE_V3;
+    constexpr size_t bytes_per_chunk = XELIS_BYTES_PER_CHUNK_V3;
+
+    uint8_t *t = reinterpret_cast<uint8_t *>(sp);
+    uint8_t K2_values[4][32];
+    uint8_t nonces[4][12];
+    uint8_t buffer[64] = {0};
+    uint8_t key[128] = {0};
+
+    memcpy(key, input, input_len);
+
+    blake3(input, input_len, buffer);
+    memcpy(nonces[0], buffer, 12);
+
+    for (int i = 0; i < 4; i++)
+    {
+      if (i == 0)
+      {
+        memcpy(buffer + chunk_size, key, chunk_size);
+      }
+      else
+      {
+        memcpy(buffer, K2_values[i - 1], chunk_size);
+        memcpy(buffer + chunk_size, key + i * chunk_size, chunk_size);
+      }
+      blake3(buffer, chunk_size * 2, K2_values[i]);
+    }
+
+    for (int i = 0; i < 3; i++)
+    {
+      chacha_get_bytes_at_offset(K2_values[i], nonces[i],
+                                bytes_per_chunk - 12, nonces[i + 1], 8);
+    }
+
+    for (int i = 0; i < 4; i++)
+    {
+      uint8_t state[48] = {0};
+      ChaCha20SetKey(state, K2_values[i]);
+      ChaCha20SetNonce(state, nonces[i]);
+      ChaCha20EncryptBytes(state, NULL, t + i * bytes_per_chunk, bytes_per_chunk, 8);
+    }
+  },
+  "ssse3", "avx2"
 )
 
 __attribute__((target("default"))) static void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
@@ -830,49 +833,17 @@ static inline uint64_t mod128_64_fast(__uint128_t t1, uint64_t denom)
 //   return quotient;
 // }
 
+static inline uint64_t hi(__uint128_t x) { return (uint64_t)(x >> 64); }
+static inline uint64_t lo(__uint128_t x) { return (uint64_t)x; }
+
 static inline uint64_t div128_128_large(__uint128_t *dividend, __uint128_t divisor)
 {
-  uint64_t div_hi = divisor >> 64;
-
-  // If high part of divisor is 0, use 128/64 division instead
-  if (div_hi == 0)
-  {
-    uint64_t div_lo = (uint64_t)divisor;
-    if (div_lo == 0)
-      return 0; // Prevent div by zero
-    __uint128_t q = d128(*dividend, div_lo);
-    *dividend = *dividend - q * divisor;
-    return (uint64_t)q;
-  }
-
-  uint64_t quotient = 0;
-  uint64_t dividend_hi = *dividend >> 64;
-
-  if (dividend_hi >= div_hi)
-  {
-    uint64_t q_hi = dividend_hi / div_hi;
-    if (q_hi > 0)
-    {
-      __uint128_t sub = divisor * q_hi;
-      if (sub <= *dividend)
-      {
-        *dividend -= sub;
-        quotient += q_hi;
-      }
-      else
-      {
-        q_hi--;
-        if (q_hi > 0)
-        {
-          sub = divisor * q_hi;
-          *dividend -= sub;
-          quotient += q_hi;
-        }
-      }
-    }
-  }
-
-  return quotient;
+  uint64_t a1 = hi(*dividend);
+  uint64_t b1 = hi(divisor);
+  if (a1 < b1) return 0;
+  uint64_t q = a1 / b1;
+  *dividend -= divisor * (__uint128_t)q;
+  return q;
 }
 
 static inline uint64_t udiv(uint64_t high, uint64_t low, uint64_t divisor)
@@ -1161,6 +1132,10 @@ static inline int pick_half_fast(uint64_t v)
 
 #ifdef __x86_64__
 
+static inline void prefetch_L2(const void* p) {
+  _mm_prefetch((const char*)p, _MM_HINT_T1);   // “L2-ish” hint
+}
+
 __attribute__((target("aes"))) static void stage_3(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
 {
   constexpr uint8_t key[17] = "xelishash-pow-v3";
@@ -1176,7 +1151,11 @@ __attribute__((target("aes"))) static void stage_3(uint64_t *scratch_pad, worker
 
   for (size_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V3; ++i)
   {
+    prefetch_L2(&mem_buffer_a[map_index(addr_a)]);
+
     uint64_t mem_a = mem_buffer_a[map_index(addr_a)];
+
+    prefetch_L2(&mem_buffer_b[map_index(mem_a ^ addr_b)]);
     uint64_t mem_b = mem_buffer_b[map_index(mem_a ^ addr_b)];
 
     __m128i block_vec = _mm_set_epi64x(mem_a, mem_b);
@@ -1207,16 +1186,19 @@ __attribute__((target("aes"))) static void stage_3(uint64_t *scratch_pad, worker
       uint64_t idx_a = map_index(t ^ result ^ XELIS_GOLDEN_RATIO);
       uint64_t idx_b = map_index(idx_a ^ ~result ^ XELIS_SCATTER_CONST);
 
-      // __builtin_prefetch(&mem_buffer_a[idx_a], 1, 0);
-      // __builtin_prefetch(&mem_buffer_b[idx_b], 1, 0);
-
       uint64_t mem_a_tmp = mem_buffer_a[idx_a];
       mem_buffer_a[idx_a] = t;
       mem_buffer_b[idx_b] ^= mem_a_tmp ^ ROTR(t, i + j);
     }
 
-    addr_a = modular_power(addr_a, addr_b, result);
-    addr_b = isqrt(result) * (r + 1) * isqrt(addr_a);
+    // Compute next addrs
+    uint64_t addr_a_next = modular_power(addr_a, addr_b, result);
+    uint64_t addr_b_next = isqrt(result) * (r + 1) * isqrt(addr_a_next);
+
+    prefetch_L2(&mem_buffer_a[map_index(addr_a_next)]);
+
+    addr_a = addr_a_next;
+    addr_b = addr_b_next;
   }
 }
 
@@ -1235,7 +1217,10 @@ __attribute__((target("default"))) static void stage_3(uint64_t *scratch_pad, wo
 
   for (size_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V3; ++i)
   {
+    prefetch_L2(&mem_buffer_a[map_index(addr_a)]);
     uint64_t mem_a = mem_buffer_a[map_index(addr_a)];
+
+    prefetch_L2(&mem_buffer_b[map_index(mem_a ^ addr_b)]);
     uint64_t mem_b = mem_buffer_b[map_index(mem_a ^ addr_b)];
 
     uint64_to_le_bytes(mem_b, block);
@@ -1267,16 +1252,18 @@ __attribute__((target("default"))) static void stage_3(uint64_t *scratch_pad, wo
       uint64_t idx_a = map_index(t ^ result ^ XELIS_GOLDEN_RATIO);
       uint64_t idx_b = map_index(idx_a ^ ~result ^ XELIS_SCATTER_CONST);
 
-      // __builtin_prefetch(&mem_buffer_a[idx_a], 1, 0);
-      // __builtin_prefetch(&mem_buffer_b[idx_b], 1, 0);
-
       uint64_t mem_a_tmp = mem_buffer_a[idx_a];
       mem_buffer_a[idx_a] = t;
       mem_buffer_b[idx_b] ^= mem_a_tmp ^ ROTR(t, i + j);
     }
 
-    addr_a = modular_power(addr_a, addr_b, result);
-    addr_b = isqrt(result) * (r + 1) * isqrt(addr_a);
+    uint64_t addr_a_next = modular_power(addr_a, addr_b, result);
+    uint64_t addr_b_next = isqrt(result) * (r + 1) * isqrt(addr_a_next);
+
+    prefetch_L2(&mem_buffer_a[map_index(addr_a_next)]);
+
+    addr_a = addr_a_next;
+    addr_b = addr_b_next;
   }
 }
 
