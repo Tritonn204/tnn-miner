@@ -8,7 +8,8 @@
       "Bash(xargs cat:*)",
       "Read(//c/openssl_msvc/**)",
       "Bash(cd:*)",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []

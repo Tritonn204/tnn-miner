@@ -12,6 +12,10 @@
 #include <chacha20.h>
 #include <cmath> // NEW: needed for sqrt() in isqrt
 
+#if defined(_MSC_VER) && defined(_M_X64)
+#include <intrin.h> // For _umul128
+#endif
+
 #if defined(__x86_64__)
 #include <emmintrin.h>
 #include <immintrin.h>
@@ -42,40 +46,6 @@
 #define ntohll(x) ((1 == ntohl(1)) ? (x) : ((uint64_t)ntohl((x) & 0xFFFFFFFF) << 32) | ntohl((x) >> 32))
 
 #define COMBINE_UINT64(high, low) (((__uint128_t)(high) << 64) | (low))
-
-const int sign_bit_values_avx512[16][16] = {
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {-1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}};
-
-alignas(32) const int sign_bit_values_avx2[8][8] = {
-    {0, 0, 0, 0, 0, 0, 0, -1},
-    {0, 0, 0, 0, 0, 0, -1, 0},
-    {0, 0, 0, 0, 0, -1, 0, 0},
-    {0, 0, 0, 0, -1, 0, 0, 0},
-    {0, 0, 0, -1, 0, 0, 0, 0},
-    {0, 0, -1, 0, 0, 0, 0, 0},
-    {0, -1, 0, 0, 0, 0, 0, 0},
-    {-1, 0, 0, 0, 0, 0, 0, 0}};
-
-alignas(16) const int sign_bit_values_sse[4][4] = {
-    {0, 0, 0, -1},
-    {0, 0, -1, 0},
-    {0, -1, 0, 0},
-    {-1, 0, 0, 0}};
 
 static inline uint64_t swap_bytes(uint64_t value)
 {
@@ -621,40 +591,6 @@ static inline uint64_t d128_64(__uint128_t a, uint64_t b)
 #endif
 }
 
-static inline __uint128_t d128(__uint128_t a, uint64_t b)
-{
-  uint64_t dividend_hi = a >> 64;
-  uint64_t dividend_lo = (uint64_t)a;
-
-#if defined(__x86_64__)
-  uint64_t q_hi = 0, q_lo = 0, remainder = 0;
-
-  if (dividend_hi < b)
-  {
-    __asm__("divq %[divisor]"
-            : "=a"(q_lo), "=d"(remainder)
-            : [divisor] "r"(b), "a"(dividend_lo), "d"(dividend_hi)
-            : "cc");
-  }
-  else
-  {
-    __asm__("divq %[divisor]"
-            : "=a"(q_hi), "=d"(dividend_hi)
-            : [divisor] "r"(b), "a"(dividend_hi), "d"(0ULL)
-            : "cc");
-
-    __asm__("divq %[divisor]"
-            : "=a"(q_lo), "=d"(remainder)
-            : [divisor] "r"(b), "a"(dividend_lo), "d"(dividend_hi)
-            : "cc");
-  }
-
-  return ((__uint128_t)q_hi << 64) | q_lo;
-#else
-  return a / b;
-#endif
-}
-
 static inline uint64_t mod128_64(__uint128_t dividend, uint64_t divisor)
 {
   uint64_t dividend_hi = dividend >> 64;
@@ -709,142 +645,8 @@ static inline uint64_t mod128_64_fast(__uint128_t t1, uint64_t denom)
   return mod128_64(t1, denom);
 }
 
-// Very cool, very performant, but unnecessary for Xelis given inter-operand relations from the ChaCha dataset
-// #ifdef __x86_64__
-
-// #ifndef TNN_LEGACY_AMD64
-// #define div_targets_extra , TNN_TARGETS_X86_AVX2, TNN_TARGETS_X86_AVX512
-// #else
-// #define div_targets_extra
-// #endif
-// TNN_TARGET_CLONE(
-//   div128_128_clz_improved,
-//   static inline __uint128_t,
-//   (__uint128_t dividend, __uint128_t divisor),
-//   {
-//     if (divisor > dividend) return 0;
-//     if (divisor == dividend) return 1;
-//     if ((divisor >> 64) == 0) return d128(dividend, (uint64_t)divisor);
-
-//     int dividend_clz = (dividend >> 64) ? __builtin_clzll(dividend >> 64) :
-//                       64 + __builtin_clzll((uint64_t)dividend);
-//     int divisor_clz = (divisor >> 64) ? __builtin_clzll(divisor >> 64) :
-//                       64 + __builtin_clzll((uint64_t)divisor);
-
-//     int shift = divisor_clz - dividend_clz;
-//     if (shift < 0) return 0;
-
-//     __uint128_t shifted_divisor = divisor << shift;
-//     uint64_t quotient = 0;
-
-//     if (shift >= 64) {
-//       uint64_t div_hi = shifted_divisor >> 64;
-//       uint64_t div_lo = (uint64_t)shifted_divisor;
-//       uint64_t rem_hi = dividend >> 64;
-//       uint64_t rem_lo = (uint64_t)dividend;
-
-//       for (int i = 0; i <= shift; i++) {
-//         quotient <<= 1;
-
-//         if (rem_hi > div_hi || (rem_hi == div_hi && rem_lo >= div_lo)) {
-//           __m128i rem = _mm_set_epi64x(rem_hi, rem_lo);
-//           __m128i div = _mm_set_epi64x(div_hi, div_lo);
-
-//           uint64_t borrow = (rem_lo < div_lo) ? 1 : 0;
-//           rem_lo -= div_lo;
-//           rem_hi -= div_hi + borrow;
-
-//           quotient |= 1;
-//         }
-
-//         div_lo = (div_lo >> 1) | (div_hi << 63);
-//         div_hi >>= 1;
-//       }
-
-//       dividend = ((__uint128_t)rem_hi << 64) | rem_lo;
-//     } else {
-//       for (int i = 0; i <= shift; i++) {
-//         quotient <<= 1;
-//         if (dividend >= shifted_divisor) {
-//           dividend -= shifted_divisor;
-//           quotient |= 1;
-//         }
-//         shifted_divisor >>= 1;
-//       }
-//     }
-
-//     return quotient;
-//   },
-//   "sse2", "ssse3" div_targets_extra
-// )
-// __attribute__((target("default")))
-// #endif
-// static inline __uint128_t div128_128_clz_improved(__uint128_t dividend, __uint128_t divisor) {
-//   if (divisor > dividend) return 0;
-//   if (divisor == dividend) return 1;
-//   if ((divisor >> 64) == 0) return d128(dividend, (uint64_t)divisor);
-
-//   int dividend_clz = (dividend >> 64) ? __builtin_clzll(dividend >> 64) :
-//                     64 + __builtin_clzll((uint64_t)dividend);
-//   int divisor_clz = (divisor >> 64) ? __builtin_clzll(divisor >> 64) :
-//                     64 + __builtin_clzll((uint64_t)divisor);
-
-//   int shift = divisor_clz - dividend_clz;
-//   if (shift < 0) return 0;
-
-//   __uint128_t shifted_divisor = divisor << shift;
-//   uint64_t quotient = 0;
-
-//   int chunks = (shift + 1) / 8;
-//   int remaining = (shift + 1) % 8;
-
-//   for (int chunk = 0; chunk < chunks; chunk++) {
-//     uint64_t chunk_quotient = 0;
-//     uint64_t chunk_divisor = shifted_divisor >> (8 * chunk);
-
-//     for (int bit = 0; bit < 8; bit++) {
-//       chunk_quotient <<= 1;
-//       if (dividend >= chunk_divisor) {
-//         dividend -= chunk_divisor;
-//         chunk_quotient |= 1;
-//       }
-//       chunk_divisor >>= 1;
-//     }
-
-//     quotient = (quotient << 8) | chunk_quotient;
-//   }
-
-//   if (remaining > 0) {
-//     uint64_t remaining_quotient = 0;
-//     uint64_t remaining_divisor = shifted_divisor >> (8 * chunks);
-
-//     for (int bit = 0; bit < remaining; bit++) {
-//       remaining_quotient <<= 1;
-//       if (dividend >= remaining_divisor) {
-//         dividend -= remaining_divisor;
-//         remaining_quotient |= 1;
-//       }
-//       remaining_divisor >>= 1;
-//     }
-
-//     quotient = (quotient << remaining) | remaining_quotient;
-//   }
-
-//   return quotient;
-// }
-
 static inline uint64_t hi(__uint128_t x) { return (uint64_t)(x >> 64); }
 static inline uint64_t lo(__uint128_t x) { return (uint64_t)x; }
-
-static inline uint64_t div128_128_large(__uint128_t *dividend, __uint128_t divisor)
-{
-  uint64_t a1 = hi(*dividend);
-  uint64_t b1 = hi(divisor);
-  if (a1 < b1) return 0;
-  uint64_t q = a1 / b1;
-  *dividend -= divisor * (__uint128_t)q;
-  return q;
-}
 
 static inline uint64_t udiv(uint64_t high, uint64_t low, uint64_t divisor)
 {
@@ -852,152 +654,41 @@ static inline uint64_t udiv(uint64_t high, uint64_t low, uint64_t divisor)
   return d128_64(dividend, divisor);
 }
 
-// __attribute__((noinline))
-static inline uint64_t case_0(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j)
+static inline uint64_t umul64_hi(uint64_t a, uint64_t b)
 {
-  __uint128_t t1 = combine_uint64(a + i, isqrt(b + j));
-  uint64_t denom = murmurhash3(c ^ result ^ i ^ j) | 1;
-  return (uint64_t)(t1 % denom);
+#if defined(_MSC_VER) && defined(_M_X64)
+  uint64_t hi;
+  _umul128(a, b, &hi);
+  return hi;
+#elif defined(__GNUC__) && (defined(__x86_64__) || defined(__aarch64__))
+  #if defined(__x86_64__)
+    uint64_t hi, lo;
+    __asm__("mulq %3" : "=a"(lo), "=d"(hi) : "a"(a), "r"(b));
+    return hi;
+  #elif defined(__aarch64__)
+    return __umulh(a, b);
+  #endif
+#else
+  return ((__uint128_t)a * b) >> 64;
+#endif
 }
-// __attribute__((noinline))
-static inline uint64_t case_1(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j)
-{
-  return ROTL((c + i) % isqrt(b | 2), i + j) * isqrt(a + j);
-}
-// __attribute__((noinline))
-static inline uint64_t case_2(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j)
-{
-  return (isqrt(a + i) * isqrt(c + j)) ^ (b + i + j);
-}
-// __attribute__((noinline))
-static inline uint64_t case_3(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j)
-{
-  return (a + b) * c;
-}
-// __attribute__((noinline))
-static inline uint64_t case_4(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j)
-{
-  return (b - c) * a;
-}
-// __attribute__((noinline))
-static inline uint64_t case_5(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j)
-{
-  return c - a + b;
-}
-// __attribute__((noinline))
-static inline uint64_t case_6(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j)
-{
-  return a - b + c;
-}
-// __attribute__((noinline))
-static inline uint64_t case_7(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j)
-{
-  return b * c + a;
-}
-// __attribute__((noinline))
-static inline uint64_t case_8(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j)
-{
-  return c * a + b;
-}
-// __attribute__((noinline))
-static inline uint64_t case_9(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j)
-{
-  return a * b * c;
-}
-// __attribute__((noinline))
-static inline uint64_t case_10(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j)
-{
-  return mod128_64_fast(COMBINE_UINT64(a, b), c | 1);
-}
-// __attribute__((noinline))
-static inline uint64_t case_11(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j)
-{
-  uint64_t t2_hi = ROTL(result, r);
-  uint64_t t2_lo = a | 2;
 
-  if (t2_hi > b || (t2_hi == b && t2_lo > c))
-  {
-    return c;
+template<bool compute_remainder = true>
+static inline uint64_t div128_128_large_parts(__uint128_t *dividend, uint64_t divisor_hi, uint64_t divisor_lo)
+{
+  uint64_t a1 = hi(*dividend);
+  if (a1 < divisor_hi) {
+    return 0;
   }
-
-  if (t2_hi == 0)
-  {
-    return mod128_64_fast(COMBINE_UINT64(b, c), t2_lo);
+  uint64_t q = a1 / divisor_hi;
+  if constexpr (compute_remainder) {
+    // Compute remainder using only 64-bit operations (no 128-bit multiply needed)
+    uint64_t dividend_lo = (uint64_t)*dividend;
+    uint64_t remainder_lo = dividend_lo - divisor_lo * q;
+    *dividend = remainder_lo;
   }
-
-  __uint128_t t2 = COMBINE_UINT64(t2_hi, t2_lo);
-  __uint128_t dividend = COMBINE_UINT64(b, c);
-
-  uint64_t quotient = div128_128_large(&dividend, t2);
-  return (uint64_t)(dividend - quotient * t2);
+  return q;
 }
-// __attribute__((noinline))
-static inline uint64_t case_12(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j)
-{
-  return udiv(c, a, b | 4);
-}
-// __attribute__((noinline))
-static inline uint64_t case_13(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j)
-{
-  uint64_t t1_hi = ROTL(result, r);
-  uint64_t t1_lo = b;
-  uint64_t t2_hi = a;
-  uint64_t t2_lo = c | 8;
-
-  if (t1_hi > t2_hi || (t1_hi == t2_hi && t1_lo > t2_lo))
-  {
-    __uint128_t dividend = ((__uint128_t)t1_hi << 64) | t1_lo;
-    __uint128_t divisor = ((__uint128_t)t2_hi << 64) | t2_lo;
-    return div128_128_large(&dividend, divisor);
-  }
-  else
-  {
-    return a ^ b;
-  }
-}
-// __attribute__((noinline))
-static inline uint64_t case_14(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j)
-{
-  __uint128_t ac = (__uint128_t)a * c;
-  uint64_t ac_hi = ac >> 64;
-  uint64_t bc = b * c;
-  return ac_hi + bc;
-}
-// __attribute__((noinline))
-static inline uint64_t case_15(uint64_t a, uint64_t b, uint64_t c, int r, uint64_t result, int i, int j)
-{
-  uint64_t b1 = ROTR(result, r);
-  uint64_t b0 = b;
-
-  __uint128_t z0 = (__uint128_t)c * b0;
-  __uint128_t z1 = (__uint128_t)a * b0 + (__uint128_t)c * b1;
-
-  uint64_t z0_hi = z0 >> 64;
-  uint64_t z1_lo = (uint64_t)z1;
-
-  return z0_hi + z1_lo;
-}
-
-typedef uint64_t (*operation_func)(uint64_t, uint64_t, uint64_t, int, uint64_t, int, int);
-
-static operation_func operations[] = {
-    case_0,
-    case_1,
-    case_2,
-    case_3,
-    case_4,
-    case_5,
-    case_6,
-    case_7,
-    case_8,
-    case_9,
-    case_10,
-    case_11,
-    case_12,
-    case_13,
-    case_14,
-    case_15,
-};
 
 static inline uint64_t execute_operation_goto(uint32_t idx, uint64_t a, uint64_t b,
                                               uint64_t c, int r_next, uint64_t result,
@@ -1070,9 +761,8 @@ op11:
   }
   else
   {
-    __uint128_t t2 = COMBINE_UINT64(t2_hi, t2_lo);
     __uint128_t dividend = COMBINE_UINT64(b, c);
-    div128_128_large(&dividend, t2);
+    div128_128_large_parts(&dividend, t2_hi, t2_lo);
     v = dividend;
   }
   goto done;
@@ -1082,15 +772,11 @@ op12:
   goto done;
 op13:
 {
-  uint64_t t1_hi = ROTL(result, r_next);
-  uint64_t t1_lo = b;
-  uint64_t t2_hi = a;
-  uint64_t t2_lo = c | 8;
-  if (t1_hi > t2_hi || (t1_hi == t2_hi && t1_lo > t2_lo))
+  uint64_t rotl_result = ROTL(result, r_next);
+  if (rotl_result > a || (rotl_result == a && b > (c | 8)))
   {
-    __uint128_t dividend = ((__uint128_t)t1_hi << 64) | t1_lo;
-    __uint128_t divisor = ((__uint128_t)t2_hi << 64) | t2_lo;
-    v = div128_128_large(&dividend, divisor);
+    __uint128_t dividend = COMBINE_UINT64(rotl_result, b);
+    v = div128_128_large_parts<false>(&dividend, a, c | 8);
   }
   else
   {
@@ -1100,21 +786,13 @@ op13:
 }
 op14:
 {
-  __uint128_t ac = (__uint128_t)a * c;
-  uint64_t ac_hi = ac >> 64;
-  uint64_t bc = b * c;
-  v = ac_hi + bc;
+  v = umul64_hi(a, c) + b * c;
   goto done;
 }
 op15:
 {
-  uint64_t b1 = ROTR(result, r_next);
-  uint64_t b0 = b;
-  __uint128_t z0 = (__uint128_t)c * b0;
-  __uint128_t z1 = (__uint128_t)a * b0 + (__uint128_t)c * b1;
-  uint64_t z0_hi = z0 >> 64;
-  uint64_t z1_lo = (uint64_t)z1;
-  v = z0_hi + z1_lo;
+  uint64_t rotr_result = ROTR(result, r_next);
+  v = a * b + c * rotr_result + umul64_hi(c, b);
   goto done;
 }
 
