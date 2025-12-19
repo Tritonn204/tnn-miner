@@ -657,19 +657,25 @@ static inline uint64_t udiv(uint64_t high, uint64_t low, uint64_t divisor)
 static inline uint64_t umul64_hi(uint64_t a, uint64_t b)
 {
 #if defined(_MSC_VER) && defined(_M_X64)
-  uint64_t hi;
-  _umul128(a, b, &hi);
-  return hi;
-#elif defined(__GNUC__) && (defined(__x86_64__) || defined(__aarch64__))
-  #if defined(__x86_64__)
-    uint64_t hi, lo;
-    __asm__("mulq %3" : "=a"(lo), "=d"(hi) : "a"(a), "r"(b));
+    uint64_t hi;
+    (void)_umul128(a, b, &hi);
     return hi;
-  #elif defined(__aarch64__)
-    return __umulh(a, b);
-  #endif
+
+#elif defined(__SIZEOF_INT128__)
+    return (uint64_t)(((__uint128_t)a * (__uint128_t)b) >> 64);
+
+#elif defined(__x86_64__)
+    uint64_t hi, lo;
+    __asm__("mulq %3" : "=a"(lo), "=d"(hi) : "a"(a), "r"(b) : "cc");
+    return hi;
+
+#elif defined(__aarch64__)
+    uint64_t hi;
+    __asm__("umulh %0, %1, %2" : "=r"(hi) : "r"(a), "r"(b));
+    return hi;
+
 #else
-  return ((__uint128_t)a * b) >> 64;
+#   error "No known way to compute high 64 bits of 64x64 multiply on this target"
 #endif
 }
 
