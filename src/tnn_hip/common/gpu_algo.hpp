@@ -310,6 +310,26 @@ struct AlgoConfig {
 };
 
 // ============================================================================
+// Job snapshot - captures all job state at batch start
+// ============================================================================
+struct JobSnapshot {
+    std::vector<uint8_t> work_template;  // Copy of template data
+    int64_t job_id;                      // Job ID/height
+    uint64_t difficulty;                 // Difficulty for this job
+    int algo_id;                         // Algorithm identifier (e.g., ALGO_XELISV3)
+
+    JobSnapshot() : job_id(0), difficulty(0), algo_id(0) {}
+
+    JobSnapshot(const uint8_t* template_data, size_t template_size,
+                int64_t id, uint64_t diff, int algo)
+        : work_template(template_data, template_data + template_size)
+        , job_id(id)
+        , difficulty(diff)
+        , algo_id(algo)
+    {}
+};
+
+// ============================================================================
 // Batch result
 // ============================================================================
 struct BatchResult {
@@ -332,8 +352,9 @@ public:
     virtual void cleanup() = 0;
 
     virtual void set_work(const uint8_t* work_template, uint64_t difficulty) = 0;
+    virtual const uint8_t* get_current_work_template() const = 0;
     virtual BatchResult mine_batch(uint64_t nonce_start, uint32_t batch_size = 0) = 0;
-    
+
     virtual uint32_t get_batch_size() const = 0;
     virtual double get_hashrate() const = 0;
     

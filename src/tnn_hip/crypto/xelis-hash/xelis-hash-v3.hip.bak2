@@ -10,7 +10,6 @@ constexpr size_t XELIS_BUFFER_SIZE_V3 = XELIS_MEMORY_SIZE_V3 / 2;
 constexpr uint16_t XELIS_SCRATCHPAD_ITERS_V3 = 2;
 constexpr size_t XELIS_HASH_SIZE = 32;
 constexpr size_t XELIS_TEMPLATE_SIZE = 112;
-constexpr size_t XELIS_NONCE_STORAGE_OFFSET = XELIS_MEMORY_SIZE_V3;  // Extra slot after scratch for nonce
 
 constexpr size_t XELIS_CHUNK_SIZE = 32;
 constexpr size_t XELIS_OUTPUT_SIZE_V3 = XELIS_MEMORY_SIZE_V3 * 8;
@@ -52,10 +51,14 @@ __device__ __forceinline__ uint64_t ROTR(uint64_t x, uint32_t r)
 __device__ __forceinline__ uint32_t rotl32(uint32_t x, uint32_t r)
 {
 #if defined(__CUDA_ARCH__)
+  // NVIDIA: Use funnel shift for arbitrary rotations (more efficient than shift+or)
   uint32_t result;
   asm("shf.l.wrap.b32 %0, %1, %1, %2;" : "=r"(result) : "r"(x), "r"(r));
   return result;
 #elif defined(__HIP_PLATFORM_AMD__)
+  // AMD: Use v_alignbit_b32 instruction (funnel shift equivalent)
+  // alignbit(hi, lo, shift) extracts 32 bits from the 64-bit value {hi, lo} >> shift
+  // For left rotation by r: we want bits from position (32-r) in {x, x}
   return __builtin_amdgcn_alignbit(x, x, 32 - r);
 #else
   return (x << r) | (x >> (32 - r));
@@ -104,76 +107,74 @@ __device__ __forceinline__ int pick_half(uint64_t v)
 
 __device__ __forceinline__ uint64_t isqrt(uint64_t n)
 {
-    // Handle edge cases
-    if (n < 2)
-        return n;
+  if (n < 2)
+    return n;
 
 #ifdef __HIP_PLATFORM_AMD__
-    
-    #if defined(__gfx700__) || defined(__gfx701__) || defined(__gfx702__) || \
-        defined(__gfx703__) || defined(__gfx704__) || defined(__gfx705__) || \
-        defined(__gfx801__) || defined(__gfx802__) || defined(__gfx803__) || \
-        defined(__gfx804__) || defined(__gfx805__) || defined(__gfx810__)
-        
-        uint32_t hi = static_cast<uint32_t>(n >> 32);
-        uint32_t lo = static_cast<uint32_t>(n & 0xFFFFFFFFu);
-        float xf = __uint2float_rn(hi) * 4294967296.0f + __uint2float_rn(lo);
-        float root_f = sqrtf(xf);
-        uint64_t root = static_cast<uint64_t>(root_f);
-        
-        if (root == 0) root = 1;
-        root = (root + n / root) >> 1;
-        
-        if (root * root > n) --root;
-        else if ((root + 1) * (root + 1) <= n) ++root;
-        
-        return root;
-    
-    #else
-        double xd = static_cast<double>(n);
-        return static_cast<uint64_t>(sqrt(xd));
-    #endif
 
-#elif defined(__CUDA_ARCH__)
-    
-    #if __CUDA_ARCH__ < 500
-        uint32_t hi = static_cast<uint32_t>(n >> 32);
-        uint32_t lo = static_cast<uint32_t>(n & 0xFFFFFFFFu);
-        float xf = __uint2float_rn(hi) * 4294967296.0f + __uint2float_rn(lo);
-        float root_f = sqrtf(xf);
-        uint64_t root = static_cast<uint64_t>(root_f);
-        
-        if (root == 0) root = 1;
-        root = (root + n / root) >> 1;
-        
-        if (root * root > n) --root;
-        else if ((root + 1) * (root + 1) <= n) ++root;
-        
-        return root;
-    
-    #else
-        double xd = static_cast<double>(n);
-        return static_cast<uint64_t>(sqrt(xd));
-    #endif
+#if defined(__gfx906__) || defined(__gfx908__) || defined(__gfx90a__) || \
+    defined(__gfx940__) || defined(__gfx941__) || defined(__gfx942__)
+
+  double d = sqrt(__ull2double_rn(n));
+  uint64_t root = __double2ull_rz(d);
+
+  if ((root + 1) * (root + 1) <= n)
+    ++root;
+  else if (root * root > n)
+    --root;
 
 #else
-    uint64_t lo = 1, hi = (n >> 1) < 0xFFFFFFFFULL ? (n >> 1) : 0xFFFFFFFFULL;
-    
-    while (lo <= hi)
-    {
-        uint64_t mid = (lo + hi) >> 1;
-        uint64_t sq = mid * mid;
-        
-        if (sq == n)
-            return mid;
-        if (sq < n)
-            lo = mid + 1;
-        else
-            hi = mid - 1;
-    }
-    
-    return hi;
+  float x = __uint2float_rn(n >> 32) * 4294967296.0f + __uint2float_rn(n & 0xFFFFFFFFu);
+  float root_f = __builtin_amdgcn_sqrtf(x);
+  uint64_t root = __float2ull_rz(root_f);
+
+  root = (root + n / root) >> 1;
+
+  if (root * root > n)
+    --root;
+  else if ((root + 1) * (root + 1) <= n)
+    ++root;
 #endif
+
+#elif defined(__CUDA_ARCH__)
+  uint32_t hi = static_cast<uint32_t>(n >> 32);
+  uint32_t lo = static_cast<uint32_t>(n & 0xFFFFFFFFu);
+
+  float xf = __uint2float_rn(hi) * 4294967296.0f + __uint2float_rn(lo);
+
+  float root_f = sqrtf(xf);
+  uint64_t root = static_cast<uint64_t>(root_f);
+
+  if (root == 0)
+    root = 1;
+
+  root = (root + n / root) >> 1;
+
+  if (root * root > n)
+    --root;
+  else if ((root + 1) * (root + 1) <= n)
+    ++root;
+
+#else
+  uint64_t lo = 1, hi = (n >> 1) < 0xFFFFFFFFULL ? (n >> 1) : 0xFFFFFFFFULL;
+
+  while (lo <= hi)
+  {
+    uint64_t mid = (lo + hi) >> 1;
+    uint64_t sq = mid * mid;
+
+    if (sq == n)
+      return mid;
+    if (sq < n)
+      lo = mid + 1;
+    else
+      hi = mid - 1;
+  }
+
+  uint64_t root = hi;
+#endif
+
+  return root;
 }
 
 __device__ __forceinline__ uint64_t modular_power(uint64_t base, uint64_t exp, uint64_t mod) {
@@ -198,126 +199,6 @@ __device__ __forceinline__ uint32_t le_bytes_to_uint32(const uint8_t *bytes)
          ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
 }
 
-// Lean Blake3 implementation for Xelis (531 chunks, fully unrolled)
-__device__ __forceinline__ void xelis_blake3_lean(const uint8_t* input, uint8_t* output)
-{
-    constexpr int NUM_CHUNKS = 531;
-    constexpr uint8_t FULL_BLEN = BLAKE3_BLOCK_LEN;
-
-    uint32_t cv_stack[10][8];
-    int stack_len = 0;
-
-    uint8_t left_bytes[BLAKE3_OUT_LEN];
-    uint8_t right_bytes[BLAKE3_OUT_LEN];
-    uint8_t parent_bytes[BLAKE3_OUT_LEN];
-
-    // Leaves + incremental merges
-    for (uint64_t chunk_idx = 0; chunk_idx < (uint64_t)NUM_CHUNKS; chunk_idx++) {
-        const uint8_t* chunk_ptr = input + (size_t)chunk_idx * (size_t)BLAKE3_CHUNK_LEN;
-
-        uint32_t cv[8];
-        blake3_cv_init(cv);
-
-        // 16 full blocks
-        blake3_compress_in_place(cv, chunk_ptr, FULL_BLEN, chunk_idx, (uint8_t)CHUNK_START);
-
-        #pragma unroll
-        for (int b = 1; b < 15; b++) {
-            blake3_compress_in_place(cv, chunk_ptr + b * BLAKE3_BLOCK_LEN, FULL_BLEN, chunk_idx, (uint8_t)0);
-        }
-
-        blake3_compress_in_place(cv, chunk_ptr + 15 * BLAKE3_BLOCK_LEN, FULL_BLEN, chunk_idx, (uint8_t)CHUNK_END);
-
-        // Push to stack
-        #pragma unroll
-        for (int i = 0; i < 8; i++) cv_stack[stack_len][i] = cv[i];
-        stack_len++;
-
-        // Merges: ctz(chunk_idx+1), capped to 9
-        uint32_t tz = __ffsll(chunk_idx + 1ULL) - 1;
-        tz = min(tz, 9u);
-
-        // Fixed merge attempts
-        #pragma unroll
-        for (int m = 0; m < 10; m++) {
-            int do_merge = (m < (int)tz) & (stack_len >= 2);
-
-            int idx_r = max(stack_len - 1, 0);
-            int idx_l = max(stack_len - 2, 0);
-
-            uint32_t right_w[8], left_w[8];
-            #pragma unroll
-            for (int i = 0; i < 8; i++) {
-                right_w[i] = cv_stack[idx_r][i];
-                left_w[i]  = cv_stack[idx_l][i];
-            }
-
-            #pragma unroll
-            for (int i = 0; i < 8; i++) {
-                blake3_store32(left_bytes  + i * 4, left_w[i]);
-                blake3_store32(right_bytes + i * 4, right_w[i]);
-            }
-
-            blake3_hash_parent(left_bytes, right_bytes, parent_bytes, false);
-
-            #pragma unroll
-            for (int i = 0; i < 8; i++) {
-                uint32_t parent_w = blake3_load32(parent_bytes + i * 4);
-                cv_stack[idx_l][i] = do_merge ? parent_w : cv_stack[idx_l][i];
-            }
-
-            stack_len -= do_merge;
-        }
-    }
-
-    // Final reduction to 2
-    #pragma unroll
-    for (int t = 0; t < 10; t++) {
-        int do_merge = (stack_len > 2);
-
-        int idx_r = max(stack_len - 1, 0);
-        int idx_l = max(stack_len - 2, 0);
-
-        uint32_t right_w[8], left_w[8];
-        #pragma unroll
-        for (int i = 0; i < 8; i++) {
-            right_w[i] = cv_stack[idx_r][i];
-            left_w[i]  = cv_stack[idx_l][i];
-        }
-
-        #pragma unroll
-        for (int i = 0; i < 8; i++) {
-            blake3_store32(left_bytes  + i * 4, left_w[i]);
-            blake3_store32(right_bytes + i * 4, right_w[i]);
-        }
-
-        blake3_hash_parent(left_bytes, right_bytes, parent_bytes, false);
-
-        #pragma unroll
-        for (int i = 0; i < 8; i++) {
-            uint32_t parent_w = blake3_load32(parent_bytes + i * 4);
-            cv_stack[idx_l][i] = do_merge ? parent_w : cv_stack[idx_l][i];
-        }
-
-        stack_len -= do_merge;
-    }
-
-    // Final ROOT merge
-    #pragma unroll
-    for (int i = 0; i < 8; i++) {
-        blake3_store32(left_bytes  + i * 4, cv_stack[0][i]);
-        blake3_store32(right_bytes + i * 4, cv_stack[1][i]);
-    }
-
-    blake3_hash_parent(left_bytes, right_bytes, parent_bytes, true);
-
-    #pragma unroll
-    for (int i = 0; i < 8; i++) {
-        blake3_store32(output + i * 4, blake3_load32(parent_bytes + i * 4));
-    }
-}
-
-
 // ============================================================================
 // Optimized 128-bit Division
 // ============================================================================
@@ -325,6 +206,45 @@ __device__ __forceinline__ void xelis_blake3_lean(const uint8_t* input, uint8_t*
 #define COMBINE_UINT64(high, low) (((__uint128_t)(high) << 64) | (low))
 #define U128_HI(x) (uint64_t)((x) >> 64)
 #define U128_LO(x) (uint64_t)(x)
+
+__device__ __forceinline__ uint32_t estimate_quotient_fp32(__uint128_t dividend, __uint128_t divisor) {
+    uint64_t dividend_hi = U128_HI(dividend);
+    uint64_t divisor_hi = U128_HI(divisor);
+    
+    float d_hi = __uint2float_rn((uint32_t)(dividend_hi >> 32)) * 4294967296.0f + 
+                 __uint2float_rn((uint32_t)(dividend_hi & 0xFFFFFFFF));
+    float v_hi = __uint2float_rn((uint32_t)(divisor_hi >> 32)) * 4294967296.0f + 
+                 __uint2float_rn((uint32_t)(divisor_hi & 0xFFFFFFFF));
+    
+    v_hi = fmaxf(v_hi, 1.0f);
+    float q_float = d_hi / v_hi;
+    return __float2uint_rz(q_float);
+}
+
+__device__ __forceinline__ uint64_t div128_optimized(__uint128_t dividend, __uint128_t divisor) {
+    uint32_t q_est = estimate_quotient_fp32(dividend, divisor);
+    return q_est;
+}
+
+__device__ __forceinline__ uint64_t mod128_optimized(__uint128_t dividend, __uint128_t divisor) {
+    if (dividend < divisor) return U128_LO(dividend);
+    uint32_t q_est = estimate_quotient_fp32(dividend, divisor);
+    
+    __uint128_t product = divisor * q_est;
+    
+    if (dividend < product) {
+        q_est--;
+        product = divisor * q_est;
+    }
+    
+    __uint128_t remainder = dividend - product;
+    
+    if (remainder >= divisor) {
+        remainder -= divisor;
+    }
+    
+    return U128_LO(remainder);
+}
 
 // ============================================================================
 // Streaming Store Intrinsics (Platform-Specific)
@@ -373,80 +293,170 @@ __device__ __forceinline__ void store_streaming_u256(uint64_t *ptr,
 #if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
 
 // NVIDIA: Full ASM ChaCha20 with funnel shifts
-__device__ void chacha20_block(uint32_t* __restrict__ output, 
-                                         const uint32_t* __restrict__ input) {
-    uint32_t s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15;
-    
-    // Load state into registers
-    s0 = input[0]; s1 = input[1]; s2 = input[2]; s3 = input[3];
-    s4 = input[4]; s5 = input[5]; s6 = input[6]; s7 = input[7];
-    s8 = input[8]; s9 = input[9]; s10 = input[10]; s11 = input[11];
-    s12 = input[12]; s13 = input[13]; s14 = input[14]; s15 = input[15];
+__device__ void chacha20_block(uint32_t *__restrict__ output,
+                               const uint32_t *__restrict__ input)
+{
+  uint32_t s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15;
 
-    // Store original values for final addition
-    const uint32_t i0 = s0, i1 = s1, i2 = s2, i3 = s3;
-    const uint32_t i4 = s4, i5 = s5, i6 = s6, i7 = s7;
-    const uint32_t i8 = s8, i9 = s9, i10 = s10, i11 = s11;
-    const uint32_t i12 = s12, i13 = s13, i14 = s14, i15 = s15;
+  // Load state into registers
+  s0 = input[0];
+  s1 = input[1];
+  s2 = input[2];
+  s3 = input[3];
+  s4 = input[4];
+  s5 = input[5];
+  s6 = input[6];
+  s7 = input[7];
+  s8 = input[8];
+  s9 = input[9];
+  s10 = input[10];
+  s11 = input[11];
+  s12 = input[12];
+  s13 = input[13];
+  s14 = input[14];
+  s15 = input[15];
 
-    #pragma unroll 4
-    for (int round = 0; round < 8; round += 2) {
-        // Column round
-        // QR(0, 4, 8, 12)
-        s0 += s4; s12 ^= s0; s12 = __byte_perm(s12, s12, 0x1032);
-        s8 += s12; s4 ^= s8; asm("shf.l.wrap.b32 %0, %0, %0, 12;" : "+r"(s4));
-        s0 += s4; s12 ^= s0; s12 = __byte_perm(s12, s12, 0x2103);
-        s8 += s12; s4 ^= s8; asm("shf.l.wrap.b32 %0, %0, %0, 7;" : "+r"(s4));
+  // Store original values for final addition
+  const uint32_t i0 = s0, i1 = s1, i2 = s2, i3 = s3;
+  const uint32_t i4 = s4, i5 = s5, i6 = s6, i7 = s7;
+  const uint32_t i8 = s8, i9 = s9, i10 = s10, i11 = s11;
+  const uint32_t i12 = s12, i13 = s13, i14 = s14, i15 = s15;
 
-        // QR(1, 5, 9, 13)
-        s1 += s5; s13 ^= s1; s13 = __byte_perm(s13, s13, 0x1032);
-        s9 += s13; s5 ^= s9; asm("shf.l.wrap.b32 %0, %0, %0, 12;" : "+r"(s5));
-        s1 += s5; s13 ^= s1; s13 = __byte_perm(s13, s13, 0x2103);
-        s9 += s13; s5 ^= s9; asm("shf.l.wrap.b32 %0, %0, %0, 7;" : "+r"(s5));
+#pragma unroll 4
+  for (int round = 0; round < 8; round += 2)
+  {
+    // Column round
+    // QR(0, 4, 8, 12)
+    s0 += s4;
+    s12 ^= s0;
+    s12 = __byte_perm(s12, s12, 0x1032);
+    s8 += s12;
+    s4 ^= s8;
+    asm("shf.l.wrap.b32 %0, %0, %0, 12;" : "+r"(s4));
+    s0 += s4;
+    s12 ^= s0;
+    s12 = __byte_perm(s12, s12, 0x2103);
+    s8 += s12;
+    s4 ^= s8;
+    asm("shf.l.wrap.b32 %0, %0, %0, 7;" : "+r"(s4));
 
-        // QR(2, 6, 10, 14)
-        s2 += s6; s14 ^= s2; s14 = __byte_perm(s14, s14, 0x1032);
-        s10 += s14; s6 ^= s10; asm("shf.l.wrap.b32 %0, %0, %0, 12;" : "+r"(s6));
-        s2 += s6; s14 ^= s2; s14 = __byte_perm(s14, s14, 0x2103);
-        s10 += s14; s6 ^= s10; asm("shf.l.wrap.b32 %0, %0, %0, 7;" : "+r"(s6));
+    // QR(1, 5, 9, 13)
+    s1 += s5;
+    s13 ^= s1;
+    s13 = __byte_perm(s13, s13, 0x1032);
+    s9 += s13;
+    s5 ^= s9;
+    asm("shf.l.wrap.b32 %0, %0, %0, 12;" : "+r"(s5));
+    s1 += s5;
+    s13 ^= s1;
+    s13 = __byte_perm(s13, s13, 0x2103);
+    s9 += s13;
+    s5 ^= s9;
+    asm("shf.l.wrap.b32 %0, %0, %0, 7;" : "+r"(s5));
 
-        // QR(3, 7, 11, 15)
-        s3 += s7; s15 ^= s3; s15 = __byte_perm(s15, s15, 0x1032);
-        s11 += s15; s7 ^= s11; asm("shf.l.wrap.b32 %0, %0, %0, 12;" : "+r"(s7));
-        s3 += s7; s15 ^= s3; s15 = __byte_perm(s15, s15, 0x2103);
-        s11 += s15; s7 ^= s11; asm("shf.l.wrap.b32 %0, %0, %0, 7;" : "+r"(s7));
+    // QR(2, 6, 10, 14)
+    s2 += s6;
+    s14 ^= s2;
+    s14 = __byte_perm(s14, s14, 0x1032);
+    s10 += s14;
+    s6 ^= s10;
+    asm("shf.l.wrap.b32 %0, %0, %0, 12;" : "+r"(s6));
+    s2 += s6;
+    s14 ^= s2;
+    s14 = __byte_perm(s14, s14, 0x2103);
+    s10 += s14;
+    s6 ^= s10;
+    asm("shf.l.wrap.b32 %0, %0, %0, 7;" : "+r"(s6));
 
-        // Diagonal round
-        // QR(0, 5, 10, 15)
-        s0 += s5; s15 ^= s0; s15 = __byte_perm(s15, s15, 0x1032);
-        s10 += s15; s5 ^= s10; asm("shf.l.wrap.b32 %0, %0, %0, 12;" : "+r"(s5));
-        s0 += s5; s15 ^= s0; s15 = __byte_perm(s15, s15, 0x2103);
-        s10 += s15; s5 ^= s10; asm("shf.l.wrap.b32 %0, %0, %0, 7;" : "+r"(s5));
+    // QR(3, 7, 11, 15)
+    s3 += s7;
+    s15 ^= s3;
+    s15 = __byte_perm(s15, s15, 0x1032);
+    s11 += s15;
+    s7 ^= s11;
+    asm("shf.l.wrap.b32 %0, %0, %0, 12;" : "+r"(s7));
+    s3 += s7;
+    s15 ^= s3;
+    s15 = __byte_perm(s15, s15, 0x2103);
+    s11 += s15;
+    s7 ^= s11;
+    asm("shf.l.wrap.b32 %0, %0, %0, 7;" : "+r"(s7));
 
-        // QR(1, 6, 11, 12)
-        s1 += s6; s12 ^= s1; s12 = __byte_perm(s12, s12, 0x1032);
-        s11 += s12; s6 ^= s11; asm("shf.l.wrap.b32 %0, %0, %0, 12;" : "+r"(s6));
-        s1 += s6; s12 ^= s1; s12 = __byte_perm(s12, s12, 0x2103);
-        s11 += s12; s6 ^= s11; asm("shf.l.wrap.b32 %0, %0, %0, 7;" : "+r"(s6));
+    // Diagonal round
+    // QR(0, 5, 10, 15)
+    s0 += s5;
+    s15 ^= s0;
+    s15 = __byte_perm(s15, s15, 0x1032);
+    s10 += s15;
+    s5 ^= s10;
+    asm("shf.l.wrap.b32 %0, %0, %0, 12;" : "+r"(s5));
+    s0 += s5;
+    s15 ^= s0;
+    s15 = __byte_perm(s15, s15, 0x2103);
+    s10 += s15;
+    s5 ^= s10;
+    asm("shf.l.wrap.b32 %0, %0, %0, 7;" : "+r"(s5));
 
-        // QR(2, 7, 8, 13)
-        s2 += s7; s13 ^= s2; s13 = __byte_perm(s13, s13, 0x1032);
-        s8 += s13; s7 ^= s8; asm("shf.l.wrap.b32 %0, %0, %0, 12;" : "+r"(s7));
-        s2 += s7; s13 ^= s2; s13 = __byte_perm(s13, s13, 0x2103);
-        s8 += s13; s7 ^= s8; asm("shf.l.wrap.b32 %0, %0, %0, 7;" : "+r"(s7));
+    // QR(1, 6, 11, 12)
+    s1 += s6;
+    s12 ^= s1;
+    s12 = __byte_perm(s12, s12, 0x1032);
+    s11 += s12;
+    s6 ^= s11;
+    asm("shf.l.wrap.b32 %0, %0, %0, 12;" : "+r"(s6));
+    s1 += s6;
+    s12 ^= s1;
+    s12 = __byte_perm(s12, s12, 0x2103);
+    s11 += s12;
+    s6 ^= s11;
+    asm("shf.l.wrap.b32 %0, %0, %0, 7;" : "+r"(s6));
 
-        // QR(3, 4, 9, 14)
-        s3 += s4; s14 ^= s3; s14 = __byte_perm(s14, s14, 0x1032);
-        s9 += s14; s4 ^= s9; asm("shf.l.wrap.b32 %0, %0, %0, 12;" : "+r"(s4));
-        s3 += s4; s14 ^= s3; s14 = __byte_perm(s14, s14, 0x2103);
-        s9 += s14; s4 ^= s9; asm("shf.l.wrap.b32 %0, %0, %0, 7;" : "+r"(s4));
-    }
+    // QR(2, 7, 8, 13)
+    s2 += s7;
+    s13 ^= s2;
+    s13 = __byte_perm(s13, s13, 0x1032);
+    s8 += s13;
+    s7 ^= s8;
+    asm("shf.l.wrap.b32 %0, %0, %0, 12;" : "+r"(s7));
+    s2 += s7;
+    s13 ^= s2;
+    s13 = __byte_perm(s13, s13, 0x2103);
+    s8 += s13;
+    s7 ^= s8;
+    asm("shf.l.wrap.b32 %0, %0, %0, 7;" : "+r"(s7));
 
-    // Final addition and store
-    output[0] = s0 + i0; output[1] = s1 + i1; output[2] = s2 + i2; output[3] = s3 + i3;
-    output[4] = s4 + i4; output[5] = s5 + i5; output[6] = s6 + i6; output[7] = s7 + i7;
-    output[8] = s8 + i8; output[9] = s9 + i9; output[10] = s10 + i10; output[11] = s11 + i11;
-    output[12] = s12 + i12; output[13] = s13 + i13; output[14] = s14 + i14; output[15] = s15 + i15;
+    // QR(3, 4, 9, 14)
+    s3 += s4;
+    s14 ^= s3;
+    s14 = __byte_perm(s14, s14, 0x1032);
+    s9 += s14;
+    s4 ^= s9;
+    asm("shf.l.wrap.b32 %0, %0, %0, 12;" : "+r"(s4));
+    s3 += s4;
+    s14 ^= s3;
+    s14 = __byte_perm(s14, s14, 0x2103);
+    s9 += s14;
+    s4 ^= s9;
+    asm("shf.l.wrap.b32 %0, %0, %0, 7;" : "+r"(s4));
+  }
+
+  // Final addition and store
+  output[0] = s0 + i0;
+  output[1] = s1 + i1;
+  output[2] = s2 + i2;
+  output[3] = s3 + i3;
+  output[4] = s4 + i4;
+  output[5] = s5 + i5;
+  output[6] = s6 + i6;
+  output[7] = s7 + i7;
+  output[8] = s8 + i8;
+  output[9] = s9 + i9;
+  output[10] = s10 + i10;
+  output[11] = s11 + i11;
+  output[12] = s12 + i12;
+  output[13] = s13 + i13;
+  output[14] = s14 + i14;
+  output[15] = s15 + i15;
 }
 
 #else
@@ -730,89 +740,104 @@ __device__ __forceinline__ void stage_1_cooperative(
     }
 }
 
-#define U128_LT(a_hi,a_lo,b_hi,b_lo) (((a_hi) < (b_hi)) || (((a_hi) == (b_hi)) && ((a_lo) < (b_lo))))
-#define U128_GT(a_hi,a_lo,b_hi,b_lo) (((a_hi) > (b_hi)) || (((a_hi) == (b_hi)) && ((a_lo) > (b_lo))))
-
 __device__ __forceinline__ uint64_t execute_op_offset(
     uint32_t offset_op, uint64_t a, uint64_t b, uint64_t c,
     uint32_t r, uint64_t result, uint32_t i, uint32_t j)
 {
-    uint64_t t0, t1, t2, t3; 
-    
-    if (offset_op < 7) {  
-        t0 = a * b; t1 = a * c; t2 = b * c; 
-        uint64_t r0 = t1 + t2, r1 = t0 - t1, r2 = c - a + b;  
-        uint64_t r3 = a - b + c, r4 = t2 + a, r5 = t1 + b, r6 = t0 * c; 
-        
-        uint64_t out = 0; 
-        out |= r0 & -(uint64_t)(offset_op == 0);  
-        out |= r1 & -(uint64_t)(offset_op == 1);  
-        out |= r2 & -(uint64_t)(offset_op == 2);  
-        out |= r3 & -(uint64_t)(offset_op == 3);  
-        out |= r4 & -(uint64_t)(offset_op == 4);  
-        out |= r5 & -(uint64_t)(offset_op == 5);  
-        out |= r6 & -(uint64_t)(offset_op == 6);  
-        return out; 
-    } 
-    
-    __uint128_t w0; 
-    
-    switch (offset_op) { 
-        case 7: { 
-            w0 = COMBINE_UINT64(a, b); 
-            return (uint64_t)(w0 % (c | 1)); 
-        } 
-        case 8: { 
-            t0 = ROTL(result, r); 
-            t1 = a | 2; 
-            /* denom = (t0 : t1), numer = (b : c) */ 
-            if (U128_LT(b, c, t0, t1)) { 
-                return c; 
-            } 
-            t2 = b / t0; 
-            return c - t1 * t2; 
-        } 
-        case 9: { 
-            w0 = COMBINE_UINT64(c, a); 
-            return (uint64_t)(w0 / (b | 4)); 
-        } 
-        case 10: { 
-            t0 = ROTL(result, r);
-            return U128_GT(t0, b, a, (c | 8)) 
-                 ? t0/a 
-                 : (a ^ b); 
-        } 
-        case 11: { 
-            t0 = __umul64hi(a, c); 
-            t1 = b * c; 
-            return t0 + t1; 
-        } 
-        case 12: { 
-            t0 = __umul64hi(c, b); 
-            t1 = a * b; 
-            t2 = ROTR(result, r); 
-            t3 = c * t2; 
-            return t0 + t1 + t3; 
-        } 
-        case 13: { 
-            t0 = isqrt(b + j); 
-            t1 = murmurhash3(c ^ result ^ i ^ j) | 1; 
-            w0 = COMBINE_UINT64(a + i, t0); 
-            return (uint64_t)(w0 % t1); 
-        } 
-        case 14: { 
-            t0 = isqrt(b | 2); 
-            t1 = isqrt(a + j); 
-            t2 = (t0 > 0) ? (c + i) % t0 : 0; 
-            t3 = ROTL(t2, i + j); 
-            return t3 * t1; 
-        } 
-        default: { 
-            t0 = isqrt(a + i); 
-            t1 = isqrt(c + j); 
-            return (t0 * t1) ^ (b + i + j); 
-        } 
-    } 
+  uint64_t t0, t1, t2, t3, t4, t5, t6;
+  
+  __uint128_t w0, w1;
+
+  if (offset_op < 7)
+  {
+    t0 = a * b;
+    t1 = a * c;
+    t2 = b * c;
+
+    t3 = t1 + t2;
+    t4 = t0 - t1;
+    t5 = c - a + b;
+    t6 = a - b + c;
+    uint64_t r4 = t2 + a;
+    uint64_t r5 = t1 + b;
+    uint64_t r6 = t0 * c;
+
+    uint64_t m0 = -(uint64_t)(offset_op == 0);
+    uint64_t m1 = -(uint64_t)(offset_op == 1);
+    uint64_t m2 = -(uint64_t)(offset_op == 2);
+    uint64_t m3 = -(uint64_t)(offset_op == 3);
+    uint64_t m4 = -(uint64_t)(offset_op == 4);
+    uint64_t m5 = -(uint64_t)(offset_op == 5);
+    uint64_t m6 = -(uint64_t)(offset_op == 6);
+
+    return (t3 & m0) | (t4 & m1) | (t5 & m2) | (t6 & m3) |
+           (r4 & m4) | (r5 & m5) | (r6 & m6);
+  }
+
+  switch (offset_op)
+  {
+  case 7:
+  {
+    w0 = COMBINE_UINT64(a, b);
+    return (uint64_t)(w0 % (c | 1));
+  }
+  case 8:
+  {
+    t0 = ROTL(result, r); \
+    w0 = COMBINE_UINT64(t0, a | 2); \
+    w1 = COMBINE_UINT64(b, c); \
+    return (w1 < w0) ? c : mod128_optimized(w1, w0); \
+  }
+  case 9:
+  {
+    w0 = COMBINE_UINT64(c, a);
+    return (uint64_t)(w0 / (b | 4));
+  }
+  case 10:
+  {
+    t0 = ROTL(result, r);
+    w0 = COMBINE_UINT64(t0, b);
+    w1 = COMBINE_UINT64(a, c | 8);
+    return (w0 > w1) ? div128_optimized(w0, w1) : (a ^ b);
+  }
+  case 11:
+  {
+    t0 = __umul64hi(a, c);
+    t1 = b * c;
+    return t0 + t1;
+  }
+  case 12:
+  {
+    t0 = __umul64hi(c, b);
+    t1 = a * b;
+    t2 = ROTR(result, r);
+    t3 = c * t2;
+    return t0 + t1 + t3;
+  }
+  case 13:
+  {
+    t0 = isqrt(b + j);
+    t1 = murmurhash3(c ^ result ^ i ^ j) | 1;
+    w0 = COMBINE_UINT64(a + i, t0);
+    return (uint64_t)(w0 % t1);
+  }
+  case 14:
+  {
+    t0 = isqrt(b | 2);
+    t1 = isqrt(a + j);
+    t2 = (t0 > 0) ? (c + i) % t0 : 0;
+    t3 = ROTL(t2, i + j);
+    return t3 * t1;
+  }
+  default:
+  {
+    t0 = isqrt(a + i);
+    t1 = isqrt(c + j);
+    t2 = t0 * t1;
+    t3 = b + i + j;
+    return t2 ^ t3;
+  }
+  }
 }
 
 #if defined(__CUDA_ARCH__) || defined(__HIP_PLATFORM_NVIDIA__)
@@ -857,7 +882,6 @@ __device__ void stage_3(uint64_t *my_scratch)
 
     uint64_t result = ~(hash1 ^ hash2);
 
-#pragma unroll 4
     for (uint32_t j = 0; j < XELIS_BUFFER_SIZE_V3; j++)
     {
       uint64_t idx_a_read = map_index(result);
@@ -883,15 +907,8 @@ __device__ void stage_3(uint64_t *my_scratch)
       uint64_t t = (use_buffer_b ? mem_buffer_b[idx_t] : mem_buffer_a[idx_t]) ^ result;
 
       uint64_t idx_a_write = map_index(t ^ result ^ XELIS_GOLDEN_RATIO);
-
-#if defined(__CUDA_ARCH__) || defined(__HIP_PLATFORM_NVIDIA__)
-      prefetch_l1(&mem_buffer_a[idx_a_write]);
-#endif
-
       uint64_t idx_b_write = map_index(idx_a_write ^ ~result ^ XELIS_SCATTER_CONST);
 
-#if defined(__CUDA_ARCH__) || defined(__HIP_PLATFORM_NVIDIA__)
-      prefetch_l1(&mem_buffer_b[idx_b_write]);
 #endif
 
       uint64_t old_mem_a = mem_buffer_a[idx_a_write];
@@ -966,17 +983,8 @@ __device__ void stage_3_efficient(uint64_t *my_scratch)
       uint64_t t = (use_buffer_b ? mem_buffer_b[idx_t] : mem_buffer_a[idx_t]) ^ result;
 
       uint64_t idx_a_write = map_index(t ^ result ^ XELIS_GOLDEN_RATIO);
-
-#if defined(__CUDA_ARCH__) || defined(__HIP_PLATFORM_NVIDIA__)
-      // L2 write prefetch for mem_buffer_a (issued early to hide latency)
-      prefetch_l2(&mem_buffer_a[idx_a_write]);
-#endif
-
       uint64_t idx_b_write = map_index(idx_a_write ^ ~result ^ XELIS_SCATTER_CONST);
 
-#if defined(__CUDA_ARCH__) || defined(__HIP_PLATFORM_NVIDIA__)
-      // L2 write prefetch for mem_buffer_b
-      prefetch_l2(&mem_buffer_b[idx_b_write]);
 #endif
 
       uint64_t old_mem_a = mem_buffer_a[idx_a_write];
@@ -1017,12 +1025,10 @@ __device__ __forceinline__ bool check_difficulty_gpu(const uint8_t *hash, const 
 // ============================================================================
 
 // Stage 1 only kernel - prepares scratchpad (standard)
-#if defined(__HIP_PLATFORM_AMD__)
-extern "C" __attribute__((amdgpu_flat_work_group_size(XELIS_MIN_WG, XELIS_MAX_WG)))
-#else
-extern "C" __maxnreg__(96)
-#endif
-__global__ void xelis_stage1_kernel(
+// #if defined(__HIP_PLATFORM_AMD__)
+// __attribute__((amdgpu_flat_work_group_size(XELIS_MIN_WG, XELIS_MAX_WG)))
+// #endif
+extern "C" __global__ void xelis_stage1_kernel(
     const uint8_t *__restrict__ input_template,
     uint64_t *__restrict__ scratch_memory,
     uint64_t nonce_start,
@@ -1039,10 +1045,7 @@ __global__ void xelis_stage1_kernel(
   uint8_t input[XELIS_TEMPLATE_SIZE];
   memcpy(input, input_template, XELIS_TEMPLATE_SIZE);
 
-  // Nonce segmentation: bits 59-63=device_id, bits 48-58=random, bits 0-47=counter
-  // Must use global_idx (not local_tid) since scratch memory is indexed by global_idx
-  uint64_t counter = nonce_start & 0xFFFFFFFFFFFFULL;  // Extract counter (bits 0-47)
-  uint64_t nonce = (nonce_start & 0xFFFF000000000000ULL) | ((counter + global_idx) & 0xFFFFFFFFFFFFULL);
+  uint64_t nonce = nonce_start + local_tid;
   ((uint64_t *)(input))[5] = nonce;
 
   stage_1(input, my_scratch, blockDim.x);
@@ -1050,11 +1053,7 @@ __global__ void xelis_stage1_kernel(
 
 // Stage 1 Cooperative kernel - bandwidth optimized (hard-capped at 32 threads)
 // Uses shared memory coordination for coalesced writes
-extern "C"
-#if defined(__CUDA_ARCH__)
-__maxnreg__(96)
-#endif
-__global__ void xelis_stage1_cooperative(
+extern "C" __global__ void xelis_stage1_cooperative(
     const uint8_t *__restrict__ input_template,
     uint64_t *__restrict__ scratch_memory,
     uint64_t nonce_start,
@@ -1068,16 +1067,13 @@ __global__ void xelis_stage1_cooperative(
   if (local_tid >= batch_size)
     return;
 
-  uint64_t global_idx = local_tid + scratch_offset;
+  uint32_t global_idx = local_tid + scratch_offset;
   uint64_t *my_scratch = scratch_memory + (size_t)global_idx * XELIS_MEMORY_SIZE_V3;
 
   uint8_t input[XELIS_TEMPLATE_SIZE];
   memcpy(input, input_template, XELIS_TEMPLATE_SIZE);
 
-  // Nonce segmentation: bits 59-63=device_id, bits 48-58=random, bits 0-47=counter
-  // Must use global_idx (not local_tid) since scratch memory is indexed by global_idx
-  uint64_t counter = nonce_start & 0xFFFFFFFFFFFFULL;  // Extract counter (bits 0-47)
-  uint64_t nonce = (nonce_start & 0xFFFF000000000000ULL) | ((counter + global_idx) & 0xFFFFFFFFFFFFULL);
+  uint64_t nonce = nonce_start + local_tid;
   ((uint64_t *)(input))[5] = nonce;
 
   stage_1_cooperative(input, my_scratch, shared_mem);
@@ -1085,11 +1081,9 @@ __global__ void xelis_stage1_cooperative(
 
 // Fused Stage 3 + Blake3 + Difficulty check kernel (standard)
 #if defined(__HIP_PLATFORM_AMD__)
-extern "C" __attribute__((amdgpu_flat_work_group_size(XELIS_MIN_WG, XELIS_MAX_WG)))
-#else
-extern "C"
+__attribute__((amdgpu_flat_work_group_size(XELIS_MIN_WG, XELIS_MAX_WG)))
 #endif
-__global__ void xelis_s3_fused_kernel(
+extern "C" __global__ void xelis_s3_fused_kernel(
     uint64_t *__restrict__ scratch_memory,
     uint8_t *__restrict__ outputs,
     uint64_t nonce_start,
@@ -1110,15 +1104,12 @@ __global__ void xelis_s3_fused_kernel(
   stage_3(my_scratch);
 
   // Execute Blake3 finalization
-  xelis_blake3_lean((uint8_t *)my_scratch, my_output);
+  blake3_hasher_hash((uint8_t *)my_scratch, XELIS_OUTPUT_SIZE_V3, my_output);
 
   // Check difficulty and record solutions
   if (difficulty_target && solutions && check_difficulty_gpu(my_output, difficulty_target))
   {
-    // Nonce segmentation: bits 59-63=device_id, bits 48-58=random, bits 0-47=counter
-    // Must use global_idx (not local_tid) since scratch memory is indexed by global_idx
-    uint64_t counter = nonce_start & 0xFFFFFFFFFFFFULL;  // Extract counter (bits 0-47)
-    uint64_t nonce = (nonce_start & 0xFFFF000000000000ULL) | ((counter + global_idx) & 0xFFFFFFFFFFFFULL);
+    uint64_t nonce = nonce_start + local_tid;
     unsigned long long idx = atomicAdd((unsigned long long *)&solutions[0], 1ULL);
 
     if (idx < 1024)
@@ -1133,11 +1124,9 @@ __global__ void xelis_s3_fused_kernel(
 
 // Fused Stage 3 Efficient + Blake3 + Difficulty check kernel (optimized prefetch)
 #if defined(__HIP_PLATFORM_AMD__)
-extern "C" __attribute__((amdgpu_flat_work_group_size(XELIS_MIN_WG, XELIS_MAX_WG)))
-#else
-extern "C"
+__attribute__((amdgpu_flat_work_group_size(XELIS_MIN_WG, XELIS_MAX_WG)))
 #endif
-__global__ void xelis_s3_efficient_kernel(
+extern "C" __global__ void xelis_s3_efficient_kernel(
     uint64_t *__restrict__ scratch_memory,
     uint8_t *__restrict__ outputs,
     uint64_t nonce_start,
@@ -1158,108 +1147,12 @@ __global__ void xelis_s3_efficient_kernel(
   stage_3_efficient(my_scratch);
 
   // Execute Blake3 finalization
-  xelis_blake3_lean((uint8_t *)my_scratch, my_output);
+  blake3_hasher_hash((uint8_t *)my_scratch, XELIS_OUTPUT_SIZE_V3, my_output);
 
   // Check difficulty and record solutions
   if (difficulty_target && solutions && check_difficulty_gpu(my_output, difficulty_target))
   {
-    // Nonce segmentation: bits 59-63=device_id, bits 48-58=random, bits 0-47=counter
-    // Must use global_idx (not local_tid) since scratch memory is indexed by global_idx
-    uint64_t counter = nonce_start & 0xFFFFFFFFFFFFULL;  // Extract counter (bits 0-47)
-    uint64_t nonce = (nonce_start & 0xFFFF000000000000ULL) | ((counter + global_idx) & 0xFFFFFFFFFFFFULL);
-    unsigned long long idx = atomicAdd((unsigned long long *)&solutions[0], 1ULL);
-
-    if (idx < 1024)
-    {
-      uint64_t *solution_slot = &solutions[1 + idx * 5];
-      solution_slot[0] = nonce;
-      uint8_t *hash_dest = (uint8_t *)&solution_slot[1];
-      memcpy(hash_dest, my_output, 32);
-    }
-  }
-}
-
-// ============================================================================
-// SEPARATED KERNELS - Stage 3 without Blake3 (for reduced register pressure)
-// ============================================================================
-
-// Stage 3 Fused (no Blake3)
-extern "C"
-#if defined(__CUDA_ARCH__)
-__maxnreg__(40)
-#endif
-__global__ void xelis_s3_fused_noblake_kernel(
-    uint64_t *__restrict__ scratch_memory,
-    uint32_t batch_size,
-    uint32_t scratch_offset,
-    const uint64_t *__restrict__ difficulty_target,
-    uint64_t *__restrict__ solutions,
-    uint64_t nonce_start)
-{
-  uint32_t local_tid = blockIdx.x * blockDim.x + threadIdx.x;
-  if (local_tid >= batch_size)
-    return;
-
-  uint32_t global_idx = local_tid + scratch_offset;
-  uint64_t *my_scratch = scratch_memory + (size_t)global_idx * XELIS_MEMORY_SIZE_V3;
-
-  // Execute Stage 3 (no Blake3)
-  stage_3(my_scratch);
-}
-
-// Stage 3 Efficient (no Blake3)
-extern "C"
-#if defined(__CUDA_ARCH__)
-__maxnreg__(40)
-#endif
-__global__ void xelis_s3_efficient_noblake_kernel(
-    uint64_t *__restrict__ scratch_memory,
-    uint32_t batch_size,
-    uint32_t scratch_offset,
-    const uint64_t *__restrict__ difficulty_target,
-    uint64_t *__restrict__ solutions,
-    uint64_t nonce_start)
-{
-  uint32_t local_tid = blockIdx.x * blockDim.x + threadIdx.x;
-  if (local_tid >= batch_size)
-    return;
-
-  uint32_t global_idx = local_tid + scratch_offset;
-  uint64_t *my_scratch = scratch_memory + (size_t)global_idx * XELIS_MEMORY_SIZE_V3;
-
-  // Execute Stage 3 Efficient (optimized prefetch strategy)
-  stage_3_efficient(my_scratch);
-}
-
-// Separate Blake3 Kernel - lightweight, can run at high thread count
-// Recommended block size: 256-512 threads (low register pressure)
-extern "C"
-__global__ void xelis_blake3_batch(
-    uint64_t *__restrict__ scratch_memory,
-    uint8_t *__restrict__ outputs,
-    uint32_t batch_size,
-    uint32_t scratch_offset,
-    const uint64_t *__restrict__ difficulty_target,
-    uint64_t *__restrict__ solutions,
-    uint64_t nonce_start)
-{
-  uint32_t local_tid = blockIdx.x * blockDim.x + threadIdx.x;
-  if (local_tid >= batch_size)
-    return;
-
-  uint32_t global_idx = local_tid + scratch_offset;
-  uint64_t *my_scratch = scratch_memory + (size_t)global_idx * XELIS_MEMORY_SIZE_V3;
-  uint8_t *my_output = outputs + global_idx * XELIS_HASH_SIZE;
-
-  // Execute Blake3 finalization using lean implementation
-  xelis_blake3_lean((uint8_t *)my_scratch, my_output);
-
-  // Check difficulty and record solutions
-  if (difficulty_target && solutions && check_difficulty_gpu(my_output, difficulty_target))
-  {
-    // Recompute the nonce that was used during Stage 1 (same computation as in Stage 1 kernel)
-    uint64_t counter = nonce_start & 0xFFFFFFFFFFFFULL;
-    uint64_t nonce = (nonce_start & 0xFFFF000000000000ULL) | ((counter + global_idx) & 0xFFFFFFFFFFFFULL);
+    uint64_t nonce = nonce_start + local_tid;
     unsigned long long idx = atomicAdd((unsigned long long *)&solutions[0], 1ULL);
 
     if (idx < 1024)
@@ -1277,11 +1170,9 @@ __global__ void xelis_blake3_batch(
 // ============================================================================
 
 #if defined(__HIP_PLATFORM_AMD__)
-extern "C" __attribute__((amdgpu_flat_work_group_size(XELIS_MIN_WG, XELIS_MAX_WG)))
-#else
-extern "C" __maxnreg__(96)
+__attribute__((amdgpu_flat_work_group_size(XELIS_MIN_WG, XELIS_MAX_WG)))
 #endif
-__global__ void xelis_hash_v3_kernel(
+extern "C" __global__ void xelis_hash_v3_kernel(
     const uint8_t *__restrict__ input_template,
     uint8_t *__restrict__ outputs,
     uint64_t *__restrict__ scratch_memory,
@@ -1301,15 +1192,13 @@ __global__ void xelis_hash_v3_kernel(
   uint8_t input[XELIS_TEMPLATE_SIZE];
   memcpy(input, input_template, XELIS_TEMPLATE_SIZE);
 
-  // Nonce segmentation: bits 59-63=device_id, bits 48-58=random, bits 0-47=counter
-  uint64_t counter = nonce_start & 0xFFFFFFFFFFFFULL;  // Extract counter (bits 0-47)
-  uint64_t nonce = (nonce_start & 0xFFFF000000000000ULL) | ((counter + tid) & 0xFFFFFFFFFFFFULL);
+  uint64_t nonce = nonce_start + tid;
   ((uint64_t *)(input))[5] = nonce;
 
   stage_1(input, my_scratch, blockDim.x);
 
   stage_3(my_scratch);
-  xelis_blake3_lean((uint8_t *)my_scratch, my_output);
+  blake3_hasher_hash((uint8_t *)my_scratch, XELIS_OUTPUT_SIZE_V3, my_output);
 
   if (difficulty_target && solutions && check_difficulty_gpu(my_output, difficulty_target))
   {

@@ -184,10 +184,8 @@ extern "C" bool precompile_all_kernels()
             opts.push_back("-DXELIS_MIN_WG=" + std::to_string(min_wg));
             opts.push_back("-DXELIS_MAX_WG=" + std::to_string(max_wg));
 
-            if (auto maxregs = choose_maxregcount(cfg, props)) {
-                opts.push_back("--maxrregcount=" + std::to_string(*maxregs));
-                printf("[PRECOMPILE] maxrregcount=%d\n", *maxregs);
-            }
+            // Note: Register limits are now set per-kernel using __maxnreg__() attributes
+            // in the HIP source code instead of globally via --maxrregcount
 #endif
             fflush(stdout);
 

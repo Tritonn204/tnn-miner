@@ -679,23 +679,6 @@ static inline uint64_t umul64_hi(uint64_t a, uint64_t b)
 #endif
 }
 
-template<bool compute_remainder = true>
-static inline uint64_t div128_128_large_parts(__uint128_t *dividend, uint64_t divisor_hi, uint64_t divisor_lo)
-{
-  uint64_t a1 = hi(*dividend);
-  if (a1 < divisor_hi) {
-    return 0;
-  }
-  uint64_t q = a1 / divisor_hi;
-  if constexpr (compute_remainder) {
-    // Compute remainder using only 64-bit operations (no 128-bit multiply needed)
-    uint64_t dividend_lo = (uint64_t)*dividend;
-    uint64_t remainder_lo = dividend_lo - divisor_lo * q;
-    *dividend = remainder_lo;
-  }
-  return q;
-}
-
 static inline uint64_t execute_operation_goto(uint32_t idx, uint64_t a, uint64_t b,
                                               uint64_t c, int r_next, uint64_t result,
                                               int i, int j_off)
@@ -768,8 +751,9 @@ op11:
   else
   {
     __uint128_t dividend = COMBINE_UINT64(b, c);
-    div128_128_large_parts(&dividend, t2_hi, t2_lo);
-    v = dividend;
+    __uint128_t divisor = COMBINE_UINT64(t2_hi, t2_lo);
+    uint64_t quotient = (t2_hi != 0) ? (b / t2_hi) : 0;
+    v = (uint64_t)(dividend - divisor * quotient);
   }
   goto done;
 }
@@ -781,8 +765,7 @@ op13:
   uint64_t rotl_result = ROTL(result, r_next);
   if (rotl_result > a || (rotl_result == a && b > (c | 8)))
   {
-    __uint128_t dividend = COMBINE_UINT64(rotl_result, b);
-    v = div128_128_large_parts<false>(&dividend, a, c | 8);
+    v = (a != 0) ? (rotl_result / a) : 0;
   }
   else
   {
@@ -820,7 +803,7 @@ static inline void prefetch_L2(const void* p) {
   _mm_prefetch((const char*)p, _MM_HINT_T1);   // “L2-ish” hint
 }
 
-__attribute__((target("aes"))) static void stage_3(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
+__attribute__((target("aes,sse4.1"))) static void stage_3(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
 {
   constexpr uint8_t key[17] = "xelishash-pow-v3";
   __m128i key_vec = _mm_loadu_si128((const __m128i *)key);
@@ -851,11 +834,20 @@ __attribute__((target("aes"))) static void stage_3(uint64_t *scratch_pad, worker
 
     for (size_t j = 0; j < XELIS_BUFFER_SIZE_V3; ++j)
     {
-      uint64_t a = mem_buffer_a[map_index(result)];
-      uint64_t b = mem_buffer_b[map_index(a ^ ~ROTR(result, r))];
+      // Hoist: breaks dependency chain for b load
+      uint64_t rot_res = ~ROTR(result, r);
+
+      uint64_t idx_a_read = map_index(result);
+      uint64_t a = mem_buffer_a[idx_a_read];
+
+      // Compute idx_b early with hoisted rot_res
+      uint64_t idx_b_read = map_index(a ^ rot_res);
+
+      uint64_t b = mem_buffer_b[idx_b_read];
+
       uint64_t c = scratch_pad[r];
 
-      r = (r + 1) % XELIS_MEMORY_SIZE_V3;
+      r++;
 
       uint32_t op_idx = ROTL(result, (uint32_t)c) & 0xF;
       uint64_t v = execute_operation_goto(op_idx, a, b, c, r, result, i, j);
@@ -917,11 +909,13 @@ __attribute__((target("default"))) static void stage_3(uint64_t *scratch_pad, wo
 
     for (size_t j = 0; j < XELIS_BUFFER_SIZE_V3; ++j)
     {
-      uint64_t a = mem_buffer_a[map_index(result)];
-      uint64_t b = mem_buffer_b[map_index(a ^ ~ROTR(result, r))];
+      uint64_t rot_res = ~ROTR(result, r);
+      uint64_t idx_a_read = map_index(result);
+      uint64_t a = mem_buffer_a[idx_a_read];
+      uint64_t idx_b_read = map_index(a ^ rot_res);
+      uint64_t b = mem_buffer_b[idx_b_read];
       uint64_t c = scratch_pad[r];
-
-      r = (r + 1) % XELIS_MEMORY_SIZE_V3;
+      r++;
 
       uint32_t op_idx = ROTL(result, (uint32_t)c) & 0xF;
       uint64_t v = execute_operation_goto(op_idx, a, b, c, r, result, i, j);
@@ -1051,6 +1045,24 @@ void xelis_hash_v3(byte *input, workerData_xelis_v3 &worker, byte *hashResult)
   blake3((uint8_t *)worker.scratchPad, XELIS_OUTPUT_SIZE_V3, hashResult);
 }
 
+// Exposed stages for debugging/validation
+void xelis_stage1_v3(const uint8_t *input, uint64_t *scratch_pad, size_t input_len)
+{
+  stage_1(input, scratch_pad, input_len);
+}
+
+void xelis_stage3_v3(uint64_t *scratch_pad)
+{
+  // Create a dummy worker (unused by stage_3, but required by signature)
+  workerData_xelis_v3 worker;
+  stage_3(scratch_pad, worker);
+}
+
+void xelis_blake3_v3(const uint8_t *scratch_pad, byte *hashResult)
+{
+  blake3(scratch_pad, XELIS_OUTPUT_SIZE_V3, hashResult);
+}
+
 void xelis_benchmark_cpu_hash_v3()
 {
   constexpr uint32_t ITERATIONS = 10000;
@@ -1082,6 +1094,490 @@ void xelis_benchmark_cpu_hash_v3()
   printf("\n");
   fflush(stdout);
 }
+
+// ============================================================================
+// OPTIMIZED MODULAR POWER
+// ============================================================================
+
+// Fast modular power using our optimized 128-bit mod
+static inline uint64_t modular_power_fast(uint64_t base, uint64_t exp, uint64_t mod)
+{
+    if (mod == 0) mod = 1;
+    if (mod == 1) return 0;
+    if (exp == 0) return 1;
+    if (base == 0) return 0;
+    
+    base %= mod;
+    if (base == 0) return 0;
+    if (base == 1) return 1;
+    
+    uint64_t result = 1;
+    
+    while (exp > 0)
+    {
+        if (exp & 1)
+        {
+            __uint128_t tmp = (__uint128_t)result * base;
+            result = mod128_64_fast(tmp, mod);
+        }
+        
+        exp >>= 1;
+        
+        if (exp > 0)
+        {
+            __uint128_t tmp = (__uint128_t)base * base;
+            base = mod128_64_fast(tmp, mod);
+            if (base == 0) return 0;
+        }
+    }
+    
+    return result;
+}
+
+// ============================================================================
+// OPTIMIZED STAGE 3 - VARIANT 1 (Prefetch + Fast ModPow)
+// ============================================================================
+
+#ifdef __x86_64__
+
+__attribute__((target("aes,sse4.1")))
+static void stage_3_optimized_v1(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
+{
+    constexpr uint8_t key[17] = "xelishash-pow-v3";
+    __m128i key_vec = _mm_loadu_si128((const __m128i *)key);
+
+    uint64_t *__restrict mem_buffer_a = scratch_pad;
+    uint64_t *__restrict mem_buffer_b = scratch_pad + XELIS_BUFFER_SIZE_V3;
+
+    uint64_t addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V3 - 1];
+    uint64_t addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V3 - 1] >> 32;
+
+    size_t r = 0;
+
+    // FIXED: Added cast to (const char*)
+    _mm_prefetch((const char*)&mem_buffer_a[map_index(addr_a)], _MM_HINT_T0);
+
+    for (size_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V3; ++i)
+    {
+        uint64_t idx_mem_a = map_index(addr_a);
+        uint64_t mem_a = mem_buffer_a[idx_mem_a];
+        
+        uint64_t idx_mem_b = map_index(mem_a ^ addr_b);
+        _mm_prefetch((const char*)&mem_buffer_b[idx_mem_b], _MM_HINT_T0);
+        
+        uint64_t mem_b = mem_buffer_b[idx_mem_b];
+
+        __m128i block_vec = _mm_set_epi64x(mem_a, mem_b);
+        block_vec = _mm_aesenc_si128(block_vec, key_vec);
+        uint64_t hash1 = _mm_extract_epi64(block_vec, 0);
+        uint64_t hash2 = _mm_extract_epi64(block_vec, 1);
+
+        uint64_t result = ~(hash1 ^ hash2);
+        
+        uint64_t addr_a_next = modular_power_fast(addr_a, addr_b, result);
+        uint64_t next_prefetch_idx = map_index(addr_a_next);
+        
+        _mm_prefetch((const char*)&mem_buffer_a[next_prefetch_idx], _MM_HINT_T0);
+
+        for (size_t j = 0; j < XELIS_BUFFER_SIZE_V3; ++j)
+        {
+            if ((j & 7) == 0) {
+                size_t prefetch_r = (r + 16) % XELIS_MEMORY_SIZE_V3;
+                _mm_prefetch((const char*)&scratch_pad[prefetch_r], _MM_HINT_T0);
+            }
+
+            uint64_t rot_res = ~ROTR(result, r);
+            uint64_t idx_a_read = map_index(result);
+            uint64_t a = mem_buffer_a[idx_a_read];
+            
+            uint64_t idx_b_read = map_index(a ^ rot_res);
+            uint64_t b = mem_buffer_b[idx_b_read];
+            uint64_t c = scratch_pad[r];
+            
+            r++;
+
+            uint32_t op_idx = ROTL(result, (uint32_t)c) & 0xF;
+            uint64_t v = execute_operation_goto(op_idx, a, b, c, r, result, i, j);
+
+            uint64_t idx_seed = v ^ result;
+            result = ROTL(idx_seed, r);
+
+            int use_buffer_b = pick_half_fast(v);
+            uint64_t idx_t = map_index(idx_seed);
+            uint64_t t = (use_buffer_b ? mem_buffer_b[idx_t] : mem_buffer_a[idx_t]) ^ result;
+
+            uint64_t idx_a_write = map_index(t ^ result ^ XELIS_GOLDEN_RATIO);
+            uint64_t idx_b_write = map_index(idx_a_write ^ ~result ^ XELIS_SCATTER_CONST);
+
+            _mm_prefetch((const char*)&mem_buffer_a[idx_a_write], _MM_HINT_T0);
+            _mm_prefetch((const char*)&mem_buffer_b[idx_b_write], _MM_HINT_T0);
+
+            uint64_t mem_a_tmp = mem_buffer_a[idx_a_write];
+            mem_buffer_a[idx_a_write] = t;
+            mem_buffer_b[idx_b_write] ^= mem_a_tmp ^ ROTR(t, i + j);
+        }
+
+        uint64_t addr_b_next = isqrt(result) * (r + 1) * isqrt(addr_a_next);
+        
+        addr_a = addr_a_next;
+        addr_b = addr_b_next;
+    }
+}
+
+// ============================================================================
+// OPTIMIZED STAGE 3 - VARIANT 2 (V1 + Non-Temporal Stores)
+// ============================================================================
+
+__attribute__((target("aes,sse4.1"))) 
+static void stage_3_optimized_v2(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
+{
+    constexpr uint8_t key[17] = "xelishash-pow-v3";
+    __m128i key_vec = _mm_loadu_si128((const __m128i *)key);
+
+    uint64_t *__restrict mem_buffer_a = scratch_pad;
+    uint64_t *__restrict mem_buffer_b = scratch_pad + XELIS_BUFFER_SIZE_V3;
+
+    uint64_t addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V3 - 1];
+    uint64_t addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V3 - 1] >> 32;
+
+    size_t r = 0;
+
+    _mm_prefetch((const char*)&mem_buffer_a[map_index(addr_a)], _MM_HINT_T0);
+
+    for (size_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V3; ++i)
+    {
+        uint64_t idx_mem_a = map_index(addr_a);
+        uint64_t mem_a = mem_buffer_a[idx_mem_a];
+        
+        uint64_t idx_mem_b = map_index(mem_a ^ addr_b);
+        _mm_prefetch((const char*)&mem_buffer_b[idx_mem_b], _MM_HINT_T0);
+        
+        uint64_t mem_b = mem_buffer_b[idx_mem_b];
+
+        __m128i block_vec = _mm_set_epi64x(mem_a, mem_b);
+        block_vec = _mm_aesenc_si128(block_vec, key_vec);
+        uint64_t hash1 = _mm_extract_epi64(block_vec, 0);
+        uint64_t hash2 = _mm_extract_epi64(block_vec, 1);
+
+        uint64_t result = ~(hash1 ^ hash2);
+        
+        uint64_t addr_a_next = modular_power_fast(addr_a, addr_b, result);
+        uint64_t next_prefetch_idx = map_index(addr_a_next);
+        _mm_prefetch((const char*)&mem_buffer_a[next_prefetch_idx], _MM_HINT_T0);
+
+        for (size_t j = 0; j < XELIS_BUFFER_SIZE_V3; ++j)
+        {
+            if ((j & 7) == 0) {
+                size_t prefetch_r = (r + 16) % XELIS_MEMORY_SIZE_V3;
+                _mm_prefetch((const char*)&scratch_pad[prefetch_r], _MM_HINT_T0);
+            }
+
+            uint64_t rot_res = ~ROTR(result, r);
+            uint64_t idx_a_read = map_index(result);
+            uint64_t a = mem_buffer_a[idx_a_read];
+            
+            uint64_t idx_b_read = map_index(a ^ rot_res);
+            uint64_t b = mem_buffer_b[idx_b_read];
+            uint64_t c = scratch_pad[r];
+            
+            r++;
+
+            uint32_t op_idx = ROTL(result, (uint32_t)c) & 0xF;
+            uint64_t v = execute_operation_goto(op_idx, a, b, c, r, result, i, j);
+
+            uint64_t idx_seed = v ^ result;
+            result = ROTL(idx_seed, r);
+
+            int use_buffer_b = pick_half_fast(v);
+            uint64_t idx_t = map_index(idx_seed);
+            uint64_t t = (use_buffer_b ? mem_buffer_b[idx_t] : mem_buffer_a[idx_t]) ^ result;
+
+            uint64_t idx_a_write = map_index(t ^ result ^ XELIS_GOLDEN_RATIO);
+            uint64_t idx_b_write = map_index(idx_a_write ^ ~result ^ XELIS_SCATTER_CONST);
+
+            uint64_t mem_a_tmp = mem_buffer_a[idx_a_write];
+            
+            _mm_stream_si64((long long*)&mem_buffer_a[idx_a_write], t);
+            
+            uint64_t new_b_val = mem_buffer_b[idx_b_write] ^ mem_a_tmp ^ ROTR(t, i + j);
+            _mm_stream_si64((long long*)&mem_buffer_b[idx_b_write], new_b_val);
+        }
+        
+        _mm_sfence();
+
+        uint64_t addr_b_next = isqrt(result) * (r + 1) * isqrt(addr_a_next);
+        
+        addr_a = addr_a_next;
+        addr_b = addr_b_next;
+    }
+    
+    _mm_sfence();
+}
+
+__attribute__((target("default"))) 
+static void stage_3_optimized_v1(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
+{
+    stage_3(scratch_pad, worker);
+}
+
+__attribute__((target("default"))) 
+static void stage_3_optimized_v2(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
+{
+    stage_3(scratch_pad, worker);
+}
+
+#else // ARM implementation
+
+static void stage_3_optimized_v1(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
+{
+    constexpr uint8_t key[17] = "xelishash-pow-v3";
+    
+#if defined(__aarch64__) && defined(__ARM_NEON) && defined(__ARM_FEATURE_CRYPTO)
+    uint8x16_t key_vec = vld1q_u8(key);
+#endif
+
+    uint64_t *__restrict mem_buffer_a = scratch_pad;
+    uint64_t *__restrict mem_buffer_b = scratch_pad + XELIS_BUFFER_SIZE_V3;
+
+    uint64_t addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V3 - 1];
+    uint64_t addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V3 - 1] >> 32;
+
+    size_t r = 0;
+
+    __builtin_prefetch(&mem_buffer_a[map_index(addr_a)], 0, 3);
+
+    for (size_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V3; ++i)
+    {
+        uint64_t idx_mem_a = map_index(addr_a);
+        uint64_t mem_a = mem_buffer_a[idx_mem_a];
+        
+        uint64_t idx_mem_b = map_index(mem_a ^ addr_b);
+        __builtin_prefetch(&mem_buffer_b[idx_mem_b], 0, 3);
+        
+        uint64_t mem_b = mem_buffer_b[idx_mem_b];
+
+        uint64_t hash1, hash2;
+        
+#if defined(__aarch64__) && defined(__ARM_NEON) && defined(__ARM_FEATURE_CRYPTO)
+        {
+            uint64x2_t result_u64 = aes_round_v3_register(mem_a, mem_b, key_vec);
+            hash1 = vgetq_lane_u64(result_u64, 0);
+            hash2 = vgetq_lane_u64(result_u64, 1);
+        }
+#else
+        uint8_t block_bytes[16];
+        uint64_to_le_bytes(mem_b, block_bytes);
+        uint64_to_le_bytes(mem_a, block_bytes + 8);
+        aes_round(block_bytes, key);
+        hash1 = le_bytes_to_uint64(block_bytes);
+        hash2 = le_bytes_to_uint64(block_bytes + 8);
+#endif
+
+        uint64_t result = ~(hash1 ^ hash2);
+        
+        uint64_t addr_a_next = modular_power_fast(addr_a, addr_b, result);
+        __builtin_prefetch(&mem_buffer_a[map_index(addr_a_next)], 0, 3);
+
+        for (size_t j = 0; j < XELIS_BUFFER_SIZE_V3; ++j)
+        {
+            if ((j & 7) == 0) {
+                size_t prefetch_r = (r + 16) % XELIS_MEMORY_SIZE_V3;
+                __builtin_prefetch(&scratch_pad[prefetch_r], 0, 3);
+            }
+
+            uint64_t rot_res = ~ROTR(result, r);
+            uint64_t idx_a_read = map_index(result);
+            uint64_t a = mem_buffer_a[idx_a_read];
+            
+            uint64_t idx_b_read = map_index(a ^ rot_res);
+            uint64_t b = mem_buffer_b[idx_b_read];
+            uint64_t c = scratch_pad[r];
+
+            r = (r + 1) % XELIS_MEMORY_SIZE_V3;
+
+            uint32_t op_idx = ROTL(result, (uint32_t)c) & 0xF;
+            uint64_t v = execute_operation_goto(op_idx, a, b, c, r, result, i, j);
+
+            uint64_t idx_seed = v ^ result;
+            result = ROTL(idx_seed, r);
+
+            int use_buffer_b = pick_half_fast(v);
+            uint64_t idx_t = map_index(idx_seed);
+            uint64_t t = (use_buffer_b ? mem_buffer_b[idx_t] : mem_buffer_a[idx_t]) ^ result;
+
+            uint64_t idx_a_write = map_index(t ^ result ^ XELIS_GOLDEN_RATIO);
+            uint64_t idx_b_write = map_index(idx_a_write ^ ~result ^ XELIS_SCATTER_CONST);
+
+            __builtin_prefetch(&mem_buffer_a[idx_a_write], 1, 0);
+            __builtin_prefetch(&mem_buffer_b[idx_b_write], 1, 0);
+
+            uint64_t mem_a_tmp = mem_buffer_a[idx_a_write];
+            mem_buffer_a[idx_a_write] = t;
+            mem_buffer_b[idx_b_write] ^= mem_a_tmp ^ ROTR(t, i + j);
+        }
+
+        addr_a = addr_a_next;
+        addr_b = isqrt(result) * (r + 1) * isqrt(addr_a);
+    }
+}
+
+static void stage_3_optimized_v2(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
+{
+    // ARM doesn't have beneficial NT store equivalent
+    stage_3_optimized_v1(scratch_pad, worker);
+}
+
+#endif
+
+// ============================================================================
+// VARIANT SELECTOR AND BENCHMARK
+// ============================================================================
+
+void xelis_hash_v3_variant(byte *input, workerData_xelis_v3 &worker, 
+                           byte *hashResult, Stage3Variant variant)
+{
+    stage_1(input, worker.scratchPad, 112);
+    
+    switch (variant) {
+        case Stage3Variant::ORIGINAL:
+            stage_3(worker.scratchPad, worker);
+            break;
+        case Stage3Variant::OPTIMIZED_V1:
+            stage_3_optimized_v1(worker.scratchPad, worker);
+            break;
+        case Stage3Variant::OPTIMIZED_V2:
+            stage_3_optimized_v2(worker.scratchPad, worker);
+            break;
+    }
+    
+    blake3((uint8_t *)worker.scratchPad, XELIS_OUTPUT_SIZE_V3, hashResult);
+}
+
+void xelis_benchmark_stage3_comparison()
+{
+    constexpr uint32_t WARMUP_ITERATIONS = 100;
+    constexpr uint32_t BENCHMARK_ITERATIONS = 5000;
+    
+    byte input[112] = {0};
+    workerData_xelis_v3 worker;
+    byte hash_result[XELIS_HASH_SIZE] = {0};
+    
+    // Fill with semi-random data for realistic test
+    for (int i = 0; i < 112; i++) {
+        input[i] = (i * 17 + 31) & 0xFF;
+    }
+    
+    std::cout << "\n=== Stage 3 A/B Benchmark ===" << std::endl;
+    std::cout << "Buffer size: " << (XELIS_MEMORY_SIZE_V3 * 8 / 1024) << " KB" << std::endl;
+    std::cout << "Iterations: " << BENCHMARK_ITERATIONS << std::endl;
+    std::cout << std::endl;
+    
+    // Store results to verify correctness
+    byte hash_original[XELIS_HASH_SIZE];
+    byte hash_v1[XELIS_HASH_SIZE];
+    byte hash_v2[XELIS_HASH_SIZE];
+    
+    // === WARMUP ===
+    for (uint32_t i = 0; i < WARMUP_ITERATIONS; ++i) {
+        xelis_hash_v3_variant(input, worker, hash_result, Stage3Variant::ORIGINAL);
+    }
+    
+    // === BENCHMARK ORIGINAL ===
+    auto start_original = std::chrono::steady_clock::now();
+    for (uint32_t i = 0; i < BENCHMARK_ITERATIONS; ++i) {
+        xelis_hash_v3_variant(input, worker, hash_result, Stage3Variant::ORIGINAL);
+    }
+    auto end_original = std::chrono::steady_clock::now();
+    memcpy(hash_original, hash_result, XELIS_HASH_SIZE);
+    
+    std::chrono::duration<double, std::milli> elapsed_original = end_original - start_original;
+    double hs_original = (BENCHMARK_ITERATIONS * 1000.0) / elapsed_original.count();
+    double ms_original = elapsed_original.count() / BENCHMARK_ITERATIONS;
+    
+    // === WARMUP V1 ===
+    for (uint32_t i = 0; i < WARMUP_ITERATIONS; ++i) {
+        xelis_hash_v3_variant(input, worker, hash_result, Stage3Variant::OPTIMIZED_V1);
+    }
+    
+    // === BENCHMARK OPTIMIZED V1 ===
+    auto start_v1 = std::chrono::steady_clock::now();
+    for (uint32_t i = 0; i < BENCHMARK_ITERATIONS; ++i) {
+        xelis_hash_v3_variant(input, worker, hash_result, Stage3Variant::OPTIMIZED_V1);
+    }
+    auto end_v1 = std::chrono::steady_clock::now();
+    memcpy(hash_v1, hash_result, XELIS_HASH_SIZE);
+    
+    std::chrono::duration<double, std::milli> elapsed_v1 = end_v1 - start_v1;
+    double hs_v1 = (BENCHMARK_ITERATIONS * 1000.0) / elapsed_v1.count();
+    double ms_v1 = elapsed_v1.count() / BENCHMARK_ITERATIONS;
+    
+    // === WARMUP V2 ===
+    for (uint32_t i = 0; i < WARMUP_ITERATIONS; ++i) {
+        xelis_hash_v3_variant(input, worker, hash_result, Stage3Variant::OPTIMIZED_V2);
+    }
+    
+    // === BENCHMARK OPTIMIZED V2 ===
+    auto start_v2 = std::chrono::steady_clock::now();
+    for (uint32_t i = 0; i < BENCHMARK_ITERATIONS; ++i) {
+        xelis_hash_v3_variant(input, worker, hash_result, Stage3Variant::OPTIMIZED_V2);
+    }
+    auto end_v2 = std::chrono::steady_clock::now();
+    memcpy(hash_v2, hash_result, XELIS_HASH_SIZE);
+    
+    std::chrono::duration<double, std::milli> elapsed_v2 = end_v2 - start_v2;
+    double hs_v2 = (BENCHMARK_ITERATIONS * 1000.0) / elapsed_v2.count();
+    double ms_v2 = elapsed_v2.count() / BENCHMARK_ITERATIONS;
+    
+    // === VERIFY CORRECTNESS ===
+    bool v1_matches = (memcmp(hash_original, hash_v1, XELIS_HASH_SIZE) == 0);
+    bool v2_matches = (memcmp(hash_original, hash_v2, XELIS_HASH_SIZE) == 0);
+    
+    // === RESULTS ===
+    std::cout << std::fixed << std::setprecision(2);
+    
+    std::cout << "┌─────────────────┬────────────┬────────────┬──────────┬──────────┐" << std::endl;
+    std::cout << "│ Variant         │    H/s     │   ms/hash  │  vs Orig │ Correct  │" << std::endl;
+    std::cout << "├─────────────────┼────────────┼────────────┼──────────┼──────────┤" << std::endl;
+    
+    std::cout << "│ ORIGINAL        │ " << std::setw(10) << hs_original 
+              << " │ " << std::setw(10) << ms_original 
+              << " │   -----  │    ✓     │" << std::endl;
+    
+    double speedup_v1 = ((hs_v1 / hs_original) - 1.0) * 100.0;
+    std::cout << "│ OPTIMIZED_V1    │ " << std::setw(10) << hs_v1 
+              << " │ " << std::setw(10) << ms_v1 
+              << " │ " << std::setw(+6) << (speedup_v1 >= 0 ? "+" : "") << speedup_v1 << "% │    " 
+              << (v1_matches ? "✓" : "✗") << "     │" << std::endl;
+    
+    double speedup_v2 = ((hs_v2 / hs_original) - 1.0) * 100.0;
+    std::cout << "│ OPTIMIZED_V2    │ " << std::setw(10) << hs_v2 
+              << " │ " << std::setw(10) << ms_v2 
+              << " │ " << std::setw(+6) << (speedup_v2 >= 0 ? "+" : "") << speedup_v2 << "% │    " 
+              << (v2_matches ? "✓" : "✗") << "     │" << std::endl;
+    
+    std::cout << "└─────────────────┴────────────┴────────────┴──────────┴──────────┘" << std::endl;
+    
+    // Hash output for verification
+    std::cout << "\nHash (ORIGINAL):     ";
+    for (int i = 0; i < 32; i++) printf("%02x", hash_original[i]);
+    std::cout << std::endl;
+    
+    if (!v1_matches) {
+        std::cout << "Hash (OPTIMIZED_V1): ";
+        for (int i = 0; i < 32; i++) printf("%02x", hash_v1[i]);
+        std::cout << " <-- MISMATCH!" << std::endl;
+    }
+    
+    if (!v2_matches) {
+        std::cout << "Hash (OPTIMIZED_V2): ";
+        for (int i = 0; i < 32; i++) printf("%02x", hash_v2[i]);
+        std::cout << " <-- MISMATCH!" << std::endl;
+    }
+    
+    std::cout << std::endl;
+    fflush(stdout);
+}
+
 
 namespace xelis_tests_v3
 {
@@ -1387,33 +1883,37 @@ namespace xelis_tests_v3
 
 int xelis_runTests_v3()
 {
-  std::cout << "\n=== Running Xelis Hash v3 Tests ===" << std::endl;
-  fflush(stdout);
-
-  bool all_tests_passed = true;
-
-  // Core hash tests
-  all_tests_passed &= xelis_tests_v3::test_zero_hash();
-  all_tests_passed &= xelis_tests_v3::test_verify_output();
-  all_tests_passed &= xelis_tests_v3::test_reused_scratchpad();
-
-  // Component tests
-  all_tests_passed &= xelis_tests_v3::test_map_index();
-  all_tests_passed &= xelis_tests_v3::test_pick_half();
-  all_tests_passed &= xelis_tests_v3::test_isqrt_correctness();
-  all_tests_passed &= xelis_tests_v3::test_modular_power();
-  all_tests_passed &= xelis_tests_v3::test_stage3_single_iteration();
-
-  if (all_tests_passed)
-  {
-    std::cout << "\nXELIS-HASH-V3: All tests passed! ✓" << std::endl;
+    std::cout << "\n=== Running Xelis Hash v3 Tests ===" << std::endl;
     fflush(stdout);
-    return 0;
-  }
-  else
-  {
-    std::cout << "\nXELIS-HASH-V3: Some tests failed! ✗" << std::endl;
-    fflush(stdout);
-    return 1;
-  }
+
+    bool all_tests_passed = true;
+
+    // Core hash tests
+    all_tests_passed &= xelis_tests_v3::test_zero_hash();
+    all_tests_passed &= xelis_tests_v3::test_verify_output();
+    all_tests_passed &= xelis_tests_v3::test_reused_scratchpad();
+
+    // Component tests
+    all_tests_passed &= xelis_tests_v3::test_map_index();
+    all_tests_passed &= xelis_tests_v3::test_pick_half();
+    all_tests_passed &= xelis_tests_v3::test_isqrt_correctness();
+    all_tests_passed &= xelis_tests_v3::test_modular_power();
+    all_tests_passed &= xelis_tests_v3::test_stage3_single_iteration();
+
+    if (all_tests_passed)
+    {
+        std::cout << "\nXELIS-HASH-V3: All tests passed! ✓" << std::endl;
+        
+        // Run A/B benchmark comparison
+        xelis_benchmark_stage3_comparison();
+        
+        fflush(stdout);
+        return 0;
+    }
+    else
+    {
+        std::cout << "\nXELIS-HASH-V3: Some tests failed! ✗" << std::endl;
+        fflush(stdout);
+        return 1;
+    }
 }

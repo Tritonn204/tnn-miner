@@ -2,6 +2,7 @@
 // AES Tables
 // ============================================================================
 
+// Constant memory for default path
 __constant__ uint8_t AES_SBOX[256] = {
     0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76,
     0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0, 0xad, 0xd4, 0xa2, 0xaf, 0x9c, 0xa4, 0x72, 0xc0,
@@ -56,72 +57,6 @@ __constant__ uint8_t GF_MUL3[256] = {
     0x3b, 0x38, 0x3d, 0x3e, 0x37, 0x34, 0x31, 0x32, 0x23, 0x20, 0x25, 0x26, 0x2f, 0x2c, 0x29, 0x2a,
     0x0b, 0x08, 0x0d, 0x0e, 0x07, 0x04, 0x01, 0x02, 0x13, 0x10, 0x15, 0x16, 0x1f, 0x1c, 0x19, 0x1a};
 
-    // ============================================================================
-// AES Round
-// ============================================================================
-
-__device__ void aes_round(uint8_t *block, const uint8_t *key)
-{
-  uint8_t tmp[16];
-
-#pragma unroll
-  for (int i = 0; i < 16; i++)
-  {
-    tmp[i] = AES_SBOX[block[i]];
-  }
-
-  uint8_t shifted[16];
-  shifted[0] = tmp[0];
-  shifted[1] = tmp[5];
-  shifted[2] = tmp[10];
-  shifted[3] = tmp[15];
-  shifted[4] = tmp[4];
-  shifted[5] = tmp[9];
-  shifted[6] = tmp[14];
-  shifted[7] = tmp[3];
-  shifted[8] = tmp[8];
-  shifted[9] = tmp[13];
-  shifted[10] = tmp[2];
-  shifted[11] = tmp[7];
-  shifted[12] = tmp[12];
-  shifted[13] = tmp[1];
-  shifted[14] = tmp[6];
-  shifted[15] = tmp[11];
-
-#pragma unroll
-  for (int col = 0; col < 4; col++)
-  {
-    int i = col * 4;
-    uint8_t a0 = shifted[i], a1 = shifted[i + 1], a2 = shifted[i + 2], a3 = shifted[i + 3];
-    block[i] = GF_MUL2[a0] ^ GF_MUL3[a1] ^ a2 ^ a3 ^ key[i];
-    block[i + 1] = a0 ^ GF_MUL2[a1] ^ GF_MUL3[a2] ^ a3 ^ key[i + 1];
-    block[i + 2] = a0 ^ a1 ^ GF_MUL2[a2] ^ GF_MUL3[a3] ^ key[i + 2];
-    block[i + 3] = GF_MUL3[a0] ^ a1 ^ a2 ^ GF_MUL2[a3] ^ key[i + 3];
-  }
-}
-
-__device__ __forceinline__ void aes_round_u64(uint64_t *lo, uint64_t *hi, const uint8_t *key)
-{
-  uint8_t block[16];
-
-#pragma unroll
-  for (int i = 0; i < 8; i++)
-  {
-    block[i] = (*lo >> (i * 8)) & 0xFF;
-    block[i + 8] = (*hi >> (i * 8)) & 0xFF;
-  }
-
-  aes_round(block, key);
-
-  *lo = 0;
-  *hi = 0;
-#pragma unroll
-  for (int i = 0; i < 8; i++)
-  {
-    *lo |= ((uint64_t)block[i]) << (i * 8);
-    *hi |= ((uint64_t)block[i + 8]) << (i * 8);
-  }
-}
 // ============================================================================
 // Galois Field Multiplication (computed on-demand)
 // ============================================================================
@@ -190,6 +125,95 @@ __device__ __forceinline__ uint8_t aes_sbox_computed(uint8_t x) {
                           0x63);
     return s;
 }
+
+// ============================================================================
+// AES Round (using constant memory SBOX - legacy version)
+// ============================================================================
+
+__device__ void aes_round(uint8_t *block, const uint8_t *key)
+{
+  uint8_t tmp[16];
+
+#pragma unroll
+  for (int i = 0; i < 16; i++)
+  {
+    tmp[i] = AES_SBOX[block[i]];
+  }
+
+  uint8_t shifted[16];
+  shifted[0] = tmp[0];
+  shifted[1] = tmp[5];
+  shifted[2] = tmp[10];
+  shifted[3] = tmp[15];
+  shifted[4] = tmp[4];
+  shifted[5] = tmp[9];
+  shifted[6] = tmp[14];
+  shifted[7] = tmp[3];
+  shifted[8] = tmp[8];
+  shifted[9] = tmp[13];
+  shifted[10] = tmp[2];
+  shifted[11] = tmp[7];
+  shifted[12] = tmp[12];
+  shifted[13] = tmp[1];
+  shifted[14] = tmp[6];
+  shifted[15] = tmp[11];
+
+#pragma unroll
+  for (int col = 0; col < 4; col++)
+  {
+    int i = col * 4;
+    uint8_t a0 = shifted[i], a1 = shifted[i + 1], a2 = shifted[i + 2], a3 = shifted[i + 3];
+    block[i] = GF_MUL2[a0] ^ GF_MUL3[a1] ^ a2 ^ a3 ^ key[i];
+    block[i + 1] = a0 ^ GF_MUL2[a1] ^ GF_MUL3[a2] ^ a3 ^ key[i + 1];
+    block[i + 2] = a0 ^ a1 ^ GF_MUL2[a2] ^ GF_MUL3[a3] ^ key[i + 2];
+    block[i + 3] = GF_MUL3[a0] ^ a1 ^ a2 ^ GF_MUL2[a3] ^ key[i + 3];
+  }
+}
+
+// ============================================================================
+// AES Round (optimized - shared memory SBOX, computed G tables)
+// ============================================================================
+
+__device__ void aes_round_shared(uint8_t *block, const uint8_t *key, const uint8_t *shared_sbox)
+{
+  uint8_t tmp[16];
+
+#pragma unroll
+  for (int i = 0; i < 16; i++)
+  {
+    tmp[i] = shared_sbox[block[i]];
+  }
+
+  uint8_t shifted[16];
+  shifted[0] = tmp[0];
+  shifted[1] = tmp[5];
+  shifted[2] = tmp[10];
+  shifted[3] = tmp[15];
+  shifted[4] = tmp[4];
+  shifted[5] = tmp[9];
+  shifted[6] = tmp[14];
+  shifted[7] = tmp[3];
+  shifted[8] = tmp[8];
+  shifted[9] = tmp[13];
+  shifted[10] = tmp[2];
+  shifted[11] = tmp[7];
+  shifted[12] = tmp[12];
+  shifted[13] = tmp[1];
+  shifted[14] = tmp[6];
+  shifted[15] = tmp[11];
+
+#pragma unroll
+  for (int col = 0; col < 4; col++)
+  {
+    int i = col * 4;
+    uint8_t a0 = shifted[i], a1 = shifted[i + 1], a2 = shifted[i + 2], a3 = shifted[i + 3];
+    block[i] = gf_mul2(a0) ^ gf_mul3(a1) ^ a2 ^ a3 ^ key[i];
+    block[i + 1] = a0 ^ gf_mul2(a1) ^ gf_mul3(a2) ^ a3 ^ key[i + 1];
+    block[i + 2] = a0 ^ a1 ^ gf_mul2(a2) ^ gf_mul3(a3) ^ key[i + 2];
+    block[i + 3] = gf_mul3(a0) ^ a1 ^ a2 ^ gf_mul2(a3) ^ key[i + 3];
+  }
+}
+
 __device__ __forceinline__ void aes_round_computed(uint8_t *block, const uint8_t *key)
 {
     uint8_t tmp[16];
@@ -230,6 +254,53 @@ __device__ __forceinline__ void aes_round_computed(uint8_t *block, const uint8_t
         block[i + 3] = gf_mul3(a0) ^ a1      ^ a2        ^ gf_mul2(a3)   ^ key[i + 3];
     }
 }
+
+__device__ __forceinline__ void aes_round_u64(uint64_t *lo, uint64_t *hi, const uint8_t *key)
+{
+  uint8_t block[16];
+
+#pragma unroll
+  for (int i = 0; i < 8; i++)
+  {
+    block[i] = (*lo >> (i * 8)) & 0xFF;
+    block[i + 8] = (*hi >> (i * 8)) & 0xFF;
+  }
+
+  aes_round(block, key);
+
+  *lo = 0;
+  *hi = 0;
+#pragma unroll
+  for (int i = 0; i < 8; i++)
+  {
+    *lo |= ((uint64_t)block[i]) << (i * 8);
+    *hi |= ((uint64_t)block[i + 8]) << (i * 8);
+  }
+}
+
+__device__ __forceinline__ void aes_round_u64_shared(uint64_t *lo, uint64_t *hi, const uint8_t *key, const uint8_t *shared_sbox)
+{
+  uint8_t block[16];
+
+#pragma unroll
+  for (int i = 0; i < 8; i++)
+  {
+    block[i] = (*lo >> (i * 8)) & 0xFF;
+    block[i + 8] = (*hi >> (i * 8)) & 0xFF;
+  }
+
+  aes_round_shared(block, key, shared_sbox);
+
+  *lo = 0;
+  *hi = 0;
+#pragma unroll
+  for (int i = 0; i < 8; i++)
+  {
+    *lo |= ((uint64_t)block[i]) << (i * 8);
+    *hi |= ((uint64_t)block[i + 8]) << (i * 8);
+  }
+}
+
 __device__ __forceinline__ void aes_round_u64_computed(uint64_t *lo, uint64_t *hi, const uint8_t *key)
 {
     uint8_t block[16];
@@ -249,4 +320,71 @@ __device__ __forceinline__ void aes_round_u64_computed(uint64_t *lo, uint64_t *h
         *lo |= ((uint64_t)block[i])     << (i * 8);
         *hi |= ((uint64_t)block[i + 8]) << (i * 8);
     }
+}
+
+// ============================================================================
+// AES Round (all tables in shared memory - SBOX + GF_MUL2 + GF_MUL3)
+// ============================================================================
+
+__device__ void aes_round_shared_full(uint8_t *block, const uint8_t *key, const uint8_t *shared_sbox, const uint8_t *shared_gf2, const uint8_t *shared_gf3)
+{
+  uint8_t tmp[16];
+
+#pragma unroll
+  for (int i = 0; i < 16; i++)
+  {
+    tmp[i] = shared_sbox[block[i]];
+  }
+
+  uint8_t shifted[16];
+  shifted[0] = tmp[0];
+  shifted[1] = tmp[5];
+  shifted[2] = tmp[10];
+  shifted[3] = tmp[15];
+  shifted[4] = tmp[4];
+  shifted[5] = tmp[9];
+  shifted[6] = tmp[14];
+  shifted[7] = tmp[3];
+  shifted[8] = tmp[8];
+  shifted[9] = tmp[13];
+  shifted[10] = tmp[2];
+  shifted[11] = tmp[7];
+  shifted[12] = tmp[12];
+  shifted[13] = tmp[1];
+  shifted[14] = tmp[6];
+  shifted[15] = tmp[11];
+
+#pragma unroll
+  for (int col = 0; col < 4; col++)
+  {
+    int i = col * 4;
+    uint8_t a0 = shifted[i], a1 = shifted[i + 1], a2 = shifted[i + 2], a3 = shifted[i + 3];
+    block[i] = shared_gf2[a0] ^ shared_gf3[a1] ^ a2 ^ a3 ^ key[i];
+    block[i + 1] = a0 ^ shared_gf2[a1] ^ shared_gf3[a2] ^ a3 ^ key[i + 1];
+    block[i + 2] = a0 ^ a1 ^ shared_gf2[a2] ^ shared_gf3[a3] ^ key[i + 2];
+    block[i + 3] = shared_gf3[a0] ^ a1 ^ a2 ^ shared_gf2[a3] ^ key[i + 3];
+  }
+}
+
+__device__ __forceinline__ void aes_round_u64_shared_full(uint64_t *lo, uint64_t *hi, const uint8_t *key, const uint8_t *shared_sbox, const uint8_t *shared_gf2, const uint8_t *shared_gf3)
+{
+  uint8_t block[16];
+
+#pragma unroll
+  for (int i = 0; i < 8; i++)
+  {
+    block[i] = (*lo >> (i * 8)) & 0xFF;
+    block[i + 8] = (*hi >> (i * 8)) & 0xFF;
+  }
+
+  aes_round_shared_full(block, key, shared_sbox, shared_gf2, shared_gf3);
+
+  *lo = 0;
+  *hi = 0;
+#pragma unroll
+  for (int i = 0; i < 8; i++)
+  {
+    *lo |= ((uint64_t)block[i]) << (i * 8);
+    *hi |= ((uint64_t)block[i + 8]) << (i * 8);
+  }
 }

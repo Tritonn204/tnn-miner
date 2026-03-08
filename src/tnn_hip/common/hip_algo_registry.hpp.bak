@@ -106,27 +106,22 @@ inline bool xelis_v3_split_execute(
         ? "xelis_stage1_cooperative"
         : "xelis_stage1_kernel";
 
-    // Use noblake variants for separated Blake3 execution
     const char* s3_name = (mode == ExecMode::SplitCooperative)
-        ? "xelis_s3_efficient_noblake_kernel"
-        : "xelis_s3_fused_noblake_kernel";
-
-    const char* blake3_name = "xelis_blake3_batch";
+        ? "xelis_s3_efficient_kernel"
+        : "xelis_s3_fused_kernel";
 
     auto stage1_it = kernels.find(stage1_name);
     auto s3_it = kernels.find(s3_name);
-    auto blake3_it = kernels.find(blake3_name);
 
     // Fallback to monolithic if kernels not found
-    if (stage1_it == kernels.end() || s3_it == kernels.end() || blake3_it == kernels.end()) {
-        fprintf(stderr, "[XELIS] Split kernels not found (%s, %s, %s), falling back to monolithic\n",
-                stage1_name, s3_name, blake3_name);
+    if (stage1_it == kernels.end() || s3_it == kernels.end()) {
+        fprintf(stderr, "[XELIS] Split kernels not found (%s, %s), falling back to monolithic\n",
+                stage1_name, s3_name);
         return default_monolithic_execute(kernels, ctx);
     }
 
     hipFunction_t stage1_kernel = stage1_it->second;
     hipFunction_t s3_kernel = s3_it->second;
-    hipFunction_t blake3_kernel = blake3_it->second;
 
     // Stage 1 block size
     // Cooperative Stage 1 is hard-capped at 32 threads
@@ -165,15 +160,16 @@ inline bool xelis_v3_split_execute(
         }
     }
 
-    // Launch Stage 3 (no Blake3 - separated for reduced register pressure)
+    // Launch Stage 3 (efficient or standard)
     {
         void* args[] = {
             (void*)&ctx.d_scratch,
+            (void*)&ctx.d_outputs,
+            (void*)&ctx.nonce_start,
             (void*)&ctx.batch_size,
             (void*)&scratch_offset,
             (void*)&ctx.d_difficulty_target,
-            (void*)&ctx.d_solutions,
-            (void*)&ctx.nonce_start
+            (void*)&ctx.d_solutions
         };
 
         hipError_t err = hipModuleLaunchKernel(
@@ -184,38 +180,8 @@ inline bool xelis_v3_split_execute(
             args, nullptr
         );
         if (err != hipSuccess) {
-            fprintf(stderr, "[XELIS SPLIT] Stage3 noblake (%s) launch failed: %s (blocks=%d, threads=%d)\n",
+            fprintf(stderr, "[XELIS SPLIT] Stage3 (%s) launch failed: %s (blocks=%d, threads=%d)\n",
                     s3_name, hipGetErrorString(err), ctx.num_blocks, ctx.block_size);
-            return false;
-        }
-    }
-
-    // Launch Blake3 (separate kernel for reduced register pressure)
-    // Blake3 is lightweight - use higher thread count (256 threads optimal)
-    {
-        int blake3_block_size = 256;  // Optimal for low register pressure Blake3
-        int blake3_num_blocks = (ctx.batch_size + blake3_block_size - 1) / blake3_block_size;
-        
-        void* args[] = {
-            (void*)&ctx.d_scratch,
-            (void*)&ctx.d_outputs,
-            (void*)&ctx.batch_size,
-            (void*)&scratch_offset,
-            (void*)&ctx.d_difficulty_target,
-            (void*)&ctx.d_solutions,
-            (void*)&ctx.nonce_start
-        };
-
-        hipError_t err = hipModuleLaunchKernel(
-            blake3_kernel,
-            blake3_num_blocks, 1, 1,
-            blake3_block_size, 1, 1,
-            0, ctx.stream,
-            args, nullptr
-        );
-        if (err != hipSuccess) {
-            fprintf(stderr, "[XELIS SPLIT] Blake3 launch failed: %s (blocks=%d, threads=%d)\n",
-                    hipGetErrorString(err), blake3_num_blocks, blake3_block_size);
             return false;
         }
     }
@@ -237,14 +203,11 @@ inline AlgoConfig XELIS_V3_CONFIG = {
 
     // Multiple kernels for split execution
     .kernel_names = {
-        "xelis_hash_v3_kernel",            // Primary (for tuning, fallback monolithic)
-        "xelis_stage1_kernel",              // Stage 1 (standard)
-        "xelis_s3_fused_kernel",            // Fused Stage 3 + Finalize (standard - legacy)
-        "xelis_stage1_cooperative",         // Stage 1 Cooperative (RDNA+/Ampere+)
-        "xelis_s3_efficient_kernel",        // Stage 3 Efficient (RDNA+/Ampere+ - legacy)
-        "xelis_s3_fused_noblake_kernel",    // Stage 3 Fused without Blake3 (standard split)
-        "xelis_s3_efficient_noblake_kernel", // Stage 3 Efficient without Blake3 (RDNA+/Ampere+ split)
-        "xelis_blake3_batch"                // Separate Blake3 kernel (split execution)
+        "xelis_hash_v3_kernel",        // Primary (for tuning, fallback monolithic)
+        "xelis_stage1_kernel",          // Stage 1 (standard)
+        "xelis_s3_fused_kernel",        // Fused Stage 3 + Finalize (standard)
+        "xelis_stage1_cooperative",     // Stage 1 Cooperative (RDNA+/Ampere+)
+        "xelis_s3_efficient_kernel"     // Stage 3 Efficient (RDNA+/Ampere+)
     },
 
     .kernel_name = "",  // Empty - using kernel_names instead
@@ -260,7 +223,7 @@ inline AlgoConfig XELIS_V3_CONFIG = {
     .template_size = 112,
     .hash_size = 32,
     .nonce_size = 8,
-    .scratch_per_hash = (531 * 128 + 1) * sizeof(uint64_t),  // +1 for nonce storage
+    .scratch_per_hash = 531 * 128 * sizeof(uint64_t),
     .preferred_block_size = 64,
     .algo_id = ALGO_XELISV3,
     .calc_shared_mem = xelis_v3_shared_mem,
@@ -269,15 +232,15 @@ inline AlgoConfig XELIS_V3_CONFIG = {
     .enable_reg_tuning = true,
 
     .amd_blocks = {32, 1024, 32},
-    .nvidia_blocks = {32, 1024, 32},
-    .target_batch_time_ms = 1250.0,
+    .nvidia_blocks = {32, 768, 32},
+    .target_batch_time_ms = 2500.0,
     .max_batch_time_ms = 3000.0,
     .min_batch_time_ms = 100.0,
     .enable_autotune = true,
     .autotune_warmup = 1,
-    .autotune_iterations = 1,
+    .autotune_iterations = 2,
     .memory_reserve_mb = 128.0,
-    .memory_usage_factor = 1.0,
+    .memory_usage_factor = 0.9,
     
     // Use split kernel execution strategy
     .execute_fn = xelis_v3_split_execute,

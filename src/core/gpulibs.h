@@ -14,7 +14,7 @@
 inline int GPUTest() {
   #ifdef TNN_HIP
     // Run HIPRTC isolation test FIRST, before any other GPU work
-    test_hiprtc_isolation();
+    // test_hiprtc_isolation();
 
     // if (is_hip_supported()) {
       // helloTest();

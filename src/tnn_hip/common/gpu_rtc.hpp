@@ -26,6 +26,11 @@ public:
         std::string kernel_name;
     };
 
+    struct CompiledCode {
+        std::vector<char> code;
+        std::string kernel_name;
+    };
+
     static RTCCompiler& instance() {
         static RTCCompiler inst;
         return inst;
@@ -80,31 +85,50 @@ public:
         printf("[TRACE]   source size: %zu\n", source.size());
         fflush(stdout);
 
-        // Build normalized options exactly as compile_internal will.
+        // Build normalized options
         const auto defaults = build_default_options();
         const auto norm = normalize_options(defaults, extra_options);
 
-        const std::string cache_key =
-            make_cache_key(source_name, kernel_name, norm.sorted);
+        // Module cache key (includes device-specific options like -DDEVICE_ID)
+        const std::string module_key = make_cache_key(source_name, kernel_name, norm.sorted);
 
-        printf("[TRACE] RTCCompiler::compile_from_source: Checking cache, key='%s'\n",
-               cache_key.c_str());
+        // Code cache key (excludes device-specific options)
+        auto code_options = filter_device_specific_options(norm.sorted);
+        const std::string code_key = make_cache_key(source_name, kernel_name, code_options);
+
+        printf("[TRACE] RTCCompiler::compile_from_source: Checking caches\n");
+        printf("[TRACE]   module_key='%s'\n", module_key.c_str());
+        printf("[TRACE]   code_key='%s'\n", code_key.c_str());
         fflush(stdout);
 
         {
             std::lock_guard<std::mutex> lock(cache_mutex_);
-            auto it = cache_.find(cache_key);
-            if (it != cache_.end()) {
-                printf("[TRACE] RTCCompiler::compile_from_source: Found in cache\n");
+
+            // First check module cache (fast path for same device)
+            auto module_it = module_cache_.find(module_key);
+            if (module_it != module_cache_.end()) {
+                printf("[TRACE] RTCCompiler::compile_from_source: Found in module cache\n");
                 fflush(stdout);
-                return it->second;
+                return module_it->second;
+            }
+
+            // Check code cache (allows sharing compiled code across identical GPUs)
+            auto code_it = code_cache_.find(code_key);
+            if (code_it != code_cache_.end()) {
+                printf("[TRACE] RTCCompiler::compile_from_source: Found in code cache, loading module\n");
+                fflush(stdout);
+
+                // Load module from cached code
+                CompiledKernel kernel = load_module_from_code(code_it->second);
+                module_cache_[module_key] = kernel;
+                return kernel;
             }
         }
 
         printf("[TRACE] RTCCompiler::compile_from_source: Not in cache, calling compile_internal\n");
         fflush(stdout);
 
-        return compile_internal(source, source_name, kernel_name, extra_options, cache_key);
+        return compile_internal(source, source_name, kernel_name, extra_options, module_key, code_key);
     }
 
     // Compile from file path (fallback)
@@ -113,23 +137,37 @@ public:
         const std::string& kernel_name,
         const std::vector<std::string>& extra_options = {}
     ) {
-        // Build normalized options exactly as compile_internal will.
+        // Build normalized options
         const auto defaults = build_default_options();
         const auto norm = normalize_options(defaults, extra_options);
 
-        const std::string cache_key =
-            make_cache_key(source_path, kernel_name, norm.sorted);
+        // Module cache key (includes device-specific options)
+        const std::string module_key = make_cache_key(source_path, kernel_name, norm.sorted);
+
+        // Code cache key (excludes device-specific options)
+        auto code_options = filter_device_specific_options(norm.sorted);
+        const std::string code_key = make_cache_key(source_path, kernel_name, code_options);
 
         {
             std::lock_guard<std::mutex> lock(cache_mutex_);
-            auto it = cache_.find(cache_key);
-            if (it != cache_.end()) {
-                return it->second;
+
+            // Check module cache first
+            auto module_it = module_cache_.find(module_key);
+            if (module_it != module_cache_.end()) {
+                return module_it->second;
+            }
+
+            // Check code cache
+            auto code_it = code_cache_.find(code_key);
+            if (code_it != code_cache_.end()) {
+                CompiledKernel kernel = load_module_from_code(code_it->second);
+                module_cache_[module_key] = kernel;
+                return kernel;
             }
         }
 
         std::string source = load_text_file(source_path);
-        return compile_internal(source, source_path, kernel_name, extra_options, cache_key);
+        return compile_internal(source, source_path, kernel_name, extra_options, module_key, code_key);
     }
 
     // Manual override; whatever you set here is passed directly as
@@ -140,12 +178,13 @@ public:
 
     void clear_cache() {
         std::lock_guard<std::mutex> lock(cache_mutex_);
-        for (auto& kv : cache_) {
+        for (auto& kv : module_cache_) {
             if (kv.second.module) {
                 hipModuleUnload(kv.second.module);
             }
         }
-        cache_.clear();
+        module_cache_.clear();
+        code_cache_.clear();
     }
 
 private:
@@ -356,6 +395,48 @@ private:
         return key;
     }
 
+    // Filter out device-specific options for code cache (allows sharing across identical GPUs)
+    static std::vector<std::string> filter_device_specific_options(
+        const std::vector<std::string>& options
+    ) {
+        std::vector<std::string> filtered;
+        filtered.reserve(options.size());
+        for (const auto& opt : options) {
+            // Skip device-specific options that don't affect compilation output
+            if (starts_with(opt, "-DDEVICE_ID=")) continue;
+            filtered.push_back(opt);
+        }
+        return filtered;
+    }
+
+    // Load module from cached compiled code
+    CompiledKernel load_module_from_code(const CompiledCode& cached_code) {
+        printf("[TRACE] RTCCompiler::load_module_from_code: Loading module from %zu bytes\n",
+               cached_code.code.size());
+        fflush(stdout);
+
+        CompiledKernel kernel;
+        kernel.kernel_name = cached_code.kernel_name;
+
+        hipError_t err = hipModuleLoadData(&kernel.module, cached_code.code.data());
+        if (err != hipSuccess) {
+            printf("[ERROR] hipModuleLoadData failed: %d (%s)\n", err, hipGetErrorString(err));
+            fflush(stdout);
+            throw std::runtime_error("hipModuleLoadData failed: " + std::string(hipGetErrorString(err)));
+        }
+
+        err = hipModuleGetFunction(&kernel.function, kernel.module, kernel.kernel_name.c_str());
+        if (err != hipSuccess) {
+            hipModuleUnload(kernel.module);
+            throw std::runtime_error("Failed to get kernel function: " + kernel.kernel_name);
+        }
+
+        printf("[TRACE] RTCCompiler::load_module_from_code: Module loaded successfully\n");
+        fflush(stdout);
+
+        return kernel;
+    }
+
     // ----------------------------
     // Actual compile
     // ----------------------------
@@ -365,14 +446,16 @@ private:
         const std::string& source_name,
         const std::string& kernel_name,
         const std::vector<std::string>& extra_options,
-        const std::string& cache_key
+        const std::string& module_key,
+        const std::string& code_key
     ) {
         printf("[TRACE] RTCCompiler::compile_internal: Entry\n");
         printf("[TRACE]   source_name: %s\n", source_name.c_str());
         printf("[TRACE]   kernel_name: %s\n", kernel_name.c_str());
         printf("[TRACE]   source size: %zu\n", source.size());
         printf("[TRACE]   headers: %zu\n", headers_.size());
-        printf("[TRACE]   cache_key: %s\n", cache_key.c_str());
+        printf("[TRACE]   code_key: %s\n", code_key.c_str());
+        printf("[TRACE]   module_key: %s\n", module_key.c_str());
         fflush(stdout);
 
         // Build header arrays for hiprtcCreateProgram
@@ -534,7 +617,20 @@ private:
 
         {
             std::lock_guard<std::mutex> lock(cache_mutex_);
-            cache_[cache_key] = kernel;
+
+            // Store compiled code in code cache (shared across identical GPUs)
+            CompiledCode cached_code;
+            cached_code.code = std::move(code);
+            cached_code.kernel_name = kernel_name;
+            code_cache_[code_key] = std::move(cached_code);
+
+            // Store loaded module in module cache (per-device)
+            module_cache_[module_key] = kernel;
+
+            printf("[TRACE] RTCCompiler::compile_internal: Cached code and module\n");
+            printf("[TRACE]   code_key='%s'\n", code_key.c_str());
+            printf("[TRACE]   module_key='%s'\n", module_key.c_str());
+            fflush(stdout);
         }
 
         return kernel;
@@ -545,7 +641,11 @@ private:
     std::string gpu_arch_;
 
     mutable std::mutex cache_mutex_;
-    std::unordered_map<std::string, CompiledKernel> cache_;
+    // Two-tier cache system:
+    // 1. code_cache_: Stores compiled PTX/binary (slow compilation, shared across identical GPUs)
+    // 2. module_cache_: Stores loaded hipModule_t (fast load, per-device context)
+    std::unordered_map<std::string, CompiledCode> code_cache_;
+    std::unordered_map<std::string, CompiledKernel> module_cache_;
 
     std::vector<Header> headers_;
 };

@@ -4,9 +4,7 @@
 #include <vector>
 #include <atomic>
 
-constexpr size_t XELIS_TEMPLATE_SIZE = 112;
-constexpr size_t XELIS_HASH_SIZE = 32;
-constexpr size_t XELIS_MEMORY_SIZE_V3 = 531 * 128;
+#include <crypto/xelis-hash/xelis-hash.hpp>
 
 namespace Xelis_HIP {
     constexpr int MAX_NONCES = 16;

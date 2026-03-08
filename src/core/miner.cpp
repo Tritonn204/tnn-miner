@@ -65,6 +65,7 @@
 #include <boost/json/src.hpp>
 #include <tnn_hip/common/gpu_rtc.hpp>
 #include <tnn_hip/common/gpu_algo.hpp>
+#include <tnn_hip/coins/xelis/test_xelis_hip.h>
 #endif
 
 #ifdef TNN_YESPOWER
@@ -701,6 +702,26 @@ int tnn_main(int argc, char** argv)
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
+    #endif
+  }
+
+  if (vm.count("hip-test-xelis"))
+  {
+    #if defined(TNN_HIP) && defined(TNN_XELISHASH)
+      int rc = test_xelis_hip();
+      return rc;
+    #elif !defined(TNN_HIP)
+      setcolor(RED);
+      printf("ERROR: --hip-test-xelis requires TNN_HIP to be enabled\n");
+      fflush(stdout);
+      setcolor(BRIGHT_WHITE);
+      return 1;
+    #else
+      setcolor(RED);
+      printf("%s", unsupported_xelishash);
+      fflush(stdout);
+      setcolor(BRIGHT_WHITE);
+      return 1;
     #endif
   }
 

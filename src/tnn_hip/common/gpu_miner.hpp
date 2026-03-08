@@ -4,6 +4,7 @@
 #include <atomic>
 #include <thread>
 #include <mutex>
+#include <random>
 
 class GPUMiner {
 public:
@@ -52,8 +53,21 @@ public:
             logged_template = true;
         }
     }
-    
-    void start(std::function<void(const uint8_t*, uint64_t)> on_solution) {
+
+    void set_job_id(int64_t job_id) {
+        current_job_id_.store(job_id, std::memory_order_release);
+    }
+
+    int64_t get_current_job_id() const {
+        return current_job_id_.load(std::memory_order_acquire);
+    }
+
+    // Get the current work template for this miner (for solution verification)
+    const uint8_t* get_current_work_template() const {
+        return algo_->get_current_work_template();
+    }
+
+    void start(std::function<void(const uint8_t*, uint64_t, const JobSnapshot&)> on_solution) {
         printf("[TRACE] Miner %d starting\n", device_id_);
         fflush(stdout);
         running_ = true;
@@ -86,7 +100,7 @@ public:
     int get_device_id() const { return device_id_; }
     
     void set_solution_callback(
-        std::function<void(const uint8_t*, uint64_t)> callback
+        std::function<void(const uint8_t*, uint64_t, const JobSnapshot&)> callback
     ) {
         on_solution_ = callback;
     }
@@ -94,81 +108,123 @@ public:
 private:
     std::timed_mutex send_mutex;
     void mine_loop() {
-        printf("[TRACE] mine_loop top of loop\n");
-        fflush(stdout);
+        // printf("[TRACE] mine_loop top of loop\n");
+        // fflush(stdout);
 
-        uint64_t nonce = 0;
+        // Nonce segmentation:
+        // - Bits 59-63 (top 5 bits): device ID (supports up to 32 GPUs)
+        // - Bits 48-58 (next 11 bits): random int (0-2047, randomized per mining session)
+        // - Bits 0-47 (bottom 48 bits): counter (incremented by batch_size each kernel launch)
+
+        std::random_device rd;
+        std::mt19937 rng(rd());
+        std::uniform_int_distribution<uint64_t> random_dist(0, 0x7FF);  // 11-bit random value (0-2047)
+
+        uint64_t device_id_bits = ((uint64_t)(device_id_ & 0x1F)) << 59;  // Top 5 bits
+        uint64_t random_bits = random_dist(rng) << 48;                     // Next 11 bits
+        uint64_t nonce = device_id_bits | random_bits;                     // Counter starts at 0
+
         const uint32_t batch_size = algo_->get_batch_size();
         const size_t hash_size = algo_->get_config().hash_size;
 
-        printf("[TRACE] mine_loop config read\n");
+        printf("[INFO] GPU %d: Nonce segmentation - device_id=%d in bits[59:63], random=%llu in bits[48:58], counter in bits[0:47]\n",
+               device_id_, device_id_, (random_bits >> 48));
+        printf("[INFO] GPU %d: device_id_=%d, device_id_bits=0x%016llx, random_bits=0x%016llx, nonce=0x%016llx\n",
+               device_id_, device_id_, (unsigned long long)device_id_bits, (unsigned long long)random_bits, (unsigned long long)nonce);
         fflush(stdout);
+
+        // printf("[TRACE] mine_loop config read\n");
+        // fflush(stdout);
 
         // Wait for initial work to be set
         while (running_ && !work_updated_.load(std::memory_order_acquire)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
 
-        printf("[TRACE] mine_loop work received\n");
-        fflush(stdout);
+        // printf("[TRACE] mine_loop work received\n");
+        // fflush(stdout);
 
         while (running_) {
             try {
-                printf("[TRACE] mine_loop running_ is true\n");
-                fflush(stdout);
+                // printf("[TRACE] mine_loop running_ is true\n");
+                // fflush(stdout);
 
                 work_updated_.store(false, std::memory_order_relaxed);
 
-                printf("[TRACE] GPU%d mine_batch START (nonce=%lu)\n", device_id_, nonce);
+                // Capture complete job state BEFORE mining exec (template, job_id, difficulty, algo)
+                // Everything is copied/captured atomically so it's immune to concurrent set_work() calls
+                const uint8_t* template_ptr = algo_->get_current_work_template();
+                JobSnapshot job_snapshot(
+                    template_ptr,
+                    algo_->get_config().template_size,
+                    current_job_id_.load(std::memory_order_acquire),
+                    current_difficulty_.load(std::memory_order_acquire),
+                    algo_->get_config().algo_id
+                );
+
+                printf("[DEBUG] GPU%d calling mine_batch: nonce=0x%016llx (dev=%llu, rand=%llu, ctr=%llu)\n",
+                       device_id_, (unsigned long long)nonce,
+                       (unsigned long long)((nonce >> 59) & 0x1F),
+                       (unsigned long long)((nonce >> 48) & 0x7FF),
+                       (unsigned long long)(nonce & 0xFFFFFFFFFFFFULL));
                 fflush(stdout);
                 auto result = algo_->mine_batch(nonce, batch_size);
-                printf("[TRACE] GPU%d mine_batch END (checked %u hashes, found %u valid)\n",
-                       device_id_, result.count, result.num_valid);
-                fflush(stdout);
+                // printf("[TRACE] GPU%d mine_batch END (checked %u hashes, found %u valid)\n",
+                //        device_id_, result.count, result.num_valid);
+                // fflush(stdout);
 
                 for (uint32_t i = 0; i < result.num_valid; i++) {
+                    // Check if new job arrived before processing this solution
+                    if (work_updated_.load(std::memory_order_acquire)) {
+                        printf("[INFO] GPU%d: New job arrived, stopping solution processing\n", device_id_);
+                        fflush(stdout);
+                        nonce = device_id_bits | random_bits;  // Reset counter to 0, preserve device ID and random
+                        break;  // Exit solution loop to get new work
+                    }
+
                     uint64_t winning_nonce = result.valid_nonces[i];
                     const uint8_t* hash = result.valid_hashes.data() + i * hash_size;
 
-                    printf("[TRACE] GPU%d SOLUTION FOUND (nonce=%lu), attempting callback with 50ms lock\n",
-                          device_id_, winning_nonce);
-                    fflush(stdout);
+                    // printf("[TRACE] GPU%d SOLUTION FOUND (nonce=%lu), calling solution callback\n",
+                    //       device_id_, winning_nonce);
+                    // fflush(stdout);
 
                     if (on_solution_) {
-                        // 50ms timed lock around the send / callback
-                        std::unique_lock<std::timed_mutex> lock(send_mutex, std::defer_lock);
-                        if (lock.try_lock_for(std::chrono::milliseconds(50))) {
-                            on_solution_(hash, winning_nonce);
-                            // lock released automatically when going out of scope
-                        } else {
-                            // Couldn’t get the lock in time - optional logging
-                            fprintf(stderr,
-                                    "[WARN] GPU%d: could not acquire send_mutex within 50ms, "
-                                    "skipping solution callback for nonce=%lu\n",
-                                    device_id_, winning_nonce);
+                        // Call solution callback with complete job snapshot captured before this batch
+                        // JobSnapshot contains copies of template, job_id, difficulty - all safe from concurrent updates
+                        on_solution_(hash, winning_nonce, job_snapshot);
+
+                        // Check again if job changed during submission
+                        if (work_updated_.load(std::memory_order_acquire)) {
+                            printf("[INFO] GPU%d: Job changed during submission, resetting for new work\n", device_id_);
+                            fflush(stdout);
+                            nonce = device_id_bits | random_bits;  // Reset counter to 0, preserve device ID and random
+                            break;  // Exit solution loop
                         }
-
-                        break; // FOR NOW, as you already had
+                    } else {
+                        // printf("[TRACE] GPU%d callback pointer was null\n", device_id_);
+                        // fflush(stdout);
                     }
-
-                    printf("[TRACE] GPU%d callback pointer was null\n", device_id_);
-                    fflush(stdout);
                 }
 
-                if (result.num_valid > 0) {
-                    printf("[TRACE] GPU%d batch had %u solution(s)\n", device_id_, result.num_valid);
-                    fflush(stdout);
-                }
+                // if (result.num_valid > 0) {
+                //     printf("[TRACE] GPU%d batch had %u solution(s)\n", device_id_, result.num_valid);
+                //     fflush(stdout);
+                // }
 
                 total_hashes_ += result.count;
-                nonce += batch_size;
+                // Increment nonce: add batch_size to counter (bottom 48 bits)
+                // Preserves device_id in bits 59-63 and random in bits 48-58
+                uint64_t counter_loc = nonce & 0xFFFFFFFFFFFFULL;  // Extract counter (bits 0-47)
+                counter_loc += batch_size;                          // Increment counter
+                nonce = (nonce & 0xFFFF000000000000ULL) | (counter_loc & 0xFFFFFFFFFFFFULL);  // Combine
 
                 HIP_counters[device_id_].fetch_add(result.count);
                 counter.fetch_add(result.count);
 
                 // Check if work was updated
                 if (work_updated_.load(std::memory_order_acquire)) {
-                    nonce = 0;  // Reset nonce for new work
+                    nonce = device_id_bits | random_bits;  // Reset counter to 0, preserve device ID and random
                 }
             } catch (const std::exception& e) {
                 fprintf(stderr, "GPU mining error on device %d: %s\n", device_id_, e.what());
@@ -198,8 +254,9 @@ private:
     std::atomic<uint64_t> total_hashes_{0};
 
     std::atomic<uint64_t> current_difficulty_{0};
+    std::atomic<int64_t> current_job_id_{0};
     std::atomic<bool> work_updated_{false};
 
     std::thread miner_thread_;
-    std::function<void(const uint8_t*, uint64_t)> on_solution_;
+    std::function<void(const uint8_t*, uint64_t, const JobSnapshot&)> on_solution_;
 };

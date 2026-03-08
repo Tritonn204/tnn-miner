@@ -26,6 +26,7 @@ if (WITH_XELISHASH)
 
   list(APPEND TNN_HIP_SOURCES
     src/tnn_hip/coins/xelis/mine_xelis.hip.cpp
+    src/tnn_hip/coins/xelis/test_xelis_hip.cpp
     ${XELIS_EMBEDDED_HEADERS}  # CMake will regenerate this when .hip/.inc files change
   )
 else()

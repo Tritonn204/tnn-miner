@@ -9,6 +9,7 @@
 #include <algo_definitions.h>
 
 #include "mine_xelis.hip.h"
+#include <crypto/xelis-hash/xelis-hash.hpp>
 
 void mineXelis_hip(int tid)
 {
@@ -76,6 +77,9 @@ void mineXelis_hip(int tid)
     return;
   }
 
+  printf("[INFO] All GPUs initialized, ready to start mining\n");
+  fflush(stdout);
+
   int64_t localOurHeight = 0;
   int64_t localDevHeight = 0;
 
@@ -111,18 +115,11 @@ void mineXelis_hip(int tid)
   fflush(stdout);
 
   // Solution callback - receives RAW hash from GPU (already difficulty-checked)
-  auto on_solution = [&](const uint8_t *hash, uint64_t nonce, int gpu_id, bool devMine, int64_t solution_height)
+  auto on_solution = [&](const uint8_t *hash, uint64_t nonce, int gpu_id, bool devMine, const JobSnapshot& job_snapshot)
   {
-    // Check if solution is stale (from old job)
-    // int64_t current_height = devMine ? current_dev_job_height.load() : current_job_height.load();
-
-    // if (solution_height != current_height)
-    // {
-    //   printf("[DEBUG] Skipping stale solution (found for height %ld, current %ld)\n",
-    //          solution_height, current_height);
-    //   fflush(stdout);
-    //   return;
-    // }
+    // JobSnapshot contains copies of template, job_id, difficulty captured before batch execution
+    // All data is guaranteed to match what the GPU processed (safe from concurrent job updates)
+    // Let the pool decide if solution is stale - don't pre-filter here
 
     // // In SOLO mode, skip if we already submitted a solution for this job
     // // (prevents multiple submissions from same batch competing)
@@ -158,42 +155,105 @@ void mineXelis_hip(int tid)
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
 
-    // bool submit = (devMine && devConnected) ? !submittingDev : !submitting;
+    // Wait for previous submission to complete before submitting new one
+    bool submit = (devMine && devConnected) ? !submittingDev : !submitting;
 
-    // if (!submit) {
-    //     // Don't block the GPU thread - wait with timeout
-    //     int wait_count = 0;
-    //     const int MAX_WAIT = 250; // ~100ms max wait
-    //     for(;;) {
-    //         submit = (devMine && devConnected) ? !submittingDev : !submitting;
+    if (!submit) {
+        // Wait for previous submission with timeout
+        int wait_count = 0;
+        const int MAX_WAIT = 5000; // 5 second max wait (network can be slow)
+        for(;;) {
+            submit = (devMine && devConnected) ? !submittingDev : !submitting;
 
-    //         // Check if job changed (solution became stale)
-    //         int64_t current_height = devMine ? current_dev_job_height.load() : current_job_height.load();
-    //         if (submit || solution_height != current_height)
-    //             break;
+            // Check if job changed (solution became stale)
+            int64_t current_height = devMine ? current_dev_job_height.load() : current_job_height.load();
+            if (submit || job_snapshot.job_id != current_height) {
+                if (job_snapshot.job_id != current_height) {
+                    printf("[INFO] Job changed during submission wait (height %ld -> %ld), aborting solution\n",
+                           job_snapshot.job_id, current_height);
+                    fflush(stdout);
+                }
+                break;
+            }
 
-    //         if (++wait_count > MAX_WAIT) {
-    //             printf("[WARN] Submission blocked, dropping solution to prevent GPU stall\n");
-    //             fflush(stdout);
-    //             return; // Drop this solution to keep GPU mining
-    //         }
-    //         std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    //     }
-    // }
+            if (++wait_count > MAX_WAIT) {
+                printf("[WARN] Submission timeout after 5s, dropping solution to prevent GPU stall\n");
+                fflush(stdout);
+                return; // Drop this solution to keep GPU mining
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
 
-    // Build the complete work template with the winning nonce
-    // Use SAVED work template to prevent race condition with job updates
-    byte finalWork[XELIS_TEMPLATE_SIZE];
-
-    {
-      std::lock_guard<std::mutex> lock(saved_work_mutex);
-      memcpy(finalWork, devMine ? saved_devWork : saved_work, XELIS_TEMPLATE_SIZE);
+        // If job changed, don't submit stale solution
+        if (job_snapshot.job_id != (devMine ? current_dev_job_height.load() : current_job_height.load())) {
+            return;
+        }
     }
 
-    // Insert nonce at correct position (bytes 40-47)
-    for (int i = 0; i < 8; i++)
-    {
+    // Build the complete work template with the winning nonce
+    // Use the work template from JobSnapshot (captured before mine_batch() call)
+    // This guarantees it matches exactly what the GPU processed
+    byte finalWork[XELIS_TEMPLATE_SIZE];
+    memcpy(finalWork, job_snapshot.work_template.data(), XELIS_TEMPLATE_SIZE);
+
+    // Insert nonce at correct position (bytes 40-47, little-endian)
+    for (int i = 0; i < 8; i++) {
       finalWork[40 + i] = (nonce >> (i * 8)) & 0xFF;
+    }
+
+    // CPU stage-by-stage verification before submission (detect hash computation errors)
+    {
+      static thread_local uint64_t *cpu_scratch = nullptr;
+      if (!cpu_scratch) {
+        cpu_scratch = new uint64_t[XELIS_MEMORY_SIZE_V3];
+      }
+
+      // Run CPU stages
+      xelis_stage1_v3(finalWork, cpu_scratch, 112);
+
+      // Optional: Checksum after stage1 for debugging
+      // uint64_t cpu_s1_checksum = 0;
+      // for (size_t i = 0; i < XELIS_MEMORY_SIZE_V3; i++) cpu_s1_checksum ^= cpu_scratch[i];
+      // printf("  CPU Stage1 checksum: 0x%016llx\n", cpu_s1_checksum);
+
+      xelis_stage3_v3(cpu_scratch);
+
+      // Optional: Checksum after stage3 for debugging
+      // uint64_t cpu_s3_checksum = 0;
+      // for (size_t i = 0; i < XELIS_MEMORY_SIZE_V3; i++) cpu_s3_checksum ^= cpu_scratch[i];
+      // printf("  CPU Stage3 checksum: 0x%016llx\n", cpu_s3_checksum);
+
+      byte cpu_hash[32];
+      xelis_blake3_v3((uint8_t*)cpu_scratch, cpu_hash);
+
+      // GPU hash is raw blake3 output (not reversed)
+      byte gpu_hash_raw[32];
+      memcpy(gpu_hash_raw, hash, 32);  // Use original 'hash' parameter, NOT hash_reversed
+
+      if (memcmp(cpu_hash, gpu_hash_raw, 32) != 0) {
+        printf("\033[31m[ERROR] GPU/CPU hash mismatch! Same input, different output.\033[0m\n");
+        // Extract nonce fields using NEW format: bits 59-63=device, 48-58=random, 0-47=counter
+        uint64_t device_id_extracted = (nonce >> 59) & 0x1F;        // Top 5 bits
+        uint64_t random_extracted = (nonce >> 48) & 0x7FF;          // Next 11 bits
+        uint64_t counter_extracted = nonce & 0xFFFFFFFFFFFFULL;     // Bottom 48 bits
+        printf("  GPU %d, Nonce: 0x%016llx (device=%llu, random=%llu, counter=%llu)\n",
+               gpu_id, (unsigned long long)nonce,
+               (unsigned long long)device_id_extracted,
+               (unsigned long long)random_extracted,
+               (unsigned long long)counter_extracted);
+        printf("  Work template (first 48 bytes):\n    ");
+        for (int i = 0; i < 48; i++) {
+          printf("%02x", finalWork[i]);
+          if ((i+1) % 32 == 0) printf("\n    ");
+        }
+        printf("\n  Nonce at bytes 40-47: ");
+        for (int i = 40; i < 48; i++) printf("%02x", finalWork[i]);
+        printf("\n  GPU hash: %s\n", hexStr(gpu_hash_raw, 32).c_str());
+        printf("  CPU hash: %s\n", hexStr(cpu_hash, 32).c_str());
+        printf("  \033[31mNOT SUBMITTING - hash computation error!\033[0m\n");
+        fflush(stdout);
+        return;  // Don't submit invalid hash
+      }
     }
 
     // Hash is currently reversed (Xelis canonical format)
@@ -261,26 +321,8 @@ void mineXelis_hip(int tid)
   printf("[TRACE] on_solution defined\n");
   fflush(stdout);
 
-  // Start all miners with solution callback
-  for (auto &miner : miners)
-  {
-    miner->start([&, gpu_id = miner->get_device_id()](const uint8_t *hash, uint64_t nonce)
-                 {
-            fflush(stdout);
-
-            // Determine if this is a dev share based on current mining state
-            double which = dist(rng);
-            bool devMine = (devConnected && devHeight > 0 && which < devFee * 100.0);
-
-            // Get the height this solution was found for (from saved work snapshot)
-            int64_t solution_height;
-            {
-              std::lock_guard<std::mutex> lock(saved_work_mutex);
-              solution_height = devMine ? saved_dev_job_height : saved_job_height;
-            }
-
-            on_solution(hash, nonce, gpu_id, devMine, solution_height); });
-  }
+  // Track if miners have been started
+  std::atomic<bool> miners_started{false};
 
 waitForJob:
   while (!isConnected)
@@ -348,18 +390,7 @@ waitForJob:
         localOurHeight = ourHeight;
         i = 0;
 
-        printf("[TRACE] Step 4: Generating base nonce\n");
-        fflush(stdout);
-        // Generate base nonce for this thread/round
-        uint64_t baseNonce = ((tid - 1) % (256 * 256)) | ((int)(n2(rng)) << 16) | ((i++) << 24);
-
-        // Update work template with base nonce components (little-endian for now)
-        for (int j = 0; j < 8; j++)
-        {
-          work[40 + j] = (baseNonce >> (j * 8)) & 0xFF;
-        }
-
-        printf("[TRACE] Step 5: Saving work snapshot\n");
+        printf("[TRACE] Step 4: Saving work snapshot\n");
         fflush(stdout);
         // Save work template snapshot before mining (prevents race with job updates)
         {
@@ -370,7 +401,7 @@ waitForJob:
         printf("[DEBUG] Saved work template snapshot for height %ld\n", ourHeight);
         fflush(stdout);
 
-        printf("[TRACE] Step 6: Calling set_work on %zu miners\n", miners.size());
+        printf("[TRACE] Step 5: Calling set_work on %zu miners\n", miners.size());
         fflush(stdout);
         // Update all GPU miners with new work
         current_difficulty = difficulty;
@@ -379,10 +410,37 @@ waitForJob:
           printf("[TRACE]   Calling set_work on miner device %d\n", miner->get_device_id());
           fflush(stdout);
           miner->set_work(work, difficulty);
+          miner->set_job_id(ourHeight);  // Capture job height alongside template
           printf("[TRACE]   set_work returned\n");
           fflush(stdout);
         }
-        printf("[TRACE] Step 7: All miners updated, continuing\n");
+
+        // Start miners on first job (ensures full initialization before mining begins)
+        if (!miners_started.load())
+        {
+          printf("[INFO] Starting all GPU miners (first job received)\n");
+          fflush(stdout);
+
+          for (auto &miner : miners)
+          {
+            int gpu_id = miner->get_device_id();
+            miner->start([&, gpu_id](const uint8_t *hash, uint64_t nonce, const JobSnapshot& job_snapshot)
+                         {
+                // Determine if this is a dev share based on current mining state
+                double which = dist(rng);
+                bool devMine = (devConnected && devHeight > 0 && which < devFee * 100.0);
+
+                // JobSnapshot contains all job state captured before batch execution
+                // (template, job_id, difficulty) - all guaranteed to match what GPU processed
+                on_solution(hash, nonce, gpu_id, devMine, job_snapshot); });
+          }
+
+          miners_started.store(true);
+          printf("[INFO] All GPU miners started successfully\n");
+          fflush(stdout);
+        }
+
+        printf("[TRACE] Step 6: All miners updated, continuing\n");
         fflush(stdout);
       }
 

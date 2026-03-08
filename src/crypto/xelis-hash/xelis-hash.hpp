@@ -124,7 +124,25 @@ void xelis_hash_v3(byte *input, workerData_xelis_v3 &worker, byte *hashResult);
 void xelis_benchmark_cpu_hash_v3();
 int xelis_runTests_v3();
 
+// Exposed stages for debugging/validation
+void xelis_stage1_v3(const uint8_t *input, uint64_t *scratch_pad, size_t input_len);
+void xelis_stage3_v3(uint64_t *scratch_pad);
+void xelis_blake3_v3(const uint8_t *scratch_pad, byte *hashResult);
+
 // ============================================================================
 // Mining Entry Point
 // ============================================================================
 void mineXelis(int tid);
+
+enum class Stage3Variant {
+    ORIGINAL,       // Current implementation
+    OPTIMIZED_V1,   // Prefetch improvements + fast modpow
+    OPTIMIZED_V2,   // V1 + non-temporal stores
+};
+
+// // Benchmark both implementations
+// void xelis_benchmark_stage3_comparison();
+
+// // Selectable stage 3 for testing
+// void xelis_hash_v3_variant(byte *input, workerData_xelis_v3 &worker, 
+//                            byte *hashResult, Stage3Variant variant);
