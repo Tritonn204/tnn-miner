@@ -174,6 +174,8 @@ bool xelis_set_simd_override(const char *level)
     return true;
 }
 #else
+static Stage1Fn g_stage1_override    = nullptr;
+static Stage1Fn g_stage1_nt_override = nullptr;
 bool xelis_set_simd_override(const char *) { return false; }
 #endif
 
