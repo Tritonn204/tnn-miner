@@ -9,30 +9,11 @@
 
 
 // ============================================================================
-// STAGE 1 - NT variant (not FMV, stays in main TU)
+// ARM stage_1 (not part of spec/SIMD tier system)
+// On x86, stage_1/stage_1_nt/stage_1_serial come from generated simd_sources/ TUs.
 // ============================================================================
 
-#ifdef __x86_64__
-
-// --- NT variant: same as default path but calls NT ChaCha ---
-// No target attribute needed - ChaCha20EncryptXelisNT uses FMV internally
-static TNN_SECTION("xelis_hot") void stage_1_nt(const uint8_t *input, uint64_t *sp, size_t input_len)
-{
-    constexpr size_t bytes_per_chunk = XELIS_BYTES_PER_CHUNK_V3;
-    uint8_t *t = reinterpret_cast<uint8_t *>(sp);
-    uint8_t K2_values[4][32];
-    uint8_t nonces[4][12];
-
-    stage_1_derive(input, input_len, K2_values, nonces);
-
-    byte *outputs[4];
-    for (int i = 0; i < 4; i++) {
-        outputs[i] = t + i * bytes_per_chunk;
-    }
-    ChaCha20EncryptXelisNT(K2_values, nonces, outputs, bytes_per_chunk, 8);
-}
-
-#else // non-x86
+#if !defined(__x86_64__)
 
 static void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
 {
@@ -51,13 +32,7 @@ static void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
     }
 }
 
-// NT is a no-op on non-x86
-static TNN_SECTION("xelis_hot") void stage_1_nt(const uint8_t *input, uint64_t *sp, size_t input_len)
-{
-    stage_1(input, sp, input_len);
-}
-
-#endif // __x86_64__
+#endif // !defined(__x86_64__)
 
 // ============================================================================
 // STAGE 3 - ARM (not part of spec/SIMD tier system)
@@ -109,9 +84,12 @@ static void stage_3(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
 #endif
         uint64_t result = ~(hash1 ^ hash2);
 
+        uint64_t next_a_idx = map_index(result);
+        prefetch_L1(&mem_buffer_a[next_a_idx]);
+
         for (size_t j = 0; j < XELIS_BUFFER_SIZE_V3; ++j)
         {
-            uint64_t a = mem_buffer_a[map_index(result)];
+            uint64_t a = mem_buffer_a[next_a_idx];
             uint64_t b = mem_buffer_b[map_index(a ^ ~ROTR(result, r))];
             uint64_t c = scratch_pad[r];
             r = (r + 1) % XELIS_MEMORY_SIZE_V3;
@@ -121,6 +99,9 @@ uint64_t v      = execute_operation(op_raw, a, b, c, r, result, i, j);
 
             uint64_t idx_seed = v ^ result;
             result            = ROTL(idx_seed, r);
+
+            next_a_idx = map_index(result);
+            prefetch_L1(&mem_buffer_a[next_a_idx]);
 
             int      use_b = pick_half(v);
             uint64_t idx_t = map_index(idx_seed);
@@ -134,15 +115,10 @@ uint64_t v      = execute_operation(op_raw, a, b, c, r, result, i, j);
             mem_buffer_b[idx_b] ^= mem_a_tmp ^ ROTR(t, i + j);
         }
 
-        addr_a = modular_power(addr_a, addr_b, result);
+        addr_a = modular_power_fast(addr_a, addr_b, result);
         addr_b = isqrt(result) * (r + 1) * isqrt(addr_a);
     }
 }
-
-static void stage_3_modpow(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
-{ stage_3(scratch_pad, worker); }
-static void stage_3_modpow_switch(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
-{ stage_3(scratch_pad, worker); }
 
 #endif // !defined(__x86_64__)
 
@@ -156,9 +132,9 @@ using Stage3Fn = void(*)(uint64_t *, workerData_xelis_v3 &);
 // On ARM, dispatchers don't exist — wire directly to the local statics
 #if !defined(__x86_64__)
 static Stage1Fn get_stage_1() { return stage_1; }
+static Stage1Fn get_stage_1_nt() { return stage_1; }     // NT is a no-op on ARM
+static Stage1Fn get_stage_1_serial() { return stage_1; } // ARM stage_1 is already serial
 static Stage3Fn get_stage_3() { return stage_3; }
-static Stage3Fn get_stage_3_modpow() { return stage_3_modpow; }
-static Stage3Fn get_stage_3_modpow_switch() { return stage_3_modpow_switch; }
 #endif
 
 struct HashVariant {
@@ -170,13 +146,10 @@ struct HashVariant {
 };
 
 static HashVariant HASH_VARIANTS[] = {
-    // id              description                               s1              s3              enabled
-    { "baseline",      "S1:temporal  + S3:original",            get_stage_1(),  get_stage_3(),  true },
-#ifdef __x86_64__
-    { "s1_nt",         "S1:NT-store  + S3:original",            stage_1_nt,     get_stage_3(),  true },
-    { "s3_modpow",     "S1:temporal  + S3:modpow (goto)",       get_stage_1(),  get_stage_3_modpow(),        true },
-    { "s3_modpow_sw",  "S1:temporal  + S3:modpow (switch)",     get_stage_1(),  get_stage_3_modpow_switch(), true },
-#endif
+    // id              description                               s1                    s3              enabled
+    { "baseline",      "S1:pipelined + S3:baseline",            get_stage_1(),        get_stage_3(),  true },
+    { "s1_serial",     "S1:serial    + S3:baseline",            get_stage_1_serial(), get_stage_3(),  true },
+    { "s1_nt",         "S1:NT-store  + S3:baseline",            get_stage_1_nt(),     get_stage_3(),  true },
 };
 
 static constexpr size_t NUM_VARIANTS = sizeof(HASH_VARIANTS) / sizeof(HASH_VARIANTS[0]);
@@ -619,10 +592,9 @@ struct MTBenchConfig {
 };
 
 static MTBenchConfig MT_CONFIGS[] = {
-    { "baseline",       "S1:temporal, all threads",              get_stage_1(),  nullptr,    get_stage_3()                    },
-    { "s1_nt",          "S1:NT-store, all threads",              stage_1_nt,     nullptr,    get_stage_3()                    },
-    { "modpow_goto",    "S1:temporal P, NT HT + modpow goto",   get_stage_1(),  stage_1_nt, get_stage_3_modpow()             },
-    { "modpow_switch",  "S1:temporal P, NT HT + modpow switch", get_stage_1(),  stage_1_nt, get_stage_3_modpow_switch()      },
+    { "baseline",       "S1:pipelined temporal",                 get_stage_1(),       nullptr,           get_stage_3() },
+    { "serial",         "S1:serial (non-pipelined)",             get_stage_1_serial(),nullptr,           get_stage_3() },
+    { "hybrid",         "S1:pipelined P, NT HT",                get_stage_1(),       get_stage_1_nt(),  get_stage_3() },
 };
 
 static constexpr size_t NUM_MT_CONFIGS = sizeof(MT_CONFIGS) / sizeof(MT_CONFIGS[0]);

@@ -7,6 +7,7 @@
 #include <iostream>
 #include "aes.hpp"
 #include "chacha20.h"
+#include "chacha20_xelis_inline.h"
 #include <crc32.h>
 #include <memory>
 
@@ -577,14 +578,55 @@ static inline uint64_t execute_operation(
 // ============================================================================
 
 #ifdef __x86_64__
-static inline void prefetch_L2(const void *p) {
-    _mm_prefetch((const char *)p, _MM_HINT_T1);
+static inline void prefetch_L1(const void *p) {
+    _mm_prefetch((const char *)p, _MM_HINT_T0);
 }
 #else
-static inline void prefetch_L2(const void *p) {
-    __builtin_prefetch(p, 0, 2);
+static inline void prefetch_L1(const void *p) {
+    __builtin_prefetch(p, 0, 3);
 }
 #endif
+
+// ============================================================================
+// Shared stage_1 pipelined body (always_inline 4-way ChaCha into tier TU)
+// ============================================================================
+
+#define XELIS_STAGE1_INLINE(chacha_fn, POLICY) \
+{ \
+    constexpr size_t bytes_per_chunk = XELIS_BYTES_PER_CHUNK_V3; \
+    uint8_t *t = reinterpret_cast<uint8_t *>(sp); \
+    uint8_t K2_values[4][32]; \
+    uint8_t nonces[4][12]; \
+\
+    stage_1_derive(input, input_len, K2_values, nonces); \
+\
+    byte *outputs[4]; \
+    for (int i = 0; i < 4; i++) \
+        outputs[i] = t + i * bytes_per_chunk; \
+    chacha_fn<POLICY>(K2_values, nonces, outputs, bytes_per_chunk, 8); \
+}
+
+// ============================================================================
+// Shared stage_1 serial body (non-pipelined, sequential per-stream ChaCha)
+// ============================================================================
+
+#define XELIS_STAGE1_SERIAL_BODY \
+{ \
+    constexpr size_t bytes_per_chunk = XELIS_BYTES_PER_CHUNK_V3; \
+    uint8_t *t = reinterpret_cast<uint8_t *>(sp); \
+    uint8_t K2_values[4][32]; \
+    uint8_t nonces[4][12]; \
+\
+    stage_1_derive(input, input_len, K2_values, nonces); \
+\
+    for (int i = 0; i < 4; i++) \
+    { \
+        uint8_t state[48] = {0}; \
+        ChaCha20SetKey(state, K2_values[i]); \
+        ChaCha20SetNonce(state, nonces[i]); \
+        ChaCha20EncryptBytes(state, NULL, t + i * bytes_per_chunk, bytes_per_chunk, 8); \
+    } \
+}
 
 // ============================================================================
 // Shared stage_3 body macro (software AES path, used by non-AES tiers)
@@ -604,9 +646,7 @@ static inline void prefetch_L2(const void *p) {
 \
     for (size_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V3; ++i) \
     { \
-        prefetch_L2(&mem_buffer_a[map_index(addr_a)]); \
         uint64_t mem_a = mem_buffer_a[map_index(addr_a)]; \
-        prefetch_L2(&mem_buffer_b[map_index(mem_a ^ addr_b)]); \
         uint64_t mem_b = mem_buffer_b[map_index(mem_a ^ addr_b)]; \
 \
         uint64_to_le_bytes(mem_b, block); \
@@ -616,10 +656,13 @@ static inline void prefetch_L2(const void *p) {
         uint64_t hash2 = le_bytes_to_uint64(block + 8); \
         uint64_t result = ~(hash1 ^ hash2); \
 \
+        uint64_t next_a_idx = map_index(result); \
+        prefetch_L1(&mem_buffer_a[next_a_idx]); \
+\
         for (size_t j = 0; j < XELIS_BUFFER_SIZE_V3; ++j) \
         { \
             uint64_t rot_res = ~ROTR(result, r); \
-            uint64_t a       = mem_buffer_a[map_index(result)]; \
+            uint64_t a       = mem_buffer_a[next_a_idx]; \
             uint64_t b       = mem_buffer_b[map_index(a ^ rot_res)]; \
             uint64_t c       = scratch_pad[r]; \
             r++; \
@@ -629,6 +672,9 @@ static inline void prefetch_L2(const void *p) {
 \
             uint64_t idx_seed = v ^ result; \
             result            = ROTL(idx_seed, r); \
+\
+            next_a_idx = map_index(result); \
+            prefetch_L1(&mem_buffer_a[next_a_idx]); \
 \
             int      use_b = pick_half(v); \
             uint64_t idx_t = map_index(idx_seed); \
@@ -642,9 +688,8 @@ static inline void prefetch_L2(const void *p) {
             mem_buffer_b[idx_b] ^= mem_a_tmp ^ ROTR(t, i + j); \
         } \
 \
-        uint64_t addr_a_next = modular_power(addr_a, addr_b, result); \
+        uint64_t addr_a_next = modular_power_fast(addr_a, addr_b, result); \
         uint64_t addr_b_next = isqrt(result) * (r + 1) * isqrt(addr_a_next); \
-        prefetch_L2(&mem_buffer_a[map_index(addr_a_next)]); \
         addr_a = addr_a_next; \
         addr_b = addr_b_next; \
     } \
