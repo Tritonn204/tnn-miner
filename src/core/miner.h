@@ -5,7 +5,7 @@
 
 #include <tnn-common.hpp>
 
-#include <bigint.h>
+// #include <bigint.h>
 #include <stdint.h>
 #include <chrono>
 #include <inttypes.h>
@@ -59,7 +59,7 @@ void cudaMine();
 void benchmark(int i);
 void logSeconds(std::chrono::steady_clock::time_point start_time, int duration, bool *stop);
 
-Num CompactToBig(uint32_t compact) {
+inline Num CompactToBig(uint32_t compact) {
     // Extract the mantissa, sign bit, and exponent
     uint32_t mantissa = compact & 0x007fffff;
     bool isNegative = (compact & 0x00800000) != 0;
@@ -98,7 +98,7 @@ inline Num ConvertDifficultyToBig(int64_t d, int algo)
   }
 }
 
-std::vector<std::string> supportCheck = {
+inline std::vector<std::string> supportCheck = {
   "sse","sse2","sse3","avx","avx2","avx512f"
 };
 
@@ -131,11 +131,9 @@ inline void printSupported()
 #endif
 }
 
+#include <tnn_affinity.h>
+
 void setPriorityClass(boost::thread::native_handle_type t, int priority);
-
-void setPriority(boost::thread::native_handle_type t, int priority);
-
-void setAffinity(boost::thread::native_handle_type t, uint64_t core);
 
 void update(std::chrono::steady_clock::time_point startTime);
 

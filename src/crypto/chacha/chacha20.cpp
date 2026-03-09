@@ -182,3 +182,16 @@ void ChaCha20EncryptXelis(
       size_t bytes_per_stream,
       int rounds) {}
 //}
+
+#if defined(__x86_64__)
+__attribute__((target("default")))
+#endif
+void ChaCha20EncryptXelisNT(
+    const uint8_t keys[4][32],
+    const uint8_t nonces[4][12],
+    uint8_t* outputs[4],
+    const size_t bytes_per_stream,
+    int rounds)
+{
+    ChaCha20EncryptXelis(keys, nonces, outputs, bytes_per_stream, rounds);
+}
