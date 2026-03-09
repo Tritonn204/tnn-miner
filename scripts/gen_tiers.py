@@ -491,6 +491,9 @@ def generate(spec_path, output_dir):
 
         cpp.append(f'#include "{spec_name}.gen.h"\n\n')
 
+        # Tier TUs are x86-only (target attrs, SIMD intrinsics)
+        cpp.append('#ifdef __x86_64__\n\n')
+
         for blk in tier_blocks[tid]:
             if use_sections:
                 transformed = transform_tier_block(blk, tid, feats, section_prefix, func_names)
@@ -498,6 +501,8 @@ def generate(spec_path, output_dir):
             else:
                 cpp.append(blk)
             cpp.append('\n')
+
+        cpp.append('#endif // __x86_64__\n')
 
         write_if_changed(cpp_path, ''.join(cpp))
         written.append(cpp_path)

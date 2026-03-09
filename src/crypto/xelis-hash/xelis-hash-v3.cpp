@@ -634,7 +634,11 @@ __attribute__((cold)) static void mt_worker_fn(
     uint64_t nonce = 0;
 
     ready_barrier->arrive_and_wait();
-    while (!start_flag->load(std::memory_order_acquire)) { _mm_pause(); }
+    while (!start_flag->load(std::memory_order_acquire)) {
+#ifdef __x86_64__
+        _mm_pause();
+#endif
+    }
 
     auto t0 = std::chrono::steady_clock::now();
     uint64_t count = 0;

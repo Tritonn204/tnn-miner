@@ -153,6 +153,9 @@
 
 #ifdef _WIN32
   #define TNN_SECTION(name) __attribute__((section(".text$" name)))
+#elif defined(__APPLE__)
+  // Mach-O doesn't support arbitrary named text sections; no-op on macOS
+  #define TNN_SECTION(name)
 #else
   #define TNN_SECTION(name) __attribute__((section(".text." name)))
 #endif
