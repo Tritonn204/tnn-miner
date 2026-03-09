@@ -385,6 +385,9 @@ def generate(spec_path, output_dir):
         h_lines.append(blk)
         h_lines.append('\n')
 
+    # Everything below is x86-only (target attrs, __builtin_cpu_supports)
+    h_lines.append('#ifdef __x86_64__\n\n')
+
     # Emit declarations grouped by tier
     for tid in tier_order:
         if tid not in tier_decls:
@@ -459,6 +462,8 @@ def generate(spec_path, output_dir):
             h_lines.append(f'  static {base_name}_fn fn = resolve_{base_name}();\n')
             h_lines.append(f'  return fn;\n')
             h_lines.append(f'}}\n\n')
+
+    h_lines.append('#endif // __x86_64__\n')
 
     write_if_changed(h_path, ''.join(h_lines))
     written.append(h_path)
