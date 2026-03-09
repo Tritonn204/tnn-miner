@@ -1450,6 +1450,7 @@ Mining:
 
   // Create worker threads and set CPU affinity
   //  mutex.lock();
+  g_start_time = std::chrono::steady_clock::now();
   boost::thread minerThreads[threads];
   if (gpuMine)
   {
@@ -1485,7 +1486,6 @@ Mining:
   }
   //  mutex.unlock();
 
-  g_start_time = std::chrono::steady_clock::now();
   if (broadcastStats)
   {
     boost::thread BROADCAST(BroadcastServer::serverThread, &rate30sec, &accepted, &rejected, algoName(miningProfile.coin.miningAlgo), versionString, reportInterval);

@@ -32,6 +32,7 @@ int update_handler(const boost::system::error_code& error)
     if (datasetInitInProgress.load()) return 1;
 #endif
 
+    static bool first_tick = true;
     reportCounter++;
 
     auto now = std::chrono::steady_clock::now();
@@ -55,6 +56,8 @@ int update_handler(const boost::system::error_code& error)
         bool prev_beQuiet = beQuiet;
         beQuiet = true;
 
+        double elapsed_gpu = first_tick ? std::chrono::duration<double>(now - g_start_time).count() : 0.0;
+
         for (int i = 0; i < HIP_deviceCount; i++) {
             uint64_t currentHashesG = HIP_counters[i].load();
             HIP_counters[i].store(0);
@@ -63,6 +66,10 @@ int update_handler(const boost::system::error_code& error)
                 any_gpu_hashing = true;
                 beQuiet = prev_beQuiet;
             }
+
+            // Normalize first-tick GPU sample the same way as CPU
+            if (first_tick && elapsed_gpu > 1.0)
+                currentHashesG = (uint64_t)(currentHashesG / elapsed_gpu);
 
             double ratioG = 1.0;
             if (HIP_rates1min[i].size() <= 60) {
@@ -97,6 +104,15 @@ int update_handler(const boost::system::error_code& error)
         any_gpu_hashing = true;  // Reuse flag for CPU too
     }
 
+    // On the first tick the sample covers an unknown duration since workers
+    // started, not exactly 1 second.  Normalize it to a per-second rate so it
+    // doesn't inflate the rolling average.
+    if (first_tick) {
+        double elapsed = std::chrono::duration<double>(now - g_start_time).count();
+        if (elapsed > 1.0)
+            currentHashes = (uint64_t)(currentHashes / elapsed);
+    }
+
     double ratio = 1.0;
     if (rate30sec.size() <= 30) {
         rate30sec.push_back((int64_t)(currentHashes * ratio));
@@ -115,6 +131,7 @@ int update_handler(const boost::system::error_code& error)
         hashrate /= 1000.0;
     }
     latest_hashrate = hashrate;
+    first_tick = false;
 
     // =========================================================================
     // Check if mining has started (first non-zero hashrate)
