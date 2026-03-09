@@ -20,67 +20,168 @@
 
 #ifdef _WIN32
 #include <Windows.h>
+#include <winioctl.h>
 
-class WinRing0Dynamic {
+// Direct-to-driver WinRing0 access (no DLL needed, only WinRing0x64.sys).
+// Based on the XMRig approach: register .sys as a kernel service, talk via DeviceIoControl.
+
+#define WR0_SERVICE_NAME    L"WinRing0_1_2_0"
+#define WR0_IOCTL_READ_MSR  CTL_CODE(40000, 0x821, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define WR0_IOCTL_WRITE_MSR CTL_CODE(40000, 0x822, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+class WinRing0Direct {
 private:
-    HMODULE hDll = nullptr;
-    
+    HANDLE driver       = INVALID_HANDLE_VALUE;
+    SC_HANDLE manager   = nullptr;
+    SC_HANDLE service   = nullptr;
+    bool reuse          = false;
+
 public:
-    // Function pointers
-    BOOL (WINAPI *InitializeOls)() = nullptr;
-    VOID (WINAPI *DeinitializeOls)() = nullptr;
-    BOOL (WINAPI *RdmsrTx)(DWORD, PDWORD, PDWORD, DWORD_PTR) = nullptr;
-    BOOL (WINAPI *WrmsrTx)(DWORD, DWORD, DWORD, DWORD_PTR) = nullptr;
-    
-    WinRing0Dynamic() {
-        hDll = LoadLibraryA("WinRing0x64.dll");
-        if (hDll) {
-            *(FARPROC*)&InitializeOls = GetProcAddress(hDll, "InitializeOls");
-            *(FARPROC*)&DeinitializeOls = GetProcAddress(hDll, "DeinitializeOls");
-            *(FARPROC*)&RdmsrTx = GetProcAddress(hDll, "RdmsrTx");  
-            *(FARPROC*)&WrmsrTx = GetProcAddress(hDll, "WrmsrTx");
+    WinRing0Direct() = default;
+
+    bool init() {
+        manager = OpenSCManager(nullptr, nullptr, SC_MANAGER_ALL_ACCESS);
+        if (!manager) {
+            DWORD err = GetLastError();
+            if (err == ERROR_ACCESS_DENIED) {
+                fprintf(stderr, "MSR: administrator privileges required\n");
+            } else {
+                fprintf(stderr, "MSR: failed to open service control manager, error %lu\n", err);
+            }
+            return false;
+        }
+
+        // Resolve path to WinRing0x64.sys next to our exe
+        std::vector<wchar_t> dir;
+        DWORD err;
+        do {
+            dir.resize(dir.empty() ? MAX_PATH : dir.size() * 2);
+            GetModuleFileNameW(nullptr, dir.data(), (DWORD)dir.size());
+            err = GetLastError();
+        } while (err == ERROR_INSUFFICIENT_BUFFER);
+
+        for (auto it = dir.end() - 1; it != dir.begin(); --it) {
+            if (*it == L'\\' || *it == L'/') {
+                *(it + 1) = L'\0';
+                break;
+            }
+        }
+        std::wstring sysPath = std::wstring(dir.data()) + L"WinRing0x64.sys";
+
+        // Check if service already exists
+        service = OpenServiceW(manager, WR0_SERVICE_NAME, SERVICE_ALL_ACCESS);
+        if (service) {
+            SERVICE_STATUS status;
+            if (QueryServiceStatus(service, &status) && status.dwCurrentState == SERVICE_RUNNING) {
+                reuse = true;
+            } else {
+                // Service exists but not running — remove and recreate
+                uninstall();
+            }
+        }
+
+        // Try opening driver directly (may already be running under different service name)
+        driver = CreateFileW(L"\\\\.\\WinRing0_1_2_0", GENERIC_READ | GENERIC_WRITE,
+                            0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (driver != INVALID_HANDLE_VALUE) {
+            reuse = true;
+            return true;
+        }
+
+        // Install and start the service
+        if (!reuse) {
+            service = CreateServiceW(manager, WR0_SERVICE_NAME, WR0_SERVICE_NAME,
+                                    SERVICE_ALL_ACCESS, SERVICE_KERNEL_DRIVER,
+                                    SERVICE_DEMAND_START, SERVICE_ERROR_NORMAL,
+                                    sysPath.c_str(), nullptr, nullptr, nullptr, nullptr, nullptr);
+            if (!service) {
+                fprintf(stderr, "MSR: failed to install WinRing0 driver, error %lu\n", GetLastError());
+                return false;
+            }
+
+            if (!StartService(service, 0, nullptr)) {
+                err = GetLastError();
+                if (err != ERROR_SERVICE_ALREADY_RUNNING) {
+                    if (err == ERROR_FILE_NOT_FOUND) {
+                        fprintf(stderr, "MSR: WinRing0x64.sys not found next to executable\n");
+                    } else {
+                        fprintf(stderr, "MSR: failed to start WinRing0 driver, error %lu\n", err);
+                    }
+                    uninstall();
+                    return false;
+                }
+            }
+        }
+
+        driver = CreateFileW(L"\\\\.\\WinRing0_1_2_0", GENERIC_READ | GENERIC_WRITE,
+                            0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (driver == INVALID_HANDLE_VALUE) {
+            fprintf(stderr, "MSR: failed to connect to WinRing0 driver, error %lu\n", GetLastError());
+            uninstall();
+            return false;
+        }
+        return true;
+    }
+
+    void uninstall() {
+        if (driver != INVALID_HANDLE_VALUE) {
+            CloseHandle(driver);
+            driver = INVALID_HANDLE_VALUE;
+        }
+        if (service && !reuse) {
+            SERVICE_STATUS ss;
+            ControlService(service, SERVICE_CONTROL_STOP, &ss);
+            DeleteService(service);
+        }
+        if (service) {
+            CloseServiceHandle(service);
+            service = nullptr;
+        }
+        if (manager) {
+            CloseServiceHandle(manager);
+            manager = nullptr;
         }
     }
-    
-    ~WinRing0Dynamic() {
-        if (hDll) FreeLibrary(hDll);
+
+    ~WinRing0Direct() {
+        uninstall();
     }
-    
-    bool isLoaded() const {
-        return hDll && InitializeOls && RdmsrTx && WrmsrTx;
+
+    bool isAvailable() const { return driver != INVALID_HANDLE_VALUE; }
+
+    bool rdmsr(uint32_t reg, uint64_t &value) const {
+        DWORD size = 0;
+        return DeviceIoControl(driver, WR0_IOCTL_READ_MSR,
+                              &reg, sizeof(reg), &value, sizeof(value), &size, nullptr) != 0;
+    }
+
+    bool wrmsr(uint32_t reg, uint64_t value) {
+        struct { uint32_t reg; uint32_t val[2]; } input;
+        static_assert(sizeof(input) == 12, "WinRing0 IOCTL struct size");
+        input.reg = reg;
+        *reinterpret_cast<uint64_t*>(input.val) = value;
+        DWORD output, k;
+        return DeviceIoControl(driver, WR0_IOCTL_WRITE_MSR,
+                              &input, sizeof(input), &output, sizeof(output), &k, nullptr) != 0;
     }
 };
 
-static WinRing0Dynamic g_winRing0;
+static WinRing0Direct g_winRing0;
 
 inline bool initMSRAccess() {
-    if (!g_winRing0.isLoaded()) {
-        return false;
-    }
-    return g_winRing0.InitializeOls() != 0; // TRUE means success
+    return g_winRing0.init();
 }
 
 inline bool readMSR(uint32_t reg, uint64_t& value, int core = 0) {
-    if (!g_winRing0.isLoaded()) {
-        return false;
-    }
-    
-    DWORD eax = 0, edx = 0;
-    if (g_winRing0.RdmsrTx(reg, &eax, &edx, (1ULL << core))) {
-        value = ((uint64_t)edx << 32) | eax;
-        return true;
-    }
-    return false;
+    (void)core;  // direct IOCTL operates on current core
+    if (!g_winRing0.isAvailable()) return false;
+    return g_winRing0.rdmsr(reg, value);
 }
 
 inline bool writeMSR(uint32_t reg, uint64_t value, int core = 0) {
-    if (!g_winRing0.isLoaded()) {
-        return false;
-    }
-    
-    DWORD eax = static_cast<DWORD>(value & 0xFFFFFFFF);
-    DWORD edx = static_cast<DWORD>(value >> 32);
-    return g_winRing0.WrmsrTx(reg, eax, edx, (1ULL << core)) != 0;
+    (void)core;
+    if (!g_winRing0.isAvailable()) return false;
+    return g_winRing0.wrmsr(reg, value);
 }
 
 #else
@@ -555,7 +656,7 @@ inline std::unique_ptr<MSRManager> MSRManagerGlobal::instance = nullptr;
 inline std::mutex MSRManagerGlobal::instanceMutex;
 inline std::atomic<bool> MSRManagerGlobal::signalHandlersRegistered{false};
 
-// Simple interface for algorithm-specific optimizations
+// Simple interface for algorithm-specific optimizations.
 inline bool applyMSROptimization(const std::string& algorithm) {
     MSRManager* manager = MSRManagerGlobal::getInstance();
     return manager->applyOptimizationProfile(algorithm);

@@ -876,8 +876,8 @@ int tnn_main(int argc, char **argv)
   {
 #if defined(TNN_XELISHASH) && !defined(TNN_HIP)
     if (!msrDisabled) {
-      applyMSROptimization("XelisV3");
-      std::atexit(cleanupMSROnExit);
+      if (applyMSROptimization("XelisV3"))
+        std::atexit(cleanupMSROnExit);
     }
     boost::thread t(xelis_benchmark_cpu_hash_v3);
     if (threadPriorityLevel == 2)
@@ -1323,8 +1323,8 @@ fillBlanks:
     }
 
     if (!msrDisabled) {
-      applyMSROptimization("XelisV3");
-      std::atexit(cleanupMSROnExit);
+      if (applyMSROptimization("XelisV3"))
+        std::atexit(cleanupMSROnExit);
     }
 
     xelis_tune_v3(threads);
@@ -1484,8 +1484,8 @@ Mining:
 
     randomx_set_flags(true);
     if (!msrDisabled) {
-      applyMSROptimization("RandomX");
-      std::atexit(cleanupMSROnExit);
+      if (applyMSROptimization("RandomX"))
+        std::atexit(cleanupMSROnExit);
     }
     fflush(stdout);
     randomx_init_intern(n);
