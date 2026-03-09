@@ -2,10 +2,10 @@
 // These get hoisted into the per-SIMD-tier text sections at compile time.
 #pragma once
 
+#ifdef __x86_64__
+
 #include <immintrin.h>
 #include "simd/simd_utils.h"
-
-#ifdef __x86_64__
 
 // ============================================================================
 // SSSE3 4-way (128-bit lanes, 4 streams interleaved)
