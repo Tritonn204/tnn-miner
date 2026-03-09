@@ -29,16 +29,8 @@ struct TnnAllocInfo {
     bool is_locked;
 };
 
-#ifdef __linux__
 inline thread_local int tnn_tls_numa_node = -1;
 inline thread_local TnnAllocInfo tnn_tls_last_alloc = {TNN_PAGE_REGULAR, -1, false};
-#elif defined(_WIN32)
-inline __declspec(thread) int tnn_tls_numa_node = -1;
-inline __declspec(thread) TnnAllocInfo tnn_tls_last_alloc = {TNN_PAGE_REGULAR, -1, false};
-#else
-inline int tnn_tls_numa_node = -1;
-inline TnnAllocInfo tnn_tls_last_alloc = {TNN_PAGE_REGULAR, -1, false};
-#endif
 
 inline void tnn_setNumaNode(int node) {
     tnn_tls_numa_node = node;

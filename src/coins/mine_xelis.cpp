@@ -414,10 +414,21 @@ waitForJob:
         }
 
         memcpy(FINALWORK, WORK, XELIS_TEMPLATE_SIZE);
-        
+
         // Call the appropriate hash function based on version
         if (currentUseV3) {
-          xelis_hash_v3(FINALWORK, *(workerData_xelis_v3*)worker, powHash);
+          bool is_ht = xelis_v3_use_hybrid && (unsigned)tid > xelis_v3_ht_threshold;
+          if (xelis_v3_use_switch) {
+            if (is_ht)
+              xelis_hash_v3_switch_nt(FINALWORK, *(workerData_xelis_v3*)worker, powHash);
+            else
+              xelis_hash_v3_switch(FINALWORK, *(workerData_xelis_v3*)worker, powHash);
+          } else {
+            if (is_ht)
+              xelis_hash_v3_nt(FINALWORK, *(workerData_xelis_v3*)worker, powHash);
+            else
+              xelis_hash_v3(FINALWORK, *(workerData_xelis_v3*)worker, powHash);
+          }
         } else {
           xelis_hash_v2(FINALWORK, *(workerData_xelis_v2*)worker, powHash);
         }

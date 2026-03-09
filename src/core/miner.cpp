@@ -72,6 +72,10 @@
 #include <crypto/yespower/yespower_algo.h>
 #endif
 
+#ifdef TNN_XELISHASH
+#include <xelis-hash/xelis-hash.hpp>
+#endif
+
 #if defined(USE_ASTRO_SPSA)
 #include "spsa.hpp"
 #endif
@@ -146,6 +150,8 @@ int rejected;
 int accepted;
 
 bool lockThreads = true;
+bool msrDisabled = false;
+int threadPriorityLevel = 0;  // 0 = normal (don't set), 1 = above normal, 2 = high
 
 // static int firstRejected;
 
@@ -869,8 +875,15 @@ int tnn_main(int argc, char **argv)
   if (vm.count("bench-xelis"))
   {
 #if defined(TNN_XELISHASH) && !defined(TNN_HIP)
+    if (!msrDisabled) {
+      applyMSROptimization("XelisV3");
+      std::atexit(cleanupMSROnExit);
+    }
     boost::thread t(xelis_benchmark_cpu_hash_v3);
-    setPriority(t.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+    if (threadPriorityLevel == 2)
+      setPriority(t.native_handle(), THREAD_PRIORITY_HIGHEST);
+    else if (threadPriorityLevel == 1)
+      setPriority(t.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
     t.join();
     return 0;
 #else
@@ -1025,6 +1038,32 @@ int tnn_main(int argc, char **argv)
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     lockThreads = false;
+  }
+  if (vm.count("no-msr"))
+  {
+    setcolor(CYAN);
+    printf("MSR optimization has been disabled\n");
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    msrDisabled = true;
+  }
+  if (vm.count("priority"))
+  {
+    std::string prio = vm["priority"].as<std::string>();
+    if (prio == "above") {
+      threadPriorityLevel = 1;
+      setcolor(CYAN);
+      printf("Thread priority: ABOVE NORMAL\n");
+    } else if (prio == "high") {
+      threadPriorityLevel = 2;
+      setcolor(CYAN);
+      printf("Thread priority: HIGH\n");
+    } else {
+      setcolor(YELLOW);
+      printf("Unknown priority '%s', using normal\n", prio.c_str());
+    }
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
   }
   if (vm.count("gpu"))
   {
@@ -1272,6 +1311,28 @@ fillBlanks:
   setcolor(BRIGHT_WHITE);
 #endif
 
+#ifdef TNN_XELISHASH
+  if (miningProfile.coin.miningAlgo == ALGO_XELISV3)
+  {
+    if (vm.count("xelis-simd")) {
+      std::string simd = vm["xelis-simd"].as<std::string>();
+      xelis_set_simd_override(simd.c_str());
+      setcolor(CYAN);
+      printf("Xelis v3 stage 1 SIMD override: %s\n", simd.c_str());
+      setcolor(BRIGHT_WHITE);
+    }
+
+    if (!msrDisabled) {
+      applyMSROptimization("XelisV3");
+      std::atexit(cleanupMSROnExit);
+    }
+
+    xelis_tune_v3(threads);
+  }
+  fflush(stdout);
+  setcolor(BRIGHT_WHITE);
+#endif
+
   printf("\n");
 }
 
@@ -1422,8 +1483,10 @@ Mining:
     }
 
     randomx_set_flags(true);
-    applyMSROptimization("RandomX");
-    std::atexit(cleanupMSROnExit);
+    if (!msrDisabled) {
+      applyMSROptimization("RandomX");
+      std::atexit(cleanupMSROnExit);
+    }
     fflush(stdout);
     randomx_init_intern(n);
   }
@@ -1474,8 +1537,10 @@ Mining:
       {
         setAffinity(minerThreads[i].native_handle(), i);
       }
-      // if (threads == 1 || (n > 2 && i <= n - 2))
-      // setPriority(minerThreads[i].native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+      if (threadPriorityLevel == 1)
+        setPriority(minerThreads[i].native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+      else if (threadPriorityLevel == 2)
+        setPriority(minerThreads[i].native_handle(), THREAD_PRIORITY_HIGHEST);
 
       std::cout << i + 1;
       if (i + 1 != threads)

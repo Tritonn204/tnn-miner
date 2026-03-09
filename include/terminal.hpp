@@ -176,6 +176,8 @@ inline po::options_description get_prog_opts()
     ("dev-fee", po::value<double>(), "Your desired dev fee percentage, default is 2.5, minimum is 1")
     ("report-interval", po::value<int>(), "Your desired status update interval in seconds")
     ("no-lock", "Disables CPU affinity / CPU core binding")
+    ("priority", po::value<std::string>(), "<normal|above|high> Set mining thread priority (default: normal). WARNING: 'high' may reduce system responsiveness on Windows")
+    ("no-msr", "Disable MSR optimization")
     ("ignore-wallet", "Disables wallet validation, for specific uses with pool mining")
     // ("gpu", "Mine with GPU instead of CPU")
     // ("batch-size", po::value<int>(), "(GPU Setting) Sets batch size used for GPU mining")
@@ -206,6 +208,7 @@ inline po::options_description get_prog_opts()
   xelis.add_options()
     ("xatum", "Required for mining to Xatum pools on Xelis")
     ("bench-xelis", "Run a benchmark of xelis-hash with 1 thread")
+    ("xelis-simd", po::value<std::string>(), "<avx512|avx2|aes|none> Override stage 1 SIMD dispatch level")
   ;
 
   po::options_description randomX("RandomX", col_width);

@@ -1,5 +1,6 @@
 #include "xelis-hash-v3-internal.hpp"
 #include "xelis_v3_fmv.gen.h"
+#include <tnn-hugepages.hpp>
 
 #include <iostream>
 #include <chrono>
@@ -120,6 +121,18 @@ uint64_t v      = execute_operation(op_raw, a, b, c, r, result, i, j);
     }
 }
 
+static void stage_3_l2(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
+{
+    // ARM L2 variant — same as stage_3 but with L2 prefetch hint
+    // (On ARM this is a minimal difference; included for API symmetry)
+    XELIS_STAGE3_SOFT_AES_BODY_PF(prefetch_L2)
+}
+
+static void stage_3_sw(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
+{
+    XELIS_STAGE3_SOFT_AES_BODY_SWITCH
+}
+
 #endif // !defined(__x86_64__)
 
 // ============================================================================
@@ -134,7 +147,90 @@ using Stage3Fn = void(*)(uint64_t *, workerData_xelis_v3 &);
 static Stage1Fn get_stage_1() { return stage_1; }
 static Stage1Fn get_stage_1_nt() { return stage_1; }     // NT is a no-op on ARM
 static Stage1Fn get_stage_1_serial() { return stage_1; } // ARM stage_1 is already serial
-static Stage3Fn get_stage_3() { return stage_3; }
+#endif
+
+// Stage 1 SIMD override — set by xelis_set_simd_override() from CLI flag.
+// When set, xelis_hash_v3 / _nt use this instead of get_stage_1().
+#if defined(__x86_64__)
+static Stage1Fn g_stage1_override    = nullptr;
+static Stage1Fn g_stage1_nt_override = nullptr;
+
+bool xelis_set_simd_override(const char *level)
+{
+    std::string s(level);
+    if (s == "avx512") {
+        g_stage1_override    = stage_1_avx512;
+        g_stage1_nt_override = stage_1_nt_avx512;
+    } else if (s == "avx2") {
+        g_stage1_override    = stage_1_avx2;
+        g_stage1_nt_override = stage_1_nt_avx2;
+    } else if (s == "aes") {
+        g_stage1_override    = stage_1_aes;
+        g_stage1_nt_override = stage_1_nt_aes;
+    } else {
+        g_stage1_override    = stage_1_fallback;
+        g_stage1_nt_override = stage_1_nt_fallback;
+    }
+    return true;
+}
+#else
+bool xelis_set_simd_override(const char *) { return false; }
+#endif
+
+// Stage 3 dispatch: two-dimensional (SIMD level x AES-NI).
+// AES-NI availability is independent of SIMD level — a CPU can have
+// AVX512 without AES-NI or vice versa.  Resolved once, cached in a
+// static function pointer so every subsequent call is a single indirect.
+#if defined(__x86_64__)
+static Stage3Fn pick_stage_3() {
+    static Stage3Fn fn = [] {
+        bool has_aes = __builtin_cpu_supports("aes") && __builtin_cpu_supports("sse4.1");
+        if (__builtin_cpu_supports("avx512f") && __builtin_cpu_supports("avx512dq")
+            && __builtin_cpu_supports("avx512bw"))
+            return (Stage3Fn)(has_aes ? stage_3_hw_avx512 : stage_3_avx512);
+        if (__builtin_cpu_supports("avx2"))
+            return (Stage3Fn)(has_aes ? stage_3_hw_avx2 : stage_3_avx2);
+        if (has_aes)
+            return (Stage3Fn)stage_3_aes;
+        return (Stage3Fn)stage_3_fallback;
+    }();
+    return fn;
+}
+
+static Stage3Fn pick_stage_3_l2() {
+    static Stage3Fn fn = [] {
+        bool has_aes = __builtin_cpu_supports("aes") && __builtin_cpu_supports("sse4.1");
+        if (__builtin_cpu_supports("avx512f") && __builtin_cpu_supports("avx512dq")
+            && __builtin_cpu_supports("avx512bw"))
+            return (Stage3Fn)(has_aes ? stage_3_hw_l2_avx512 : stage_3_l2_avx512);
+        if (__builtin_cpu_supports("avx2"))
+            return (Stage3Fn)(has_aes ? stage_3_hw_l2_avx2 : stage_3_l2_avx2);
+        if (has_aes)
+            return (Stage3Fn)stage_3_l2_aes;
+        return (Stage3Fn)stage_3_l2_fallback;
+    }();
+    return fn;
+}
+
+static Stage3Fn pick_stage_3_switch() {
+    static Stage3Fn fn = [] {
+        bool has_aes = __builtin_cpu_supports("aes") && __builtin_cpu_supports("sse4.1");
+        if (__builtin_cpu_supports("avx512f") && __builtin_cpu_supports("avx512dq")
+            && __builtin_cpu_supports("avx512bw"))
+            return (Stage3Fn)(has_aes ? stage_3_hw_sw_avx512 : stage_3_sw_avx512);
+        if (__builtin_cpu_supports("avx2"))
+            return (Stage3Fn)(has_aes ? stage_3_hw_sw_avx2 : stage_3_sw_avx2);
+        if (has_aes)
+            return (Stage3Fn)stage_3_sw_aes;
+        return (Stage3Fn)stage_3_sw_fallback;
+    }();
+    return fn;
+}
+
+#else
+static Stage3Fn pick_stage_3() { return stage_3; }
+static Stage3Fn pick_stage_3_l2() { return stage_3_l2; }
+static Stage3Fn pick_stage_3_switch() { return stage_3_sw; }
 #endif
 
 struct HashVariant {
@@ -147,9 +243,9 @@ struct HashVariant {
 
 static HashVariant HASH_VARIANTS[] = {
     // id              description                               s1                    s3              enabled
-    { "baseline",      "S1:pipelined + S3:baseline",            get_stage_1(),        get_stage_3(),  true },
-    { "s1_serial",     "S1:serial    + S3:baseline",            get_stage_1_serial(), get_stage_3(),  true },
-    { "s1_nt",         "S1:NT-store  + S3:baseline",            get_stage_1_nt(),     get_stage_3(),  true },
+    { "baseline",      "S1:pipelined + S3:baseline",            get_stage_1(),        pick_stage_3(),  true },
+    { "s1_serial",     "S1:serial    + S3:baseline",            get_stage_1_serial(), pick_stage_3(),  true },
+    { "s1_nt",         "S1:NT-store  + S3:baseline",            get_stage_1_nt(),     pick_stage_3(),  true },
 };
 
 static constexpr size_t NUM_VARIANTS = sizeof(HASH_VARIANTS) / sizeof(HASH_VARIANTS[0]);
@@ -160,8 +256,33 @@ static constexpr size_t NUM_VARIANTS = sizeof(HASH_VARIANTS) / sizeof(HASH_VARIA
 
 TNN_SECTION("xelis_hot") void xelis_hash_v3(byte *input, workerData_xelis_v3 &worker, byte *hashResult)
 {
-    get_stage_1()(input, worker.scratchPad, 112);
-    get_stage_3()(worker.scratchPad, worker);
+    auto s1 = g_stage1_override ? g_stage1_override : get_stage_1();
+    s1(input, worker.scratchPad, 112);
+    pick_stage_3()(worker.scratchPad, worker);
+    blake3((uint8_t *)worker.scratchPad, XELIS_OUTPUT_SIZE_V3, hashResult);
+}
+
+TNN_SECTION("xelis_hot") void xelis_hash_v3_nt(byte *input, workerData_xelis_v3 &worker, byte *hashResult)
+{
+    auto s1 = g_stage1_nt_override ? g_stage1_nt_override : get_stage_1_nt();
+    s1(input, worker.scratchPad, 112);
+    pick_stage_3()(worker.scratchPad, worker);
+    blake3((uint8_t *)worker.scratchPad, XELIS_OUTPUT_SIZE_V3, hashResult);
+}
+
+TNN_SECTION("xelis_hot") void xelis_hash_v3_switch(byte *input, workerData_xelis_v3 &worker, byte *hashResult)
+{
+    auto s1 = g_stage1_override ? g_stage1_override : get_stage_1();
+    s1(input, worker.scratchPad, 112);
+    pick_stage_3_switch()(worker.scratchPad, worker);
+    blake3((uint8_t *)worker.scratchPad, XELIS_OUTPUT_SIZE_V3, hashResult);
+}
+
+TNN_SECTION("xelis_hot") void xelis_hash_v3_switch_nt(byte *input, workerData_xelis_v3 &worker, byte *hashResult)
+{
+    auto s1 = g_stage1_nt_override ? g_stage1_nt_override : get_stage_1_nt();
+    s1(input, worker.scratchPad, 112);
+    pick_stage_3_switch()(worker.scratchPad, worker);
     blake3((uint8_t *)worker.scratchPad, XELIS_OUTPUT_SIZE_V3, hashResult);
 }
 
@@ -187,7 +308,7 @@ __attribute__((cold)) void xelis_benchmark_all_variants()
     byte input[112];
     for (int i = 0; i < 112; i++) input[i] = (byte)((i * 17 + 31) & 0xFF);
 
-    workerData_xelis_v3 worker;
+    auto *worker = (workerData_xelis_v3 *)malloc_huge_pages(sizeof(workerData_xelis_v3));
     byte                scratch[XELIS_HASH_SIZE];
 
     std::cout << "\n";
@@ -215,9 +336,9 @@ __attribute__((cold)) void xelis_benchmark_all_variants()
 
         auto run = [&](uint32_t n) {
             for (uint32_t k = 0; k < n; k++) {
-                HASH_VARIANTS[v].stage1(input, worker.scratchPad, 112);
-                HASH_VARIANTS[v].stage3(worker.scratchPad, worker);
-                blake3((uint8_t *)worker.scratchPad, XELIS_OUTPUT_SIZE_V3, r.hash);
+                HASH_VARIANTS[v].stage1(input, worker->scratchPad, 112);
+                HASH_VARIANTS[v].stage3(worker->scratchPad, *worker);
+                blake3((uint8_t *)worker->scratchPad, XELIS_OUTPUT_SIZE_V3, r.hash);
             }
         };
 
@@ -279,6 +400,7 @@ __attribute__((cold)) void xelis_benchmark_all_variants()
     }
     std::cout << "\n";
     fflush(stdout);
+    free_huge_pages(worker);
 }
 
 // ============================================================================
@@ -293,7 +415,7 @@ TNN_SECTION("xelis_hot") void xelis_stage1_v3(const uint8_t *input, uint64_t *sc
 TNN_SECTION("xelis_hot") void xelis_stage3_v3(uint64_t *scratch_pad)
 {
     workerData_xelis_v3 worker;
-    get_stage_3()(scratch_pad, worker);
+    pick_stage_3()(scratch_pad, worker);
 }
 
 TNN_SECTION("xelis_hot") void xelis_blake3_v3(const uint8_t *scratch_pad, byte *hashResult)
@@ -301,11 +423,13 @@ TNN_SECTION("xelis_hot") void xelis_blake3_v3(const uint8_t *scratch_pad, byte *
     blake3(scratch_pad, XELIS_OUTPUT_SIZE_V3, hashResult);
 }
 
+static void xelis_benchmark_multithread();
+
 __attribute__((cold)) void xelis_benchmark_cpu_hash_v3()
 {
     constexpr uint32_t ITERATIONS = 10000;
     byte input[112] = {0};
-    workerData_xelis_v3 worker;
+    auto *worker = (workerData_xelis_v3 *)malloc_huge_pages(sizeof(workerData_xelis_v3));
     byte hash_result[XELIS_HASH_SIZE] = {0};
 
     printf("v3 bench\n");
@@ -313,7 +437,7 @@ __attribute__((cold)) void xelis_benchmark_cpu_hash_v3()
 
     auto start = std::chrono::steady_clock::now();
     for (uint32_t i = 0; i < ITERATIONS; ++i)
-        xelis_hash_v3(input, worker, hash_result);
+        xelis_hash_v3(input, *worker, hash_result);
     auto end = std::chrono::steady_clock::now();
 
     std::chrono::duration<double, std::milli> elapsed = end - start;
@@ -322,6 +446,13 @@ __attribute__((cold)) void xelis_benchmark_cpu_hash_v3()
     std::cout << "ms/hash: " << (elapsed.count() / ITERATIONS) << "\n";
     for (int i = 0; i < 32; i++) printf("%02x", hash_result[i]);
     printf("\n");
+    fflush(stdout);
+
+    free_huge_pages(worker);
+
+    xelis_benchmark_all_variants();
+    fflush(stdout);
+    xelis_benchmark_multithread();
     fflush(stdout);
 }
 
@@ -591,11 +722,16 @@ struct MTBenchConfig {
     Stage3Fn    stage3;
 };
 
+#if defined(__x86_64__)
 static MTBenchConfig MT_CONFIGS[] = {
-    { "baseline",       "S1:pipelined temporal",                 get_stage_1(),       nullptr,           get_stage_3() },
-    { "serial",         "S1:serial (non-pipelined)",             get_stage_1_serial(),nullptr,           get_stage_3() },
-    { "hybrid",         "S1:pipelined P, NT HT",                get_stage_1(),       get_stage_1_nt(),  get_stage_3() },
+    { "L1+S",           "S3:L1 lookahead + scratch (default)",   get_stage_1(),       nullptr,           pick_stage_3() },
+    { "hybrid",         "S3:L1+S + S1:pipelined P, NT HT",      get_stage_1(),       get_stage_1_nt(),  pick_stage_3() },
 };
+#else
+static MTBenchConfig MT_CONFIGS[] = {
+    { "baseline",       "S3:baseline",                           get_stage_1(),       nullptr,           pick_stage_3() },
+};
+#endif
 
 static constexpr size_t NUM_MT_CONFIGS = sizeof(MT_CONFIGS) / sizeof(MT_CONFIGS[0]);
 
@@ -668,47 +804,44 @@ __attribute__((cold)) static void mt_worker_fn(
     free_huge_pages(worker);
 }
 
-__attribute__((cold)) void xelis_benchmark_multithread()
+// ---------------------------------------------------------------------------
+// Inner MT benchmark pass — runs all configs x thread counts, returns results
+// ---------------------------------------------------------------------------
+
+struct MTBenchResult {
+    const char* config_id;
+    unsigned int threads;
+    double total_hs;
+    double per_thread_hs;
+    double scaling_efficiency;
+};
+
+__attribute__((cold)) static std::vector<MTBenchResult> xelis_mt_bench_pass(
+    const char* label,
+    const std::vector<unsigned int>& thread_counts,
+    double duration_sec,
+    unsigned ht_threshold)
 {
-    // Get hardware concurrency
-    unsigned int max_threads = std::thread::hardware_concurrency();
-    if (max_threads == 0) max_threads = 8;
-    
-    // Thread counts to test
-    std::vector<unsigned int> thread_counts = {1,2,4,8,10,12,14,16};
-    
-    constexpr double BENCH_DURATION_SEC = 10.0;
-    
     std::cout << "\n";
     std::cout << "╔══════════════════════════════════════════════════════════════════════╗\n";
-    std::cout << "║          XELIS HASH V3 - MULTI-THREADED BENCHMARK                    ║\n";
+    std::cout << "║  XELIS V3 MT BENCH  --  " << std::left << std::setw(43) << label << "║\n";
     std::cout << "╠══════════════════════════════════════════════════════════════════════╣\n";
-    std::cout << "║  Duration: " << BENCH_DURATION_SEC << "s per config  │  Max threads: " 
-              << std::setw(2) << max_threads 
-              << "  │  Scratchpad: 531KB      ║\n";
+    std::cout << "║  Duration: " << std::fixed << std::setprecision(1) << duration_sec
+              << "s per config  │  Scratchpad: "
+              << (XELIS_MEMORY_SIZE_V3 * 8 / 1024) << " KB"
+              << std::string(22, ' ') << "║\n";
     std::cout << "╚══════════════════════════════════════════════════════════════════════╝\n\n";
-    
-    // Results storage
-    struct Result {
-        const char* config_id;
-        unsigned int threads;
-        double total_hs;
-        double per_thread_hs;
-        double scaling_efficiency;
-    };
-    std::vector<Result> all_results;
-    
-    // Baseline single-thread H/s for each config (for scaling calculation)
+
+    std::vector<MTBenchResult> all_results;
     std::map<const char*, double> single_thread_hs;
-    unsigned ht_threshold = computeHTThreshold(16);
 
     for (const auto& config : MT_CONFIGS) {
         std::cout << "Testing config: " << config.id << " (" << config.description << ")\n";
         std::cout << std::string(70, '-') << "\n";
-        
+
         for (unsigned int num_threads : thread_counts) {
             std::cout << "  " << std::setw(2) << num_threads << " thread(s): " << std::flush;
-            
+
             std::vector<boost::thread> bench_threads(num_threads);
             std::vector<MTWorkerResult> results(num_threads);
 
@@ -720,42 +853,34 @@ __attribute__((cold)) void xelis_benchmark_multithread()
                 bench_threads[t] = boost::thread(mt_worker_fn, t, &config,
                                                 &start_flag, &stop_flag, &results[t],
                                                 &ready_barrier, lockThreads, ht_threshold);
-                
+
                 if (lockThreads) {
                     setAffinity(bench_threads[t].native_handle(), t);
                 }
             }
-                        
-            // Wait for all threads to be ready
+
             ready_barrier.arrive_and_wait();
-            
-            // Start all threads simultaneously
             start_flag.store(true, std::memory_order_release);
-            
-            // Let them run for the benchmark duration
+
             std::this_thread::sleep_for(
-                std::chrono::milliseconds((int)(BENCH_DURATION_SEC * 1000)));
-            
-            // Signal stop
+                std::chrono::milliseconds((int)(duration_sec * 1000)));
+
             stop_flag.store(true, std::memory_order_release);
-            
-            // Wait for all threads to finish
+
             for (auto& t : bench_threads) {
                 t.join();
             }
-            
-            // Aggregate results
+
             uint64_t total_hashes = 0;
             double max_elapsed = 0;
             for (const auto& r : results) {
                 total_hashes += r.hashes_completed;
                 max_elapsed = std::max(max_elapsed, r.elapsed_ms);
             }
-            
+
             double total_hs = (total_hashes * 1000.0) / max_elapsed;
             double per_thread_hs = total_hs / num_threads;
-            
-            // Calculate scaling efficiency
+
             double efficiency = 100.0;
             if (num_threads == 1) {
                 single_thread_hs[config.id] = total_hs;
@@ -763,83 +888,179 @@ __attribute__((cold)) void xelis_benchmark_multithread()
                 double ideal = single_thread_hs[config.id] * num_threads;
                 efficiency = (total_hs / ideal) * 100.0;
             }
-            
+
             std::cout << std::fixed << std::setprecision(2)
                       << std::setw(8) << total_hs << " H/s total, "
                       << std::setw(8) << per_thread_hs << " H/s/thread, "
                       << std::setw(5) << efficiency << "% scaling\n";
-            
+
             all_results.push_back({config.id, num_threads, total_hs, per_thread_hs, efficiency});
         }
         std::cout << "\n";
     }
-    
-    // Summary comparison table
-    std::cout << "┌───────────┬─────────────────────────────────────────────────────────────┐\n";
+
+    // Summary table
+    std::cout << "┌───────────┬";
+    for (size_t i = 0; i < NUM_MT_CONFIGS; i++) std::cout << "────────────────┬";
+    std::cout << "────────────┐\n";
     std::cout << "│  Threads  │";
-    for (const auto& config : MT_CONFIGS) {
+    for (const auto& config : MT_CONFIGS)
         std::cout << "  " << std::setw(12) << config.id << "  │";
-    }
     std::cout << "   Winner   │\n";
     std::cout << "├───────────┼";
-    for (size_t i = 0; i < NUM_MT_CONFIGS; i++) {
-        std::cout << "────────────────┼";
-    }
+    for (size_t i = 0; i < NUM_MT_CONFIGS; i++) std::cout << "────────────────┼";
     std::cout << "────────────┤\n";
-    
+
     for (unsigned int tc : thread_counts) {
         std::cout << "│     " << std::setw(2) << tc << "    │";
-        
         double best_hs = 0;
         const char* best_id = "";
-        
         for (const auto& config : MT_CONFIGS) {
             for (const auto& r : all_results) {
                 if (r.threads == tc && strcmp(r.config_id, config.id) == 0) {
                     std::cout << "  " << std::setw(10) << r.total_hs << " H/s│";
-                    if (r.total_hs > best_hs) {
-                        best_hs = r.total_hs;
-                        best_id = r.config_id;
-                    }
+                    if (r.total_hs > best_hs) { best_hs = r.total_hs; best_id = r.config_id; }
                     break;
                 }
             }
         }
         std::cout << "  " << std::setw(10) << best_id << "│\n";
     }
-    
     std::cout << "└───────────┴";
-    for (size_t i = 0; i < NUM_MT_CONFIGS; i++) {
-        std::cout << "────────────────┴";
-    }
-    std::cout << "────────────┘\n";
-    
-    // NT vs Temporal comparison at max threads
-    std::cout << "\n";
-    double temporal_max = 0, nt_max = 0;
-    for (const auto& r : all_results) {
-        if (r.threads == max_threads) {
-            if (strcmp(r.config_id, "temporal") == 0) temporal_max = r.total_hs;
-            if (strcmp(r.config_id, "nt") == 0) nt_max = r.total_hs;
+    for (size_t i = 0; i < NUM_MT_CONFIGS; i++) std::cout << "────────────────┴";
+    std::cout << "────────────┘\n\n";
+    fflush(stdout);
+
+    return all_results;
+}
+
+// ---------------------------------------------------------------------------
+// Public entry point
+// ---------------------------------------------------------------------------
+
+__attribute__((cold)) static void xelis_benchmark_multithread()
+{
+    unsigned hw = boost::thread::hardware_concurrency();
+
+    // 1, 2, 4, 4+4, 4+4+4, ... up to 32, skip if > hw
+    std::vector<unsigned int> thread_counts;
+    for (unsigned t : {1u, 2u, 4u})
+        if (t <= hw) thread_counts.push_back(t);
+    for (unsigned t = 8; t <= 32 && t <= hw; t += 4)
+        thread_counts.push_back(t);
+
+    constexpr double BENCH_DURATION_SEC = 10.0;
+    unsigned ht_threshold = computeHTThreshold(hw);
+
+    xelis_mt_bench_pass("Prefetch A/B", thread_counts, BENCH_DURATION_SEC, ht_threshold);
+}
+
+// ============================================================================
+// STARTUP TUNE — baseline vs hybrid (NT stores for HT siblings)
+// ============================================================================
+
+bool xelis_v3_use_hybrid = false;
+bool xelis_v3_use_switch = false;
+unsigned xelis_v3_ht_threshold = UINT_MAX;
+
+using XelisHashFn = void(*)(byte *, workerData_xelis_v3 &, byte *);
+
+struct XelisTuneConfig {
+    const char *name;
+    XelisHashFn hash_fn;       // used by physical-core threads
+    XelisHashFn hash_fn_ht;    // used by HT-sibling threads (nullptr = same)
+};
+
+__attribute__((cold)) void xelis_tune_v3(int num_threads)
+{
+    constexpr double WARMUP_SEC  = 2.0;
+    constexpr double BENCH_SEC   = 10.0;
+
+    unsigned phys = boost::thread::physical_concurrency();
+    unsigned ht_thresh = std::min(phys, (unsigned)num_threads);
+
+    XelisTuneConfig configs[] = {
+        { "goto",           xelis_hash_v3,        nullptr },
+        { "goto+hybrid",    xelis_hash_v3,        xelis_hash_v3_nt },
+        { "switch",         xelis_hash_v3_switch,  nullptr },
+        { "switch+hybrid",  xelis_hash_v3_switch,  xelis_hash_v3_switch_nt },
+    };
+    constexpr size_t NUM_CONFIGS = sizeof(configs) / sizeof(configs[0]);
+
+    printf("Xelis v3 tune: %d threads, %u physical cores, %.0fs warmup + %.0fs bench x %zu configs\n",
+           num_threads, phys, WARMUP_SEC, BENCH_SEC, NUM_CONFIGS);
+    fflush(stdout);
+
+    double best_hs = 0;
+    size_t best_idx = 0;
+
+    for (size_t ci = 0; ci < NUM_CONFIGS; ci++)
+    {
+        auto &cfg = configs[ci];
+        std::atomic<uint64_t> total_hashes{0};
+        std::atomic<bool> stop_flag{false};
+        std::barrier ready_barrier(num_threads + 1);
+
+        std::vector<boost::thread> threads(num_threads);
+        for (int t = 0; t < num_threads; t++)
+        {
+            threads[t] = boost::thread([&, t]() {
+                auto *worker = (workerData_xelis_v3 *)malloc_huge_pages(sizeof(workerData_xelis_v3));
+                alignas(64) byte input[XELIS_TEMPLATE_SIZE] = {0};
+                byte hash[XELIS_HASH_SIZE];
+
+                for (int k = 0; k < 112; k++)
+                    input[k] = (byte)((k * 17 + 31 + t * 7) & 0xFF);
+
+                bool is_ht = ((unsigned)t >= ht_thresh);
+                XelisHashFn fn = (is_ht && cfg.hash_fn_ht) ? cfg.hash_fn_ht : cfg.hash_fn;
+
+                ready_barrier.arrive_and_wait();
+
+                // Warmup
+                auto warmup_end = std::chrono::steady_clock::now()
+                    + std::chrono::milliseconds((int)(WARMUP_SEC * 1000));
+                while (std::chrono::steady_clock::now() < warmup_end)
+                    fn(input, *worker, hash);
+
+                // Bench
+                uint64_t count = 0;
+                while (!stop_flag.load(std::memory_order_relaxed)) {
+                    fn(input, *worker, hash);
+                    count++;
+                }
+                total_hashes.fetch_add(count, std::memory_order_relaxed);
+                free_huge_pages(worker);
+            });
+
+            if (lockThreads)
+                setAffinity(threads[t].native_handle(), t);
+        }
+
+        ready_barrier.arrive_and_wait();
+
+        // Wait for warmup + bench duration
+        std::this_thread::sleep_for(
+            std::chrono::milliseconds((int)((WARMUP_SEC + BENCH_SEC) * 1000)));
+        stop_flag.store(true, std::memory_order_release);
+
+        for (auto &th : threads) th.join();
+
+        double hs = (double)total_hashes.load() / BENCH_SEC;
+        printf("  %-10s: %.2f H/s\n", cfg.name, hs);
+        fflush(stdout);
+
+        if (hs > best_hs) {
+            best_hs = hs;
+            best_idx = ci;
         }
     }
-    
-    if (temporal_max > 0 && nt_max > 0) {
-        double diff_pct = ((nt_max / temporal_max) - 1.0) * 100.0;
-        std::cout << "At " << max_threads << " threads: NT stores are "
-                  << (diff_pct >= 0 ? "+" : "") << std::fixed << std::setprecision(2) 
-                  << diff_pct << "% vs temporal\n";
-        
-        if (diff_pct > 0) {
-            std::cout << "→ NT stores WIN under contention! Cache thrashing avoided.\n";
-        } else if (diff_pct > -5) {
-            std::cout << "→ Roughly equivalent under contention.\n";
-        } else {
-            std::cout << "→ Temporal stores still win even under contention.\n";
-        }
-    }
-    
-    std::cout << "\n";
+
+    xelis_v3_use_hybrid  = (best_idx == 1 || best_idx == 3);
+    xelis_v3_use_switch  = (best_idx == 2 || best_idx == 3);
+    xelis_v3_ht_threshold = ht_thresh;
+
+    printf("Selected: %s (%.2f H/s)\n\n", configs[best_idx].name, best_hs);
     fflush(stdout);
 }
 
@@ -934,10 +1155,6 @@ __attribute__((cold)) int xelis_runTests_v3()
 
     if (ok) {
         std::cout << "\nXELIS-HASH-V3: All tests passed! ✓\n\n";
-        fflush(stdout);
-        xelis_benchmark_all_variants();
-        fflush(stdout);
-        xelis_benchmark_multithread();
         fflush(stdout);
         return 0;
     }

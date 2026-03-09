@@ -121,8 +121,22 @@ int xelis_runTests_v2();
 // V3 Function Declarations (NEW)
 // ============================================================================
 void xelis_hash_v3(byte *input, workerData_xelis_v3 &worker, byte *hashResult);
+void xelis_hash_v3_nt(byte *input, workerData_xelis_v3 &worker, byte *hashResult);
+void xelis_hash_v3_switch(byte *input, workerData_xelis_v3 &worker, byte *hashResult);
+void xelis_hash_v3_switch_nt(byte *input, workerData_xelis_v3 &worker, byte *hashResult);
 void xelis_benchmark_cpu_hash_v3();
 int xelis_runTests_v3();
+
+// Startup tune: compares baseline vs hybrid (NT stores for HT siblings).
+// Sets xelis_v3_use_hybrid and xelis_v3_ht_threshold globals.
+void xelis_tune_v3(int num_threads);
+extern bool xelis_v3_use_hybrid;
+extern bool xelis_v3_use_switch;
+extern unsigned xelis_v3_ht_threshold;
+
+// Override stage 1 SIMD dispatch level.
+// Valid levels: "avx512", "avx2", "aes"; anything else maps to "none" (scalar fallback).
+bool xelis_set_simd_override(const char *level);
 
 // Exposed stages for debugging/validation
 void xelis_stage1_v3(const uint8_t *input, uint64_t *scratch_pad, size_t input_len);

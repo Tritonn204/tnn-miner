@@ -581,9 +581,26 @@ static inline uint64_t execute_operation(
 static inline void prefetch_L1(const void *p) {
     _mm_prefetch((const char *)p, _MM_HINT_T0);
 }
+static inline void prefetch_L2(const void *p) {
+    _mm_prefetch((const char *)p, _MM_HINT_T1);
+}
 #else
 static inline void prefetch_L1(const void *p) {
     __builtin_prefetch(p, 0, 3);
+}
+static inline void prefetch_L2(const void *p) {
+    __builtin_prefetch(p, 0, 2);
+}
+#endif
+static inline void prefetch_none(const void *) {}
+
+#ifdef __x86_64__
+static inline void prefetch_W(const void *p) {
+    __builtin_prefetch(p, 1, 3);  // PREFETCHW — write-intent, L1
+}
+#else
+static inline void prefetch_W(const void *p) {
+    __builtin_prefetch(p, 1, 3);
 }
 #endif
 
@@ -629,10 +646,21 @@ static inline void prefetch_L1(const void *p) {
 }
 
 // ============================================================================
-// Shared stage_3 body macro (software AES path, used by non-AES tiers)
+// Shared stage_3 body macros
+// SOFT: software AES via aes_round() FMV (used by tiers without AES target)
+// HW:   inline _mm_aesenc_si128, requires AES-NI in the function target
+//
+// _PF(PF)          — single prefetch function for lookahead
+// _EX(PF,PF_W,PF_S)— lookahead + write-intent stores + scratch_pad read
+// Plain versions    — L1 lookahead + scratch_pad[r] read-ahead (default)
 // ============================================================================
 
-#define XELIS_STAGE3_SOFT_AES_BODY \
+#define XELIS_STAGE3_SOFT_AES_BODY_PF(PF) \
+    XELIS_STAGE3_SOFT_AES_BODY_FULL(PF, prefetch_none, prefetch_none, OpDispatch::Goto)
+
+// Soft AES full: PF=lookahead, PF_W=write-intent, PF_S=scratch read, OPD=dispatch mode
+// Also L2-prefetches scratch_pad[r+32] unconditionally.
+#define XELIS_STAGE3_SOFT_AES_BODY_FULL(PF, PF_W, PF_S, OPD) \
 { \
     constexpr uint8_t key[17] = "xelishash-pow-v3"; \
     uint8_t block[16]; \
@@ -657,10 +685,12 @@ static inline void prefetch_L1(const void *p) {
         uint64_t result = ~(hash1 ^ hash2); \
 \
         uint64_t next_a_idx = map_index(result); \
-        prefetch_L1(&mem_buffer_a[next_a_idx]); \
+        PF(&mem_buffer_a[next_a_idx]); \
 \
         for (size_t j = 0; j < XELIS_BUFFER_SIZE_V3; ++j) \
         { \
+            PF_S(&scratch_pad[r]); \
+            prefetch_L2(&scratch_pad[r + 32]); \
             uint64_t rot_res = ~ROTR(result, r); \
             uint64_t a       = mem_buffer_a[next_a_idx]; \
             uint64_t b       = mem_buffer_b[map_index(a ^ rot_res)]; \
@@ -668,13 +698,13 @@ static inline void prefetch_L1(const void *p) {
             r++; \
 \
             uint32_t op_raw = ROTL(result, (uint32_t)c); \
-            uint64_t v      = execute_operation(op_raw, a, b, c, r, result, i, j); \
+            uint64_t v      = execute_operation<OPD>(op_raw, a, b, c, r, result, i, j); \
 \
             uint64_t idx_seed = v ^ result; \
             result            = ROTL(idx_seed, r); \
 \
             next_a_idx = map_index(result); \
-            prefetch_L1(&mem_buffer_a[next_a_idx]); \
+            PF(&mem_buffer_a[next_a_idx]); \
 \
             int      use_b = pick_half(v); \
             uint64_t idx_t = map_index(idx_seed); \
@@ -683,6 +713,8 @@ static inline void prefetch_L1(const void *p) {
             uint64_t idx_a = map_index(t ^ result ^ XELIS_GOLDEN_RATIO); \
             uint64_t idx_b = map_index(idx_a ^ ~result ^ XELIS_SCATTER_CONST); \
 \
+            PF_W(&mem_buffer_a[idx_a]); \
+            PF_W(&mem_buffer_b[idx_b]); \
             uint64_t mem_a_tmp = mem_buffer_a[idx_a]; \
             mem_buffer_a[idx_a] = t; \
             mem_buffer_b[idx_b] ^= mem_a_tmp ^ ROTR(t, i + j); \
@@ -694,3 +726,94 @@ static inline void prefetch_L1(const void *p) {
         addr_b = addr_b_next; \
     } \
 }
+
+#define XELIS_STAGE3_SOFT_AES_BODY_EX(PF, PF_W, PF_S) \
+    XELIS_STAGE3_SOFT_AES_BODY_FULL(PF, PF_W, PF_S, OpDispatch::Goto)
+
+// Default: L1 lookahead + scratch_pad[r] read-ahead (goto dispatch)
+#define XELIS_STAGE3_SOFT_AES_BODY XELIS_STAGE3_SOFT_AES_BODY_FULL(prefetch_L1, prefetch_none, prefetch_L1, OpDispatch::Goto)
+
+// Switch dispatch variant
+#define XELIS_STAGE3_SOFT_AES_BODY_SWITCH XELIS_STAGE3_SOFT_AES_BODY_FULL(prefetch_L1, prefetch_none, prefetch_L1, OpDispatch::Switch)
+
+#if defined(__x86_64__)
+// HW AES full: PF=lookahead, PF_W=write-intent, PF_S=scratch read, OPD=dispatch mode
+// Also L2-prefetches scratch_pad[r+32] unconditionally.
+#define XELIS_STAGE3_HW_AES_BODY_FULL(PF, PF_W, PF_S, OPD) \
+{ \
+    constexpr uint8_t key[17] = "xelishash-pow-v3"; \
+    __m128i key_vec = _mm_loadu_si128((const __m128i *)key); \
+\
+    uint64_t *__restrict mem_buffer_a = scratch_pad; \
+    uint64_t *__restrict mem_buffer_b = scratch_pad + XELIS_BUFFER_SIZE_V3; \
+\
+    uint64_t addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V3 - 1]; \
+    uint64_t addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V3 - 1] >> 32; \
+    size_t r = 0; \
+\
+    for (size_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V3; ++i) \
+    { \
+        uint64_t mem_a = mem_buffer_a[map_index(addr_a)]; \
+        uint64_t mem_b = mem_buffer_b[map_index(mem_a ^ addr_b)]; \
+\
+        __m128i block_vec = _mm_set_epi64x(mem_a, mem_b); \
+        block_vec = _mm_aesenc_si128(block_vec, key_vec); \
+        uint64_t hash1 = _mm_extract_epi64(block_vec, 0); \
+        uint64_t hash2 = _mm_extract_epi64(block_vec, 1); \
+        uint64_t result = ~(hash1 ^ hash2); \
+\
+        uint64_t next_a_idx = map_index(result); \
+        PF(&mem_buffer_a[next_a_idx]); \
+\
+        for (size_t j = 0; j < XELIS_BUFFER_SIZE_V3; ++j) \
+        { \
+            PF_S(&scratch_pad[r]); \
+            prefetch_L2(&scratch_pad[r + 32]); \
+            uint64_t rot_res = ~ROTR(result, r); \
+            uint64_t a       = mem_buffer_a[next_a_idx]; \
+            uint64_t b       = mem_buffer_b[map_index(a ^ rot_res)]; \
+            uint64_t c       = scratch_pad[r]; \
+            r++; \
+\
+            uint32_t op_raw = ROTL(result, (uint32_t)c); \
+            uint64_t v      = execute_operation<OPD>(op_raw, a, b, c, r, result, i, j); \
+\
+            uint64_t idx_seed = v ^ result; \
+            result            = ROTL(idx_seed, r); \
+\
+            next_a_idx = map_index(result); \
+            PF(&mem_buffer_a[next_a_idx]); \
+\
+            int      use_b = pick_half(v); \
+            uint64_t idx_t = map_index(idx_seed); \
+            uint64_t t     = (use_b ? mem_buffer_b[idx_t] : mem_buffer_a[idx_t]) ^ result; \
+\
+            uint64_t idx_a = map_index(t ^ result ^ XELIS_GOLDEN_RATIO); \
+            uint64_t idx_b = map_index(idx_a ^ ~result ^ XELIS_SCATTER_CONST); \
+\
+            PF_W(&mem_buffer_a[idx_a]); \
+            PF_W(&mem_buffer_b[idx_b]); \
+            uint64_t mem_a_tmp = mem_buffer_a[idx_a]; \
+            mem_buffer_a[idx_a] = t; \
+            mem_buffer_b[idx_b] ^= mem_a_tmp ^ ROTR(t, i + j); \
+        } \
+\
+        uint64_t addr_a_next = modular_power_fast(addr_a, addr_b, result); \
+        uint64_t addr_b_next = isqrt(result) * (r + 1) * isqrt(addr_a_next); \
+        addr_a = addr_a_next; \
+        addr_b = addr_b_next; \
+    } \
+}
+
+#define XELIS_STAGE3_HW_AES_BODY_PF(PF) \
+    XELIS_STAGE3_HW_AES_BODY_FULL(PF, prefetch_none, prefetch_none, OpDispatch::Goto)
+
+#define XELIS_STAGE3_HW_AES_BODY_EX(PF, PF_W, PF_S) \
+    XELIS_STAGE3_HW_AES_BODY_FULL(PF, PF_W, PF_S, OpDispatch::Goto)
+
+// Default: L1 lookahead + scratch_pad[r] read-ahead (goto dispatch)
+#define XELIS_STAGE3_HW_AES_BODY XELIS_STAGE3_HW_AES_BODY_FULL(prefetch_L1, prefetch_none, prefetch_L1, OpDispatch::Goto)
+
+// Switch dispatch variant
+#define XELIS_STAGE3_HW_AES_BODY_SWITCH XELIS_STAGE3_HW_AES_BODY_FULL(prefetch_L1, prefetch_none, prefetch_L1, OpDispatch::Switch)
+#endif

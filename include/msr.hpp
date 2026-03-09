@@ -1,3 +1,5 @@
+#pragma once
+
 #include <iostream>
 #include <vector>
 #include <string>
@@ -169,6 +171,49 @@ public:
     }
 };
 
+// XelisV3-specific profile: surgically disable L2 stream HW prefetcher
+// to prevent HWPF pollution of L2 from the sequential scratch_pad[r] access.
+// The profiling shows SRB has 0 L2 HWPF activity vs TNN's ~5.7 pti — this
+// HWPF evicts random-access data from L2, causing 22x more L3 misses.
+class XelisV3OptimizationProfile : public MSROptimizationProfile {
+public:
+    std::string getName() const override {
+        return "XelisV3";
+    }
+
+    std::vector<std::pair<uint32_t, uint64_t>> getMSRValues(CPUType cpuType) const override {
+        std::vector<std::pair<uint32_t, uint64_t>> msrValues;
+
+        switch (cpuType) {
+            case CPUType::INTEL:
+                // Intel: 0x1A4 bit 0 = L2 HW prefetcher disable
+                msrValues.emplace_back(0x1A4, 0x1);
+                break;
+
+            case CPUType::AMD_ZEN1_ZEN2:
+                // 0xC0011022 bit 13 = disable L2 stream prefetcher
+                msrValues.emplace_back(0xC0011022, 0x2000);
+                break;
+
+            case CPUType::AMD_ZEN3:
+                // Zen3: bit 13 of 0xC0011022 for L2 stream PF disable
+                // Keep other bits at their defaults (0)
+                msrValues.emplace_back(0xC0011022, 0x2000);
+                break;
+
+            case CPUType::AMD_ZEN4_ZEN5:
+                // Zen4/5: same register, same bit
+                msrValues.emplace_back(0xC0011022, 0x2000);
+                break;
+
+            default:
+                break;
+        }
+
+        return msrValues;
+    }
+};
+
 // Main MSR Manager class
 class MSRManager {
 private:
@@ -225,6 +270,7 @@ public:
         // Register default profiles
         registerProfile(std::make_shared<RandomXOptimizationProfile>());
         registerProfile(std::make_shared<EthashOptimizationProfile>());
+        registerProfile(std::make_shared<XelisV3OptimizationProfile>());
         #else
         setcolor(RED);
         std::cout << "MSR optimization not available on non-x86_64 architecture" << std::endl;
@@ -505,9 +551,9 @@ public:
     }
 };
 
-std::unique_ptr<MSRManager> MSRManagerGlobal::instance = nullptr;
-std::mutex MSRManagerGlobal::instanceMutex;
-std::atomic<bool> MSRManagerGlobal::signalHandlersRegistered{false};
+inline std::unique_ptr<MSRManager> MSRManagerGlobal::instance = nullptr;
+inline std::mutex MSRManagerGlobal::instanceMutex;
+inline std::atomic<bool> MSRManagerGlobal::signalHandlersRegistered{false};
 
 // Simple interface for algorithm-specific optimizations
 inline bool applyMSROptimization(const std::string& algorithm) {
