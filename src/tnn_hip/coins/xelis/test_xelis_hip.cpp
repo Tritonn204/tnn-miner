@@ -304,12 +304,12 @@ static int test_xelis_hip_impl() {
     hipFunction_t stage3_func = nullptr;
     hipFunction_t blake3_func = nullptr;
 
-    hipError_t err = hipModuleGetFunction(&stage3_func, module_kernel.module, "xelis_s3_efficient_noblake_kernel");
+    hipError_t err = hipModuleGetFunction(&stage3_func, module_kernel.module, "xelis_s3_hybrid_v2_noblake_kernel");
     if (err != hipSuccess) {
         fprintf(stderr, "[ERROR] Failed to get stage3 kernel: %s\n", hipGetErrorString(err));
         return 1;
     }
-    printf("[TEST]   ✓ Loaded xelis_s3_efficient_noblake_kernel\n");
+    printf("[TEST]   ✓ Loaded xelis_s3_hybrid_v2_noblake_kernel\n");
     fflush(stdout);
 
     err = hipModuleGetFunction(&blake3_func, module_kernel.module, "xelis_blake3_batch");

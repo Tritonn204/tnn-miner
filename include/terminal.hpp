@@ -245,6 +245,7 @@ inline po::options_description get_prog_opts()
     ("len", po::value<int>(), "Sets length of the processed chunk in said benchmark (default 15)")
     ("sabench", "Runs a benchmark for divsufsort on snapshot files in the 'tests' directory")
     ("quiet", "Do not print TNN banner or stratum job messages")
+    ("log-level", po::value<std::string>(), "<off|info|debug|trace> Set log verbosity (default: info)")
   ;
 
   general.add(stratum);

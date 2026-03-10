@@ -2,8 +2,8 @@
 //@ section xelis
 
 //@ tier aes aes,sse4.1
-//@ tier avx2 avx2
-//@ tier avx512 avx512f,avx512dq,avx512bw
+//@ tier avx2 avx2,lzcnt
+//@ tier avx512 avx512f,avx512dq,avx512bw,lzcnt
 //@ tier fallback default
 
 //@ common
@@ -14,6 +14,11 @@
 // AVX512 tier -- inline 4-stream ChaCha with native rotates (temporal + NT)
 // =========================================================================
 //@ begin avx512
+
+__attribute__((target("avx512f,avx512dq,avx512bw,lzcnt"))) uint64_t xelis_isqrt(uint64_t n)
+{
+  XELIS_ISQRT_BODY
+}
 
 __attribute__((target("avx512f,avx512dq,avx512bw"))) void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
 {
@@ -67,6 +72,11 @@ __attribute__((target("avx512f,avx512dq,avx512bw,aes"))) void stage_3_hw_sw(uint
 // =========================================================================
 //@ begin avx2
 
+__attribute__((target("avx2,lzcnt"))) uint64_t xelis_isqrt(uint64_t n)
+{
+  XELIS_ISQRT_BODY
+}
+
 __attribute__((target("avx2"))) void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
 {
   XELIS_STAGE1_INLINE(ChaCha20EncryptXelis_avx2_inline, StorePolicy::TEMPORAL)
@@ -119,6 +129,11 @@ __attribute__((target("avx2,aes"))) void stage_3_hw_sw(uint64_t *scratch_pad, wo
 // =========================================================================
 //@ begin aes
 
+__attribute__((target("aes,sse4.1"))) uint64_t xelis_isqrt(uint64_t n)
+{
+  XELIS_ISQRT_BODY
+}
+
 __attribute__((target("aes,sse4.1"))) void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
 {
   XELIS_STAGE1_INLINE(ChaCha20EncryptXelis_ssse3_inline, StorePolicy::TEMPORAL)
@@ -155,6 +170,11 @@ __attribute__((target("aes,sse4.1"))) void stage_3_sw(uint64_t *scratch_pad, wor
 // Fallback tier -- FMV dispatch ChaCha (no inline, no guaranteed SIMD)
 // =========================================================================
 //@ begin fallback
+
+__attribute__((target("default"))) uint64_t xelis_isqrt(uint64_t n)
+{
+  XELIS_ISQRT_BODY
+}
 
 __attribute__((target("default"))) void stage_1(const uint8_t *input, uint64_t *sp, size_t input_len)
 {

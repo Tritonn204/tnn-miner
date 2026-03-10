@@ -649,6 +649,9 @@ uint64_t v      = execute_operation(op_raw, a, b, c, r, result, 0, j);
 #include <atomic>
 #include <barrier>
 #include <map>
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <tnn-hugepages.hpp>
 #include <tnn-common.hpp>
 #include <tnn_affinity.h>
@@ -703,13 +706,13 @@ __attribute__((cold)) static unsigned computeHTThreshold(unsigned num_threads)
     // NT kicks in when adding more threads would overflow L3
     // i.e., when thread_index >= fits_in_l3 AND thread_index >= phys_cores
     // The second condition ensures we never NT a physical-only thread
-    unsigned threshold     = (unsigned)std::min(
+    unsigned threshold     = (unsigned)(std::min)(
                                  fits_in_l3,
                                  (size_t)phys_cores
                              );
 
     // Clamp to actual thread count
-    return std::min(threshold, num_threads);
+    return (std::min)(threshold, num_threads);
 }
 
 // ============================================================================
@@ -877,7 +880,7 @@ __attribute__((cold)) static std::vector<MTBenchResult> xelis_mt_bench_pass(
             double max_elapsed = 0;
             for (const auto& r : results) {
                 total_hashes += r.hashes_completed;
-                max_elapsed = std::max(max_elapsed, r.elapsed_ms);
+                max_elapsed = (std::max)(max_elapsed, r.elapsed_ms);
             }
 
             double total_hs = (total_hashes * 1000.0) / max_elapsed;
@@ -979,7 +982,7 @@ __attribute__((cold)) void xelis_tune_v3(int num_threads)
     constexpr double BENCH_SEC   = 10.0;
 
     unsigned phys = boost::thread::physical_concurrency();
-    unsigned ht_thresh = std::min(phys, (unsigned)num_threads);
+    unsigned ht_thresh = (std::min)(phys, (unsigned)num_threads);
 
     XelisTuneConfig configs[] = {
         { "goto",           xelis_hash_v3,        nullptr },

@@ -231,7 +231,7 @@ public:
     }
 
     static Num& add_unsigned_overwrite(Num &a, const Num &b){
-        size_t i, na = a.size(), nb = b.size(), n = std::max(na, nb);
+        size_t i, na = a.size(), nb = b.size(), n = (std::max)(na, nb);
         a.resize(n);
         word carry = 0;
         for (i = 0; i < nb; i++){
@@ -271,7 +271,7 @@ public:
     }
 
     static Num mul_karatsuba(const Num &a, const Num &b){
-        size_t na = a.size(), nb = b.size(), n = std::max(na, nb), m2 = n/2 + (n & 1);
+        size_t na = a.size(), nb = b.size(), n = (std::max)(na, nb), m2 = n/2 + (n & 1);
         Num a_parts[2], b_parts[2];
         split(a, a_parts, 2, m2);
         split(b, b_parts, 2, m2);

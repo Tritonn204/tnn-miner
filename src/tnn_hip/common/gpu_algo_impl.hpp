@@ -1,6 +1,7 @@
 #pragma once
 #include "gpu_algo.hpp"
 #include "gpu_rtc.hpp"
+#include "tnn_log.hpp"
 #include <coins/miners.hpp>
 #include <chrono>
 #include <algorithm>
@@ -177,7 +178,7 @@ public:
         hipGetDeviceProperties(&device_props_, device_id);
         compute_units_ = device_props_.multiProcessorCount;
         
-        printf("[INFO] GPU %d: %s (%d CUs)\n", device_id, device_props_.name, compute_units_);
+        TNN_LOG_INFO("[INFO] GPU %d: %s (%d CUs)\n", device_id, device_props_.name, compute_units_);
         fflush(stdout);
 
         if (!compile_kernel()) {
@@ -197,7 +198,7 @@ public:
 
         initialized_ = true;
         
-        printf("[INFO] GPU %d initialized: %s\n", device_id, tuning_result_.describe().c_str());
+        TNN_LOG_INFO("[INFO] GPU %d initialized: %s\n", device_id, tuning_result_.describe().c_str());
         fflush(stdout);
 
         return true;
@@ -254,6 +255,7 @@ public:
         ctx.batch_size = count;
         ctx.block_size = block_size_;
         ctx.num_blocks = num_blocks_;
+        ctx.strategy = tuning_result_.strategy;
         ctx.config = &config_;
         ctx.stream = nullptr;  // Default stream
 
@@ -337,7 +339,7 @@ private:
     // ========================================================================
     
     bool compile_kernel() {
-        printf("[INFO] GPU %d: Starting kernel compilation\n", device_id_);
+        TNN_LOG_INFO("[INFO] GPU %d: Starting kernel compilation\n", device_id_);
         fflush(stdout);
 
         try {
@@ -399,7 +401,7 @@ private:
                 
                 if (err == hipSuccess && func != nullptr) {
                     kernels_[kernel_name] = func;
-                    printf("[INFO] GPU %d: Loaded kernel '%s'\n", device_id_, kernel_name.c_str());
+                    TNN_LOG_INFO("[INFO] GPU %d: Loaded kernel '%s'\n", device_id_, kernel_name.c_str());
                 } else {
                     printf("[WARN] GPU %d: Could not load kernel '%s': %s\n", 
                            device_id_, kernel_name.c_str(), hipGetErrorString(err));
@@ -412,14 +414,14 @@ private:
             }
 
             // Debug: Print loaded kernels for this device
-            printf("[INFO] GPU %d: Loaded %zu kernel(s):\n", device_id_, kernels_.size());
+            TNN_LOG_INFO("[INFO] GPU %d: Loaded %zu kernel(s):\n", device_id_, kernels_.size());
             for (const auto& kv : kernels_) {
-                printf("[INFO] GPU %d:   - %s\n", device_id_, kv.first.c_str());
+                TNN_LOG_INFO("[INFO] GPU %d:   - %s\n", device_id_, kv.first.c_str());
             }
             if (config_.execute_fn) {
-                printf("[INFO] GPU %d: Using custom execution strategy\n", device_id_);
+                TNN_LOG_INFO("[INFO] GPU %d: Using custom execution strategy\n", device_id_);
             } else {
-                printf("[INFO] GPU %d: Using default monolithic execution\n", device_id_);
+                TNN_LOG_INFO("[INFO] GPU %d: Using default monolithic execution\n", device_id_);
             }
 
             return true;
@@ -446,7 +448,7 @@ private:
         hipError_t err;
 
         size_t scratch_size = batch_size_ * config_.scratch_per_hash;
-        printf("[INFO] GPU %d: Allocating buffers (batch=%u, scratch=%zu MB)\n",
+        TNN_LOG_INFO("[INFO] GPU %d: Allocating buffers (batch=%u, scratch=%zu MB)\n",
                device_id_, batch_size_, scratch_size / (1024*1024));
         fflush(stdout);
 
@@ -490,7 +492,7 @@ private:
             return false;
         }
 
-        printf("[INFO] GPU %d: Buffer allocation successful\n", device_id_);
+        TNN_LOG_INFO("[INFO] GPU %d: Buffer allocation successful\n", device_id_);
         fflush(stdout);
         return true;
     }
@@ -520,7 +522,7 @@ private:
             batch_size_ = (batch_size_ / block_size_) * block_size_;
             num_blocks_ = batch_size_ / block_size_;
             
-            printf("[INFO] GPU %d: Using CLI override batch_size=%u, block_size=%d\n",
+            TNN_LOG_INFO("[INFO] GPU %d: Using CLI override batch_size=%u, block_size=%d\n",
                    device_id_, batch_size_, block_size_);
             
             tuning_result_.block_size = block_size_;
@@ -682,6 +684,7 @@ private:
                 else if (key == "hashrate") cached.hashrate = std::stod(val);
                 else if (key == "batch_time_ms") cached.batch_time_ms = std::stod(val);
                 else if (key == "compute_units") cached_compute_units = std::stoi(val);
+                else if (key == "strategy") cached.strategy = (uint8_t)std::stoi(val);
             }
             
             // Validate
@@ -738,6 +741,7 @@ private:
         f << "# Device: " << device_props_.name << "\n";
         f << "# Generated: " << time_buf << "\n";
         f << "compute_units=" << compute_units_ << "\n";
+        f << "strategy=" << (int)tuning_result_.strategy << "\n";
         f << "block_size=" << tuning_result_.block_size << "\n";
         f << "num_blocks=" << tuning_result_.num_blocks << "\n";
         f << "batch_size=" << tuning_result_.batch_size << "\n";
@@ -770,7 +774,8 @@ private:
         uint64_t* test_target,
         uint64_t* test_solutions,
         hipStream_t stream,
-        double timeout_ms
+        double timeout_ms,
+        uint8_t test_strategy = 0
     ) {
         TuneTestResult result;
 
@@ -792,6 +797,7 @@ private:
         ctx.batch_size = test_batch;
         ctx.block_size = test_block_size;
         ctx.num_blocks = test_num_blocks;
+        ctx.strategy = test_strategy;
         ctx.config = &config_;
         ctx.stream = stream;
         
@@ -805,7 +811,7 @@ private:
 
         // Check if kernels are loaded
         if (kernels_.empty()) {
-            fprintf(stderr, "[TUNE DEBUG] GPU %d: No kernels loaded!\n", device_id_);
+            TNN_LOG_DEBUG("[TUNE DEBUG] GPU %d: No kernels loaded!\n", device_id_);
             hipEventDestroy(start_ev);
             hipEventDestroy(stop_ev);
             return result;
@@ -820,7 +826,7 @@ private:
         }
 
         if (!success) {
-            fprintf(stderr, "[TUNE DEBUG] GPU %d: Kernel launch returned failure\n", device_id_);
+            TNN_LOG_DEBUG("[TUNE DEBUG] GPU %d: Kernel launch returned failure\n", device_id_);
             hipEventDestroy(start_ev);
             hipEventDestroy(stop_ev);
             return result;
@@ -829,7 +835,7 @@ private:
         // Check for kernel launch errors (asynchronous errors)
         hipError_t launch_err = hipGetLastError();
         if (launch_err != hipSuccess) {
-            fprintf(stderr, "[TUNE DEBUG] GPU %d: Kernel launch error: %s\n",
+            TNN_LOG_DEBUG("[TUNE DEBUG] GPU %d: Kernel launch error: %s\n",
                     device_id_, hipGetErrorString(launch_err));
             hipEventDestroy(start_ev);
             hipEventDestroy(stop_ev);
@@ -880,7 +886,7 @@ private:
         hipError_t time_err = hipEventElapsedTime(&ms, start_ev, stop_ev);
 
         if (time_err != hipSuccess) {
-            fprintf(stderr, "[TUNE DEBUG] GPU %d: hipEventElapsedTime failed: %s\n",
+            TNN_LOG_DEBUG("[TUNE DEBUG] GPU %d: hipEventElapsedTime failed: %s\n",
                     device_id_, hipGetErrorString(time_err));
             hipEventDestroy(start_ev);
             hipEventDestroy(stop_ev);
@@ -888,7 +894,7 @@ private:
         }
 
         if (ms < 0.001f) {
-            fprintf(stderr, "[TUNE DEBUG] GPU %d: Suspicious 0ms timing - batch=%u, block=%d, stream=%p\n",
+            TNN_LOG_DEBUG("[TUNE DEBUG] GPU %d: Suspicious 0ms timing - batch=%u, block=%d, stream=%p\n",
                     device_id_, test_batch, test_block_size, (void*)stream);
         }
 
@@ -1037,79 +1043,96 @@ private:
 
         double timeout_ms = config_.max_batch_time_ms * 1.5;
 
-        // Occupancy-based tuning: For each block size, probe for max batch until alloc fails
+        // Build strategy list: if algo defines variants, sweep them; otherwise just strategy=0
+        std::vector<uint8_t> strategies_to_test;
+        if (!config_.strategy_variants.empty()) {
+            strategies_to_test = config_.strategy_variants;
+        } else {
+            strategies_to_test = {0};
+        }
+
+        // Occupancy-based tuning: For each strategy × block size, probe for max batch
         {
             TuneOutputBuffer out(device_id_);
             out.printf("[AUTOTUNE] GPU %d: Using occupancy-based tuning (faster than memory percentage sweep)\n", device_id_);
+            if (strategies_to_test.size() > 1) {
+                out.printf("[AUTOTUNE] GPU %d: Sweeping %zu strategies", device_id_, strategies_to_test.size());
+                for (size_t si = 0; si < strategies_to_test.size(); si++) {
+                    const char* sname = (si < config_.strategy_names.size())
+                        ? config_.strategy_names[si].c_str()
+                        : "?";
+                    out.printf("%s %s(%u)", si == 0 ? ":" : ",", sname, strategies_to_test[si]);
+                }
+                out.printf("\n");
+            }
             out.newline();
         }
 
-        // Track the best batch size for each multiplier (1x through 8x)
-        const uint32_t max_multiplier = 8;
-        std::vector<uint32_t> best_batch_per_multiplier(max_multiplier + 1, 0);
+        for (uint8_t test_strategy : strategies_to_test) {
+
+        const char* strategy_label = "";
+        if (strategies_to_test.size() > 1) {
+            size_t si = 0;
+            for (size_t k = 0; k < config_.strategy_variants.size(); k++) {
+                if (config_.strategy_variants[k] == test_strategy) { si = k; break; }
+            }
+            strategy_label = (si < config_.strategy_names.size())
+                ? config_.strategy_names[si].c_str()
+                : "?";
+            TuneOutputBuffer out(device_id_);
+            out.printf("[AUTOTUNE] GPU %d: === Strategy: %s (%u) ===\n", device_id_, strategy_label, test_strategy);
+        }
+
+        // Batch probing uses a fixed base unit independent of block_size so that
+        // larger block dims still explore the same batch-size range as smaller ones.
+        // Half-step multipliers (1x, 1.5x, 2x, 2.5x, ..., 8x) give finer granularity.
+        const uint32_t base_batch = compute_units_ * occupancy_factor * limits.block_min;
+        const uint32_t max_half_mult = 16;  // 8x in half-steps (2=1x, 3=1.5x, ..., 16=8x)
+
+        // Track the best batch size for each half-multiplier step
+        std::vector<uint32_t> best_batch_per_step(max_half_mult + 1, 0);
 
         for (int test_block_size = limits.block_min;
              test_block_size <= limits.block_max;
              test_block_size += limits.step)
         {
             TuneOutputBuffer block_out(device_id_);
-            block_out.printf("[AUTOTUNE] GPU %d: --- Block size %d ---\n", device_id_, test_block_size);
+            if (strategies_to_test.size() > 1) {
+                block_out.printf("[AUTOTUNE] GPU %d: --- Block size %d [%s] ---\n", device_id_, test_block_size, strategy_label);
+            } else {
+                block_out.printf("[AUTOTUNE] GPU %d: --- Block size %d ---\n", device_id_, test_block_size);
+            }
 
-            // Start with conservative estimate: CUs × occupancy_factor waves
-            uint32_t base_blocks = compute_units_ * occupancy_factor;
-            uint32_t test_batch = base_blocks * test_block_size;
-
-            // Probe increasing batch sizes until allocation fails or we hit 8x
+            // Probe increasing batch sizes using half-step multipliers
             uint32_t successful_batch = 0;
-            uint32_t probe_multiplier = 1;
+            uint32_t half_step = 2;  // starts at 1x (2/2)
 
-            while (probe_multiplier <= max_multiplier) {
-                uint32_t probe_batch = base_blocks * test_block_size * probe_multiplier;
+            while (half_step <= max_half_mult) {
+                // Compute raw probe batch from fixed base, then align to block_size
+                uint64_t raw_batch = (uint64_t)base_batch * half_step / 2;
+                uint32_t probe_batch = (uint32_t)((raw_batch / test_block_size) * test_block_size);
+                if (probe_batch < (uint32_t)test_block_size) probe_batch = test_block_size;
+
+                // Skip if we've already tested this exact batch (alignment can cause duplicates)
+                if (probe_batch <= successful_batch) {
+                    half_step++;
+                    continue;
+                }
+
                 size_t probe_mem = (size_t)probe_batch * config_.scratch_per_hash;
+                double mult_display = half_step / 2.0;
 
                 // Check if this would exceed available memory
                 bool clamped_to_max = false;
-                bool clamped_to_best = false;
 
                 if (probe_mem > max_usable) {
-                    // First check if we can use the best batch for THIS multiplier from previous block sizes
-                    uint32_t best_for_this_mult = best_batch_per_multiplier[probe_multiplier];
+                    // Clamp to max available memory, aligned to block_size
+                    probe_batch = (uint32_t)(max_usable / config_.scratch_per_hash);
+                    probe_batch = (probe_batch / test_block_size) * test_block_size;
+                    probe_mem = (size_t)probe_batch * config_.scratch_per_hash;
+                    clamped_to_max = true;
 
-                    if (best_for_this_mult > 0) {
-                        // Use largest multiple of block size that fits under best batch for this multiplier
-                        uint32_t aligned_best = (best_for_this_mult / test_block_size) * test_block_size;
-
-                        if (aligned_best > successful_batch && aligned_best >= test_block_size) {
-                            probe_batch = aligned_best;
-                            probe_mem = (size_t)probe_batch * config_.scratch_per_hash;
-
-                            // Verify it fits in memory
-                            if (probe_mem <= max_usable) {
-                                clamped_to_best = true;
-                            } else {
-                                // Fall back to memory limit
-                                probe_batch = max_usable / config_.scratch_per_hash;
-                                probe_batch = (probe_batch / test_block_size) * test_block_size;
-                                probe_mem = (size_t)probe_batch * config_.scratch_per_hash;
-                                clamped_to_max = true;
-                            }
-                        } else {
-                            // Aligned best is not useful, use memory limit
-                            probe_batch = max_usable / config_.scratch_per_hash;
-                            probe_batch = (probe_batch / test_block_size) * test_block_size;
-                            probe_mem = (size_t)probe_batch * config_.scratch_per_hash;
-                            clamped_to_max = true;
-                        }
-                    } else {
-                        // No best batch yet, clamp to max available memory
-                        probe_batch = max_usable / config_.scratch_per_hash;
-                        probe_batch = (probe_batch / test_block_size) * test_block_size;
-                        probe_mem = (size_t)probe_batch * config_.scratch_per_hash;
-                        clamped_to_max = true;
-                    }
-
-                    if (probe_batch <= successful_batch || probe_batch < test_block_size) {
-                        // Already tested this or can't fit even one block, stop
+                    if (probe_batch <= successful_batch || probe_batch < (uint32_t)test_block_size) {
                         break;
                     }
                 }
@@ -1123,8 +1146,8 @@ private:
 
                 hipError_t err = hipMalloc(&test_scratch, probe_mem);
                 if (err != hipSuccess) {
-                    block_out.printf("[AUTOTUNE] GPU %d:   %ux: Alloc failed (%.1f MB), stopping probe\n",
-                                     device_id_, probe_multiplier, probe_mem / (1024.0 * 1024.0));
+                    block_out.printf("[AUTOTUNE] GPU %d:   %.1fx: Alloc failed (%.1f MB), stopping probe\n",
+                                     device_id_, mult_display, probe_mem / (1024.0 * 1024.0));
                     break;
                 }
 
@@ -1143,12 +1166,12 @@ private:
                 auto warmup = run_timed_kernel_test(
                     probe_batch, test_block_size, test_num_blocks,
                     test_input, test_outputs, test_scratch, test_target, test_solutions,
-                    tune_stream, timeout_ms * 2
+                    tune_stream, timeout_ms * 2, test_strategy
                 );
 
                 if (!warmup.valid) {
-                    block_out.printf("[AUTOTUNE] GPU %d:   %ux (batch=%6u): WARMUP FAILED\n",
-                                     device_id_, probe_multiplier, probe_batch);
+                    block_out.printf("[AUTOTUNE] GPU %d:   %.1fx (batch=%6u): WARMUP FAILED\n",
+                                     device_id_, mult_display, probe_batch);
                     hipFree(test_scratch);
                     hipFree(test_input);
                     hipFree(test_outputs);
@@ -1166,7 +1189,7 @@ private:
                     auto result = run_timed_kernel_test(
                         probe_batch, test_block_size, test_num_blocks,
                         test_input, test_outputs, test_scratch, test_target, test_solutions,
-                        tune_stream, timeout_ms
+                        tune_stream, timeout_ms, test_strategy
                     );
 
                     if (!result.valid) break;
@@ -1191,8 +1214,8 @@ private:
                 hipFree(test_solutions);
 
                 if (valid_runs == 0) {
-                    block_out.printf("[AUTOTUNE] GPU %d:   %ux (batch=%6u): NO VALID RUNS\n",
-                                     device_id_, probe_multiplier, probe_batch);
+                    block_out.printf("[AUTOTUNE] GPU %d:   %.1fx (batch=%6u): NO VALID RUNS\n",
+                                     device_id_, mult_display, probe_batch);
                     break;
                 }
 
@@ -1215,15 +1238,10 @@ private:
                     is_acceptable = true;
                 }
 
-                char clamp_marker[64] = "";
-                if (clamped_to_best) {
-                    snprintf(clamp_marker, sizeof(clamp_marker), " (best %ux)", probe_multiplier);
-                } else if (clamped_to_max) {
-                    snprintf(clamp_marker, sizeof(clamp_marker), " (max mem)");
-                }
+                const char* clamp_marker = clamped_to_max ? " (max mem)" : "";
 
-                block_out.printf("[AUTOTUNE] GPU %d:   %ux (batch=%6u): %7.1fms %10.1f H/s [%s]%s\n",
-                       device_id_, probe_multiplier, probe_batch, avg_time, hashrate, status, clamp_marker);
+                block_out.printf("[AUTOTUNE] GPU %d:   %.1fx (batch=%6u): %7.1fms %10.1f H/s [%s]%s\n",
+                       device_id_, mult_display, probe_batch, avg_time, hashrate, status, clamp_marker);
 
                 if (is_acceptable && hashrate > best.hashrate) {
                     best.block_size = test_block_size;
@@ -1231,15 +1249,11 @@ private:
                     best.batch_size = probe_batch;
                     best.hashrate = hashrate;
                     best.batch_time_ms = avg_time;
+                    best.strategy = test_strategy;
                     best.valid = true;
                 }
 
                 successful_batch = probe_batch;
-
-                // Track the best batch size for this specific multiplier
-                if (is_acceptable && probe_batch > best_batch_per_multiplier[probe_multiplier]) {
-                    best_batch_per_multiplier[probe_multiplier] = probe_batch;
-                }
 
                 // Stop if too slow - don't test higher multipliers
                 if (any_timeout || avg_time > config_.max_batch_time_ms) {
@@ -1247,19 +1261,20 @@ private:
                     break;
                 }
 
-                // If clamped to max memory or best, we've tested the max for this block size
-                if (clamped_to_max || clamped_to_best) {
-                    block_out.printf("[AUTOTUNE] GPU %d:   Reached memory/batch limit for this block size\n", device_id_);
+                // If clamped to max memory, we've tested the max for this block size
+                if (clamped_to_max) {
+                    block_out.printf("[AUTOTUNE] GPU %d:   Reached memory limit for this block size\n", device_id_);
                     break;
                 }
 
-                // Increase probe multiplier for next iteration
-                probe_multiplier++;
+                half_step++;
             }
 
             block_out.newline();
         }
-        
+
+        } // end strategy loop
+
         hipStreamDestroy(tune_stream);
         
         // Results block

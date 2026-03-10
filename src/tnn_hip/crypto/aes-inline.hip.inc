@@ -250,3 +250,77 @@ __device__ __forceinline__ void aes_round_u64_computed(uint64_t *lo, uint64_t *h
         *hi |= ((uint64_t)block[i + 8]) << (i * 8);
     }
 }
+
+// ============================================================================
+// LDS-based AES Round (S-box in shared memory)
+// ============================================================================
+
+__device__ __forceinline__ void load_sbox_to_lds(uint8_t *sbox_lds)
+{
+    int tid = threadIdx.x;
+    // 256 bytes / blockDim.x threads, each thread copies its share
+    for (int i = tid; i < 256; i += blockDim.x) {
+        sbox_lds[i] = AES_SBOX[i];
+    }
+    __syncthreads();
+}
+
+__device__ __forceinline__ void aes_round_lds(uint8_t *block, const uint8_t *key, const uint8_t *sbox)
+{
+    uint8_t tmp[16];
+
+#pragma unroll
+    for (int i = 0; i < 16; i++) {
+        tmp[i] = sbox[block[i]];
+    }
+
+    uint8_t shifted[16];
+    shifted[0]  = tmp[0];
+    shifted[1]  = tmp[5];
+    shifted[2]  = tmp[10];
+    shifted[3]  = tmp[15];
+    shifted[4]  = tmp[4];
+    shifted[5]  = tmp[9];
+    shifted[6]  = tmp[14];
+    shifted[7]  = tmp[3];
+    shifted[8]  = tmp[8];
+    shifted[9]  = tmp[13];
+    shifted[10] = tmp[2];
+    shifted[11] = tmp[7];
+    shifted[12] = tmp[12];
+    shifted[13] = tmp[1];
+    shifted[14] = tmp[6];
+    shifted[15] = tmp[11];
+
+#pragma unroll
+    for (int col = 0; col < 4; col++) {
+        int i = col * 4;
+        uint8_t a0 = shifted[i], a1 = shifted[i + 1], a2 = shifted[i + 2], a3 = shifted[i + 3];
+
+        block[i]     = GF_MUL2[a0] ^ GF_MUL3[a1] ^ a2        ^ a3        ^ key[i];
+        block[i + 1] = a0        ^ GF_MUL2[a1] ^ GF_MUL3[a2] ^ a3        ^ key[i + 1];
+        block[i + 2] = a0        ^ a1        ^ GF_MUL2[a2] ^ GF_MUL3[a3] ^ key[i + 2];
+        block[i + 3] = GF_MUL3[a0] ^ a1      ^ a2        ^ GF_MUL2[a3]   ^ key[i + 3];
+    }
+}
+
+__device__ __forceinline__ void aes_round_u64_lds(uint64_t *lo, uint64_t *hi, const uint8_t *key, const uint8_t *sbox)
+{
+    uint8_t block[16];
+
+#pragma unroll
+    for (int i = 0; i < 8; i++) {
+        block[i]     = (uint8_t)((*lo >> (i * 8)) & 0xFF);
+        block[i + 8] = (uint8_t)((*hi >> (i * 8)) & 0xFF);
+    }
+
+    aes_round_lds(block, key, sbox);
+
+    *lo = 0;
+    *hi = 0;
+#pragma unroll
+    for (int i = 0; i < 8; i++) {
+        *lo |= ((uint64_t)block[i])     << (i * 8);
+        *hi |= ((uint64_t)block[i + 8]) << (i * 8);
+    }
+}

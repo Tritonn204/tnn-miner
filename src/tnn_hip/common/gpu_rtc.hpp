@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <mutex>
 #include <algorithm>
+#include "tnn_log.hpp"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -79,10 +80,10 @@ public:
         const std::string& kernel_name,
         const std::vector<std::string>& extra_options = {}
     ) {
-        printf("[TRACE] RTCCompiler::compile_from_source: Entry\n");
-        printf("[TRACE]   source_name: %s\n", source_name.c_str());
-        printf("[TRACE]   kernel_name: %s\n", kernel_name.c_str());
-        printf("[TRACE]   source size: %zu\n", source.size());
+        TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_from_source: Entry\n");
+        TNN_LOG_TRACE("[TRACE]   source_name: %s\n", source_name.c_str());
+        TNN_LOG_TRACE("[TRACE]   kernel_name: %s\n", kernel_name.c_str());
+        TNN_LOG_TRACE("[TRACE]   source size: %zu\n", source.size());
         fflush(stdout);
 
         // Build normalized options
@@ -96,9 +97,9 @@ public:
         auto code_options = filter_device_specific_options(norm.sorted);
         const std::string code_key = make_cache_key(source_name, kernel_name, code_options);
 
-        printf("[TRACE] RTCCompiler::compile_from_source: Checking caches\n");
-        printf("[TRACE]   module_key='%s'\n", module_key.c_str());
-        printf("[TRACE]   code_key='%s'\n", code_key.c_str());
+        TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_from_source: Checking caches\n");
+        TNN_LOG_TRACE("[TRACE]   module_key='%s'\n", module_key.c_str());
+        TNN_LOG_TRACE("[TRACE]   code_key='%s'\n", code_key.c_str());
         fflush(stdout);
 
         {
@@ -107,7 +108,7 @@ public:
             // First check module cache (fast path for same device)
             auto module_it = module_cache_.find(module_key);
             if (module_it != module_cache_.end()) {
-                printf("[TRACE] RTCCompiler::compile_from_source: Found in module cache\n");
+                TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_from_source: Found in module cache\n");
                 fflush(stdout);
                 return module_it->second;
             }
@@ -115,7 +116,7 @@ public:
             // Check code cache (allows sharing compiled code across identical GPUs)
             auto code_it = code_cache_.find(code_key);
             if (code_it != code_cache_.end()) {
-                printf("[TRACE] RTCCompiler::compile_from_source: Found in code cache, loading module\n");
+                TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_from_source: Found in code cache, loading module\n");
                 fflush(stdout);
 
                 // Load module from cached code
@@ -125,7 +126,7 @@ public:
             }
         }
 
-        printf("[TRACE] RTCCompiler::compile_from_source: Not in cache, calling compile_internal\n");
+        TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_from_source: Not in cache, calling compile_internal\n");
         fflush(stdout);
 
         return compile_internal(source, source_name, kernel_name, extra_options, module_key, code_key);
@@ -310,7 +311,7 @@ private:
         if (err != hipSuccess) {
             backend_ = Backend::UNKNOWN;
             gpu_arch_.clear();
-            printf("[TRACE] RTCCompiler: Failed to get device properties\n");
+            TNN_LOG_TRACE("[TRACE] RTCCompiler: Failed to get device properties\n");
             fflush(stdout);
             return;
         }
@@ -321,13 +322,13 @@ private:
             char buf[32];
             std::snprintf(buf, sizeof(buf), "sm_%d%d", props.major, props.minor);
             gpu_arch_ = buf; // e.g. "sm_86"
-            printf("[TRACE] RTCCompiler: Detected NVIDIA GPU, arch=%s\n", gpu_arch_.c_str());
+            TNN_LOG_TRACE("[TRACE] RTCCompiler: Detected NVIDIA GPU, arch=%s\n", gpu_arch_.c_str());
             fflush(stdout);
         }
 #else
         backend_  = Backend::AMD;
         gpu_arch_ = props.gcnArchName; // e.g. "gfx1100"
-        printf("[TRACE] RTCCompiler: Detected AMD GPU, arch=%s\n", gpu_arch_.c_str());
+        TNN_LOG_TRACE("[TRACE] RTCCompiler: Detected AMD GPU, arch=%s\n", gpu_arch_.c_str());
         fflush(stdout);
 #endif
     }
@@ -411,7 +412,7 @@ private:
 
     // Load module from cached compiled code
     CompiledKernel load_module_from_code(const CompiledCode& cached_code) {
-        printf("[TRACE] RTCCompiler::load_module_from_code: Loading module from %zu bytes\n",
+        TNN_LOG_TRACE("[TRACE] RTCCompiler::load_module_from_code: Loading module from %zu bytes\n",
                cached_code.code.size());
         fflush(stdout);
 
@@ -431,7 +432,7 @@ private:
             throw std::runtime_error("Failed to get kernel function: " + kernel.kernel_name);
         }
 
-        printf("[TRACE] RTCCompiler::load_module_from_code: Module loaded successfully\n");
+        TNN_LOG_TRACE("[TRACE] RTCCompiler::load_module_from_code: Module loaded successfully\n");
         fflush(stdout);
 
         return kernel;
@@ -449,13 +450,13 @@ private:
         const std::string& module_key,
         const std::string& code_key
     ) {
-        printf("[TRACE] RTCCompiler::compile_internal: Entry\n");
-        printf("[TRACE]   source_name: %s\n", source_name.c_str());
-        printf("[TRACE]   kernel_name: %s\n", kernel_name.c_str());
-        printf("[TRACE]   source size: %zu\n", source.size());
-        printf("[TRACE]   headers: %zu\n", headers_.size());
-        printf("[TRACE]   code_key: %s\n", code_key.c_str());
-        printf("[TRACE]   module_key: %s\n", module_key.c_str());
+        TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_internal: Entry\n");
+        TNN_LOG_TRACE("[TRACE]   source_name: %s\n", source_name.c_str());
+        TNN_LOG_TRACE("[TRACE]   kernel_name: %s\n", kernel_name.c_str());
+        TNN_LOG_TRACE("[TRACE]   source size: %zu\n", source.size());
+        TNN_LOG_TRACE("[TRACE]   headers: %zu\n", headers_.size());
+        TNN_LOG_TRACE("[TRACE]   code_key: %s\n", code_key.c_str());
+        TNN_LOG_TRACE("[TRACE]   module_key: %s\n", module_key.c_str());
         fflush(stdout);
 
         // Build header arrays for hiprtcCreateProgram
@@ -469,13 +470,13 @@ private:
                 printf("[WARNING] Skipping header '%s' - same as main source\n", h.name.c_str());
                 continue;
             }
-            printf("[TRACE]   Header: %s (size=%zu)\n", h.name.c_str(), h.source.size());
+            TNN_LOG_TRACE("[TRACE]   Header: %s (size=%zu)\n", h.name.c_str(), h.source.size());
             header_sources.push_back(h.source.c_str());
             header_names.push_back(h.name.c_str());
         }
 
-        printf("[TRACE] RTCCompiler::compile_internal: Calling hiprtcCreateProgram\n");
-        printf("[TRACE]   Passing %d headers to HIPRTC\n", (int)header_sources.size());
+        TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_internal: Calling hiprtcCreateProgram\n");
+        TNN_LOG_TRACE("[TRACE]   Passing %d headers to HIPRTC\n", (int)header_sources.size());
         fflush(stdout);
 
         hiprtcProgram prog{};
@@ -483,7 +484,7 @@ private:
 
 #ifdef _WIN32
         __try {
-            printf("[TRACE] About to call hiprtcCreateProgram...\n");
+            TNN_LOG_TRACE("[TRACE] About to call hiprtcCreateProgram...\n");
             fflush(stdout);
 
             rc = hiprtcCreateProgram(
@@ -495,7 +496,7 @@ private:
                 header_names.empty() ? nullptr : header_names.data()
             );
 
-            printf("[TRACE] hiprtcCreateProgram call returned successfully\n");
+            TNN_LOG_TRACE("[TRACE] hiprtcCreateProgram call returned successfully\n");
             fflush(stdout);
         }
         __except(EXCEPTION_EXECUTE_HANDLER) {
@@ -514,14 +515,14 @@ private:
         );
 #endif
 
-        printf("[TRACE] RTCCompiler::compile_internal: hiprtcCreateProgram returned %d\n", rc);
+        TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_internal: hiprtcCreateProgram returned %d\n", rc);
         fflush(stdout);
 
         if (rc != HIPRTC_SUCCESS) {
             throw std::runtime_error("Failed to create HIPRTC program");
         }
 
-        printf("[TRACE] RTCCompiler::compile_internal: HIPRTC program created, preparing compilation\n");
+        TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_internal: HIPRTC program created, preparing compilation\n");
         fflush(stdout);
 
         // Normalize options (dedupe + deterministic ordering)
@@ -535,10 +536,10 @@ private:
             options.push_back(s.c_str());
         }
 
-        printf("[TRACE] RTCCompiler::compile_internal: Calling hiprtcCompileProgram with %d options\n",
+        TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_internal: Calling hiprtcCompileProgram with %d options\n",
                (int)options.size());
         for (size_t i = 0; i < options.size(); i++) {
-            printf("[TRACE]   Option %zu: %s\n", i, options[i]);
+            TNN_LOG_TRACE("[TRACE]   Option %zu: %s\n", i, options[i]);
         }
         fflush(stdout);
 
@@ -564,7 +565,7 @@ private:
         );
 #endif
 
-        printf("[TRACE] RTCCompiler::compile_internal: hiprtcCompileProgram returned %d\n", rc);
+        TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_internal: hiprtcCompileProgram returned %d\n", rc);
         fflush(stdout);
 
         if (rc != HIPRTC_SUCCESS) {
@@ -591,11 +592,11 @@ private:
         CompiledKernel kernel;
         kernel.kernel_name = kernel_name;
 
-        printf("[TRACE] About to load module (%zu bytes code)\n", code_size);
+        TNN_LOG_TRACE("[TRACE] About to load module (%zu bytes code)\n", code_size);
 
         size_t free_mem = 0, total_mem = 0;
         hipMemGetInfo(&free_mem, &total_mem);
-        printf("[TRACE] GPU memory: %zu MB free / %zu MB total\n",
+        TNN_LOG_TRACE("[TRACE] GPU memory: %zu MB free / %zu MB total\n",
                free_mem / (1024 * 1024), total_mem / (1024 * 1024));
         fflush(stdout);
 
@@ -627,9 +628,9 @@ private:
             // Store loaded module in module cache (per-device)
             module_cache_[module_key] = kernel;
 
-            printf("[TRACE] RTCCompiler::compile_internal: Cached code and module\n");
-            printf("[TRACE]   code_key='%s'\n", code_key.c_str());
-            printf("[TRACE]   module_key='%s'\n", module_key.c_str());
+            TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_internal: Cached code and module\n");
+            TNN_LOG_TRACE("[TRACE]   code_key='%s'\n", code_key.c_str());
+            TNN_LOG_TRACE("[TRACE]   module_key='%s'\n", module_key.c_str());
             fflush(stdout);
         }
 

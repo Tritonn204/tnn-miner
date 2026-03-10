@@ -13,13 +13,11 @@
 // Xelis V3 Shared Memory Calculator
 // ============================================================================
 inline size_t xelis_v3_shared_mem(int block_size) {
-    // return block_size * (4 * 32 + 4 * 12);  // K2 + nonces
-    return 0;
+    return 256;  // LDS S-box for AES rounds in stage_3_hybrid_v2
 }
 
 static inline int parse_gfx_number(const char* gcnArchName) {
     if (!gcnArchName) return 0;
-    // Examples: "gfx1100", "gfx1030:sramecc+:xnack-"
     const char* p = std::strstr(gcnArchName, "gfx");
     if (!p) return 0;
     p += 3;
@@ -29,7 +27,7 @@ static inline int parse_gfx_number(const char* gcnArchName) {
         n = n * 10 + (*p - '0');
         ++p;
     }
-    return n; // 1100, 1030, ...
+    return n;
 }
 
 static inline bool is_amd_rdna_plus(int device_id) {
@@ -49,10 +47,6 @@ static inline bool is_nvidia_ampere_plus(int device_id) {
 #if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
     hipDeviceProp_t props{};
     if (hipGetDeviceProperties(&props, device_id) != hipSuccess) return false;
-
-    // Ampere (RTX 3000-series) has compute capability 8.0+
-    // Ada Lovelace (RTX 4000-series) is 8.9
-    // Blackwell (RTX 5000-series) is 9.0+
     return (props.major >= 8);
 #else
     (void)device_id;
@@ -60,89 +54,129 @@ static inline bool is_nvidia_ampere_plus(int device_id) {
 #endif
 }
 
-enum class ExecMode : uint8_t { Unknown = 0, Monolithic = 1, Split = 2, SplitCooperative = 3 };
+// ============================================================================
+// Xelis V3 Strategy Definitions
+// ============================================================================
 
-static inline ExecMode choose_exec_mode_cached(int device_id) {
-    // small fixed cache; HIP max devices is usually small.
-    // If you want fully general, use unordered_map in TLS instead.
-    thread_local std::vector<ExecMode> mode_by_dev;
+// Strategy indices (opaque to the generic tune system)
+enum class XelisStrategy : uint8_t {
+    Mono     = 0,   // s1+s3_hybrid_v2+b3 monolithic
+    Baseline = 1,   // s1+s3_hybrid_v2 fused, b3 separate
+    Sep      = 2,   // all 3 separate
+    Neo      = 3,   // s1 separate, s3+b3 fused
+};
 
-    if ((int)mode_by_dev.size() <= device_id) {
-        mode_by_dev.resize(device_id + 1, ExecMode::Unknown);
-    }
+// ============================================================================
+// Xelis V3 4-Strategy Execution Dispatch
+// ============================================================================
 
-    ExecMode& m = mode_by_dev[device_id];
-    if (m != ExecMode::Unknown) return m;
-
+// Helper: choose which stage1 kernel to use based on GPU capabilities
+static inline const char* xelis_pick_stage1(int dev) {
+    bool cooperative = false;
 #if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
-    // NVIDIA: Use cooperative split for Ampere+ (RTX 3000-series and newer)
-    m = is_nvidia_ampere_plus(device_id) ? ExecMode::SplitCooperative : ExecMode::Monolithic;
+    cooperative = is_nvidia_ampere_plus(dev);
 #else
-    // AMD: Use cooperative split for RDNA+ (gfx1010+)
-    m = is_amd_rdna_plus(device_id) ? ExecMode::SplitCooperative : ExecMode::Monolithic;
+    cooperative = is_amd_rdna_plus(dev);
 #endif
-    return m;
+    return cooperative ? "xelis_stage1_cooperative" : "xelis_stage1_kernel";
 }
 
-// ============================================================================
-// Xelis V3 Split Kernel Execution Strategy
-// ============================================================================
-inline bool xelis_v3_split_execute(
+// Helper: launch stage1 kernel
+static inline bool xelis_launch_stage1(
+    const KernelMap& kernels,
+    const KernelLaunchContext& ctx,
+    int dev)
+{
+    const char* stage1_name = xelis_pick_stage1(dev);
+    auto it = kernels.find(stage1_name);
+    if (it == kernels.end()) return false;
+
+    bool cooperative = (std::strcmp(stage1_name, "xelis_stage1_cooperative") == 0);
+
+    int stage1_block_size = cooperative ? 32 : std::min(ctx.block_size, 32);
+    size_t shared_mem = cooperative ? (32 * 176) : 0;
+    uint32_t scratch_offset = 0;
+    int stage1_num_blocks = (ctx.batch_size + stage1_block_size - 1) / stage1_block_size;
+
+    void* args[] = {
+        (void*)&ctx.d_input,
+        (void*)&ctx.d_scratch,
+        (void*)&ctx.nonce_start,
+        (void*)&ctx.batch_size,
+        (void*)&scratch_offset
+    };
+
+    hipError_t err = hipModuleLaunchKernel(
+        it->second,
+        stage1_num_blocks, 1, 1,
+        stage1_block_size, 1, 1,
+        shared_mem, ctx.stream,
+        args, nullptr
+    );
+    if (err != hipSuccess) {
+        fprintf(stderr, "[XELIS] Stage1 (%s) launch failed: %s\n",
+                stage1_name, hipGetErrorString(err));
+        return false;
+    }
+    return true;
+}
+
+// Helper: launch blake3 batch kernel
+static inline bool xelis_launch_blake3(
+    const KernelMap& kernels,
+    const KernelLaunchContext& ctx)
+{
+    auto it = kernels.find("xelis_blake3_batch");
+    if (it == kernels.end()) return false;
+
+    uint32_t scratch_offset = 0;
+    int blake3_block_size = 256;
+    int blake3_num_blocks = (ctx.batch_size + blake3_block_size - 1) / blake3_block_size;
+
+    void* args[] = {
+        (void*)&ctx.d_scratch,
+        (void*)&ctx.d_outputs,
+        (void*)&ctx.batch_size,
+        (void*)&scratch_offset,
+        (void*)&ctx.d_difficulty_target,
+        (void*)&ctx.d_solutions,
+        (void*)&ctx.nonce_start
+    };
+
+    hipError_t err = hipModuleLaunchKernel(
+        it->second,
+        blake3_num_blocks, 1, 1,
+        blake3_block_size, 1, 1,
+        0, ctx.stream,
+        args, nullptr
+    );
+    if (err != hipSuccess) {
+        fprintf(stderr, "[XELIS] Blake3 launch failed: %s\n", hipGetErrorString(err));
+        return false;
+    }
+    return true;
+}
+
+inline bool xelis_v3_execute(
     const KernelMap& kernels,
     const KernelLaunchContext& ctx
 ) {
     int dev = 0;
-    hipGetDevice(&dev); // current thread device
+    hipGetDevice(&dev);
 
-    const ExecMode mode = choose_exec_mode_cached(dev);
-
-    // Monolithic path for older GPUs
-    if (mode == ExecMode::Monolithic) {
-        return default_monolithic_execute(kernels, ctx);
-    }
-
-    // Determine which Stage 1 and Stage 3 kernels to use
-    const char* stage1_name = (mode == ExecMode::SplitCooperative)
-        ? "xelis_stage1_cooperative"
-        : "xelis_stage1_kernel";
-
-    // Use noblake variants for separated Blake3 execution
-    const char* s3_name = (mode == ExecMode::SplitCooperative)
-        ? "xelis_s3_efficient_noblake_kernel"
-        : "xelis_s3_fused_noblake_kernel";
-
-    const char* blake3_name = "xelis_blake3_batch";
-
-    auto stage1_it = kernels.find(stage1_name);
-    auto s3_it = kernels.find(s3_name);
-    auto blake3_it = kernels.find(blake3_name);
-
-    // Fallback to monolithic if kernels not found
-    if (stage1_it == kernels.end() || s3_it == kernels.end() || blake3_it == kernels.end()) {
-        fprintf(stderr, "[XELIS] Split kernels not found (%s, %s, %s), falling back to monolithic\n",
-                stage1_name, s3_name, blake3_name);
-        return default_monolithic_execute(kernels, ctx);
-    }
-
-    hipFunction_t stage1_kernel = stage1_it->second;
-    hipFunction_t s3_kernel = s3_it->second;
-    hipFunction_t blake3_kernel = blake3_it->second;
-
-    // Stage 1 block size
-    // Cooperative Stage 1 is hard-capped at 32 threads
-    int stage1_block_size = (mode == ExecMode::SplitCooperative)
-        ? 32
-        : std::min(ctx.block_size, 32);
-
-    size_t shared_mem = (mode == ExecMode::SplitCooperative)
-        ? (32 * 176)  // STAGE1_SHARED_MEM_SIZE
-        : 0;
-
+    const auto strategy = static_cast<XelisStrategy>(ctx.strategy);
     uint32_t scratch_offset = 0;
-    int stage1_num_blocks = (ctx.batch_size + stage1_block_size - 1) / stage1_block_size;
 
-    // Launch Stage 1
-    {
+    switch (strategy) {
+
+    case XelisStrategy::Mono:
+        return default_monolithic_execute(kernels, ctx);
+
+    case XelisStrategy::Baseline: {
+        // s1+s3 fused, then blake3 separate
+        auto it = kernels.find("xelis_s13_noblake_kernel");
+        if (it == kernels.end()) return default_monolithic_execute(kernels, ctx);
+
         void* args[] = {
             (void*)&ctx.d_input,
             (void*)&ctx.d_scratch,
@@ -152,21 +186,26 @@ inline bool xelis_v3_split_execute(
         };
 
         hipError_t err = hipModuleLaunchKernel(
-            stage1_kernel,
-            stage1_num_blocks, 1, 1,
-            stage1_block_size, 1, 1,
-            shared_mem, ctx.stream,
+            it->second,
+            ctx.num_blocks, 1, 1,
+            ctx.block_size, 1, 1,
+            0, ctx.stream,
             args, nullptr
         );
         if (err != hipSuccess) {
-            fprintf(stderr, "[XELIS SPLIT] Stage1 (%s) launch failed: %s (blocks=%d, threads=%d, shared=%zu)\n",
-                    stage1_name, hipGetErrorString(err), stage1_num_blocks, stage1_block_size, shared_mem);
+            fprintf(stderr, "[XELIS] s13_noblake launch failed: %s\n", hipGetErrorString(err));
             return false;
         }
+        return xelis_launch_blake3(kernels, ctx);
     }
 
-    // Launch Stage 3 (no Blake3 - separated for reduced register pressure)
-    {
+    case XelisStrategy::Sep: {
+        // stage1 separate, s3 separate, blake3 separate
+        if (!xelis_launch_stage1(kernels, ctx, dev)) return false;
+
+        auto it = kernels.find("xelis_s3_hybrid_v2_noblake_kernel");
+        if (it == kernels.end()) return false;
+
         void* args[] = {
             (void*)&ctx.d_scratch,
             (void*)&ctx.batch_size,
@@ -177,25 +216,26 @@ inline bool xelis_v3_split_execute(
         };
 
         hipError_t err = hipModuleLaunchKernel(
-            s3_kernel,
+            it->second,
             ctx.num_blocks, 1, 1,
             ctx.block_size, 1, 1,
             0, ctx.stream,
             args, nullptr
         );
         if (err != hipSuccess) {
-            fprintf(stderr, "[XELIS SPLIT] Stage3 noblake (%s) launch failed: %s (blocks=%d, threads=%d)\n",
-                    s3_name, hipGetErrorString(err), ctx.num_blocks, ctx.block_size);
+            fprintf(stderr, "[XELIS] s3_hybrid_v2_noblake launch failed: %s\n", hipGetErrorString(err));
             return false;
         }
+        return xelis_launch_blake3(kernels, ctx);
     }
 
-    // Launch Blake3 (separate kernel for reduced register pressure)
-    // Blake3 is lightweight - use higher thread count (256 threads optimal)
-    {
-        int blake3_block_size = 256;  // Optimal for low register pressure Blake3
-        int blake3_num_blocks = (ctx.batch_size + blake3_block_size - 1) / blake3_block_size;
-        
+    case XelisStrategy::Neo: {
+        // stage1 separate, s3+b3 fused
+        if (!xelis_launch_stage1(kernels, ctx, dev)) return false;
+
+        auto it = kernels.find("xelis_s3b3_hybrid_v2_kernel");
+        if (it == kernels.end()) return false;
+
         void* args[] = {
             (void*)&ctx.d_scratch,
             (void*)&ctx.d_outputs,
@@ -207,20 +247,22 @@ inline bool xelis_v3_split_execute(
         };
 
         hipError_t err = hipModuleLaunchKernel(
-            blake3_kernel,
-            blake3_num_blocks, 1, 1,
-            blake3_block_size, 1, 1,
+            it->second,
+            ctx.num_blocks, 1, 1,
+            ctx.block_size, 1, 1,
             0, ctx.stream,
             args, nullptr
         );
         if (err != hipSuccess) {
-            fprintf(stderr, "[XELIS SPLIT] Blake3 launch failed: %s (blocks=%d, threads=%d)\n",
-                    hipGetErrorString(err), blake3_num_blocks, blake3_block_size);
+            fprintf(stderr, "[XELIS] s3b3_hybrid_v2 launch failed: %s\n", hipGetErrorString(err));
             return false;
         }
+        return true;
     }
 
-    return true;
+    default:
+        return default_monolithic_execute(kernels, ctx);
+    }
 }
 
 // ============================================================================
@@ -235,20 +277,19 @@ inline AlgoConfig XELIS_V3_CONFIG = {
     .source = {},
 #endif
 
-    // Multiple kernels for split execution
+    // All kernels used across strategies
     .kernel_names = {
-        "xelis_hash_v3_kernel",            // Primary (for tuning, fallback monolithic)
-        "xelis_stage1_kernel",              // Stage 1 (standard)
-        "xelis_s3_fused_kernel",            // Fused Stage 3 + Finalize (standard - legacy)
-        "xelis_stage1_cooperative",         // Stage 1 Cooperative (RDNA+/Ampere+)
-        "xelis_s3_efficient_kernel",        // Stage 3 Efficient (RDNA+/Ampere+ - legacy)
-        "xelis_s3_fused_noblake_kernel",    // Stage 3 Fused without Blake3 (standard split)
-        "xelis_s3_efficient_noblake_kernel", // Stage 3 Efficient without Blake3 (RDNA+/Ampere+ split)
-        "xelis_blake3_batch"                // Separate Blake3 kernel (split execution)
+        "xelis_hash_v3_kernel",              // Mono (primary/fallback)
+        "xelis_stage1_kernel",               // Sep/Neo stage1
+        "xelis_stage1_cooperative",          // Sep/Neo stage1 (RDNA+/Ampere+)
+        "xelis_s13_noblake_kernel",          // Baseline (s1+s3 fused)
+        "xelis_s3_hybrid_v2_noblake_kernel", // Sep (s3 only)
+        "xelis_s3b3_hybrid_v2_kernel",       // Neo (s3+b3 fused)
+        "xelis_blake3_batch"                 // Baseline/Sep blake3
     },
 
-    .kernel_name = "",  // Empty - using kernel_names instead
-    
+    .kernel_name = "",
+
 #ifdef TNN_XELISHASH
     .rtc_headers = build_rtc_headers(
         hip_embedded::XELIS_SOURCES,
@@ -271,16 +312,24 @@ inline AlgoConfig XELIS_V3_CONFIG = {
     .amd_blocks = {32, 1024, 32},
     .nvidia_blocks = {32, 1024, 32},
     .target_batch_time_ms = 1250.0,
-    .max_batch_time_ms = 3000.0,
+    .max_batch_time_ms = 1500.0,
     .min_batch_time_ms = 100.0,
     .enable_autotune = true,
     .autotune_warmup = 1,
     .autotune_iterations = 1,
     .memory_reserve_mb = 128.0,
     .memory_usage_factor = 1.0,
-    
-    // Use split kernel execution strategy
-    .execute_fn = xelis_v3_split_execute,
+
+    .execute_fn = xelis_v3_execute,
+
+    // 4 strategies for autotune sweep
+    .strategy_variants = {
+        (uint8_t)XelisStrategy::Mono,
+        (uint8_t)XelisStrategy::Baseline,
+        (uint8_t)XelisStrategy::Sep,
+        (uint8_t)XelisStrategy::Neo
+    },
+    .strategy_names = {"Mono", "Baseline", "Sep", "Neo"},
 };
 
 // ============================================================================
@@ -292,14 +341,14 @@ public:
         static AlgoRegistry inst;
         return inst;
     }
-    
+
     std::unique_ptr<IGPUAlgorithm> create(const std::string& name) {
         if (name == "xelis_v3") {
             return std::make_unique<GPUAlgorithm>(XELIS_V3_CONFIG);
         }
         return nullptr;
     }
-    
+
     std::vector<std::string> list_algorithms() const {
         return {"xelis_v3"};
     }

@@ -14,6 +14,7 @@
 //------------------------------------------------------------------------------
 
 #include "miner_main.h"
+#include "tnn_log.hpp"
 #include "tnn-common.hpp"
 #include "tnn-hugepages.hpp"
 #include "numa_optimizer.hpp"
@@ -458,6 +459,18 @@ int tnn_main(int argc, char **argv)
     {
       printf("%s", TNN);
       fflush(stdout);
+    }
+
+    if (vm.count("log-level"))
+    {
+      std::string lvl = vm["log-level"].as<std::string>();
+      if (lvl == "off")        tnn_set_log_level(TnnLogLevel::Off);
+      else if (lvl == "info")  tnn_set_log_level(TnnLogLevel::Info);
+      else if (lvl == "debug") tnn_set_log_level(TnnLogLevel::Debug);
+      else if (lvl == "trace") tnn_set_log_level(TnnLogLevel::Trace);
+      else {
+        printf("Unknown log level '%s', using 'info'. Valid: off, info, debug, trace\n", lvl.c_str());
+      }
     }
 
     // Check if any unrecognized option is a coin symbol
@@ -1327,7 +1340,9 @@ fillBlanks:
         std::atexit(cleanupMSROnExit);
     }
 
+#ifndef TNN_HIP
     xelis_tune_v3(threads);
+#endif
   }
   fflush(stdout);
   setcolor(BRIGHT_WHITE);

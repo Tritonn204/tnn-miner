@@ -221,25 +221,23 @@ alignas(64) static constexpr uint8_t isqrt_lut[256] = {
     14,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,
     15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15};
 
+// Macro body for tier-dispatched isqrt (used by gen_tiers spec)
+#define XELIS_ISQRT_BODY \
+    if (n < 2) return n; \
+    int lz = __builtin_clzll(n); \
+    uint64_t x = 1ULL << ((63 - lz + 1) >> 1); \
+    x = (x + n/x) >> 1; \
+    x = (x + n/x) >> 1; \
+    x = (x + n/x) >> 1; \
+    x = (x + n/x) >> 1; \
+    while (x * x > n) --x; \
+    while ((x + 1) <= n / (x + 1)) ++x; \
+    return x;
+
 #ifdef __x86_64__
 static inline uint64_t isqrt(uint64_t n)
 {
-    if (n < 2) return n;
-    
-    // Initial estimate from bit position
-    int lz = __builtin_clzll(n);
-    uint64_t x = 1ULL << ((63 - lz + 1) >> 1);
-    
-    // Newton-Raphson iterations (4 is sufficient for 64-bit)
-    x = (x + n/x) >> 1;
-    x = (x + n/x) >> 1;
-    x = (x + n/x) >> 1;
-    x = (x + n/x) >> 1;
-    
-    // Final correction
-    while (x * x > n) --x;
-    while ((x + 1) <= n / (x + 1)) ++x;
-    return x;
+    XELIS_ISQRT_BODY
 }
 #endif
 

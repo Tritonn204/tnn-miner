@@ -68,13 +68,14 @@ struct TuningResult {
     uint32_t batch_size = 0;
     double hashrate = 0.0;
     double batch_time_ms = 0.0;
+    uint8_t strategy = 0;      // Algo-defined strategy index (0 = default/first)
     bool valid = false;
-    
+
     std::string describe() const {
         char buf[256];
-        snprintf(buf, sizeof(buf), 
-            "block_size=%d, num_blocks=%d, batch_size=%u, hashrate=%.2f H/s, time=%.2fms",
-            block_size, num_blocks, batch_size, hashrate, batch_time_ms);
+        snprintf(buf, sizeof(buf),
+            "strategy=%u, block_size=%d, num_blocks=%d, batch_size=%u, hashrate=%.2f H/s, time=%.2fms",
+            strategy, block_size, num_blocks, batch_size, hashrate, batch_time_ms);
         return buf;
     }
 };
@@ -89,16 +90,19 @@ struct KernelLaunchContext {
     uint64_t* d_scratch;
     uint64_t* d_difficulty_target;
     uint64_t* d_solutions;
-    
+
     // Launch parameters
     uint64_t nonce_start;
     uint32_t batch_size;
     int block_size;
     int num_blocks;
-    
+
+    // Algo-defined strategy index (from autotune)
+    uint8_t strategy = 0;
+
     // Config reference
     const struct AlgoConfig* config;
-    
+
     // Stream (nullptr = default stream)
     hipStream_t stream = nullptr;
 };
@@ -287,9 +291,19 @@ struct AlgoConfig {
     double memory_usage_factor = 0.9;
     
     // ========== Execution Strategy ==========
-    
+
     // Custom execution function (nullptr = use default monolithic)
+    // The execute_fn receives ctx.strategy to know which variant to dispatch.
     KernelExecuteFn execute_fn = nullptr;
+
+    // Strategy variants for autotune sweep.
+    // If non-empty, autotune tries each strategy × block_size and picks the best.
+    // Values are opaque uint8_t indices interpreted by execute_fn.
+    // Empty = no strategy sweep (single strategy, strategy=0).
+    std::vector<uint8_t> strategy_variants;
+
+    // Human-readable names for each strategy (for logging). Same order as strategy_variants.
+    std::vector<std::string> strategy_names;
     
     // Helper to get all kernel names (handles legacy single name)
     std::vector<std::string> get_kernel_names() const {
@@ -317,15 +331,21 @@ struct JobSnapshot {
     int64_t job_id;                      // Job ID/height
     uint64_t difficulty;                 // Difficulty for this job
     int algo_id;                         // Algorithm identifier (e.g., ALGO_XELISV3)
+    std::string job_id_str;             // Protocol-assigned job ID (stratum)
+    bool is_dev;                         // Whether this batch was mined for dev fee
 
-    JobSnapshot() : job_id(0), difficulty(0), algo_id(0) {}
+    JobSnapshot() : job_id(0), difficulty(0), algo_id(0), is_dev(false) {}
 
     JobSnapshot(const uint8_t* template_data, size_t template_size,
-                int64_t id, uint64_t diff, int algo)
+                int64_t id, uint64_t diff, int algo,
+                const std::string& id_str = "",
+                bool dev = false)
         : work_template(template_data, template_data + template_size)
         , job_id(id)
         , difficulty(diff)
         , algo_id(algo)
+        , job_id_str(id_str)
+        , is_dev(dev)
     {}
 };
 
