@@ -49,6 +49,32 @@ if (WIN32)
       list(APPEND CMAKE_MODULE_PATH ${_hip_modules})
       link_directories("${HIP_PATH}/lib")
 
+      # NVIDIA HIP on Windows: use clang-cl for host code (MSVC ABI required by NVCC)
+      if (HIP_PLATFORM MATCHES "nvidia")
+        find_program(_CLANG_CL clang-cl PATHS "${HIP_PATH}/bin" NO_DEFAULT_PATH)
+        if (NOT _CLANG_CL)
+          find_program(_CLANG_CL clang-cl)
+        endif()
+        if (_CLANG_CL)
+          set(CMAKE_C_COMPILER   "${_CLANG_CL}" CACHE FILEPATH "" FORCE)
+          set(CMAKE_CXX_COMPILER "${_CLANG_CL}" CACHE FILEPATH "" FORCE)
+          message(STATUS "NVIDIA HIP on Windows: using clang-cl at ${_CLANG_CL}")
+        else()
+          message(WARNING "clang-cl not found — NVIDIA HIP build may fail with MSVC-style flags")
+        endif()
+
+        # clang-cl needs compiler-rt builtins for FMV (__cpu_model) and
+        # 128-bit integer ops (__udivti3/__umodti3) that MSVC doesn't provide
+        file(GLOB _clang_rt_builtins "${HIP_PATH}/lib/clang/*/lib/windows/clang_rt.builtins-x86_64.lib")
+        if (_clang_rt_builtins)
+          list(GET _clang_rt_builtins -1 _clang_rt_builtins_lib)  # use newest
+          link_libraries("${_clang_rt_builtins_lib}")
+          message(STATUS "Linking clang_rt.builtins: ${_clang_rt_builtins_lib}")
+        else()
+          message(WARNING "clang_rt.builtins-x86_64.lib not found — link errors likely")
+        endif()
+      endif()
+
 # ---------- Windows CPU-only ----------
   else()
     message(STATUS "Target system is Windows (CPU-only build)")

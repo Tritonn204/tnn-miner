@@ -78,3 +78,15 @@ RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-20 100 \
  && clang --version \
  && clang++ --version \
  && ld.lld --version
+
+# CUDA toolkit (needed for NVIDIA HIP backend builds, harmless for AMD-only)
+ARG CUDA_VER=12-6
+RUN curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb \
+      -o /tmp/cuda-keyring.deb \
+ && dpkg -i /tmp/cuda-keyring.deb \
+ && rm /tmp/cuda-keyring.deb \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends \
+      cuda-compiler-${CUDA_VER} cuda-cudart-dev-${CUDA_VER} cuda-nvrtc-dev-${CUDA_VER} \
+ && rm -rf /var/lib/apt/lists/* \
+ && ls /usr/local/cuda/bin/nvcc && echo "CUDA installed OK"
