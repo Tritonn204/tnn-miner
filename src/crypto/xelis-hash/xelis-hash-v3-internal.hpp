@@ -222,23 +222,23 @@ alignas(64) static constexpr uint8_t isqrt_lut[256] = {
     15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15};
 
 #ifdef __x86_64__
-__attribute__((target("sse2")))static inline uint64_t isqrt(uint64_t n)
+static inline uint64_t isqrt(uint64_t n)
 {
     if (n < 2) return n;
-    __m128d v    = _mm_set_sd((double)n);
-    __m128d s    = _mm_sqrt_sd(v, v);
-    uint64_t root = (uint64_t)_mm_cvtsd_f64(s);
-    if ((root + 1) * (root + 1) <= n) ++root;
-    else if (root * root > n)         --root;
-    return root;
-}
-
-__attribute__((target("default")))static inline uint64_t isqrt(uint64_t n)
-{
-    if (n < 2) return n;
-    uint64_t x = n;
-    uint64_t y = (x + 1) >> 1;
-    while (y < x) { x = y; y = (x + n / x) >> 1; }
+    
+    // Initial estimate from bit position
+    int lz = __builtin_clzll(n);
+    uint64_t x = 1ULL << ((63 - lz + 1) >> 1);
+    
+    // Newton-Raphson iterations (4 is sufficient for 64-bit)
+    x = (x + n/x) >> 1;
+    x = (x + n/x) >> 1;
+    x = (x + n/x) >> 1;
+    x = (x + n/x) >> 1;
+    
+    // Final correction
+    while (x * x > n) --x;
+    while ((x + 1) <= n / (x + 1)) ++x;
     return x;
 }
 #endif
@@ -394,6 +394,21 @@ static inline uint64_t mod128_64(__uint128_t dividend, uint64_t divisor)
 #endif
 }
 
+static inline uint64_t umul64_hi(uint64_t a, uint64_t b)
+{
+#if defined(_MSC_VER) && defined(_M_X64)
+    uint64_t h; (void)_umul128(a, b, &h); return h;
+#elif defined(__SIZEOF_INT128__)
+    return (uint64_t)(((__uint128_t)a * (__uint128_t)b) >> 64);
+#elif defined(__x86_64__)
+    uint64_t h, l; __asm__("mulq %3" : "=a"(l), "=d"(h) : "a"(a), "r"(b) : "cc"); return h;
+#elif defined(__aarch64__)
+    uint64_t h; __asm__("umulh %0, %1, %2" : "=r"(h) : "r"(a), "r"(b)); return h;
+#else
+#   error "No known way to compute high 64 bits of 64x64 multiply"
+#endif
+}
+
 static inline uint64_t mod128_64_fast(__uint128_t t1, uint64_t denom)
 {
 #if defined(__x86_64__)
@@ -419,19 +434,57 @@ static inline uint64_t udiv(uint64_t high, uint64_t low, uint64_t divisor)
     return d128_64(dividend, divisor);
 }
 
-static inline uint64_t umul64_hi(uint64_t a, uint64_t b)
+// Montgomery multiplication avoids division entirely after setup
+struct Montgomery64 {
+    uint64_t n, n_inv, r2;
+    
+    static Montgomery64 init(uint64_t mod) {
+        Montgomery64 m;
+        m.n = mod | 1;
+        // Compute -n^(-1) mod 2^64 via Newton iteration
+        uint64_t x = m.n;
+        for (int i = 0; i < 5; i++) x *= 2 - m.n * x;
+        m.n_inv = -x;
+        m.r2 = ((__uint128_t)1 << 64) % m.n;
+        m.r2 = ((__uint128_t)m.r2 * m.r2) % m.n;
+        return m;
+    }
+    
+    uint64_t reduce(__uint128_t t) const {
+        uint64_t m = (uint64_t)t * n_inv;
+        uint64_t r = (t + (__uint128_t)m * n) >> 64;
+        return r >= n ? r - n : r;
+    }
+    
+    uint64_t mul(uint64_t a, uint64_t b) const {
+        return reduce((__uint128_t)a * b);
+    }
+};
+
+// The hot reduction, mu_lo/mu_hi expected to be in registers
+static inline uint64_t barrett_core(
+    __uint128_t x, uint64_t mod, uint64_t mu_lo, uint64_t mu_hi)
 {
-#if defined(_MSC_VER) && defined(_M_X64)
-    uint64_t h; (void)_umul128(a, b, &h); return h;
-#elif defined(__SIZEOF_INT128__)
-    return (uint64_t)(((__uint128_t)a * (__uint128_t)b) >> 64);
-#elif defined(__x86_64__)
-    uint64_t h, l; __asm__("mulq %3" : "=a"(l), "=d"(h) : "a"(a), "r"(b) : "cc"); return h;
-#elif defined(__aarch64__)
-    uint64_t h; __asm__("umulh %0, %1, %2" : "=r"(h) : "r"(a), "r"(b)); return h;
-#else
-#   error "No known way to compute high 64 bits of 64x64 multiply"
-#endif
+    uint64_t x_lo = (uint64_t)x;
+    uint64_t x_hi = (uint64_t)(x >> 64);
+
+    uint64_t p0_hi = umul64_hi(x_lo, mu_lo);
+    __uint128_t p1 = (__uint128_t)x_lo * mu_hi;
+    __uint128_t p2 = (__uint128_t)x_hi * mu_lo;
+    __uint128_t p3 = (__uint128_t)x_hi * mu_hi;
+
+    __uint128_t mid = (__uint128_t)p0_hi + (uint64_t)p1 + (uint64_t)p2;
+
+    __uint128_t q = p3 + (p1 >> 64) + (p2 >> 64) + (uint64_t)(mid >> 64);
+
+    // Use 128-bit subtraction to avoid truncation bug
+    __uint128_t r = x - q * (__uint128_t)mod;
+
+    // r < 2*mod guaranteed, and mod < 2^64, so r < 2^65
+    // After one subtraction, r < mod < 2^64, fits in uint64_t
+    if (r >= mod) r -= mod;
+
+    return (uint64_t)r;
 }
 
 static inline uint64_t modular_power_fast(uint64_t base, uint64_t exp, uint64_t mod)
@@ -440,16 +493,21 @@ static inline uint64_t modular_power_fast(uint64_t base, uint64_t exp, uint64_t 
     base %= mod;
     if (base < 2) return base;
 
+    // Precompute Barrett constant — one division at setup
+    __uint128_t mu = (~(__uint128_t)0) / mod;
+    uint64_t mu_lo = (uint64_t)mu;
+    uint64_t mu_hi = (uint64_t)(mu >> 64);
+
     uint64_t result = 1;
     while (exp > 0) {
         if (exp & 1) {
-            __uint128_t tmp = (__uint128_t)result * base;
-            result = mod128_64_fast(tmp, mod);
+            __uint128_t prod = (__uint128_t)result * base;
+            result = barrett_core(prod, mod, mu_lo, mu_hi);
         }
         exp >>= 1;
         if (exp > 0) {
-            __uint128_t tmp = (__uint128_t)base * base;
-            base = mod128_64_fast(tmp, mod);
+            __uint128_t prod = (__uint128_t)base * base;
+            base = barrett_core(prod, mod, mu_lo, mu_hi);
             if (base == 0) return 0;
         }
     }
@@ -677,11 +735,10 @@ static inline void prefetch_W(const void *p) {
         uint64_t mem_a = mem_buffer_a[map_index(addr_a)]; \
         uint64_t mem_b = mem_buffer_b[map_index(mem_a ^ addr_b)]; \
 \
-        uint64_to_le_bytes(mem_b, block); \
-        uint64_to_le_bytes(mem_a, block + 8); \
-        aes_round(block, key); \
-        uint64_t hash1 = le_bytes_to_uint64(block); \
-        uint64_t hash2 = le_bytes_to_uint64(block + 8); \
+        alignas(16) uint64_t block_u64[2] = { mem_b, mem_a }; \
+        aes_round(reinterpret_cast<uint8_t*>(block_u64), key);  \
+        uint64_t hash1 = block_u64[0];  \
+        uint64_t hash2 = block_u64[1];  \
         uint64_t result = ~(hash1 ^ hash2); \
 \
         uint64_t next_a_idx = map_index(result); \
