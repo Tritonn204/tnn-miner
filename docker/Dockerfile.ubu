@@ -16,7 +16,6 @@ FROM base AS build
 # Ensure HIP/ROCm/CUDA env vars are set for GPU builds (no-op for CPU builds)
 ENV HIP_PATH=/opt/rocm
 ENV ROCM_PATH=/opt/rocm
-ENV HIPCXX=/opt/rocm/bin/hipcc
 ENV CUDA_PATH=/usr/local/cuda
 ARG  CMAKE_ARGS=
 ARG  PACKAGE_VERSION=0.0.1
