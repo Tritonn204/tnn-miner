@@ -925,6 +925,15 @@ if (WITH_HIP)
       ${TNN_HIP_SOURCES}
     )
 
+    # Per-platform stats API port: CPU=8989, AMD=8990, NVIDIA=8991, Intel=8992
+    if (HIP_PLATFORM MATCHES "amd")
+      target_compile_definitions(${TNN_OUTPUT_NAME} PRIVATE TNN_BROADCAST_PORT=8990)
+    elseif (HIP_PLATFORM MATCHES "nvidia")
+      target_compile_definitions(${TNN_OUTPUT_NAME} PRIVATE TNN_BROADCAST_PORT=8991)
+    elseif (HIP_PLATFORM MATCHES "intel")
+      target_compile_definitions(${TNN_OUTPUT_NAME} PRIVATE TNN_BROADCAST_PORT=8992)
+    endif()
+
     if (WIN32 AND HIP_PLATFORM MATCHES "nvidia")
       set(CMAKE_HIP_LINK_EXECUTABLE
         "<CMAKE_LINKER> /machine:x64 /INCREMENTAL:NO <LINK_FLAGS> <OBJECTS> /OUT:<TARGET> <LINK_LIBRARIES>"

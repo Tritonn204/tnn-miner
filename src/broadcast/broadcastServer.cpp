@@ -4,7 +4,10 @@
 
 namespace BroadcastServer
 {
-  int broadcastPort = 8989;
+#ifndef TNN_BROADCAST_PORT
+#define TNN_BROADCAST_PORT 8989
+#endif
+  int broadcastPort = TNN_BROADCAST_PORT;
   std::vector<int64_t> *rate30sec_ptr;
   uint64_t startTime = 0;
   int *accepted_ptr;
@@ -12,6 +15,12 @@ namespace BroadcastServer
   int interval;
   const char *algo_b;
   const char *version_b;
+
+  // Per-GPU data
+  int gpu_count = 0;
+  std::vector<std::vector<int64_t>> *gpu_rates1min_ptr = nullptr;
+  std::string *gpu_names_ptr = nullptr;
+  std::string *gpu_pcie_ids_ptr = nullptr;
 
   void handleRequest(http::request<http::string_body> &req, http::response<http::string_body> &res)
   {
@@ -33,6 +42,33 @@ namespace BroadcastServer
 
       jsonData["algo"] = algo_b;
       jsonData["version"] = version_b;
+
+      // Per-GPU stats
+      if (gpu_count > 0 && gpu_rates1min_ptr) {
+        json_b::array gpus;
+        for (int i = 0; i < gpu_count; i++) {
+          json_b::object gpu;
+          gpu["id"] = i;
+
+          // Compute average hashrate from 1-min rolling window (in H/s)
+          auto& rates = (*gpu_rates1min_ptr)[i];
+          double hr = 0.0;
+          if (!rates.empty()) {
+            hr = (double)std::accumulate(rates.begin(), rates.end(), 0LL) / (double)rates.size();
+          }
+          gpu["hashrate"] = hr;
+
+          if (gpu_names_ptr) {
+            gpu["name"] = gpu_names_ptr[i].c_str();
+          }
+          if (gpu_pcie_ids_ptr) {
+            gpu["pcie_id"] = gpu_pcie_ids_ptr[i].c_str();
+          }
+
+          gpus.push_back(gpu);
+        }
+        jsonData["gpus"] = gpus;
+      }
 
       // Set the response headers and body
       res.version(11);

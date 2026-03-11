@@ -1568,6 +1568,14 @@ Mining:
 
   if (broadcastStats)
   {
+#ifdef TNN_HIP
+    if (gpuMine) {
+      BroadcastServer::gpu_count = HIP_deviceCount;
+      BroadcastServer::gpu_rates1min_ptr = &HIP_rates1min;
+      BroadcastServer::gpu_names_ptr = HIP_names;
+      BroadcastServer::gpu_pcie_ids_ptr = HIP_pcieID;
+    }
+#endif
     boost::thread BROADCAST(BroadcastServer::serverThread, &rate30sec, &accepted, &rejected, algoName(miningProfile.coin.miningAlgo), versionString, reportInterval);
   }
 
