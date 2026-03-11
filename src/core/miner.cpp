@@ -672,16 +672,23 @@ int tnn_main(int argc, char **argv)
 #endif
   }
 
-  if (initYespowerParamsForCoin(miningProfile.coin.coinId, &currentYespowerParams))
-  {
+{
+    int _ypCoin = miningProfile.coin.coinId;
+    if (_ypCoin == COIN_ADVC || _ypCoin == COIN_TIDE || _ypCoin == COIN_YPR16 ||
+        _ypCoin == COIN_YCR16 || _ypCoin == COIN_YCR8 || _ypCoin == COIN_MGPC ||
+        _ypCoin == COIN_URX || _ypCoin == COIN_LTNCG || _ypCoin == COIN_YSC ||
+        _ypCoin == COIN_EQPAY)
+    {
 #if defined(TNN_YESPOWER)
-    preserveAlgoOverride(miningProfile, miningProfile.coin.coinId);
-    miningProfile.protocol = PROTO_BTC_STRATUM;
-    current_algo_config = algo_configs[CONFIG_ENDIAN_YESPOWER];
-    initADVCParams(&devYespowerParams);
+      initYespowerParamsForCoin(_ypCoin, &currentYespowerParams);
+      preserveAlgoOverride(miningProfile, _ypCoin);
+      miningProfile.protocol = PROTO_BTC_STRATUM;
+      current_algo_config = algo_configs[CONFIG_ENDIAN_YESPOWER];
+      initADVCParams(&devYespowerParams);
 #else
-    UNSUPPORTED_ALGO_ERROR(unsupported_yespower);
+      UNSUPPORTED_ALGO_ERROR(unsupported_yespower);
 #endif
+    }
   }
 
   if (vm.count("yespower"))
