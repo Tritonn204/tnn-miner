@@ -9,7 +9,9 @@
       "Read(//c/openssl_msvc/**)",
       "Bash(cd:*)",
       "Bash(powershell:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(gh api:*)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

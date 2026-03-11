@@ -46,8 +46,17 @@
 #define COIN_ADVC 14
 #define COIN_TARI 15
 #define COIN_RIN 16
+#define COIN_TIDE 17     // YespowerTIDE (Tidecoin)
+#define COIN_YPR16 18    // YespowerR16 (Yenten etc.)
+#define COIN_YCR16 19    // YescryptR16 (Goldcash etc.)
+#define COIN_YCR8 20     // YescryptR8 (MTBC etc.)
+#define COIN_MGPC 21     // YespowerMGPC (Magpiecoin)
+#define COIN_URX 22      // YespowerURX (UraniumX)
+#define COIN_LTNCG 23    // YespowerLTNCG (Crane/CRNC)
+#define COIN_YSC 24      // Yescrypt (plain)
+#define COIN_EQPAY 25    // YespowerEQPAY (EqpayCoin)
 
-#define COIN_COUNT 17
+#define COIN_COUNT 26
 
 // Corresponding to the ALGO_POW[] array in miners.hpp
 // Also used in coins[COIN_COUNT] from tnn-common.hpp

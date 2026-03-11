@@ -168,13 +168,13 @@ option(ARM_V8               "Force ARMv8 (64 bit) architecture, use with caution
 option(ARM_V7               "Force ARMv7 (32 bit) architecture, use with caution if automatic detection fails, but you sure it may work" OFF)
 # End of XMRig options
 
-option(WITH_LTO "Enable Link-Time Optimization" OFF)
+option(WITH_LTO "Enable Link-Time Optimization" ON)
 
 if (NOT WITH_HIP)
   if (WITH_LTO)
     message(STATUS "LTO enabled (WITH_LTO=ON)")
-    set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -flto -fomit-frame-pointer -Wl,--keep-unique")
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flto -fomit-frame-pointer -Wl,--keep-unique")
+    set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -flto -fomit-frame-pointer")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flto -fomit-frame-pointer")
   else()
     message(STATUS "LTO disabled (pass -DWITH_LTO=ON to enable)")
     set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -fomit-frame-pointer")
@@ -990,6 +990,7 @@ if (WITH_HIP)
           ${TNN_CORE_LIB}
           ${HIPRT_LIB}
           ${HIPRTC_LIB}
+          -Wl,-Bstatic udns numa -Wl,-Bdynamic
       )
     endif()
 
