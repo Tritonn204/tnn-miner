@@ -49,6 +49,7 @@ ARG LLVM_VER=20
 ARG APT_PACKAGES="git wget build-essential libssl-dev libudns-dev libc++-dev libsodium-dev libnuma-dev ca-certificates curl gnupg lsb-release software-properties-common"
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV CMAKE_PREFIX_PATH=/opt/rocm
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
