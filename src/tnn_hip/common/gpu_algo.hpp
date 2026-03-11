@@ -391,6 +391,7 @@ struct GPUTuningOverrides {
     std::vector<uint32_t> gpu_batch_sizes;
     std::vector<int> gpu_block_sizes;
     bool disable_autotune = false;
+    bool force_retune = false;
     
     std::optional<uint32_t> get_batch_override(int device_id) const {
         if (device_id >= 0 && device_id < (int)gpu_batch_sizes.size()) {

@@ -55,8 +55,9 @@
 #define COIN_LTNCG 23    // YespowerLTNCG (Crane/CRNC)
 #define COIN_YSC 24      // Yescrypt (plain)
 #define COIN_EQPAY 25    // YespowerEQPAY (EqpayCoin)
+#define COIN_YCR32 26    // YescryptR32 (LuckyPepe etc.)
 
-#define COIN_COUNT 26
+#define COIN_COUNT 27
 
 // Corresponding to the ALGO_POW[] array in miners.hpp
 // Also used in coins[COIN_COUNT] from tnn-common.hpp

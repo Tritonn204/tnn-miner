@@ -16,10 +16,12 @@ variables:
   MACOS_ARM64_TGZ: "Tnn-miner-macos-arm64-${PACKAGE_VERSION}.tar.gz"
   WRAPPER_TEMP: "wrapper.tar.gz"
   WIN_AMD64_ZIP: "Tnn-miner-win64-${PACKAGE_VERSION}.zip"
-  WIN_HIP_AMD_ZIP: "Tnn-miner-win64-hip-amd-${PACKAGE_VERSION}.zip"
-  WIN_HIP_NVIDIA_ZIP: "Tnn-miner-win64-hip-nvidia-${PACKAGE_VERSION}.zip"
-  LINUX_HIP_AMD_TGZ: "Tnn-miner-amd64-hip-amd-${PACKAGE_VERSION}.tar.gz"
-  LINUX_HIP_NVIDIA_TGZ: "Tnn-miner-amd64-hip-nvidia-${PACKAGE_VERSION}.tar.gz"
+  WIN_HIP_AMD_ZIP: "Tnn-miner-win64-rocm-${PACKAGE_VERSION}.zip"
+  WIN_HIP_NVIDIA_ZIP: "Tnn-miner-win64-cuda-${PACKAGE_VERSION}.zip"
+  LINUX_HIP_AMD_TGZ: "Tnn-miner-rocm-amd64-${PACKAGE_VERSION}.tar.gz"
+  LINUX_HIP_NVIDIA_TGZ: "Tnn-miner-cuda-amd64-${PACKAGE_VERSION}.tar.gz"
+  HIVEOS_MMPOS_HIP_AMD_TGZ: "tnn-miner-hiveos_mmpos_hip-amd_${PACKAGE_VERSION}.tar.gz"
+  HIVEOS_MMPOS_HIP_NVIDIA_TGZ: "tnn-miner-hiveos_mmpos_hip-nvidia_${PACKAGE_VERSION}.tar.gz"
   # https://docs.gitlab.com/ee/ci/runners/hosted_runners/macos.html#optimizing-homebrew
   HOMEBREW_NO_AUTO_UPDATE: 1
   #CI_DEBUG_TRACE: "true"
@@ -39,10 +41,12 @@ workflow:
         MACOS_ARM64_TGZ: "Tnn-miner-macos-arm64-${PACKAGE_VERSION}.tar.gz"
         WRAPPER_TEMP: "wrapper.tar.gz"
         WIN_AMD64_ZIP: "Tnn-miner-win64-${PACKAGE_VERSION}.zip"
-        WIN_HIP_AMD_ZIP: "Tnn-miner-win64-hip-amd-${PACKAGE_VERSION}.zip"
-        WIN_HIP_NVIDIA_ZIP: "Tnn-miner-win64-hip-nvidia-${PACKAGE_VERSION}.zip"
+        WIN_HIP_AMD_ZIP: "Tnn-miner-win64-rocm-${PACKAGE_VERSION}.zip"
+        WIN_HIP_NVIDIA_ZIP: "Tnn-miner-win64-cuda-${PACKAGE_VERSION}.zip"
         LINUX_HIP_AMD_TGZ: "Tnn-miner-amd64-hip-amd-${PACKAGE_VERSION}.tar.gz"
         LINUX_HIP_NVIDIA_TGZ: "Tnn-miner-amd64-hip-nvidia-${PACKAGE_VERSION}.tar.gz"
+        HIVEOS_MMPOS_HIP_AMD_TGZ: "Tnn-miner-hiveos_mmpos_hip-amd_${PACKAGE_VERSION}.tar.gz"
+        HIVEOS_MMPOS_HIP_NVIDIA_TGZ: "Tnn-miner-hiveos_mmpos_hip-nvidia_${PACKAGE_VERSION}.tar.gz"
 
 .macos_saas_runners:
   tags:
@@ -159,6 +163,7 @@ build-hiveos-mmpos:
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/h-run.sh
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/h-stats.sh
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/mmp-stats.sh
+    - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/mmp-launch.sh
     - tar -czvf ${HIVEOS_MMPOS_AMD64_TGZ} -C ./wrappers/hiveos+mmpos/ tnn-miner
   after_script:
     - echo "HIVEOS_MMPOS_BUILD_JOB_ID=$CI_JOB_ID" >> hiveos-job.env
@@ -188,6 +193,7 @@ build-hiveos-mmpos-amd:
     - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner/h-run.sh
     - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner/h-stats.sh
     - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner/mmp-stats.sh
+    - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner/mmp-launch.sh
     - tar -czvf ${HIVEOS_MMPOS_HIP_AMD_TGZ} -C ./wrappers/hiveos+mmpos-amd/ tnn-miner
   after_script:
     - echo "HIVEOS_MMPOS_HIP_AMD_BUILD_JOB_ID=$CI_JOB_ID" >> hiveos-hip-amd-job.env
@@ -214,6 +220,7 @@ build-hiveos-mmpos-nvidia:
     - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner/h-run.sh
     - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner/h-stats.sh
     - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner/mmp-stats.sh
+    - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner/mmp-launch.sh
     - tar -czvf ${HIVEOS_MMPOS_HIP_NVIDIA_TGZ} -C ./wrappers/hiveos+mmpos-nvidia/ tnn-miner
   after_script:
     - echo "HIVEOS_MMPOS_HIP_NVIDIA_BUILD_JOB_ID=$CI_JOB_ID" >> hiveos-hip-nvidia-job.env

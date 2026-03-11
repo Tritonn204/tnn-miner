@@ -368,8 +368,18 @@ private:
             options.push_back("--device-int128");
           #endif
 
-            // Note: Register limits are now set per-kernel using __maxnreg__() attributes
-            // in the HIP source code instead of globally via --maxrregcount
+            // Per-kernel register limits via -D defines (arch-dependent)
+            {
+                const int major = device_props_.major;
+                // Stage3 hybrid_v2 register cap: tighter on newer archs where
+                // the compiler naturally uses fewer regs.  Too tight on older
+                // archs causes spill → stack overflow → crash.
+                int s3_nreg;
+                if (major >= 9)       s3_nreg = 40;   // Ada / Hopper
+                else if (major >= 8)  s3_nreg = 64;   // Ampere (GA10x)
+                else                  s3_nreg = 80;   // Turing / Volta / older
+                options.push_back("-DXELIS_S3_NREG=" + std::to_string(s3_nreg));
+            }
 
             // Add device ID to ensure separate module per GPU (avoids context issues)
             options.push_back("-DDEVICE_ID=" + std::to_string(device_id_));
@@ -971,7 +981,7 @@ private:
         }
         
         // Check disk cache first (before doing expensive tuning)
-        if (load_cached_tune()) {
+        if (!g_tuning_overrides.force_retune && load_cached_tune()) {
             TuneOutputBuffer out(device_id_);
             out.printf("[AUTOTUNE] GPU %d: Loaded cached tune for %s\n", 
                        device_id_, config_.name.c_str());

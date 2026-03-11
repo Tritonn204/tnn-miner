@@ -106,15 +106,16 @@ const TnnDevMinerInfo devInfo[COIN_COUNT] = {
   {COIN_ADVC,     "stratum+ssl://stratum-eu.rplant.xyz",        "17149",    "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
   {COIN_TARI,     "stratum+ssl://monerohash.com",               "9999",     "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe", "49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe"},
   {COIN_RIN,      "stratum+ssl://stratum-eu.rplant.xyz",        "17148",    "rin1qzcg5vpdypje7f9ql8v4ttwdmmcxr8j64pxfwrv", "rin1qzcg5vpdypje7f9ql8v4ttwdmmcxr8j64pxfwrv"},
-  {COIN_TIDE,     "stratum+ssl://stratum-eu.rplant.xyz",        "17059",    "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
-  {COIN_YPR16,    "stratum+ssl://stratum-eu.rplant.xyz",        "13382",    "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
-  {COIN_YCR16,    "stratum+ssl://stratum-eu.rplant.xyz",        "17057",    "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
+  {COIN_TIDE,     "stratum+ssl://stratum-eu.rplant.xyz",        "17149",    "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
+  {COIN_YPR16,    "stratum+ssl://stratum-eu.rplant.xyz",        "17149",    "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
+  {COIN_YCR16,    "stratum+ssl://stratum-eu.rplant.xyz",        "17149",    "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
   {COIN_YCR8,     "stratum+ssl://stratum-eu.rplant.xyz",        "17149",    "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
-  {COIN_MGPC,     "stratum+ssl://stratum-eu.rplant.xyz",        "17049",    "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
-  {COIN_URX,      "stratum+ssl://stratum-eu.rplant.xyz",        "13361",    "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
-  {COIN_LTNCG,    "stratum+ssl://stratum-eu.rplant.xyz",        "13335",    "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
+  {COIN_MGPC,     "stratum+ssl://stratum-eu.rplant.xyz",        "17149",    "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
+  {COIN_URX,      "stratum+ssl://stratum-eu.rplant.xyz",        "17149",    "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
+  {COIN_LTNCG,    "stratum+ssl://stratum-eu.rplant.xyz",        "17149",    "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
   {COIN_YSC,      "stratum+ssl://stratum-eu.rplant.xyz",        "17149",    "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
   {COIN_EQPAY,    "stratum+ssl://stratum-eu.rplant.xyz",        "17149",    "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
+  {COIN_YCR32,    "stratum+ssl://stratum-eu.rplant.xyz",        "17149",    "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
 };
 
 typedef struct {
@@ -152,6 +153,7 @@ const Coin coins[COIN_COUNT] = {
   {COIN_LTNCG,    ALGO_YESPOWER,    "CRNC",     "Crane (YespowerLTNCG)"},
   {COIN_YSC,      ALGO_YESPOWER,    "YSC",      "Yescrypt"},
   {COIN_EQPAY,    ALGO_YESPOWER,    "EQPAY",    "EqpayCoin (YespowerEQPAY)"},
+  {COIN_YCR32,    ALGO_YESPOWER,    "LPEPE",    "LuckyPepe (YescryptR32)"},
 };
 
 // ============================================================================

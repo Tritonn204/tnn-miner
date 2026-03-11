@@ -71,6 +71,7 @@
 
 #ifdef TNN_YESPOWER
 #include <crypto/yespower/yespower_algo.h>
+#include <yespower/yespower.h>
 #endif
 
 #ifdef TNN_XELISHASH
@@ -700,10 +701,11 @@ int tnn_main(int argc, char **argv)
 
     std::string params = vm["yespower"].as<std::string>();
 
-    // Parse parameters (N, R, pers)
+    // Parse parameters (N, R, pers, ver)
     uint32_t N = 2048;
     uint32_t R = 32;
     const char *pers = NULL;
+    yespower_version_t ver = YESPOWER_1_0;
 
     std::vector<std::string> paramPairs;
     boost::split(paramPairs, params, boost::is_any_of(","));
@@ -719,10 +721,12 @@ int tnn_main(int argc, char **argv)
           R = std::stoul(keyValue[1]);
         else if (keyValue[0] == "pers")
           pers = strdup(keyValue[1].c_str());
+        else if (keyValue[0] == "ver")
+          ver = (keyValue[1] == "0.5" || keyValue[1] == "05") ? YESPOWER_0_5 : YESPOWER_1_0;
       }
     }
 
-    setManualYespowerParams(&currentYespowerParams, N, R, pers);
+    setManualYespowerParamsV(&currentYespowerParams, ver, N, R, pers);
     initADVCParams(&devYespowerParams);
 #else
     UNSUPPORTED_ALGO_ERROR(unsupported_yespower);
@@ -792,6 +796,19 @@ int tnn_main(int argc, char **argv)
 #else
     setcolor(RED);
     printf("%s", unsupported_xelishash);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+#endif
+  }
+
+  if (vm.count("test-yespower"))
+  {
+#if defined(TNN_YESPOWER)
+    return runYespowerKnownVectorTests();
+#else
+    setcolor(RED);
+    printf("ERROR: --test-yespower requires TNN_YESPOWER to be enabled\n");
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -1098,6 +1115,12 @@ int tnn_main(int argc, char **argv)
   {
     batchSize = vm["batch-size"].as<int>();
   }
+#ifdef TNN_HIP
+  if (vm.count("gpu-retune"))
+  {
+    g_tuning_overrides.force_retune = true;
+  }
+#endif
 
   // Test-specific
   if (vm.count("op"))

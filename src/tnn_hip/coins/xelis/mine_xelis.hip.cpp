@@ -191,10 +191,11 @@ void mineXelis_hip(int tid)
 
   TNN_LOG_TRACE("[TRACE] mineXelis_hip: Setup locals\n");
 
-  // Start the centralized GPU submit queue
-  // In pool mode, accept shares from the last 3 job heights (pools have grace periods).
-  // In solo mode, only the current height is valid.
   bool solo_mode = (miningProfile.protocol == PROTO_XELIS_SOLO);
+  bool miners_started = false;
+
+waitForJob:
+  // (Re)start submit queue — safe to call after stop or on first entry
   GPUSubmitQueue::instance().start(
       &share, &devShare,
       &submitting, &submittingDev,
@@ -206,11 +207,6 @@ void mineXelis_hip(int tid)
         return job_id >= (current - 2) && job_id <= current;
       }
   );
-
-  // Track if miners have been started
-  std::atomic<bool> miners_started{false};
-
-waitForJob:
   while (!isConnected)
   {
     CHECK_CLOSE;
@@ -281,7 +277,7 @@ waitForJob:
         }
 
         // Start miners on first job (ensures full initialization before mining begins)
-        if (!miners_started.load())
+        if (!miners_started)
         {
           TNN_LOG_INFO("[INFO] Starting all GPU miners (first job received)\n");
 
@@ -306,7 +302,7 @@ waitForJob:
             });
           }
 
-          miners_started.store(true);
+          miners_started = true;
           TNN_LOG_INFO("[INFO] All GPU miners started successfully\n");
         }
 
@@ -390,6 +386,9 @@ waitForJob:
 
   if (!isConnected)
   {
+    miners_started = false;
+    localOurHeight = 0;
+    localDevHeight = 0;
     goto waitForJob;
   }
 }

@@ -80,6 +80,10 @@ bool initYespowerParamsForCoin(int coinId, yespower_params_t* params) {
         // Yescrypt (plain): v0.5, N=2048, r=8, no pers
         setManualYespowerParamsV(params, YESPOWER_0_5, 2048, 8, NULL);
         return true;
+    case COIN_YCR32:
+        // YescryptR32: v0.5, N=4096, r=32, pers="WaviBanana"
+        setManualYespowerParamsV(params, YESPOWER_0_5, 4096, 32, "WaviBanana");
+        return true;
     // EQPAY disabled — hashes 181 bytes instead of 80, needs special header handling
     // case COIN_EQPAY:
     //     setManualYespowerParamsV(params, YESPOWER_1_0, 2048, 32,

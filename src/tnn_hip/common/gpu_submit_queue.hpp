@@ -40,8 +40,9 @@ public:
         boost::condition_variable* cv_ptr,
         std::function<bool(int64_t job_id, bool is_dev)> stale_check)
     {
-        if (running_.exchange(true)) return; // already running
+        stop();  // clean up any previous drain thread
 
+        running_.store(true);
         share_ptr_ = share_ptr;
         dev_share_ptr_ = dev_share_ptr;
         submitting_ptr_ = submitting_ptr;

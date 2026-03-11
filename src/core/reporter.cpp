@@ -114,7 +114,8 @@ int update_handler(const boost::system::error_code& error)
     }
 
     double ratio = 1.0;
-    if (rate30sec.size() <= 30) {
+    size_t rate_window = gpuMine ? 60 : 30;
+    if (rate30sec.size() <= rate_window) {
         rate30sec.push_back((int64_t)(currentHashes * ratio));
     } else {
         rate30sec.erase(rate30sec.begin());

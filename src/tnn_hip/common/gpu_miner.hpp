@@ -106,12 +106,12 @@ public:
     // The builder does algo-specific work (CPU verification, payload construction)
     // and returns a GPUSubmitEntry to queue, or nullopt to skip.
     // Solutions are pushed to GPUSubmitQueue — the GPU thread never blocks on I/O.
+    // Safe to call multiple times — stops any existing thread first.
     void start(SolutionBuilder builder) {
+        stop();  // no-op if not running
         TNN_LOG_TRACE("[TRACE] Miner %d starting\n", device_id_);
         running_ = true;
         solution_builder_ = std::move(builder);
-
-        TNN_LOG_TRACE("[TRACE] Miner %d vars assigned\n", device_id_);
         miner_thread_ = std::thread([this]() {
             TNN_LOG_TRACE("[TRACE] Miner %d thread started\n", device_id_);
             mine_loop();
@@ -123,6 +123,9 @@ public:
         if (miner_thread_.joinable()) {
             miner_thread_.join();
         }
+        // Reset work flags so a subsequent start() waits for fresh work
+        work_updated_.store(false, std::memory_order_relaxed);
+        dev_work_valid_.store(false, std::memory_order_relaxed);
     }
 
     double get_hashrate() const {

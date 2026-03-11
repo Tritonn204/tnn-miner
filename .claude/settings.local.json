@@ -11,7 +11,8 @@
       "Bash(powershell:*)",
       "Bash(ls:*)",
       "Bash(gh api:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []

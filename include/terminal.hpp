@@ -196,7 +196,7 @@ inline po::options_description get_prog_opts()
                 "For versioned algorithms, append version: --xel-v3, --xel=v2, etc. "
                 "Supported versioned coins: XEL (v1/v2/v3, default v3)")
     ("randomx", "For mining RandomX coins")
-    ("yespower", po::value<std::string>(), "Mine with custom yespower parameters (format: N=2048,R=32,pers=string)")
+    ("yespower", po::value<std::string>(), "Mine with custom yespower parameters (format: N=2048,R=32,pers=string,ver=1.0). ver is optional, defaults to 1.0 (use 0.5 for yescrypt)")
   ;
 
   po::options_description dero("Dero", col_width);
@@ -223,6 +223,7 @@ inline po::options_description get_prog_opts()
     ("test-spectre", "Run detailed diagnostics for SpectreX")
     ("test-xelis", "Run the xelis-hash tests from the official source code")
     ("hip-test-xelis", "Run stage-by-stage validation of Xelis v3 GPU kernels")
+    ("test-yespower", "Run yespower known-vector tests for all builtin variants")
     ("test-astrix", "Run a basic astrix-hash validation test")
     ("test-hoosat", "Run a basic hoohash validation test")
     ("test-nexellia", "Run a basic nxl-hash validation test")
@@ -237,6 +238,7 @@ inline po::options_description get_prog_opts()
     ("tune-duration", po::value<int>()->default_value(2), "Number of seconds to tune *each* AstroBWTv3 algorithm. There will 3 or 4 algorithms depending on supported CPU features")
     ("no-tune", po::value<std::string>(), "<branch|lookup|avx2|wolf|aarch64> Use the specified AstroBWTv3 algorithm and skip tuning")
     ("mine-time", po::value<int>()->default_value(0), "Mine for a given number of seconds and then exit")
+    ("gpu-retune", "Delete GPU autotune cache and re-run tuning from scratch")
   ;
 
   po::options_description debug("DEBUG", col_width);

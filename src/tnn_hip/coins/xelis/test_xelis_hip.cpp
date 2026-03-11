@@ -284,6 +284,12 @@ static int test_xelis_hip_impl() {
 #endif
         compile_opts.push_back("-DXELIS_MIN_WG=32");
         compile_opts.push_back("-DXELIS_MAX_WG=128");
+
+        // Arch-dependent stage3 register cap
+        hipDeviceProp_t props;
+        hipGetDeviceProperties(&props, 0);
+        int s3_nreg = (props.major >= 9) ? 40 : (props.major >= 8) ? 64 : 80;
+        compile_opts.push_back("-DXELIS_S3_NREG=" + std::to_string(s3_nreg));
     }
 
     printf("[TEST] Compiling Xelis v3 module (once for all kernels)...\n");

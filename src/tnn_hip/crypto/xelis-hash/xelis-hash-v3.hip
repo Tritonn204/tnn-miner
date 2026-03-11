@@ -1450,8 +1450,8 @@ __global__ void xelis_s13_noblake_kernel(
 // Sep strategy: Stage3_hybrid_v2 only (no Blake3)
 // ============================================================================
 extern "C"
-#if defined(__CUDA_ARCH__)
-__maxnreg__(40)
+#if defined(__CUDA_ARCH__) && defined(XELIS_S3_NREG)
+__maxnreg__(XELIS_S3_NREG)
 #endif
 __global__ void xelis_s3_hybrid_v2_noblake_kernel(
     uint64_t *__restrict__ scratch_memory,
@@ -1478,6 +1478,8 @@ __global__ void xelis_s3_hybrid_v2_noblake_kernel(
 // ============================================================================
 #if defined(__HIP_PLATFORM_AMD__)
 extern "C" __attribute__((amdgpu_flat_work_group_size(XELIS_MIN_WG, XELIS_MAX_WG)))
+#elif defined(__CUDA_ARCH__) && defined(XELIS_S3_NREG)
+extern "C" __maxnreg__(XELIS_S3_NREG)
 #else
 extern "C"
 #endif
