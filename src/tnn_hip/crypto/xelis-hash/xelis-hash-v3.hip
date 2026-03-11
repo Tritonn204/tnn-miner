@@ -186,6 +186,11 @@ __device__ __forceinline__ uint64_t barrett_reduce(
     return r_lo;
 }
 
+// Forward declarations for hwrecip functions (defined later, needed by Barrett setup)
+__device__ __forceinline__ uint64_t div64_hwrecip(uint64_t dividend, uint64_t divisor);
+__device__ __forceinline__ uint64_t mod64_hwrecip(uint64_t a, uint64_t d);
+__device__ __forceinline__ uint64_t div128by64_hwrecip(uint64_t hi, uint64_t lo, uint64_t d);
+
 __device__ __forceinline__ uint64_t modular_power(
     uint64_t base, uint64_t exp, uint64_t mod)
 {
@@ -196,10 +201,11 @@ __device__ __forceinline__ uint64_t modular_power(
     if (base < 2) return base;
     if (exp == 0) return 1;
     
-    // One-time setup: use HIP's native 128-bit division
-    __uint128_t mu = (~(__uint128_t)0) / mod;
-    uint64_t mu_hi = (uint64_t)(mu >> 64);
-    uint64_t mu_lo = (uint64_t)mu;
+    // Barrett constant: mu = floor((2^128 - 1) / mod), split into (mu_hi, mu_lo).
+    // Two-step 128/64 division using hwrecip — no __uint128_t needed.
+    uint64_t mu_hi = div64_hwrecip(0xFFFFFFFFFFFFFFFFULL, mod);
+    uint64_t rem   = mod64_hwrecip(0xFFFFFFFFFFFFFFFFULL, mod);
+    uint64_t mu_lo = div128by64_hwrecip(rem, 0xFFFFFFFFFFFFFFFFULL, mod);
     
     uint64_t result = 1;
     
@@ -351,9 +357,7 @@ __device__ __forceinline__ void xelis_blake3_lean(const uint8_t* input, uint8_t*
 // Optimized 128-bit Division
 // ============================================================================
 
-#define COMBINE_UINT64(high, low) (((__uint128_t)(high) << 64) | (low))
-#define U128_HI(x) (uint64_t)((x) >> 64)
-#define U128_LO(x) (uint64_t)(x)
+// COMBINE_UINT64 / U128 macros removed — all 128-bit ops use hwrecip functions
 
 // ============================================================================
 // Streaming Store Intrinsics (Platform-Specific)
@@ -922,6 +926,11 @@ __device__ __forceinline__ uint32_t div96by64_q32_hwrecip(
     *rem_out = rem;
     return (uint32_t)q;
 }
+
+// NVIDIA NVRTC on Windows lacks __uint128_t — force hwrecip path
+#if defined(__CUDACC_RTC__) && defined(_WIN32)
+#undef XELIS_128_NORCP
+#endif
 
 #ifdef XELIS_128_NORCP
 

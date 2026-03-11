@@ -90,6 +90,6 @@ RUN curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu24
  && rm /tmp/cuda-keyring.deb \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
-      cuda-compiler-${CUDA_VER} cuda-cudart-dev-${CUDA_VER} cuda-nvrtc-dev-${CUDA_VER} \
+      cuda-compiler-${CUDA_VER} cuda-cudart-dev-${CUDA_VER} cuda-nvrtc-dev-${CUDA_VER} cuda-profiler-api-${CUDA_VER} \
  && rm -rf /var/lib/apt/lists/* \
  && ls /usr/local/cuda/bin/nvcc && echo "CUDA installed OK"
