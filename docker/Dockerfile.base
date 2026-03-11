@@ -50,6 +50,8 @@ ARG APT_PACKAGES="git wget build-essential libssl-dev libudns-dev libc++-dev lib
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV CMAKE_PREFIX_PATH=/opt/rocm
+ENV HIP_PATH=/opt/rocm
+ENV ROCM_PATH=/opt/rocm
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \

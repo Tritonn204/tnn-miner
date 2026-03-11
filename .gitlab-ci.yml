@@ -16,6 +16,8 @@ variables:
   MACOS_ARM64_TGZ: "Tnn-miner-macos-arm64-${PACKAGE_VERSION}.tar.gz"
   WRAPPER_TEMP: "wrapper.tar.gz"
   WIN_AMD64_ZIP: "Tnn-miner-win64-${PACKAGE_VERSION}.zip"
+  WIN_HIP_AMD_ZIP: "Tnn-miner-win64-hip-amd-${PACKAGE_VERSION}.zip"
+  WIN_HIP_NVIDIA_ZIP: "Tnn-miner-win64-hip-nvidia-${PACKAGE_VERSION}.zip"
   LINUX_HIP_AMD_TGZ: "Tnn-miner-amd64-hip-amd-${PACKAGE_VERSION}.tar.gz"
   LINUX_HIP_NVIDIA_TGZ: "Tnn-miner-amd64-hip-nvidia-${PACKAGE_VERSION}.tar.gz"
   # https://docs.gitlab.com/ee/ci/runners/hosted_runners/macos.html#optimizing-homebrew
@@ -37,6 +39,8 @@ workflow:
         MACOS_ARM64_TGZ: "Tnn-miner-macos-arm64-${PACKAGE_VERSION}.tar.gz"
         WRAPPER_TEMP: "wrapper.tar.gz"
         WIN_AMD64_ZIP: "Tnn-miner-win64-${PACKAGE_VERSION}.zip"
+        WIN_HIP_AMD_ZIP: "Tnn-miner-win64-hip-amd-${PACKAGE_VERSION}.zip"
+        WIN_HIP_NVIDIA_ZIP: "Tnn-miner-win64-hip-nvidia-${PACKAGE_VERSION}.zip"
         LINUX_HIP_AMD_TGZ: "Tnn-miner-amd64-hip-amd-${PACKAGE_VERSION}.tar.gz"
         LINUX_HIP_NVIDIA_TGZ: "Tnn-miner-amd64-hip-nvidia-${PACKAGE_VERSION}.tar.gz"
 
@@ -194,6 +198,46 @@ build-windows:
       dotenv: win-job.env
 
 
+build-windows-hip-amd:
+  rules:
+    - if: $CI_COMMIT_TAG || $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"
+  extends:
+    - .windows_job
+  stage: build
+  script:
+    - .\scripts\prereqs.bat ci
+    - .\scripts\build_all.ps1 $PACKAGE_VERSION amd
+    - move hip-build\win32\amd\bin\tnn-miner-hip.exe .\
+    - Compress-Archive -Path tnn-miner-hip.exe -DestinationPath ${WIN_HIP_AMD_ZIP}
+  after_script:
+    - echo "WIN_HIP_AMD_BUILD_JOB_ID=$CI_JOB_ID" >> win-hip-amd-job.env
+  artifacts:
+    name: ${WIN_HIP_AMD_ZIP}
+    paths:
+      - ${WIN_HIP_AMD_ZIP}
+    reports:
+      dotenv: win-hip-amd-job.env
+
+build-windows-hip-nvidia:
+  rules:
+    - if: $CI_COMMIT_TAG || $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"
+  extends:
+    - .windows_job
+  stage: build
+  script:
+    - .\scripts\prereqs.bat ci
+    - .\scripts\build_all.ps1 $PACKAGE_VERSION nvidia
+    - move hip-build\win32\nvidia\bin\tnn-miner-hip.exe .\
+    - Compress-Archive -Path tnn-miner-hip.exe -DestinationPath ${WIN_HIP_NVIDIA_ZIP}
+  after_script:
+    - echo "WIN_HIP_NVIDIA_BUILD_JOB_ID=$CI_JOB_ID" >> win-hip-nvidia-job.env
+  artifacts:
+    name: ${WIN_HIP_NVIDIA_ZIP}
+    paths:
+      - ${WIN_HIP_NVIDIA_ZIP}
+    reports:
+      dotenv: win-hip-nvidia-job.env
+
 build-linux-aarch64:
   image: docker:28
   stage: build
@@ -342,6 +386,12 @@ release_job:
     - job: build-linux-amd64-hip-nvidia
       artifacts: true
       optional: true
+    - job: build-windows-hip-amd
+      artifacts: true
+      optional: true
+    - job: build-windows-hip-nvidia
+      artifacts: true
+      optional: true
     #- job: build-macos
     #  artifacts: true
   rules:
@@ -355,6 +405,8 @@ release_job:
     - echo $WIN_BUILD_JOB_ID
     - echo $LINUX_HIP_AMD_BUILD_JOB_ID
     - echo $LINUX_HIP_NVIDIA_BUILD_JOB_ID
+    - echo $WIN_HIP_AMD_BUILD_JOB_ID
+    - echo $WIN_HIP_NVIDIA_BUILD_JOB_ID
     #- |
     #  release-cli create --name "Release $CI_COMMIT_TAG" --tag-name $CI_COMMIT_TAG \
     #    --assets-link "{\"name\":\"${LINUX_AMD64_BINARY}\",\"url\":\"${PACKAGE_REGISTRY_URL}/${LINUX_AMD64_BINARY}\"}"
@@ -386,3 +438,9 @@ release_job:
         - name: "${LINUX_HIP_NVIDIA_TGZ}"
           url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${LINUX_HIP_NVIDIA_BUILD_JOB_ID}/artifacts/raw/${LINUX_HIP_NVIDIA_TGZ}"
           filepath: "/${LINUX_HIP_NVIDIA_TGZ}"
+        - name: "${WIN_HIP_AMD_ZIP}"
+          url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${WIN_HIP_AMD_BUILD_JOB_ID}/artifacts/raw/${WIN_HIP_AMD_ZIP}"
+          filepath: "/${WIN_HIP_AMD_ZIP}"
+        - name: "${WIN_HIP_NVIDIA_ZIP}"
+          url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${WIN_HIP_NVIDIA_BUILD_JOB_ID}/artifacts/raw/${WIN_HIP_NVIDIA_ZIP}"
+          filepath: "/${WIN_HIP_NVIDIA_ZIP}"

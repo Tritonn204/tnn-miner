@@ -13,6 +13,9 @@ WORKDIR /src
 #RUN chmod +x ./scripts/prereqs.sh && ./scripts/prereqs.sh
 
 FROM base AS build
+# Ensure HIP/ROCm env vars are set for GPU builds (no-op for CPU builds)
+ENV HIP_PATH=/opt/rocm
+ENV ROCM_PATH=/opt/rocm
 ARG  CMAKE_ARGS=
 ARG  PACKAGE_VERSION=0.0.1
 ARG  TARGZ_FILE=miner.tar.gz
