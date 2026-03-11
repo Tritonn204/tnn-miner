@@ -198,45 +198,48 @@ build-windows:
       dotenv: win-job.env
 
 
-build-windows-hip-amd:
-  rules:
-    - if: $CI_COMMIT_TAG || $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"
-  extends:
-    - .windows_job
-  stage: build
-  script:
-    - .\scripts\prereqs.bat ci
-    - .\scripts\build_all.ps1 $PACKAGE_VERSION amd
-    - move hip-build\win32\amd\bin\tnn-miner-hip.exe .\
-    - Compress-Archive -Path tnn-miner-hip.exe -DestinationPath ${WIN_HIP_AMD_ZIP}
-  after_script:
-    - echo "WIN_HIP_AMD_BUILD_JOB_ID=$CI_JOB_ID" >> win-hip-amd-job.env
-  artifacts:
-    name: ${WIN_HIP_AMD_ZIP}
-    paths:
-      - ${WIN_HIP_AMD_ZIP}
-    reports:
-      dotenv: win-hip-amd-job.env
-
-build-windows-hip-nvidia:
-  rules:
-    - if: $CI_COMMIT_TAG || $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"
-  extends:
-    - .windows_job
-  stage: build
-  script:
-    - .\scripts\prereqs.bat ci
-    - .\scripts\build_all.ps1 $PACKAGE_VERSION nvidia
-    - move hip-build\win32\nvidia\bin\tnn-miner-hip.exe .\
-    - Compress-Archive -Path tnn-miner-hip.exe -DestinationPath ${WIN_HIP_NVIDIA_ZIP}
-  after_script:
-    - echo "WIN_HIP_NVIDIA_BUILD_JOB_ID=$CI_JOB_ID" >> win-hip-nvidia-job.env
-  artifacts:
-    name: ${WIN_HIP_NVIDIA_ZIP}
-    paths:
-      - ${WIN_HIP_NVIDIA_ZIP}
-    reports:
-      dotenv: win-hip-nvidia-job.env
+# TODO: Windows GPU CI jobs need a self-hosted runner with ROCm/CUDA installed.
+# For now, build manually with: .\scripts\build_all.ps1 <version> amd|nvidia
+#
+# build-windows-hip-amd:
+#   rules:
+#     - if: $CI_COMMIT_TAG || $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"
+#   extends:
+#     - .windows_job
+#   stage: build
+#   script:
+#     - .\scripts\prereqs.bat ci
+#     - .\scripts\build_all.ps1 $PACKAGE_VERSION amd
+#     - move hip-build\win32\amd\bin\tnn-miner-hip.exe .\
+#     - Compress-Archive -Path tnn-miner-hip.exe -DestinationPath ${WIN_HIP_AMD_ZIP}
+#   after_script:
+#     - echo "WIN_HIP_AMD_BUILD_JOB_ID=$CI_JOB_ID" >> win-hip-amd-job.env
+#   artifacts:
+#     name: ${WIN_HIP_AMD_ZIP}
+#     paths:
+#       - ${WIN_HIP_AMD_ZIP}
+#     reports:
+#       dotenv: win-hip-amd-job.env
+#
+# build-windows-hip-nvidia:
+#   rules:
+#     - if: $CI_COMMIT_TAG || $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"
+#   extends:
+#     - .windows_job
+#   stage: build
+#   script:
+#     - .\scripts\prereqs.bat ci
+#     - .\scripts\build_all.ps1 $PACKAGE_VERSION nvidia
+#     - move hip-build\win32\nvidia\bin\tnn-miner-hip.exe .\
+#     - Compress-Archive -Path tnn-miner-hip.exe -DestinationPath ${WIN_HIP_NVIDIA_ZIP}
+#   after_script:
+#     - echo "WIN_HIP_NVIDIA_BUILD_JOB_ID=$CI_JOB_ID" >> win-hip-nvidia-job.env
+#   artifacts:
+#     name: ${WIN_HIP_NVIDIA_ZIP}
+#     paths:
+#       - ${WIN_HIP_NVIDIA_ZIP}
+#     reports:
+#       dotenv: win-hip-nvidia-job.env
 
 build-linux-aarch64:
   image: docker:28
@@ -386,12 +389,12 @@ release_job:
     - job: build-linux-amd64-hip-nvidia
       artifacts: true
       optional: true
-    - job: build-windows-hip-amd
-      artifacts: true
-      optional: true
-    - job: build-windows-hip-nvidia
-      artifacts: true
-      optional: true
+    #- job: build-windows-hip-amd
+    #  artifacts: true
+    #  optional: true
+    #- job: build-windows-hip-nvidia
+    #  artifacts: true
+    #  optional: true
     #- job: build-macos
     #  artifacts: true
   rules:

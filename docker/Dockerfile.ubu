@@ -13,9 +13,11 @@ WORKDIR /src
 #RUN chmod +x ./scripts/prereqs.sh && ./scripts/prereqs.sh
 
 FROM base AS build
-# Ensure HIP/ROCm env vars are set for GPU builds (no-op for CPU builds)
+# Ensure HIP/ROCm/CUDA env vars are set for GPU builds (no-op for CPU builds)
 ENV HIP_PATH=/opt/rocm
 ENV ROCM_PATH=/opt/rocm
+ENV HIPCXX=/opt/rocm/bin/hipcc
+ENV CUDA_PATH=/usr/local/cuda
 ARG  CMAKE_ARGS=
 ARG  PACKAGE_VERSION=0.0.1
 ARG  TARGZ_FILE=miner.tar.gz
@@ -30,7 +32,7 @@ RUN ls -la .
 RUN --mount=type=cache,target=/src/_deps ./scripts/prereqs.sh
 RUN --mount=type=cache,target=/src/_deps mkdir ./build && cd ./build && cmake $CMAKE_ARGS -DTNN_VERSION=$PACKAGE_VERSION ..
 RUN --mount=type=cache,target=/src/_deps cd ./build && make -j$(nproc)
-RUN mv ./build/bin/tnn-miner-* ./
+RUN ls -la ./build/bin/ ./build/ && mv ./build/bin/tnn-miner-* ./ || mv ./build/tnn-miner-* ./
 #RUN ./tnn-miner-* --test-spectre
 RUN ls -la ./
 RUN tar -czvf ${TARGZ_FILE} ./tnn-miner*
