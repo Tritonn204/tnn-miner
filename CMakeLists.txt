@@ -410,10 +410,11 @@ if(WIN32)
     endif()
 
     if (HIP_PLATFORM MATCHES "nvidia")
-      # MSVC-ABI OpenSSL — prebuilt dynamic libs from FireDaemon, installed by prereqs.bat
-      set(TNN_NEED_PREBUILT_OPENSSL ON)
+      # NVIDIA clang-cl uses /MT (static CRT) — dynamic OpenSSL avoids CRT mismatch
+      set(TNN_NEED_DYNAMIC_OPENSSL ON)
     else()
-      set(OPENSSL_ROOT_DIR "C:/openssl/clang64")
+      # AMD HIP uses lld-link (MSVC linker) — static MSVC-ABI OpenSSL
+      set(TNN_NEED_STATIC_OPENSSL ON)
     endif()
   endif()
   include_directories(
@@ -474,20 +475,17 @@ endif()
 cmake_print_variables(CPM_DOWNLOAD_LOCATION)
 include(${CPM_DOWNLOAD_LOCATION})
 
-#set(OPENSSL_USE_STATIC_LIBS TRUE)
+set(_OSSL_ROOT "C:/openssl_msvc")
 
-if (TNN_NEED_PREBUILT_OPENSSL)
-  # HIP + Windows + NVIDIA (clang-cl / MSVC ABI) — FireDaemon prebuilt dynamic OpenSSL
+if (TNN_NEED_DYNAMIC_OPENSSL)
+  # NVIDIA HIP (clang-cl /MT) — dynamic OpenSSL to avoid CRT mismatch
   # Ship libcrypto-3-x64.dll + libssl-3-x64.dll alongside the executable
-  set(_OSSL_ROOT "C:/openssl_msvc")
-
   if(NOT EXISTS "${_OSSL_ROOT}/lib/libssl.lib")
     message(FATAL_ERROR
       "OpenSSL MSVC not found at ${_OSSL_ROOT}. Run scripts/prereqs.bat first.")
   endif()
   message(STATUS "Using prebuilt OpenSSL (MSVC/dynamic) at ${_OSSL_ROOT}")
 
-  # Import libraries (.lib stubs for the DLLs)
   add_library(OpenSSL::Crypto SHARED IMPORTED GLOBAL)
   set_target_properties(OpenSSL::Crypto PROPERTIES
     IMPORTED_IMPLIB "${_OSSL_ROOT}/lib/libcrypto.lib"
@@ -503,15 +501,36 @@ if (TNN_NEED_PREBUILT_OPENSSL)
 
   include_directories("${_OSSL_ROOT}/include")
   link_directories("${_OSSL_ROOT}/lib")
+
+elseif (TNN_NEED_STATIC_OPENSSL)
+  # AMD HIP (lld-link) — static MSVC-ABI OpenSSL
+  if(NOT EXISTS "${_OSSL_ROOT}/lib/libssl_static.lib")
+    message(FATAL_ERROR
+      "OpenSSL MSVC not found at ${_OSSL_ROOT}. Run scripts/prereqs.bat first.")
+  endif()
+  message(STATUS "Using prebuilt OpenSSL (MSVC/static) at ${_OSSL_ROOT}")
+
+  add_library(OpenSSL::Crypto STATIC IMPORTED GLOBAL)
+  set_target_properties(OpenSSL::Crypto PROPERTIES
+    IMPORTED_LOCATION "${_OSSL_ROOT}/lib/libcrypto_static.lib"
+  )
+
+  add_library(OpenSSL::SSL STATIC IMPORTED GLOBAL)
+  set_target_properties(OpenSSL::SSL PROPERTIES
+    IMPORTED_LOCATION "${_OSSL_ROOT}/lib/libssl_static.lib"
+  )
+  target_link_libraries(OpenSSL::SSL INTERFACE OpenSSL::Crypto)
+
+  include_directories("${_OSSL_ROOT}/include")
+  link_directories("${_OSSL_ROOT}/lib")
+
 else()
   if (WIN_CROSS)
     set(OPENSSL_ROOT "/src/clang64")
   endif()
-  if (NOT (WIN32 AND WITH_HIP AND HIP_PLATFORM MATCHES "nvidia"))
-    find_package(OpenSSL REQUIRED)
-    if(OPENSSL_INCLUDE_DIR)
-      include_directories(${OPENSSL_INCLUDE_DIR})
-    endif()
+  find_package(OpenSSL REQUIRED)
+  if(OPENSSL_INCLUDE_DIR)
+    include_directories(${OPENSSL_INCLUDE_DIR})
   endif()
 endif()
 
@@ -1046,7 +1065,7 @@ if (WITH_HIP)
         "${HIPRTC_DLL_DIR}"
         "$<TARGET_FILE_DIR:${TNN_OUTPUT_NAME}>"
     )
-    if (TNN_NEED_PREBUILT_OPENSSL)
+    if (TNN_NEED_DYNAMIC_OPENSSL)
       add_custom_command(
         TARGET ${TNN_OUTPUT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
