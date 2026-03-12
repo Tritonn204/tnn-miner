@@ -114,7 +114,9 @@ void mineXelis_hip(int tid)
 {
   TNN_LOG_TRACE("[TRACE] mineXelis_hip: Entry, tid=%d\n", tid);
 
-  // Initialize GPU miner for all devices
+  // Bind CUDA context to this thread before any other HIP calls
+  hipSetDevice(0);
+
   std::vector<std::unique_ptr<GPUMiner>> miners;
   int gpuCount;
   hipGetDeviceCount(&gpuCount);
@@ -210,7 +212,7 @@ waitForJob:
   while (!isConnected)
   {
     CHECK_CLOSE;
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
   while (!ABORT_MINER)

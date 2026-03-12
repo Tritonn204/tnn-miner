@@ -209,10 +209,10 @@ namespace net = boost::asio;           // from <boost/asio.hpp>
 namespace ssl = boost::asio::ssl;      // from <boost/asio/ssl.hpp>
 namespace po = boost::program_options; // from <boost/program_options.hpp>
 
-boost::mutex mutex;
-boost::mutex devMutex;
-boost::mutex userMutex;
-boost::mutex reportMutex;
+std::mutex mutex;
+std::mutex devMutex;
+std::mutex userMutex;
+std::mutex reportMutex;
 
 uint16_t *lookup2D_global; // Storage for computed values of 2-byte chunks
 byte *lookup3D_global;     // Storage for deterministically computed values of 1-byte chunks
@@ -330,7 +330,7 @@ void onExit()
   printf("\nExiting Miner...\n");
   fflush(stdout);
 
-  // boost::this_thread::sleep_for(boost::chrono::seconds(1));
+  // std::this_thread::sleep_for(std::chrono::seconds(1));
   // fflush(stdout);
 
 #if defined(_WIN32)
@@ -584,7 +584,7 @@ int tnn_main(int argc, char **argv)
   if (vm.count("help"))
   {
     std::cout << opts << std::endl;
-    boost::this_thread::sleep_for(boost::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::seconds(1));
     return 0;
   }
 
@@ -915,7 +915,7 @@ int tnn_main(int argc, char **argv)
       if (applyMSROptimization("XelisV3"))
         std::atexit(cleanupMSROnExit);
     }
-    boost::thread t(xelis_benchmark_cpu_hash_v3);
+    std::thread t(xelis_benchmark_cpu_hash_v3);
     if (threadPriorityLevel == 2)
       setPriority(t.native_handle(), THREAD_PRIORITY_HIGHEST);
     else if (threadPriorityLevel == 1)
@@ -1051,7 +1051,7 @@ int tnn_main(int argc, char **argv)
         fflush(stdout);
 
         setcolor(BRIGHT_WHITE);
-        boost::this_thread::sleep_for(boost::chrono::seconds(1));
+        std::this_thread::sleep_for(std::chrono::seconds(1));
         return 1;
       }
       devFee = std::min(devFee, 100.0);
@@ -1059,7 +1059,7 @@ int tnn_main(int argc, char **argv)
     catch (...)
     {
       printf("ERROR: invalid dev fee parameter... format should be for example '1.0'");
-      boost::this_thread::sleep_for(boost::chrono::seconds(1));
+      std::this_thread::sleep_for(std::chrono::seconds(1));
       return 1;
     }
   }
@@ -1422,7 +1422,7 @@ fillBlanks:
 
   //   while (!isConnected)
   //   {
-  //     boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+  //     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   //   }
   //   auto start_time = std::chrono::steady_clock::now();
   //   startBenchmark = true;
@@ -1439,7 +1439,7 @@ fillBlanks:
   //       stopBenchmark = true;
   //       break;
   //     }
-  //     boost::this_thread::sleep_for(boost::chrono::milliseconds(50));
+  //     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   //   }
 
   //   auto now = std::chrono::steady_clock::now();
@@ -1460,7 +1460,7 @@ fillBlanks:
   //     rateSuffix = " KH/s";
   //   }
   //   std::cout << std::setprecision(3) << rate << rateSuffix << std::endl;
-  //   boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+  //   std::this_thread::sleep_for(std::chrono::milliseconds(100));
   //   return 0;
   // }
 
@@ -1545,35 +1545,36 @@ Mining:
   // }
   // #endif
 
-  boost::thread GETWORK(getWork_v2, &miningProfile);
-  // setPriority(GETWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
-
-  devMiningProfile = miningProfile;
-  devMiningProfile.setDev(vm.count("testnet"));
-  boost::thread DEVWORK(getWork_v2, &devMiningProfile);
-  // setPriority(DEVWORK.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
-
-  // Create worker threads and set CPU affinity
-  //  mutex.lock();
   g_start_time = std::chrono::steady_clock::now();
-  boost::thread minerThreads[threads];
   if (gpuMine)
   {
     threads = 0;
 #ifdef TNN_HIP
     std::cout << "Starting GPU worker.." << std::endl;
-    boost::thread t(getMiningFunc(miningProfile.coin.miningAlgo, true), 0);
+    auto gpuFunc = getMiningFunc(miningProfile.coin.miningAlgo, true);
+    std::thread t([gpuFunc]() { gpuFunc(0); });
+    t.detach();
 #else
     printf("Please use a GPU TNN Miner binary...\n");
     return -1;
 #endif
   }
-  else
+
+  std::thread GETWORK(getWork_v2, &miningProfile);
+  GETWORK.detach();
+
+  devMiningProfile = miningProfile;
+  devMiningProfile.setDev(vm.count("testnet"));
+  std::thread DEVWORK(getWork_v2, &devMiningProfile);
+  DEVWORK.detach();
+
+  std::thread minerThreads[threads];
+  if (!gpuMine)
   {
     std::cout << "Starting threads: ";
     for (int i = 0; i < threads; i++)
     {
-      minerThreads[i] = boost::thread(getMiningFunc(miningProfile.coin.miningAlgo, false), i + 1);
+      minerThreads[i] = std::thread(getMiningFunc(miningProfile.coin.miningAlgo, false), i + 1);
 
       if (lockThreads)
       {
@@ -1603,12 +1604,13 @@ Mining:
       BroadcastServer::gpu_pcie_ids_ptr = HIP_pcieID;
     }
 #endif
-    boost::thread BROADCAST(BroadcastServer::serverThread, &rate30sec, &accepted, &rejected, algoName(miningProfile.coin.miningAlgo), versionString, reportInterval);
+    std::thread BROADCAST(BroadcastServer::serverThread, &rate30sec, &accepted, &rejected, algoName(miningProfile.coin.miningAlgo), versionString, reportInterval);
+    BROADCAST.detach();
   }
 
   while (!isConnected)
   {
-    boost::this_thread::yield();
+    std::this_thread::yield();
   }
 
   if (mine_time > 5)
@@ -1641,12 +1643,10 @@ Mining:
     std::this_thread::yield();
   }
   // ioc.reset();
-  GETWORK.interrupt();
-  DEVWORK.interrupt();
+  // GETWORK/DEVWORK are detached std::threads — they exit via ABORT_MINER flag
   std::cout << "Interrupting all threads...\n";
   for (unsigned i = 0; i < threads; ++i)
   {
-    minerThreads[i].interrupt();
     minerThreads[i].join();
   }
 
@@ -1671,7 +1671,7 @@ void logSeconds(std::chrono::steady_clock::time_point start_time, int duration, 
       //  mutex.unlock();
       i++;
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(250));
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
   }
 }
 
@@ -1745,7 +1745,7 @@ std::vector<CoreInfo> getCoreTopology()
         {
           KAFFINITY mask = current->Processor.GroupMask[groupIdx].Mask;
           WORD group = current->Processor.GroupMask[groupIdx].Group;
-          DWORD logicalCount = __popcnt64(mask);
+          DWORD logicalCount = __builtin_popcountll(mask);
           DWORD baseLogicalCore = 0;
 
           // Calculate base logical core for this group
@@ -1764,7 +1764,7 @@ std::vector<CoreInfo> getCoreTopology()
               CoreInfo core;
               core.physicalCore = physicalCoreId;
               core.logicalCore = baseLogicalCore + bit;
-              core.isHyperthread = (logicalCount > 1 && __popcnt64(mask & ((1ULL << bit) - 1)) > 0);
+              core.isHyperthread = (logicalCount > 1 && __builtin_popcountll(mask & ((1ULL << bit) - 1)) > 0);
               core.isPCore = isPCore; // New field
               cores.push_back(core);
             }
@@ -1899,7 +1899,7 @@ static std::vector<unsigned> buildPhysicalFirstOrder()
 
 #endif
 
-void setAffinity(boost::thread::native_handle_type t, uint64_t core)
+void setAffinity(std::thread::native_handle_type t, uint64_t core)
 {
 #if defined(_WIN32)
   static std::vector<CoreInfo> topology = getCoreTopology();
@@ -1950,7 +1950,14 @@ void setAffinity(boost::thread::native_handle_type t, uint64_t core)
     // Critical part: use the physical-first ordering to get the proper logical core
     DWORD logicalCoreIndex = physicalFirst[core];
     DWORD targetCore = topology[logicalCoreIndex].logicalCore;
-    HANDLE threadHandle = t;
+    // MinGW std::thread::native_handle_type is a pthread_t (not a Windows HANDLE).
+    // Use pthread_gethandle (mingw-w64 extension) to get the real Win32 thread HANDLE.
+    HANDLE threadHandle;
+#ifdef _MSC_VER
+    threadHandle = reinterpret_cast<HANDLE>(t);
+#else
+    threadHandle = pthread_gethandle(t);
+#endif
 
     {
       std::lock_guard<std::mutex> lock(threadMapMutex);
@@ -2067,11 +2074,15 @@ void setAffinity(boost::thread::native_handle_type t, uint64_t core)
 #endif
 }
 
-void setPriority(boost::thread::native_handle_type t, int priority)
+void setPriority(std::thread::native_handle_type t, int priority)
 {
 #if defined(_WIN32)
 
-  HANDLE threadHandle = t;
+#ifdef _MSC_VER
+  HANDLE threadHandle = reinterpret_cast<HANDLE>(t);
+#else
+  HANDLE threadHandle = pthread_gethandle(t);
+#endif
 
   // Set the thread priority
   int threadPriority = priority;
@@ -2096,7 +2107,7 @@ void setPriority(boost::thread::native_handle_type t, int priority)
 void getWork_v2(MiningProfile *miningProf)
 {
   net::io_context ioc;
-  ssl::context ctx = ssl::context{ssl::context::tlsv12_client};
+  ssl::context ctx{ssl::context::tlsv12_client};
   load_root_certificates(ctx);
 
   bool caughtDisconnect = false;
@@ -2177,7 +2188,7 @@ connectionAttempt:
         setcolor(BRIGHT_WHITE);
         //  mutex.unlock();
       }
-      boost::this_thread::sleep_for(boost::chrono::milliseconds(randomSleepTimeMs()));
+      std::this_thread::sleep_for(std::chrono::milliseconds(randomSleepTimeMs()));
       ioc.restart();
       goto connectionAttempt;
     }
@@ -2186,12 +2197,7 @@ connectionAttempt:
       caughtDisconnect = false;
     }
   }
-  catch (boost::thread_interrupted &)
-  {
-    // std::cout << "Thread was interrupted!" << std::endl;
-    ioc.restart();
-    return;
-  }
+  // boost::thread_interrupted no longer possible with std::thread
   catch (const std::exception &e)
   {
     CHECK_CLOSE;
@@ -2215,14 +2221,14 @@ connectionAttempt:
       setcolor(BRIGHT_WHITE);
       //  mutex.unlock();
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(randomSleepTimeMs()));
+    std::this_thread::sleep_for(std::chrono::milliseconds(randomSleepTimeMs()));
     ioc.restart();
     goto connectionAttempt;
   }
   while (*B)
   {
     caughtDisconnect = false;
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
   }
   CHECK_CLOSE;
   if (!miningProf->isDev)
@@ -2259,7 +2265,7 @@ connectionAttempt:
   }
   caughtDisconnect = true;
   CHECK_CLOSE;
-  boost::this_thread::sleep_for(boost::chrono::milliseconds(randomSleepTimeMs()));
+  std::this_thread::sleep_for(std::chrono::milliseconds(randomSleepTimeMs()));
   ioc.restart();
   goto connectionAttempt;
 }

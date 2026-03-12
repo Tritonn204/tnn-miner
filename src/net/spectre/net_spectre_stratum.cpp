@@ -38,7 +38,7 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
   
   if (M == SpectreStratum::s_notify)
   {
-    std::scoped_lock<boost::mutex> lockGuard(mutex);
+    std::scoped_lock<std::mutex> lockGuard(mutex);
     boost::json::value *J = isDev ? &devJob : &job;
     int64_t *h = isDev ? &devHeight : &ourHeight;
 
@@ -157,7 +157,7 @@ int handleSpectreStratumPacket(boost::json::object packet, SpectreStratum::jobCa
   }
   else if (M == SpectreStratum::s_setExtraNonce)
   {
-    std::scoped_lock<boost::mutex> lockGuard(mutex);
+    std::scoped_lock<std::mutex> lockGuard(mutex);
     boost::json::value *J = isDev ? &devJob : &job;
 
     std::string enStr = std::string(packet.at("params").as_array()[0].as_string());
@@ -289,7 +289,7 @@ int handleSpectreStratumResponse(boost::json::object packet, bool isDev)
 // Helper to wait for submit thread
 inline void waitForSubmitThread(bool &submitThread) {
   while (submitThread) {
-    boost::this_thread::yield();
+    std::this_thread::yield();
   }
 }
 
@@ -422,15 +422,15 @@ void spectre_stratum_session(
 
   std::string packetBuffer;
   std::queue<std::string> submitQueue;
-  boost::mutex submitMutex;
+  std::mutex submitMutex;
   bool submitThread = false;
   bool abort = false;
 
   // Submit thread with queue
-  boost::thread subThread([&]() {
+  std::thread subThread([&]() {
     submitThread = true;
     while (!abort) {
-      boost::unique_lock<boost::mutex> lock(mutex);
+      std::unique_lock<std::mutex> lock(mutex);
       bool *B = isDev ? &submittingDev : &submitting;
       cv.wait(lock, [&] { return (data_ready && (*B)) || abort; });
       if (abort) break;
@@ -440,7 +440,7 @@ void spectre_stratum_session(
         std::string msg = boost::json::serialize(*S) + "\n";
         
         {
-          boost::lock_guard<boost::mutex> qlock(submitMutex);
+          std::lock_guard<std::mutex> qlock(submitMutex);
           submitQueue.push(std::move(msg));
         }
         
@@ -448,7 +448,7 @@ void spectre_stratum_session(
         while (!abort) {
           std::string qmsg;
           {
-            boost::lock_guard<boost::mutex> qlock(submitMutex);
+            std::lock_guard<std::mutex> qlock(submitMutex);
             if (submitQueue.empty()) break;
             qmsg = std::move(submitQueue.front());
             submitQueue.pop();
@@ -480,7 +480,7 @@ void spectre_stratum_session(
         setcolor(BRIGHT_WHITE);
         break;
       }
-      boost::this_thread::yield();
+      std::this_thread::yield();
     }
     submitThread = false;
   });
@@ -581,7 +581,7 @@ void spectre_stratum_session(
       return;
     }
 
-    boost::this_thread::yield();
+    std::this_thread::yield();
 
     if (ABORT_MINER) {
       setForDisconnected(C, B, &abort, &data_ready, &cv);
@@ -592,7 +592,6 @@ void spectre_stratum_session(
   // Cleanup
   abort = true;
   cv.notify_all();
-  subThread.interrupt();
   if (subThread.joinable()) {
     subThread.join();
   }
@@ -714,15 +713,15 @@ void spectre_stratum_session_nossl(
 
   std::string packetBuffer;
   std::queue<std::string> submitQueue;
-  boost::mutex submitMutex;
+  std::mutex submitMutex;
   bool submitThread = false;
   bool abort = false;
 
   // Submit thread with queue
-  boost::thread subThread([&]() {
+  std::thread subThread([&]() {
     submitThread = true;
     while (!abort) {
-      boost::unique_lock<boost::mutex> lock(mutex);
+      std::unique_lock<std::mutex> lock(mutex);
       bool *B = isDev ? &submittingDev : &submitting;
       cv.wait(lock, [&] { return (data_ready && (*B)) || abort; });
       if (abort) break;
@@ -732,7 +731,7 @@ void spectre_stratum_session_nossl(
         std::string msg = boost::json::serialize(*S) + "\n";
         
         {
-          boost::lock_guard<boost::mutex> qlock(submitMutex);
+          std::lock_guard<std::mutex> qlock(submitMutex);
           submitQueue.push(std::move(msg));
         }
         
@@ -740,7 +739,7 @@ void spectre_stratum_session_nossl(
         while (!abort) {
           std::string qmsg;
           {
-            boost::lock_guard<boost::mutex> qlock(submitMutex);
+            std::lock_guard<std::mutex> qlock(submitMutex);
             if (submitQueue.empty()) break;
             qmsg = std::move(submitQueue.front());
             submitQueue.pop();
@@ -772,7 +771,7 @@ void spectre_stratum_session_nossl(
         setcolor(BRIGHT_WHITE);
         break;
       }
-      boost::this_thread::yield();
+      std::this_thread::yield();
     }
     submitThread = false;
   });
@@ -873,7 +872,7 @@ void spectre_stratum_session_nossl(
       return;
     }
 
-    boost::this_thread::yield();
+    std::this_thread::yield();
 
     if (ABORT_MINER) {
       setForDisconnected(C, B, &abort, &data_ready, &cv);
@@ -884,7 +883,6 @@ void spectre_stratum_session_nossl(
   // Cleanup
   abort = true;
   cv.notify_all();
-  subThread.interrupt();
   if (subThread.joinable()) {
     subThread.join();
   }

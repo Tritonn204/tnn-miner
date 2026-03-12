@@ -72,7 +72,7 @@ void mineShai(int tid)
   std::generate(buf.begin(), buf.end(), [&dist, &gen]() { return dist(gen); });
   std::memcpy(random_buf, buf.data(), buf.size());
 
-  boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
+  std::this_thread::sleep_for(std::chrono::milliseconds(125));
 
   int64_t localJobCounter;
   byte powHash[10000];
@@ -87,7 +87,7 @@ void mineShai(int tid)
 waitForJob:
 
   while (!isConnected) {
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
   srand(time(NULL));
@@ -98,7 +98,7 @@ waitForJob:
     {
       boost::json::value myJob, myJobDev;
       {
-        std::scoped_lock<boost::mutex> lockGuard(mutex);
+        std::scoped_lock<std::mutex> lockGuard(mutex);
         myJob = job;
         myJobDev = devJob;
         localJobCounter = jobCounter;

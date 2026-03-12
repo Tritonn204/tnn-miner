@@ -19,12 +19,10 @@
 
 #include <boost/json.hpp>
 
-#include <boost/thread.hpp>
 #include <boost/atomic.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/atomic.hpp>
-#include <boost/thread.hpp>
 #include <boost/tokenizer.hpp>
 
 #include <boost/multiprecision/cpp_int.hpp>

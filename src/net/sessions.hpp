@@ -9,7 +9,6 @@
 #include <boost/beast/core.hpp>
 #include <boost/json.hpp>
 
-#include <boost/thread.hpp>
 
 namespace net = boost::asio;            // from <boost/asio.hpp>
 namespace ssl = boost::asio::ssl;       // from <boost/asio/ssl.hpp>

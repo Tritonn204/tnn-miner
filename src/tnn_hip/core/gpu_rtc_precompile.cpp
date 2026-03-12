@@ -184,8 +184,14 @@ extern "C" bool precompile_all_kernels()
             opts.push_back("-DXELIS_MIN_WG=" + std::to_string(min_wg));
             opts.push_back("-DXELIS_MAX_WG=" + std::to_string(max_wg));
 
-            // Note: Register limits are now set per-kernel using __maxnreg__() attributes
-            // in the HIP source code instead of globally via --maxrregcount
+            // Arch-dependent stage3 register cap (must match gpu_algo_impl.hpp)
+            {
+                int s3_nreg = (props.major <= 7) ? 56 : 40;
+                opts.push_back("-DXELIS_S3_NREG=" + std::to_string(s3_nreg));
+            }
+
+            // Per-device module key (NVIDIA modules are bound to a CUDA context)
+            opts.push_back("-DDEVICE_ID=" + std::to_string(d));
 #endif
             fflush(stdout);
 

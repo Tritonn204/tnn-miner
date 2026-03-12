@@ -409,12 +409,12 @@ if(WIN32)
       add_compile_definitions(BOOST_HAS_THREADS=1)
     endif()
 
-    set(OPENSSL_ROOT_DIR "C:/openssl_msvc")
-    add_library(OpenSSL::Crypto UNKNOWN IMPORTED)
-    set_target_properties(OpenSSL::Crypto PROPERTIES IMPORTED_LOCATION "${OPENSSL_ROOT_DIR}/lib/libcrypto_static.lib")
-  
-    add_library(OpenSSL::SSL UNKNOWN IMPORTED)
-    set_target_properties(OpenSSL::SSL PROPERTIES IMPORTED_LOCATION "${OPENSSL_ROOT_DIR}/lib/libssl_static.lib")
+    if (HIP_PLATFORM MATCHES "nvidia")
+      # MSVC-ABI OpenSSL — prebuilt dynamic libs from FireDaemon, installed by prereqs.bat
+      set(TNN_NEED_PREBUILT_OPENSSL ON)
+    else()
+      set(OPENSSL_ROOT_DIR "C:/openssl/clang64")
+    endif()
   endif()
   include_directories(
     ${OPENSSL_ROOT_DIR}/include
@@ -427,7 +427,11 @@ if(WIN32)
 endif()
 
 # This stores downloaded dependencies so we do not need to re-download them
-string(MAKE_C_IDENTIFIER "${CMAKE_CXX_COMPILER_ID}-${CMAKE_CXX_COMPILER_VERSION}" COMPILER_TAG)
+if(CMAKE_CXX_SIMULATE_ID)
+  string(MAKE_C_IDENTIFIER "${CMAKE_CXX_COMPILER_ID}-${CMAKE_CXX_SIMULATE_ID}-${CMAKE_CXX_COMPILER_VERSION}" COMPILER_TAG)
+else()
+  string(MAKE_C_IDENTIFIER "${CMAKE_CXX_COMPILER_ID}-${CMAKE_CXX_COMPILER_VERSION}" COMPILER_TAG)
+endif()
 
 if(UNIX)
   if(DEFINED ENV{XDG_CACHE_HOME})
@@ -472,13 +476,42 @@ include(${CPM_DOWNLOAD_LOCATION})
 
 #set(OPENSSL_USE_STATIC_LIBS TRUE)
 
-if (WIN_CROSS)
-  set(OPENSSL_ROOT "/src/clang64")
-endif()
-if (NOT WIN32 OR NOT WITH_HIP)
-  find_package(OpenSSL REQUIRED)
-  if(OPENSSL_INCLUDE_DIR)
-    include_directories(${OPENSSL_INCLUDE_DIR})
+if (TNN_NEED_PREBUILT_OPENSSL)
+  # HIP + Windows + NVIDIA (clang-cl / MSVC ABI) — FireDaemon prebuilt dynamic OpenSSL
+  # Ship libcrypto-3-x64.dll + libssl-3-x64.dll alongside the executable
+  set(_OSSL_ROOT "C:/openssl_msvc")
+
+  if(NOT EXISTS "${_OSSL_ROOT}/lib/libssl.lib")
+    message(FATAL_ERROR
+      "OpenSSL MSVC not found at ${_OSSL_ROOT}. Run scripts/prereqs.bat first.")
+  endif()
+  message(STATUS "Using prebuilt OpenSSL (MSVC/dynamic) at ${_OSSL_ROOT}")
+
+  # Import libraries (.lib stubs for the DLLs)
+  add_library(OpenSSL::Crypto SHARED IMPORTED GLOBAL)
+  set_target_properties(OpenSSL::Crypto PROPERTIES
+    IMPORTED_IMPLIB "${_OSSL_ROOT}/lib/libcrypto.lib"
+    IMPORTED_LOCATION "${_OSSL_ROOT}/bin/libcrypto-3-x64.dll"
+  )
+
+  add_library(OpenSSL::SSL SHARED IMPORTED GLOBAL)
+  set_target_properties(OpenSSL::SSL PROPERTIES
+    IMPORTED_IMPLIB "${_OSSL_ROOT}/lib/libssl.lib"
+    IMPORTED_LOCATION "${_OSSL_ROOT}/bin/libssl-3-x64.dll"
+  )
+  target_link_libraries(OpenSSL::SSL INTERFACE OpenSSL::Crypto)
+
+  include_directories("${_OSSL_ROOT}/include")
+  link_directories("${_OSSL_ROOT}/lib")
+else()
+  if (WIN_CROSS)
+    set(OPENSSL_ROOT "/src/clang64")
+  endif()
+  if (NOT WIN32 OR NOT WITH_HIP)
+    find_package(OpenSSL REQUIRED)
+    if(OPENSSL_INCLUDE_DIR)
+      include_directories(${OPENSSL_INCLUDE_DIR})
+    endif()
   endif()
 endif()
 
@@ -574,7 +607,7 @@ else()
       "BOOST_USE_STATIC_RUNTIME ON"
       "BOOST_USE_MULTITHREADED ON"
       "BOOST_INSTALL_LAYOUT system"
-      "BOOST_INCLUDE_LIBRARIES chrono\\\;context\\\;coroutine\\\;multiprecision\\\;json\\\;thread\\\;atomic\\\;program_options"
+      "BOOST_INCLUDE_LIBRARIES chrono\\\;context\\\;coroutine\\\;multiprecision\\\;json\\\;atomic\\\;program_options"
       "${BOOST_TOOLSET_OPTS}"  # Specify Clang toolset
       "${BOOST_MS_COMPAT}"
   )
@@ -601,7 +634,7 @@ endif()
 
 # This is universal regardless of how wheter we compiled or found Boost
 #set(TNN_BOOST_LIBS Boost::chrono Boost::context Boost::coroutine Boost::thread Boost::json Boost::atomic Boost::program_options Boost::asio)
-set(TNN_BOOST_LIBS Boost::atomic Boost::context Boost::chrono Boost::json Boost::program_options Boost::thread) #@Boost::beast Boost::bind Boost::json Boost::chrono Boost::thread Boost::atomic Boost::program_options )
+set(TNN_BOOST_LIBS Boost::atomic Boost::context Boost::chrono Boost::json Boost::program_options) #@Boost::beast Boost::bind Boost::json Boost::chrono Boost::atomic Boost::program_options )
 
 set(WINSDK_DIR "${PROJECT_SOURCE_DIR}/wincross/winsdk")
 if(WIN_CROSS)
@@ -1013,6 +1046,15 @@ if (WITH_HIP)
         "${HIPRTC_DLL_DIR}"
         "$<TARGET_FILE_DIR:${TNN_OUTPUT_NAME}>"
     )
+    if (TNN_NEED_PREBUILT_OPENSSL)
+      add_custom_command(
+        TARGET ${TNN_OUTPUT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "${_OSSL_ROOT}/bin/libcrypto-3-x64.dll"
+          "${_OSSL_ROOT}/bin/libssl-3-x64.dll"
+          "$<TARGET_FILE_DIR:${TNN_OUTPUT_NAME}>"
+      )
+    endif()
   endif()
 
 else()

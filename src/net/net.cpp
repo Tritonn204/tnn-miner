@@ -20,7 +20,7 @@ namespace net = boost::asio;            // from <boost/asio.hpp>
 namespace ssl = boost::asio::ssl;       // from <boost/asio/ssl.hpp>
 using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
 
-boost::mutex wsMutex;
+std::mutex wsMutex;
 
 /* Start definitions from net.hpp */
 boost::json::value job = boost::json::value({});
@@ -34,7 +34,7 @@ boost::json::object devShare = {};
 
 bool submitting = false;
 bool submittingDev = false;
-boost::condition_variable cv;
+std::condition_variable cv;
 bool data_ready = false;
 bool doShutdown = false;
 /* End definitions from net.hpp */

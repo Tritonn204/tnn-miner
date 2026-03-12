@@ -94,6 +94,13 @@ if %LEAN%==0 (
   if not exist libsodium-1020.tar.zstd (
     curl -L https://mirror.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libsodium-1.0.20-1-any.pkg.tar.zst -o libsodium-1020.tar.zstd || exit /b 1
   )
+
+)
+
+REM ── OpenSSL MSVC (for NVIDIA HIP on Windows) ──
+REM FireDaemon prebuilt — dynamic libs, ship DLLs with the CUDA binary
+if not exist openssl-3.5.5.zip (
+  curl -L https://download.firedaemon.com/FireDaemon-OpenSSL/openssl-3.5.5.zip -o openssl-3.5.5.zip || exit /b 1
 )
 
 popd
@@ -129,7 +136,7 @@ call :install_pkg mingw-w64-clang-x86_64-llvm-libs-21.1.8-4-any.pkg.tar.zst || e
 call :install_pkg mingw-w64-clang-x86_64-lld-21.1.8-4-any.pkg.tar.zst || exit /b 1
 
 if %LEAN%==0 (
-  echo Uncompressing OpenSSL
+  echo Uncompressing OpenSSL (clang64)
   %zstdexe% -d -f %PKGROOT%\openssl-341.tar.zstd
   echo Untarring OpenSSL to c:\openssl
   mkdir c:\openssl 2>nul
@@ -140,7 +147,19 @@ if %LEAN%==0 (
   echo Untarring Sodium to c:\sodium
   mkdir c:\sodium 2>nul
   tar -xf %PKGROOT%\libsodium-1020.tar -C c:\sodium
+
 )
+
+REM ── OpenSSL MSVC (for NVIDIA HIP) ──
+set OSSL_MSVC=C:\openssl_msvc
+if not exist %OSSL_MSVC%\lib\libssl.lib (
+  echo Installing OpenSSL MSVC from FireDaemon
+  %sevenzexe% -y -oC:\ossl_tmp x %PKGROOT%\openssl-3.5.5.zip || exit /b 1
+  mkdir %OSSL_MSVC% 2>nul
+  xcopy C:\ossl_tmp\x64\* %OSSL_MSVC%\ /E /H /Y /Q >nul || exit /b 1
+  rmdir /s /q C:\ossl_tmp
+)
+echo OpenSSL MSVC: %OSSL_MSVC%
 
 if not exist %TOOLROOT%\bin\clang++.exe (
   echo ERROR: clang++.exe not found in %TOOLROOT%\bin

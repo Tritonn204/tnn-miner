@@ -164,7 +164,7 @@ int handleBTCStratumPacket(boost::json::object packet, BTCStratum::jobCache *cac
   if (M.compare(BTCStratum::s_notify) == 0)
   {
     // printf("%s%s\n", isDev ? "DEV: " : "USER: ", boost::json::serialize(packet).c_str());
-    std::scoped_lock<boost::mutex> lockGuard(mutex);
+    std::scoped_lock<std::mutex> lockGuard(mutex);
     boost::json::value *J = isDev ? &devJob : &job;
     int64_t *h = isDev ? &devHeight : &ourHeight;
 
@@ -479,11 +479,11 @@ void btc_stratum_session(
   bool abort = false;
 
   // Submit thread
-  boost::thread subThread([&]()
+  std::thread subThread([&]()
                           {
         submitThread = true;
         while(!abort) {
-            boost::unique_lock<boost::mutex> lock(mutex);
+            std::unique_lock<std::mutex> lock(mutex);
             bool *B = isDev ? &submittingDev : &submitting;
             cv.wait(lock, [&]{ return (data_ready && (*B)) || abort; });
             if (abort) break;
@@ -511,7 +511,7 @@ void btc_stratum_session(
                 setcolor(BRIGHT_WHITE);
                 break;
             }
-            boost::this_thread::yield();
+            std::this_thread::yield();
         }
         submitThread = false; });
 
@@ -537,7 +537,7 @@ void btc_stratum_session(
         {
           if (!submitThread)
             break;
-          boost::this_thread::yield();
+          std::this_thread::yield();
         }
         stream.close();
         return fail(ec, "Stratum session timed out");
@@ -555,7 +555,7 @@ void btc_stratum_session(
         {
           if (!submitThread)
             break;
-          boost::this_thread::yield();
+          std::this_thread::yield();
         }
         stream.close();
         return fail(ec, "async_read");
@@ -625,7 +625,7 @@ void btc_stratum_session(
       {
         if (!submitThread)
           break;
-        boost::this_thread::yield();
+        std::this_thread::yield();
       }
       stream.close();
       setcolor(RED);
@@ -635,7 +635,7 @@ void btc_stratum_session(
       return;
     }
 
-    boost::this_thread::yield();
+    std::this_thread::yield();
     if (ABORT_MINER)
     {
       bool *connPtr = isDev ? &devConnected : &isConnected;
@@ -646,7 +646,6 @@ void btc_stratum_session(
   }
 
   cv.notify_all();
-  subThread.interrupt();
   subThread.join();
 }
 
@@ -719,11 +718,11 @@ void btc_stratum_session_nossl(
   bool abort = false;
 
   // Submit thread
-  boost::thread subThread([&]()
+  std::thread subThread([&]()
                           {
         submitThread = true;
         while(!abort) {
-            boost::unique_lock<boost::mutex> lock(mutex);
+            std::unique_lock<std::mutex> lock(mutex);
             bool *B = isDev ? &submittingDev : &submitting;
             cv.wait(lock, [&]{ return (data_ready && (*B)) || abort; });
             if (abort) break;
@@ -751,7 +750,7 @@ void btc_stratum_session_nossl(
                 setcolor(BRIGHT_WHITE);
                 break;
             }
-            boost::this_thread::yield();
+            std::this_thread::yield();
         }
         submitThread = false; });
 
@@ -777,7 +776,7 @@ void btc_stratum_session_nossl(
         {
           if (!submitThread)
             break;
-          boost::this_thread::yield();
+          std::this_thread::yield();
         }
         stream.close();
         return fail(ec, "Stratum session timed out");
@@ -795,7 +794,7 @@ void btc_stratum_session_nossl(
         {
           if (!submitThread)
             break;
-          boost::this_thread::yield();
+          std::this_thread::yield();
         }
         stream.close();
         return fail(ec, "async_read");
@@ -866,7 +865,7 @@ void btc_stratum_session_nossl(
       {
         if (!submitThread)
           break;
-        boost::this_thread::yield();
+        std::this_thread::yield();
       }
       stream.close();
       setcolor(RED);
@@ -876,7 +875,7 @@ void btc_stratum_session_nossl(
       return;
     }
 
-    boost::this_thread::yield();
+    std::this_thread::yield();
     if (ABORT_MINER)
     {
       bool *connPtr = isDev ? &devConnected : &isConnected;
@@ -887,6 +886,5 @@ void btc_stratum_session_nossl(
   }
 
   cv.notify_all();
-  subThread.interrupt();
   subThread.join();
 }

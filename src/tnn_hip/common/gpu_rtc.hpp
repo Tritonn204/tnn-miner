@@ -105,21 +105,22 @@ public:
         {
             std::lock_guard<std::mutex> lock(cache_mutex_);
 
-            // First check module cache (fast path for same device)
+#if !defined(__HIP_PLATFORM_NVIDIA__) && !defined(__CUDACC_RTC__)
+            // AMD modules are context-independent — module cache is safe
             auto module_it = module_cache_.find(module_key);
             if (module_it != module_cache_.end()) {
                 TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_from_source: Found in module cache\n");
                 fflush(stdout);
                 return module_it->second;
             }
+#endif
 
-            // Check code cache (allows sharing compiled code across identical GPUs)
+            // Code cache (compiled PTX/binary) — reload module into current thread's context
             auto code_it = code_cache_.find(code_key);
             if (code_it != code_cache_.end()) {
                 TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_from_source: Found in code cache, loading module\n");
                 fflush(stdout);
 
-                // Load module from cached code
                 CompiledKernel kernel = load_module_from_code(code_it->second);
                 module_cache_[module_key] = kernel;
                 return kernel;
@@ -152,13 +153,13 @@ public:
         {
             std::lock_guard<std::mutex> lock(cache_mutex_);
 
-            // Check module cache first
+#if !defined(__HIP_PLATFORM_NVIDIA__) && !defined(__CUDACC_RTC__)
             auto module_it = module_cache_.find(module_key);
             if (module_it != module_cache_.end()) {
                 return module_it->second;
             }
+#endif
 
-            // Check code cache
             auto code_it = code_cache_.find(code_key);
             if (code_it != code_cache_.end()) {
                 CompiledKernel kernel = load_module_from_code(code_it->second);

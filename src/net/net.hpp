@@ -12,7 +12,6 @@
 
 #include <boost/json.hpp>
 
-#include <boost/thread.hpp>
 #include <iostream>
 #include <atomic>
 
@@ -38,15 +37,15 @@ extern boost::json::object devShare;
 extern bool submitting;
 extern bool submittingDev;
 
-extern boost::condition_variable cv;
-extern boost::mutex mutex;
-extern boost::mutex devMutex;
-extern boost::mutex userMutex;
+extern std::condition_variable cv;
+extern std::mutex mutex;
+extern std::mutex devMutex;
+extern std::mutex userMutex;
 extern bool data_ready;
 
-extern boost::mutex wsMutex;
+extern std::mutex wsMutex;
 
-tcp::endpoint resolve_host(boost::mutex &wsMutex, net::io_context &ioc, net::yield_context yield, std::string host, std::string port);
+tcp::endpoint resolve_host(std::mutex &wsMutex, net::io_context &ioc, net::yield_context yield, std::string host, std::string port);
 
 // Helper trait to set values uniformly for both bool and atomic<bool>
 namespace detail {
@@ -68,7 +67,7 @@ inline void setForDisconnected(
     bool *submitPtr, 
     AbortType *abortPtr, 
     bool *dataReadyPtr, 
-    boost::condition_variable *cvPtr) 
+    std::condition_variable *cvPtr)
 {
     if (connectedPtr != nullptr) *connectedPtr = false;
     if (submitPtr != nullptr)    *submitPtr = false;
@@ -79,10 +78,10 @@ inline void setForDisconnected(
 
 // Overload for when abort is handled separately (pass nullptr)
 inline void setForDisconnectedNoAbort(
-    bool *connectedPtr, 
+    bool *connectedPtr,
     bool *submitPtr,
-    bool *dataReadyPtr, 
-    boost::condition_variable *cvPtr) 
+    bool *dataReadyPtr,
+    std::condition_variable *cvPtr) 
 {
     if (connectedPtr != nullptr) *connectedPtr = false;
     if (submitPtr != nullptr)    *submitPtr = false;
@@ -108,7 +107,7 @@ inline void fail(char const *where, char const *why) noexcept
 }
 
 inline tcp::endpoint resolve_host(
-    boost::mutex &wsMutex, 
+    std::mutex &wsMutex,
     net::io_context &ioc, 
     net::yield_context yield, 
     std::string host, 

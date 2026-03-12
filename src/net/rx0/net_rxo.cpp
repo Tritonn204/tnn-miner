@@ -132,7 +132,7 @@ void rx0_session(
     bool isDev)
 {
   // Mutex for HTTP client thread safety
-  boost::mutex httpMutex;
+  std::mutex httpMutex;
   httplib::Client daemon(sessionHost, stoul(port));
   
   // Set reasonable timeouts
@@ -158,7 +158,7 @@ void rx0_session(
   bool cacheThreadRunning = true;
 
   auto rx0_getTemplate = [&]() -> int {
-    boost::lock_guard<boost::mutex> httpLock(httpMutex);
+    std::lock_guard<std::mutex> httpLock(httpMutex);
     
     auto res = daemon.Post("/json_rpc", gbtReq, jsonType);
     if (res && res->status == 200)
@@ -256,9 +256,9 @@ void rx0_session(
     }
   };
 
-  boost::thread subThread([&](){
+  std::thread subThread([&](){
     while (!abort.load()) {
-      boost::unique_lock<boost::mutex> lock(mutex);
+      std::unique_lock<std::mutex> lock(mutex);
       bool *B = isDev ? &submittingDev : &submitting;
       cv.wait(lock, [&]{ return (data_ready && (*B)) || abort.load(); });
       if (abort.load()) break;
@@ -270,7 +270,7 @@ void rx0_session(
         // Thread-safe HTTP access
         httplib::Result res;
         {
-          boost::lock_guard<boost::mutex> httpLock(httpMutex);
+          std::lock_guard<std::mutex> httpLock(httpMutex);
           res = daemon.Post("/json_rpc", msg, jsonType);
         }
         
@@ -295,7 +295,7 @@ void rx0_session(
             setcolor(BRIGHT_WHITE);
             accepted++;
 
-            boost::this_thread::sleep_for(boost::chrono::milliseconds(10));
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
             rx0_getTemplate();
           }
         } else {
@@ -311,15 +311,15 @@ void rx0_session(
         setcolor(BRIGHT_WHITE);
         break;
       }
-      boost::this_thread::yield();
+      std::this_thread::yield();
     }
     submitThreadRunning = false;
   });
 
   // ORIGINAL cache thread synchronization preserved
-  boost::thread cacheThread([&]() {
+  std::thread cacheThread([&]() {
     while (!abort.load()) {
-      boost::unique_lock<boost::mutex> lock(mutex);
+      std::unique_lock<std::mutex> lock(mutex);
       
       cv.wait(lock, [&]{ 
         return needsDatasetUpdate.load() || abort.load(); 
@@ -339,7 +339,7 @@ void rx0_session(
         }
       }
       
-      boost::this_thread::yield();
+      std::this_thread::yield();
     }
     cacheThreadRunning = false;
   });
@@ -355,7 +355,7 @@ void rx0_session(
         setForDisconnected(C, B, &abort, &data_ready, &cv);
         break;
       }
-      boost::this_thread::sleep_for(boost::chrono::seconds(5));
+      std::this_thread::sleep_for(std::chrono::seconds(5));
     }
     catch (const std::exception &e)
     {
@@ -367,7 +367,7 @@ void rx0_session(
       break;
     }
     
-    boost::this_thread::yield();
+    std::this_thread::yield();
   }
 
   // Clean shutdown
@@ -375,14 +375,12 @@ void rx0_session(
   cv.notify_all();
 
   if (cacheThreadRunning) {
-    cacheThread.interrupt();
     if (cacheThread.joinable()) {
       cacheThread.join();
     }
   }
 
   if (submitThreadRunning) {
-    subThread.interrupt();
     if (subThread.joinable()) {
       subThread.join();
     }

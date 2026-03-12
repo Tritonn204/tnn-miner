@@ -88,7 +88,7 @@ void jobThread(
             int64_t &rH = devMine ? devHeight : ourHeight;
             if (submit || localJobCounter != jobCounter || rH != localOurHeight)
               return;
-            boost::this_thread::yield();
+            std::this_thread::yield();
           }
         }
 
@@ -175,7 +175,7 @@ waitForJob:
   while (!isConnected)
   {
     CHECK_CLOSE;
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
   uint64_t *nonceCache = (uint64_t*)malloc(sizeof(uint64_t)*ctx.GPUCount);
@@ -189,7 +189,7 @@ waitForJob:
       boost::json::value myJob;
       boost::json::value myJobDev;
       {
-        std::scoped_lock<boost::mutex> lockGuard(mutex);
+        std::scoped_lock<std::mutex> lockGuard(mutex);
         myJob = job;
         myJobDev = devJob;
         localJobCounter = jobCounter;

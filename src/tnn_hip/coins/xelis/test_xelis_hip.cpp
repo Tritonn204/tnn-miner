@@ -4,7 +4,20 @@
 #include <stdexcept>
 #include <vector>
 #include <string>
+#include <thread>
+#include <atomic>
+#include <mutex>
+#include <condition_variable>
+#include <functional>
+#include <chrono>
 #include <hip/hip_runtime.h>
+
+#include <boost/asio.hpp>
+#include <boost/asio/spawn.hpp>
+#include <boost/asio/ssl.hpp>
+#include <boost/asio/ip/tcp.hpp>
+
+#include <core/rootcert.h>
 
 #include "../../common/gpu_rtc.hpp"
 #include "../../common/gpu_algo.hpp"
@@ -388,6 +401,321 @@ static int test_xelis_hip_impl() {
 }
 
 
+// ============================================================
+// Threaded interference test: reproduce the real miner's environment
+// Each level adds more of what getWork_v2 / miner main loop does
+// ============================================================
+
+// Level 1: GPU work runs on a spawned std::thread (not main thread)
+static int test_threaded_level1(
+    hipFunction_t stage1_func,
+    hipFunction_t stage3_func,
+    hipFunction_t blake3_func)
+{
+    printf("\n[THREAD-TEST] Level 1: GPU kernels on std::thread\n");
+    fflush(stdout);
+
+    std::atomic<int> result{-1};
+    std::thread gpu_thread([&]() {
+        hipSetDevice(0);
+        result = run_test_case(
+            "Threaded: std::thread GPU",
+            stage1_func, stage3_func, blake3_func,
+            0x0000000000000000ULL, 32, 1, 32);
+    });
+    gpu_thread.join();
+    printf("[THREAD-TEST] Level 1: %s\n", result == 0 ? "PASS" : "FAIL");
+    fflush(stdout);
+    return result;
+}
+
+// Level 2: boost::asio::io_context running on another thread alongside GPU
+static int test_threaded_level2(
+    hipFunction_t stage1_func,
+    hipFunction_t stage3_func,
+    hipFunction_t blake3_func)
+{
+    printf("\n[THREAD-TEST] Level 2: GPU + boost::asio io_context on separate threads\n");
+    fflush(stdout);
+
+    std::atomic<bool> stop_asio{false};
+    boost::asio::io_context ioc;
+    auto work_guard = boost::asio::make_work_guard(ioc);
+
+    // Simulate GETWORK thread: runs boost::asio io_context
+    std::thread asio_thread([&]() {
+        // Timer to keep io_context busy
+        boost::asio::steady_timer timer(ioc);
+        std::function<void(const boost::system::error_code&)> tick;
+        tick = [&](const boost::system::error_code& ec) {
+            if (!ec && !stop_asio.load()) {
+                timer.expires_after(std::chrono::milliseconds(50));
+                timer.async_wait(tick);
+            }
+        };
+        timer.expires_after(std::chrono::milliseconds(50));
+        timer.async_wait(tick);
+        ioc.run();
+    });
+
+    // Give asio thread time to start
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    std::atomic<int> result{-1};
+    std::thread gpu_thread([&]() {
+        hipSetDevice(0);
+        result = run_test_case(
+            "Threaded: GPU + asio io_context",
+            stage1_func, stage3_func, blake3_func,
+            0x0000000000000000ULL, 32, 1, 32);
+    });
+    gpu_thread.join();
+
+    stop_asio = true;
+    work_guard.reset();
+    ioc.stop();
+    asio_thread.join();
+
+    printf("[THREAD-TEST] Level 2: %s\n", result == 0 ? "PASS" : "FAIL");
+    fflush(stdout);
+    return result;
+}
+
+// Level 3: boost::asio::spawn (Boost.Context coroutines) running alongside GPU
+static int test_threaded_level3(
+    hipFunction_t stage1_func,
+    hipFunction_t stage3_func,
+    hipFunction_t blake3_func)
+{
+    printf("\n[THREAD-TEST] Level 3: GPU + boost::asio::spawn coroutine on separate threads\n");
+    fflush(stdout);
+
+    std::atomic<bool> stop_asio{false};
+    boost::asio::io_context ioc;
+
+    // Simulate getWork_v2: uses boost::asio::spawn (stackful coroutine via Boost.Context)
+    std::thread asio_thread([&]() {
+        boost::asio::spawn(ioc, [&](boost::asio::yield_context yield) {
+            boost::asio::steady_timer timer(ioc);
+            while (!stop_asio.load()) {
+                timer.expires_after(std::chrono::milliseconds(50));
+                boost::system::error_code ec;
+                timer.async_wait(yield[ec]);
+                if (ec) break;
+            }
+        },
+        [](std::exception_ptr ex) {
+            if (ex) {
+                try { std::rethrow_exception(ex); }
+                catch (const std::exception& e) {
+                    fprintf(stderr, "[THREAD-TEST] spawn exception: %s\n", e.what());
+                }
+            }
+        });
+        ioc.run();
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    std::atomic<int> result{-1};
+    std::thread gpu_thread([&]() {
+        hipSetDevice(0);
+        result = run_test_case(
+            "Threaded: GPU + boost::asio::spawn",
+            stage1_func, stage3_func, blake3_func,
+            0x0000000000000000ULL, 32, 1, 32);
+    });
+    gpu_thread.join();
+
+    stop_asio = true;
+    ioc.stop();
+    asio_thread.join();
+
+    printf("[THREAD-TEST] Level 3: %s\n", result == 0 ? "PASS" : "FAIL");
+    fflush(stdout);
+    return result;
+}
+
+// Level 4: SSL context + load_root_certificates alongside GPU
+static int test_threaded_level4(
+    hipFunction_t stage1_func,
+    hipFunction_t stage3_func,
+    hipFunction_t blake3_func)
+{
+    printf("\n[THREAD-TEST] Level 4: GPU + SSL context + load_root_certificates\n");
+    fflush(stdout);
+
+    std::atomic<bool> stop_asio{false};
+    boost::asio::io_context ioc;
+    boost::asio::ssl::context ctx{boost::asio::ssl::context::tlsv12_client};
+    load_root_certificates(ctx);
+
+    std::thread asio_thread([&]() {
+        boost::asio::spawn(ioc, [&](boost::asio::yield_context yield) {
+            boost::asio::steady_timer timer(ioc);
+            while (!stop_asio.load()) {
+                timer.expires_after(std::chrono::milliseconds(50));
+                boost::system::error_code ec;
+                timer.async_wait(yield[ec]);
+                if (ec) break;
+            }
+        },
+        [](std::exception_ptr) {});
+        ioc.run();
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    std::atomic<int> result{-1};
+    std::thread gpu_thread([&]() {
+        hipSetDevice(0);
+        result = run_test_case(
+            "Threaded: GPU + SSL ctx",
+            stage1_func, stage3_func, blake3_func,
+            0x0000000000000000ULL, 32, 1, 32);
+    });
+    gpu_thread.join();
+
+    stop_asio = true;
+    ioc.stop();
+    asio_thread.join();
+
+    printf("[THREAD-TEST] Level 4: %s\n", result == 0 ? "PASS" : "FAIL");
+    fflush(stdout);
+    return result;
+}
+
+// Level 5: SSL + TCP resolver inside spawn coroutine (like do_session_v2)
+static int test_threaded_level5(
+    hipFunction_t stage1_func,
+    hipFunction_t stage3_func,
+    hipFunction_t blake3_func)
+{
+    printf("\n[THREAD-TEST] Level 5: GPU + SSL + TCP resolve inside spawn\n");
+    fflush(stdout);
+
+    std::atomic<bool> stop_asio{false};
+    boost::asio::io_context ioc;
+    boost::asio::ssl::context ctx{boost::asio::ssl::context::tlsv12_client};
+    load_root_certificates(ctx);
+
+    std::thread asio_thread([&]() {
+        boost::asio::spawn(ioc, [&](boost::asio::yield_context yield) {
+            // Do a real DNS resolve like getWork_v2 -> do_session_v2 does
+            boost::asio::ip::tcp::resolver resolver(ioc);
+            boost::system::error_code ec;
+            // Resolve localhost - always works, exercises the full async path
+            auto results = resolver.async_resolve("127.0.0.1", "80", yield[ec]);
+            // Don't care if it fails, we just want the side effects
+            (void)results;
+
+            boost::asio::steady_timer timer(ioc);
+            while (!stop_asio.load()) {
+                timer.expires_after(std::chrono::milliseconds(50));
+                timer.async_wait(yield[ec]);
+                if (ec) break;
+            }
+        },
+        [](std::exception_ptr) {});
+        ioc.run();
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    std::atomic<int> result{-1};
+    std::thread gpu_thread([&]() {
+        hipSetDevice(0);
+        result = run_test_case(
+            "Threaded: GPU + SSL + resolve",
+            stage1_func, stage3_func, blake3_func,
+            0x0000000000000000ULL, 32, 1, 32);
+    });
+    gpu_thread.join();
+
+    stop_asio = true;
+    ioc.stop();
+    asio_thread.join();
+
+    printf("[THREAD-TEST] Level 5: %s\n", result == 0 ? "PASS" : "FAIL");
+    fflush(stdout);
+    return result;
+}
+
+// Level 6: Full miner sim - 2x getWork_v2-like threads + mutex/cv + SSL
+static int test_threaded_level6(
+    hipFunction_t stage1_func,
+    hipFunction_t stage3_func,
+    hipFunction_t blake3_func)
+{
+    printf("\n[THREAD-TEST] Level 6: GPU + 2x SSL/spawn/resolve threads + mutex/cv\n");
+    fflush(stdout);
+
+    std::atomic<bool> stop_asio{false};
+    std::mutex mtx;
+    std::condition_variable cv_local;
+    bool data_ready = false;
+
+    auto make_getwork_thread = [&](boost::asio::io_context &ioc, const char *label) {
+        boost::asio::ssl::context ctx{boost::asio::ssl::context::tlsv12_client};
+        load_root_certificates(ctx);
+
+        return std::thread([&ioc, &stop_asio, &mtx, &cv_local, &data_ready, label]() {
+            boost::asio::spawn(ioc, [&](boost::asio::yield_context yield) {
+                boost::asio::ip::tcp::resolver resolver(ioc);
+                boost::system::error_code ec;
+                resolver.async_resolve("127.0.0.1", "80", yield[ec]);
+
+                boost::asio::steady_timer timer(ioc);
+                while (!stop_asio.load()) {
+                    timer.expires_after(std::chrono::milliseconds(50));
+                    timer.async_wait(yield[ec]);
+                    if (ec) break;
+                    {
+                        std::lock_guard<std::mutex> lk(mtx);
+                        data_ready = true;
+                    }
+                    cv_local.notify_all();
+                }
+            },
+            [label](std::exception_ptr ex) {
+                if (ex) {
+                    try { std::rethrow_exception(ex); }
+                    catch (const std::exception& e) {
+                        fprintf(stderr, "[THREAD-TEST] %s spawn exception: %s\n", label, e.what());
+                    }
+                }
+            });
+            ioc.run();
+        });
+    };
+
+    boost::asio::io_context ioc1, ioc2;
+    auto getwork = make_getwork_thread(ioc1, "GETWORK");
+    auto devwork = make_getwork_thread(ioc2, "DEVWORK");
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+    std::atomic<int> result{-1};
+    std::thread gpu_thread([&]() {
+        hipSetDevice(0);
+        result = run_test_case(
+            "Threaded: full getWork sim",
+            stage1_func, stage3_func, blake3_func,
+            0x0000000000000000ULL, 32, 1, 32);
+    });
+    gpu_thread.join();
+
+    stop_asio = true;
+    ioc1.stop();
+    ioc2.stop();
+    getwork.join();
+    devwork.join();
+
+    printf("[THREAD-TEST] Level 6: %s\n", result == 0 ? "PASS" : "FAIL");
+    fflush(stdout);
+    return result;
+}
+
 int test_xelis_hip() {
     printf("\n");
     printf("========================================\n");
@@ -396,7 +724,81 @@ int test_xelis_hip() {
     fflush(stdout);
 
     try {
-        return test_xelis_hip_impl();
+        int ret = test_xelis_hip_impl();
+        if (ret != 0) return ret;
+
+        // Now run threaded interference tests with the same compiled kernels
+        // Re-init for threaded tests (reuse the compiled module)
+        printf("\n\n");
+        printf("========================================\n");
+        printf("[THREAD-TEST] Threaded Interference Tests\n");
+        printf("========================================\n");
+        printf("Each level adds more miner-like concurrency.\n");
+        printf("If a level crashes, that's our interference source.\n\n");
+        fflush(stdout);
+
+        // Re-compile (or we could refactor to share, but this is a test)
+        auto& compiler = RTCCompiler::instance();
+        const std::string xelis_source =
+            std::string(hip_xelis_v3_source::SRC_TNN_HIP_CRYPTO_XELIS_HASH_XELIS_HASH_V3_HIP_SOURCE);
+
+        hipDeviceProp_t props;
+        hipGetDeviceProperties(&props, 0);
+
+        #if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
+        bool is_amd = false;
+        #else
+        bool is_amd = true;
+        #endif
+
+        std::vector<std::string> compile_opts;
+        if (is_amd) {
+            compile_opts = {"-O3", "-mno-cumode", "-ffast-math"};
+            compile_opts.push_back("-DXELIS_MIN_WG=64");
+            compile_opts.push_back("-DXELIS_MAX_WG=256");
+        } else {
+            compile_opts = {"--dopt=on", "--use_fast_math"};
+#ifdef __linux__
+            compile_opts.push_back("--device-int128");
+#endif
+            compile_opts.push_back("-DXELIS_MIN_WG=32");
+            compile_opts.push_back("-DXELIS_MAX_WG=128");
+            int s3_nreg = (props.major >= 9) ? 40 : (props.major >= 8) ? 64 : 80;
+            compile_opts.push_back("-DXELIS_S3_NREG=" + std::to_string(s3_nreg));
+        }
+
+        auto module_kernel = compiler.compile_from_source(
+            xelis_source, "xelis-hash-v3.hip", "xelis_stage1_kernel", compile_opts);
+
+        hipFunction_t stage1_func = module_kernel.function;
+        hipFunction_t stage3_func = nullptr, blake3_func = nullptr;
+        hipModuleGetFunction(&stage3_func, module_kernel.module, "xelis_s3_hybrid_v2_noblake_kernel");
+        hipModuleGetFunction(&blake3_func, module_kernel.module, "xelis_blake3_batch");
+
+        int failures = 0;
+        failures += test_threaded_level1(stage1_func, stage3_func, blake3_func);
+        if (failures) { printf("\n[THREAD-TEST] STOPPED at Level 1\n"); return 1; }
+
+        failures += test_threaded_level2(stage1_func, stage3_func, blake3_func);
+        if (failures) { printf("\n[THREAD-TEST] STOPPED at Level 2\n"); return 1; }
+
+        failures += test_threaded_level3(stage1_func, stage3_func, blake3_func);
+        if (failures) { printf("\n[THREAD-TEST] STOPPED at Level 3\n"); return 1; }
+
+        failures += test_threaded_level4(stage1_func, stage3_func, blake3_func);
+        if (failures) { printf("\n[THREAD-TEST] STOPPED at Level 4\n"); return 1; }
+
+        failures += test_threaded_level5(stage1_func, stage3_func, blake3_func);
+        if (failures) { printf("\n[THREAD-TEST] STOPPED at Level 5\n"); return 1; }
+
+        failures += test_threaded_level6(stage1_func, stage3_func, blake3_func);
+        if (failures) { printf("\n[THREAD-TEST] STOPPED at Level 6\n"); return 1; }
+
+        printf("\n========================================\n");
+        printf("[THREAD-TEST] All 6 levels passed!\n");
+        printf("========================================\n");
+        return 0;
+
     } catch (const std::exception& e) {
         fprintf(stderr, "\n[ERROR] Test failed with exception: %s\n", e.what());
         fflush(stderr);

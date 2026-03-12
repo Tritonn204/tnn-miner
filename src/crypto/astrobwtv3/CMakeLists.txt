@@ -72,7 +72,7 @@ find_package(OpenSSL REQUIRED)
 
 # Boost setup
 set(Boost_USE_STATIC_LIBS ON)
-find_package(Boost 1.80 COMPONENTS chrono thread)
+find_package(Boost 1.80 COMPONENTS chrono)
 
 if(Boost_FOUND)
     message("OS-provided Boost found")
@@ -99,7 +99,7 @@ else()
             "BOOST_SKIP_INSTALL_RULES ON"
             "BOOST_USE_STATIC_LIBS ON"
             "BOOST_INSTALL_LAYOUT system"
-            "BOOST_INCLUDE_LIBRARIES chrono\\\;thread"
+            "BOOST_INCLUDE_LIBRARIES chrono"
     )
 
     if(Boost_ADDED)
@@ -143,7 +143,6 @@ add_executable(astro_benchmark ${BENCHMARK_SOURCES})
 target_link_libraries(astro_benchmark
     OpenSSL::Crypto
     Boost::chrono
-    Boost::thread
 )
 
 # Platform specific linking

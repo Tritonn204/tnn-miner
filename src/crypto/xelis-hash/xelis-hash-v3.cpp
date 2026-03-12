@@ -701,7 +701,7 @@ __attribute__((cold)) static unsigned computeHTThreshold(unsigned num_threads)
     size_t fits_in_l3      = usable_l3_kb / scratchpad_kb;
 
     // Get physical core count
-    unsigned phys_cores    = boost::thread::physical_concurrency();
+    unsigned phys_cores    = std::thread::hardware_concurrency();
 
     // NT kicks in when adding more threads would overflow L3
     // i.e., when thread_index >= fits_in_l3 AND thread_index >= phys_cores
@@ -847,7 +847,7 @@ __attribute__((cold)) static std::vector<MTBenchResult> xelis_mt_bench_pass(
         for (unsigned int num_threads : thread_counts) {
             std::cout << "  " << std::setw(2) << num_threads << " thread(s): " << std::flush;
 
-            std::vector<boost::thread> bench_threads(num_threads);
+            std::vector<std::thread> bench_threads(num_threads);
             std::vector<MTWorkerResult> results(num_threads);
 
             std::atomic<bool> start_flag{false};
@@ -855,7 +855,7 @@ __attribute__((cold)) static std::vector<MTBenchResult> xelis_mt_bench_pass(
             std::barrier ready_barrier(num_threads + 1);
 
             for (unsigned int t = 0; t < num_threads; t++) {
-                bench_threads[t] = boost::thread(mt_worker_fn, t, &config,
+                bench_threads[t] = std::thread(mt_worker_fn, t, &config,
                                                 &start_flag, &stop_flag, &results[t],
                                                 &ready_barrier, lockThreads, ht_threshold);
 
@@ -945,7 +945,7 @@ __attribute__((cold)) static std::vector<MTBenchResult> xelis_mt_bench_pass(
 
 __attribute__((cold)) static void xelis_benchmark_multithread()
 {
-    unsigned hw = boost::thread::hardware_concurrency();
+    unsigned hw = std::thread::hardware_concurrency();
 
     // 1, 2, 4, 4+4, 4+4+4, ... up to 32, skip if > hw
     std::vector<unsigned int> thread_counts;
@@ -981,7 +981,7 @@ __attribute__((cold)) void xelis_tune_v3(int num_threads)
     constexpr double WARMUP_SEC  = 2.0;
     constexpr double BENCH_SEC   = 10.0;
 
-    unsigned phys = boost::thread::physical_concurrency();
+    unsigned phys = std::thread::hardware_concurrency();
     unsigned ht_thresh = (std::min)(phys, (unsigned)num_threads);
 
     XelisTuneConfig configs[] = {
@@ -1006,10 +1006,10 @@ __attribute__((cold)) void xelis_tune_v3(int num_threads)
         std::atomic<bool> stop_flag{false};
         std::barrier ready_barrier(num_threads + 1);
 
-        std::vector<boost::thread> threads(num_threads);
+        std::vector<std::thread> threads(num_threads);
         for (int t = 0; t < num_threads; t++)
         {
-            threads[t] = boost::thread([&, t]() {
+            threads[t] = std::thread([&, t]() {
                 auto *worker = (workerData_xelis_v3 *)malloc_huge_pages(sizeof(workerData_xelis_v3));
                 alignas(64) byte input[XELIS_TEMPLATE_SIZE] = {0};
                 byte hash[XELIS_HASH_SIZE];

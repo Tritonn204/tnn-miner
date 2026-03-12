@@ -7,7 +7,6 @@
 #include <atomic>
 #include <boost/json.hpp>
 #include <boost/chrono.hpp>
-#include <boost/thread.hpp>
 #include <cstdint>
 #include <cstring>
 #include <random>
@@ -63,7 +62,7 @@ void mineDero(int tid)
   byte random_tail[12];
   for (int i = 0; i < 12; ++i) random_tail[i] = (byte)dist(gen);
 
-  boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
+  std::this_thread::sleep_for(std::chrono::milliseconds(125));
 
   int64_t localJobCounter = -1;
 
@@ -73,7 +72,7 @@ waitForJob:
 
   while (!isConnected) {
     CHECK_CLOSE;
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
   while (!ABORT_MINER) {
@@ -85,7 +84,7 @@ waitForJob:
       int64_t diffDevSnapshot;
 
       {
-        std::scoped_lock<boost::mutex> lockGuard(mutex);
+        std::scoped_lock<std::mutex> lockGuard(mutex);
         myJob            = job;
         myJobDev         = devJob;
         snapshotCounter  = jobCounter;
@@ -108,7 +107,7 @@ waitForJob:
       if ((work[0] & 0x0F) != 1) {
         std::cerr << "Unknown version, please check for updates: version"
                   << (work[0] & 0x1F) << std::endl;
-        boost::this_thread::sleep_for(boost::chrono::milliseconds(500));
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
         continue;
       }
 
@@ -142,7 +141,7 @@ waitForJob:
             for (;;) {
               submit = devMine ? !submittingDev : !submitting;
               if (submit || localJobCounter != jobCounter) break;
-              boost::this_thread::yield();
+              std::this_thread::yield();
             }
           }
           if (localJobCounter != jobCounter) break;

@@ -37,7 +37,7 @@ public:
         bool* submitting_ptr,
         bool* submitting_dev_ptr,
         bool* data_ready_ptr,
-        boost::condition_variable* cv_ptr,
+        std::condition_variable* cv_ptr,
         std::function<bool(int64_t job_id, bool is_dev)> stale_check)
     {
         stop();  // clean up any previous drain thread
@@ -142,6 +142,6 @@ private:
     bool* submitting_ptr_ = nullptr;
     bool* submitting_dev_ptr_ = nullptr;
     bool* data_ready_ptr_ = nullptr;
-    boost::condition_variable* cv_ptr_ = nullptr;
+    std::condition_variable* cv_ptr_ = nullptr;
     std::function<bool(int64_t, bool)> stale_check_;
 };

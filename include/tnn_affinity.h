@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>
-#include <boost/thread.hpp>
+#include <thread>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -21,5 +21,5 @@
 #endif
 #endif
 
-void setAffinity(boost::thread::native_handle_type t, uint64_t core);
-void setPriority(boost::thread::native_handle_type t, int priority);
+void setAffinity(std::thread::native_handle_type t, uint64_t core);
+void setPriority(std::thread::native_handle_type t, int priority);

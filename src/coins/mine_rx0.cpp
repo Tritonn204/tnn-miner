@@ -337,7 +337,7 @@ void initGlobalBatchScheduler() {
 }
 
 void mineRx0(int tid) {
-  boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
+  std::this_thread::sleep_for(std::chrono::milliseconds(125));
 
   int64_t localJobCounter;
   int64_t localUserHeight = 0;
@@ -364,13 +364,13 @@ void mineRx0(int tid) {
   };
 
   while (!batchInit.load() || needsDatasetUpdate.load()) {
-    boost::this_thread::yield();
+    std::this_thread::yield();
   }
 
 waitForJob:
   while (!isConnected) {
     CHECK_CLOSE;
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
   bool devMine = false;
@@ -383,7 +383,7 @@ waitForJob:
       boost::json::value myJob;
       boost::json::value myJobDev;
       {
-        std::scoped_lock<boost::mutex> lockGuard(mutex);
+        std::scoped_lock<std::mutex> lockGuard(mutex);
         myJob = job;
         myJobDev = devJob;
         localJobCounter = jobCounter;
@@ -394,7 +394,7 @@ waitForJob:
       std::string &tKey = devMine ? randomx_cacheKey_dev : randomx_cacheKey;
       
       while (needsDatasetUpdate.load()) {
-        boost::this_thread::yield();
+        std::this_thread::yield();
       }
 
       if (tKey != localCacheKey) {
@@ -566,7 +566,7 @@ waitForJob:
                 int64_t &lH = devMine ? localDevHeight : localUserHeight;
                 if (submit || localJobCounter != jobCounter || rH != lH)
                   break;
-                boost::this_thread::yield();
+                std::this_thread::yield();
               }
             }
             

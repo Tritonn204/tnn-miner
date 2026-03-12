@@ -144,6 +144,18 @@ public:
 
 private:
     void mine_loop() {
+        // Ensure CUDA/HIP context is bound to this worker thread.
+        // The context was created on the parent thread (which may be a
+        // boost::thread); CUDA primary contexts are per-thread on Windows
+        // and may not be inherited across thread boundaries.
+        hipError_t ctx_err = hipSetDevice(device_id_);
+        if (ctx_err != hipSuccess) {
+            fprintf(stderr, "[ERROR] GPU %d: mine_loop hipSetDevice failed: %s\n",
+                    device_id_, hipGetErrorString(ctx_err));
+            fflush(stderr);
+            return;
+        }
+
         // Nonce segmentation:
         // - Bits 59-63 (top 5 bits): device ID (supports up to 32 GPUs)
         // - Bits 48-58 (next 11 bits): random int (0-2047, randomized per mining session)

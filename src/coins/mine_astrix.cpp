@@ -29,7 +29,7 @@ waitForJob:
   while (!isConnected)
   {
     CHECK_CLOSE;
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
   while (!ABORT_MINER)
@@ -40,7 +40,7 @@ waitForJob:
       boost::json::value myJob;
       boost::json::value myJobDev;
       {
-        std::scoped_lock<boost::mutex> lockGuard(mutex);
+        std::scoped_lock<std::mutex> lockGuard(mutex);
         myJob = job;
         myJobDev = devJob;
         localJobCounter = jobCounter;
@@ -197,7 +197,7 @@ waitForJob:
               int64_t &oH = devMine ? localDevHeight : localOurHeight;
               if (submit || localJobCounter != jobCounter || rH != oH)
                 break;
-              boost::this_thread::yield();
+              std::this_thread::yield();
             }
           }
 
@@ -212,11 +212,11 @@ waitForJob:
           //   std::reverse(powHash, powHash + 32);
           // }
         //   std::string b64 = base64::to_base64(std::string((char *)&WORK[0], XELIS_TEMPLATE_SIZE));
-          // boost::lock_guard<boost::mutex> lock(mutex);
+          // std::lock_guard<std::mutex> lock(mutex);
           if (devMine)
           {
             submittingDev = true;
-            // std::scoped_lock<boost::mutex> lockGuard(devMutex);
+            // std::scoped_lock<std::mutex> lockGuard(devMutex);
             // if (localJobCounter != jobCounter || localDevHeight != devHeight)
             // {
             //   break;
@@ -248,7 +248,7 @@ waitForJob:
           else
           {
             submitting = true;
-            // std::scoped_lock<boost::mutex> lockGuard(userMutex);
+            // std::scoped_lock<std::mutex> lockGuard(userMutex);
             // if (localJobCounter != jobCounter || localOurHeight != ourHeight)
             // {
             //   break;

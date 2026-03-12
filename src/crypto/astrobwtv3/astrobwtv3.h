@@ -30,7 +30,11 @@
 
 #ifdef _WIN32
 #include <winsock2.h>
+#ifdef _MSC_VER
 #include <intrin.h>
+#else
+#include <x86intrin.h>
+#endif
 #else
 #include <arpa/inet.h>
 #endif

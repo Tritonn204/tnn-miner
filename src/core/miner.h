@@ -11,7 +11,7 @@
 #include <inttypes.h>
 #include <hex.h>
 #include <endian.hpp>
-#include <boost/thread.hpp>
+#include <thread>
 #include <vector>
 #include <terminal.hpp>
 #include <string>
@@ -133,7 +133,7 @@ inline void printSupported()
 
 #include <tnn_affinity.h>
 
-void setPriorityClass(boost::thread::native_handle_type t, int priority);
+void setPriorityClass(std::thread::native_handle_type t, int priority);
 
 void update(std::chrono::steady_clock::time_point startTime);
 

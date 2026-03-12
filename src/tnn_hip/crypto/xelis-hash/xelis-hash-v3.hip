@@ -1478,8 +1478,8 @@ __global__ void xelis_s3_hybrid_v2_noblake_kernel(
 // ============================================================================
 #if defined(__HIP_PLATFORM_AMD__)
 extern "C" __attribute__((amdgpu_flat_work_group_size(XELIS_MIN_WG, XELIS_MAX_WG)))
-#elif defined(__CUDA_ARCH__) && defined(XELIS_S3_NREG)
-extern "C" __maxnreg__(XELIS_S3_NREG)
+#elif defined(__CUDA_ARCH__)
+extern "C" __maxnreg__(48)
 #else
 extern "C"
 #endif
@@ -1569,7 +1569,8 @@ __global__ void xelis_blake3_batch(
 #if defined(__HIP_PLATFORM_AMD__)
 extern "C" __attribute__((amdgpu_flat_work_group_size(XELIS_MIN_WG, XELIS_MAX_WG)))
 #else
-extern "C" __maxnreg__(96)
+extern "C"
+// __maxnreg__(96)  // disabled — let compiler pick register allocation
 #endif
 __global__ void xelis_hash_v3_kernel(
     const uint8_t *__restrict__ input_template,

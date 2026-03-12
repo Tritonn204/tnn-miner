@@ -7,7 +7,6 @@
 #include <unistd.h>
 #endif
 
-#include <boost/thread.hpp>
 #include <algorithm>
 #include <bitset>
 #include <iostream>
@@ -170,10 +169,10 @@ void astroTune(int num_threads, int tuneWarmupSec, int tuneDurationSec) {
   printf("Tuning %zu AstroBWTv3 algos for %d seconds in total\n", numAstroFuncs, totalTuneTime);
   fflush(stdout);
 
-  boost::mutex durLock;
+  std::mutex durLock;
   std::vector<int64_t> durations[numAstroFuncs];
   
-  boost::mutex hashLock;
+  std::mutex hashLock;
   int64_t numHashes[numAstroFuncs];
   for(int x = 0; x < numAstroFuncs; x++) {
     numHashes[x] = 0;
@@ -187,14 +186,14 @@ void astroTune(int num_threads, int tuneWarmupSec, int tuneDurationSec) {
     generateRandomBytesForTune<48>(random_buffer);
     byte res[32];
 
-    boost::thread tune_threads[num_threads];
+    std::thread tune_threads[num_threads];
     for (int x = 0; x < numAstroFuncs; x++)
     {
       astroCompFunc = allAstroFuncs[x].funcPtr;
 
       // Start each thread with an inline lambda function
       for (int i = 0; i < num_threads; ++i) {
-        tune_threads[i] = boost::thread([&]() {
+        tune_threads[i] = std::thread([&]() {
           int tid = i;
           workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
           initWorker(*worker);

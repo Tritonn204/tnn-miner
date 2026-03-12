@@ -33,7 +33,7 @@ std::atomic<bool> randomx_ready_dev = false;
 
 std::atomic<bool> needsDatasetUpdate = false;
 
-boost::mutex dsMutex;
+std::mutex dsMutex;
 
 uint64_t diff_numerator = boost_swap_impl::stoull("0x100000001", nullptr, 16);
 
@@ -48,7 +48,7 @@ int handleRandomXStratumPacket(boost::json::object packet, bool isDev) {
   std::string M = std::string(packet["method"].as_string());
   
   if (M == rx0Stratum::s_job) {
-    std::scoped_lock<boost::mutex> lockGuard(mutex);
+    std::scoped_lock<std::mutex> lockGuard(mutex);
     if (!packet["error"].is_null()) return 1;
 
     boost::json::object newJob = packet["params"].as_object();
@@ -132,7 +132,7 @@ int handleRandomXStratumResponse(boost::json::object packet, bool isDev)
   {
   case rx0Stratum::loginID:
   {
-    std::scoped_lock<boost::mutex> lockGuard(mutex);
+    std::scoped_lock<std::mutex> lockGuard(mutex);
     boost::json::value *JV = isDev ? &devJob : &job;
 
     if (!packet["error"].is_null())
@@ -337,7 +337,7 @@ void rx0_stratum_session(
   
   // Thread-safe submit queue
   std::queue<std::string> submitQueue;
-  boost::mutex submitMutex;
+  std::mutex submitMutex;
   std::atomic<bool> abort{false};
 
   auto process_write_queue = [&]() {
@@ -345,7 +345,7 @@ void rx0_stratum_session(
       while (!abort.load()) {
         std::string msg;
         {
-          boost::lock_guard<boost::mutex> qlock(submitMutex);
+          std::lock_guard<std::mutex> qlock(submitMutex);
           if (submitQueue.empty()) return;
           msg = std::move(submitQueue.front());
           submitQueue.pop();
@@ -372,9 +372,9 @@ void rx0_stratum_session(
 
   bool submitThreadRunning = true;
 
-  boost::thread subThread([&](){
+  std::thread subThread([&](){
     while (!abort.load()) {
-      boost::unique_lock<boost::mutex> lock(mutex);
+      std::unique_lock<std::mutex> lock(mutex);
       bool *B = isDev ? &submittingDev : &submitting;
       cv.wait(lock, [&]{ return (data_ready && (*B)) || abort.load(); });
       if (abort.load()) break;
@@ -384,7 +384,7 @@ void rx0_stratum_session(
         std::string msg = boost::json::serialize(S) + "\n";
         
         {
-          boost::lock_guard<boost::mutex> qlock(submitMutex);
+          std::lock_guard<std::mutex> qlock(submitMutex);
           submitQueue.push(std::move(msg));
         }
         process_write_queue();
@@ -398,15 +398,15 @@ void rx0_stratum_session(
       }
       *B = false;
       data_ready = false;
-      boost::this_thread::yield();
+      std::this_thread::yield();
     }
     submitThreadRunning = false;
   });
 
   // ORIGINAL cache thread synchronization - unchanged
-  boost::thread cacheThread([&]() {
+  std::thread cacheThread([&]() {
     while(!abort.load()) {
-      boost::unique_lock<boost::mutex> lock(dsMutex);
+      std::unique_lock<std::mutex> lock(dsMutex);
       
       cv.wait(lock, [&]{ 
         return needsDatasetUpdate.load() || abort.load(); 
@@ -426,7 +426,7 @@ void rx0_stratum_session(
         }
       }
       
-      boost::this_thread::yield();
+      std::this_thread::yield();
     }
   });
 
@@ -539,20 +539,18 @@ void rx0_stratum_session(
       break;
     }
 
-    boost::this_thread::yield();
+    std::this_thread::yield();
   }
 
   // Clean shutdown
   abort = true;
   cv.notify_all();
 
-  cacheThread.interrupt();
   if (cacheThread.joinable()) {
     cacheThread.join();
   }
 
   if (submitThreadRunning) {
-    subThread.interrupt();
     if (subThread.joinable()) {
       subThread.join();
     }
@@ -614,7 +612,7 @@ void rx0_stratum_session_nossl(
   
   // Thread-safe submit queue
   std::queue<std::string> submitQueue;
-  boost::mutex submitMutex;
+  std::mutex submitMutex;
   std::atomic<bool> abort{false};
 
   auto process_write_queue = [&]() {
@@ -622,7 +620,7 @@ void rx0_stratum_session_nossl(
       while (!abort.load()) {
         std::string msg;
         {
-          boost::lock_guard<boost::mutex> qlock(submitMutex);
+          std::lock_guard<std::mutex> qlock(submitMutex);
           if (submitQueue.empty()) return;
           msg = std::move(submitQueue.front());
           submitQueue.pop();
@@ -649,9 +647,9 @@ void rx0_stratum_session_nossl(
 
   bool submitThreadRunning = true;
 
-  boost::thread subThread([&](){
+  std::thread subThread([&](){
     while (!abort.load()) {
-      boost::unique_lock<boost::mutex> lock(mutex);
+      std::unique_lock<std::mutex> lock(mutex);
       bool *B = isDev ? &submittingDev : &submitting;
       cv.wait(lock, [&]{ return (data_ready && (*B)) || abort.load(); });
       if (abort.load()) break;
@@ -661,7 +659,7 @@ void rx0_stratum_session_nossl(
         std::string msg = boost::json::serialize(S) + "\n";
         
         {
-          boost::lock_guard<boost::mutex> qlock(submitMutex);
+          std::lock_guard<std::mutex> qlock(submitMutex);
           submitQueue.push(std::move(msg));
         }
         process_write_queue();
@@ -675,15 +673,15 @@ void rx0_stratum_session_nossl(
       }
       *B = false;
       data_ready = false;
-      boost::this_thread::yield();
+      std::this_thread::yield();
     }
     submitThreadRunning = false;
   });
 
   // ORIGINAL cache thread synchronization - unchanged (uses mutex, not dsMutex)
-  boost::thread cacheThread([&]() {
+  std::thread cacheThread([&]() {
     while(!abort.load()) {
-      boost::unique_lock<boost::mutex> lock(mutex);
+      std::unique_lock<std::mutex> lock(mutex);
       
       cv.wait(lock, [&]{ 
         return needsDatasetUpdate.load() || abort.load(); 
@@ -705,7 +703,7 @@ void rx0_stratum_session_nossl(
         }
       }
       
-      boost::this_thread::yield();
+      std::this_thread::yield();
     }
   });
 
@@ -818,20 +816,18 @@ void rx0_stratum_session_nossl(
       break;
     }
 
-    boost::this_thread::yield();
+    std::this_thread::yield();
   }
 
   // Clean shutdown
   abort = true;
   cv.notify_all();
 
-  cacheThread.interrupt();
   if (cacheThread.joinable()) {
     cacheThread.join();
   }
 
   if (submitThreadRunning) {
-    subThread.interrupt();
     if (subThread.joinable()) {
       subThread.join();
     }

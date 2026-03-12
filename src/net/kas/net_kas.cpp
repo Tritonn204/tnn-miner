@@ -109,7 +109,7 @@ void kas_session(
   // boost::thread([&](){
   //   submitThread = true;
   //   while(!abort) {
-  //     boost::unique_lock<boost::mutex> lock(mutex);
+  //     std::unique_lock<std::mutex> lock(mutex);
   //     bool *B = isDev ? &submittingDev : &submitting;
   //     cv.wait(lock, [&]{ return (data_ready && (*B)) || abort; });
   //     if (abort) break;
@@ -141,7 +141,7 @@ void kas_session(
   //           setcolor(BRIGHT_WHITE);
   //           accepted++;
 
-  //           boost::this_thread::sleep_for(boost::chrono::milliseconds(10));
+  //           std::this_thread::sleep_for(std::chrono::milliseconds(10));
   //           rx0_getTemplate();
   //         }
   //       } else {
@@ -156,8 +156,8 @@ void kas_session(
   //       setcolor(BRIGHT_WHITE);
   //       break;
   //     }
-  //     //boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
-  //     boost::this_thread::yield();
+  //     //std::this_thread::sleep_for(std::chrono::milliseconds(200));
+  //     std::this_thread::yield();
   //   }
   //   submitThread = false;
   // });
@@ -176,11 +176,11 @@ void kas_session(
   //       {
   //         if (!submitThread)
   //           break;
-  //         boost::this_thread::yield();
+  //         std::this_thread::yield();
   //       }       
   //       return;
   //     }
-  //     boost::this_thread::sleep_for(boost::chrono::seconds(5));
+  //     std::this_thread::sleep_for(std::chrono::seconds(5));
   //   }
   //   catch (const std::exception &e)
   //   {
@@ -193,7 +193,7 @@ void kas_session(
   //     {
   //       if (!submitThread)
   //         break;
-  //       boost::this_thread::yield();
+  //       std::this_thread::yield();
   //     }
   //     setcolor(RED);
   //     std::cerr << e.what() << std::endl;
@@ -201,6 +201,6 @@ void kas_session(
   //     setcolor(BRIGHT_WHITE);
   //     return;
   //   }
-  //   boost::this_thread::yield();
+  //   std::this_thread::yield();
   // }
 }

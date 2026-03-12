@@ -87,7 +87,7 @@ waitForJob:
   while (!isConnected)
   {
     CHECK_CLOSE;
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
   
   while (!ABORT_MINER)
@@ -97,7 +97,7 @@ waitForJob:
       boost::json::value myJob;
       boost::json::value myJobDev;
       {
-        std::scoped_lock<boost::mutex> lockGuard(mutex);
+        std::scoped_lock<std::mutex> lockGuard(mutex);
         myJob = job;
         myJobDev = devJob;
         localJobCounter = jobCounter;

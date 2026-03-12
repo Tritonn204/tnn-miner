@@ -270,10 +270,21 @@ public:
         }
 
         hipEventRecord(stop_event_);
-        hipEventSynchronize(stop_event_);
+        hipError_t sync_err = hipEventSynchronize(stop_event_);
+
+        // Check for async kernel errors (illegal memory access, stack overflow, etc.)
+        hipError_t last_err = hipGetLastError();
 
         if (!success) {
-            fprintf(stderr, "[ERROR] Kernel execution failed\n");
+            fprintf(stderr, "[ERROR] GPU %d: Kernel launch reported failure\n", device_id_);
+        }
+        if (sync_err != hipSuccess) {
+            fprintf(stderr, "[ERROR] GPU %d: hipEventSynchronize failed: %s\n",
+                    device_id_, hipGetErrorString(sync_err));
+        }
+        if (last_err != hipSuccess) {
+            fprintf(stderr, "[ERROR] GPU %d: Async kernel error: %s\n",
+                    device_id_, hipGetErrorString(last_err));
         }
 
         float ms;
@@ -368,20 +379,17 @@ private:
             options.push_back("--device-int128");
           #endif
 
+            options.push_back("-DXELIS_MIN_WG=" + std::to_string(config_.nvidia_blocks.block_min));
+            options.push_back("-DXELIS_MAX_WG=" + std::to_string(config_.nvidia_blocks.block_max));
+
             // Per-kernel register limits via -D defines (arch-dependent)
             {
                 const int major = device_props_.major;
-                // Stage3 hybrid_v2 register cap: tighter on newer archs where
-                // the compiler naturally uses fewer regs.  Too tight on older
-                // archs causes spill → stack overflow → crash.
-                int s3_nreg;
-                if (major >= 9)       s3_nreg = 40;   // Ada / Hopper
-                else if (major >= 8)  s3_nreg = 64;   // Ampere (GA10x)
-                else                  s3_nreg = 80;   // Turing / Volta / older
+                int s3_nreg = 40; // (major <= 7) ? 56 : 40;  // Turing/Volta and older: 56, Ampere+: 40
                 options.push_back("-DXELIS_S3_NREG=" + std::to_string(s3_nreg));
             }
 
-            // Add device ID to ensure separate module per GPU (avoids context issues)
+            // Per-device module key (NVIDIA modules are bound to a CUDA context)
             options.push_back("-DDEVICE_ID=" + std::to_string(device_id_));
     #endif
 
@@ -892,12 +900,24 @@ private:
             std::this_thread::sleep_for(std::chrono::milliseconds(poll_interval_ms));
         }
         
+        // Check for async kernel errors after completion
+        hipError_t post_err = hipGetLastError();
+        if (post_err != hipSuccess) {
+            fprintf(stderr, "[AUTOTUNE] GPU %d: Kernel execution error: %s (batch=%u, block=%d, strategy=%u)\n",
+                    device_id_, hipGetErrorString(post_err), test_batch, test_block_size, test_strategy);
+            fflush(stderr);
+            hipEventDestroy(start_ev);
+            hipEventDestroy(stop_ev);
+            return result;
+        }
+
         float ms;
         hipError_t time_err = hipEventElapsedTime(&ms, start_ev, stop_ev);
 
         if (time_err != hipSuccess) {
-            TNN_LOG_DEBUG("[TUNE DEBUG] GPU %d: hipEventElapsedTime failed: %s\n",
+            fprintf(stderr, "[AUTOTUNE] GPU %d: hipEventElapsedTime failed: %s\n",
                     device_id_, hipGetErrorString(time_err));
+            fflush(stderr);
             hipEventDestroy(start_ev);
             hipEventDestroy(stop_ev);
             return result;
@@ -1091,6 +1111,7 @@ private:
                 : "?";
             TuneOutputBuffer out(device_id_);
             out.printf("[AUTOTUNE] GPU %d: === Strategy: %s (%u) ===\n", device_id_, strategy_label, test_strategy);
+            out.flush();
         }
 
         // Batch probing uses a fixed base unit independent of block_size so that
@@ -1173,11 +1194,23 @@ private:
                 int test_num_blocks = probe_batch / test_block_size;
 
                 // Warmup run
+                if (tnn_log_enabled(TnnLogLevel::Trace)) {
+                    fprintf(stderr, "[TRACE] GPU %d: Warmup: strategy=%u, batch=%u, block=%d, blocks=%d\n",
+                            device_id_, test_strategy, probe_batch, test_block_size, test_num_blocks);
+                    fflush(stderr);
+                }
+
                 auto warmup = run_timed_kernel_test(
                     probe_batch, test_block_size, test_num_blocks,
                     test_input, test_outputs, test_scratch, test_target, test_solutions,
                     tune_stream, timeout_ms * 2, test_strategy
                 );
+
+                if (tnn_log_enabled(TnnLogLevel::Trace)) {
+                    fprintf(stderr, "[TRACE] GPU %d: Warmup: valid=%d, time=%.2fms\n",
+                            device_id_, warmup.valid, warmup.time_ms);
+                    fflush(stderr);
+                }
 
                 if (!warmup.valid) {
                     block_out.printf("[AUTOTUNE] GPU %d:   %.1fx (batch=%6u): WARMUP FAILED\n",
@@ -1196,13 +1229,30 @@ private:
                 bool any_timeout = false;
 
                 for (int iter = 0; iter < config_.autotune_iterations; iter++) {
+                    if (tnn_log_enabled(TnnLogLevel::Trace)) {
+                        fprintf(stderr, "[TRACE] GPU %d: Bench %d/%d: strategy=%u, batch=%u, block=%d\n",
+                                device_id_, iter + 1, config_.autotune_iterations, test_strategy, probe_batch, test_block_size);
+                        fflush(stderr);
+                    }
+
                     auto result = run_timed_kernel_test(
                         probe_batch, test_block_size, test_num_blocks,
                         test_input, test_outputs, test_scratch, test_target, test_solutions,
                         tune_stream, timeout_ms, test_strategy
                     );
 
-                    if (!result.valid) break;
+                    if (tnn_log_enabled(TnnLogLevel::Trace)) {
+                        fprintf(stderr, "[TRACE] GPU %d: Bench %d: valid=%d, time=%.2fms\n",
+                                device_id_, iter + 1, result.valid, result.time_ms);
+                        fflush(stderr);
+                    }
+
+                    if (!result.valid) {
+                        fprintf(stderr, "[AUTOTUNE] GPU %d: Benchmark iter %d FAILED (strategy=%u, batch=%u, block=%d)\n",
+                                device_id_, iter + 1, test_strategy, probe_batch, test_block_size);
+                        fflush(stderr);
+                        break;
+                    }
 
                     total_time += result.time_ms;
                     valid_runs++;

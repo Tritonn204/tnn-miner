@@ -121,7 +121,7 @@ void dero_session(
 
   // Thread-safe queue for submissions
   std::queue<std::string> submitQueue;
-  boost::mutex submitMutex;
+  std::mutex submitMutex;
   std::atomic<bool> abort{false};
 
   auto process_write_queue = [&]() {
@@ -132,7 +132,7 @@ void dero_session(
         
         // Get next message
         {
-          boost::lock_guard<boost::mutex> qlock(submitMutex);
+          std::lock_guard<std::mutex> qlock(submitMutex);
           if (submitQueue.empty()) {
             return;
           }
@@ -157,9 +157,9 @@ void dero_session(
 
   bool submitThreadRunning = true;
 
-  boost::thread subThread([&](){
+  std::thread subThread([&](){
     while(!abort.load()) {
-      boost::unique_lock<boost::mutex> lock(mutex);
+      std::unique_lock<std::mutex> lock(mutex);
       bool *B = isDev ? &submittingDev : &submitting;
       cv.wait(lock, [&]{ return (data_ready && (*B)) || abort.load(); });
       if (abort.load()) break;
@@ -170,7 +170,7 @@ void dero_session(
         
         // Queue the message for thread-safe sending
         {
-          boost::lock_guard<boost::mutex> qlock(submitMutex);
+          std::lock_guard<std::mutex> qlock(submitMutex);
           submitQueue.push(std::move(msg));
         }
         
@@ -186,7 +186,7 @@ void dero_session(
       }
       *B = false;
       data_ready = false;
-      boost::this_thread::yield();
+      std::this_thread::yield();
     }
     submitThreadRunning = false;
   });
@@ -212,7 +212,7 @@ void dero_session(
         if (!jsonEc)
         {
           // Acquire lock BEFORE modifying job/devJob to prevent race condition
-          std::scoped_lock<boost::mutex> lockGuard(mutex);
+          std::scoped_lock<std::mutex> lockGuard(mutex);
 
           if (isDev)
             devJob = workData;
@@ -297,7 +297,7 @@ void dero_session(
       setForDisconnected(C, B, &abort, &data_ready, &cv);
       break;
     }
-    boost::this_thread::yield();
+    std::this_thread::yield();
   }
 
   // Clean shutdown
@@ -305,7 +305,6 @@ void dero_session(
   cv.notify_all();
   
   if (submitThreadRunning) {
-    subThread.interrupt();
     if (subThread.joinable()) {
       subThread.join();
     }

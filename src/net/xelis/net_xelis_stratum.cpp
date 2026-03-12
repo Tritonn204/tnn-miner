@@ -98,7 +98,7 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
     }
 
     {
-      std::scoped_lock<boost::mutex> lockGuard(mutex);
+      std::scoped_lock<std::mutex> lockGuard(mutex);
       (*JV) = J;
       *C = true;
       (*h)++;
@@ -107,7 +107,7 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
   }
   else if (M == XelisStratum::s_setDifficulty)
   {
-    std::scoped_lock<boost::mutex> lockGuard(mutex);
+    std::scoped_lock<std::mutex> lockGuard(mutex);
     int64_t *d = isDev ? &difficultyDev : &difficulty;
     (*d) = packet["params"].as_array()[0].get_double();
     if ((*d) == 0)
@@ -137,7 +137,7 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
     J["miner_work"] = blobStr;
 
     {
-      std::scoped_lock<boost::mutex> lockGuard(mutex);
+      std::scoped_lock<std::mutex> lockGuard(mutex);
       (*JV) = J;
       (*h)++;
       jobCounter++;
@@ -228,7 +228,7 @@ int handleXStratumResponse(boost::json::object packet, bool isDev)
 
     J["miner_work"] = blobStr;
     {
-      std::scoped_lock<boost::mutex> lockGuard(mutex);
+      std::scoped_lock<std::mutex> lockGuard(mutex);
       (*JV) = J;
     }
   }
@@ -276,7 +276,7 @@ struct StratumWriteQueue {
   net::strand<net::io_context::executor_type> strand;
 
   std::queue<std::string> q;
-  boost::mutex qmtx;
+  std::mutex qmtx;
   std::atomic<bool> writeInProgress{false};
   std::atomic<bool> abort{false};
 
@@ -285,7 +285,7 @@ struct StratumWriteQueue {
 
   void enqueue(std::string msg) {
     {
-      boost::lock_guard<boost::mutex> lock(qmtx);
+      std::lock_guard<std::mutex> lock(qmtx);
       q.push(std::move(msg));
     }
     process();
@@ -301,7 +301,7 @@ struct StratumWriteQueue {
       while (!abort.load()) {
         std::string msg;
         {
-          boost::lock_guard<boost::mutex> lock(qmtx);
+          std::lock_guard<std::mutex> lock(qmtx);
           if (q.empty()) {
             writeInProgress.store(false);
             return;
@@ -605,9 +605,9 @@ void xelis_stratum_session(
 
   // Submit thread
   bool submitThreadRunning = true;
-  boost::thread submitThread([&]() {
+  std::thread submitThread([&]() {
     while (!abort.load()) {
-      boost::unique_lock<boost::mutex> lock(mutex);
+      std::unique_lock<std::mutex> lock(mutex);
       cv.wait(lock, [&] { return (data_ready && (*B)) || abort.load(); });
       if (abort.load()) break;
 
@@ -628,7 +628,7 @@ void xelis_stratum_session(
 
       *B = false;
       data_ready = false;
-      boost::this_thread::yield();
+      std::this_thread::yield();
     }
     submitThreadRunning = false;
   });
@@ -664,7 +664,7 @@ void xelis_stratum_session(
       break;
     }
 
-    boost::this_thread::yield();
+    std::this_thread::yield();
   }
 
   // Shutdown
@@ -673,7 +673,6 @@ void xelis_stratum_session(
   cv.notify_all();
 
   if (submitThreadRunning) {
-    submitThread.interrupt();
     if (submitThread.joinable()) submitThread.join();
   }
 
@@ -758,9 +757,9 @@ void xelis_stratum_session_nossl(
 
   // Submit thread
   bool submitThreadRunning = true;
-  boost::thread submitThread([&]() {
+  std::thread submitThread([&]() {
     while (!abort.load()) {
-      boost::unique_lock<boost::mutex> lock(mutex);
+      std::unique_lock<std::mutex> lock(mutex);
       cv.wait(lock, [&] { return (data_ready && (*B)) || abort.load(); });
       if (abort.load()) break;
 
@@ -781,7 +780,7 @@ void xelis_stratum_session_nossl(
 
       *B = false;
       data_ready = false;
-      boost::this_thread::yield();
+      std::this_thread::yield();
     }
     submitThreadRunning = false;
   });
@@ -817,7 +816,7 @@ void xelis_stratum_session_nossl(
       break;
     }
 
-    boost::this_thread::yield();
+    std::this_thread::yield();
   }
 
   // Shutdown
@@ -826,7 +825,6 @@ void xelis_stratum_session_nossl(
   cv.notify_all();
 
   if (submitThreadRunning) {
-    submitThread.interrupt();
     if (submitThread.joinable()) submitThread.join();
   }
 
