@@ -1,5 +1,5 @@
 # tnn-miner
-# An open-source Dero/Spectre/Xelis miner
+# An optimized, open-source Cryptocurrency
 
 **Dependencies:**
   - OpenSSL v3.0.2 or higher (static libs)
@@ -184,7 +184,11 @@ CPU, NVIDIA, and AMD each require their own wrapper — make sure to use the one
 - Per-GPU stats: hashrate, PCI bus mapping, share counts
 - Stats served directly from the miner process (no log parsing)
 
-If you intend to build from source without dev fees, please consider a one-time donation to the Dero address **_tritonn_** (Dero Name Service).
+If you intend to build from source without dev fees, please consider a one-time donation:
+
+- **Dero**: `dero1qy5ewgqk8cw8drjhrcr0lpdcm26edqcwdwjke4x67m08nwd2hw4wjqqp6y2n7` (or Dero Name Service: **_tritonn_**)
+- **Monero**: `49FCeAUYsPHYV3QLSKzQEpTgmKjHGYMzv2LMs4K7hprWK5FZNS31puWTsSxZo1rQTtVDw9Bi4YhRJYNyMc66zBuMMUhYJqe`
+- **Xelis**: `xel:xz9574c80c4xegnvurazpmxhw5dlg2n0g9qm60uwgt75uqyx3pcsqzzra9m`
 
 Dev fees allow me to invest more time into maintaining, updating, and improving tnn-miner.
 
