@@ -53,7 +53,7 @@ Do note that CMakeLists.txt will need to be altered if your libraries are instal
 
 ### Support
 
-If you have trouble compiling, please either file a GitLab issue or find @Tritton or @dirker on Discord: https://discord.gg/xeVtduYteK
+If you have trouble compiling, please either file a GitLab issue or find @Tritonn or @dirker on Discord: https://discord.gg/xeVtduYteK
 
 ## USAGE
 This miner can be activated from the command line with the following parameters. Simply adjust the syntax for use with your shell or terminal of choice!
