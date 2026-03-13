@@ -12,7 +12,6 @@ POOL_PORT=""
 USER_VAL=""
 PASS_VAL=""
 ALGO_VAL=""
-API_PORT=""
 
 # ---------------- PARSE ARGS ----------------
 i=0
@@ -32,10 +31,6 @@ while [[ $i -lt ${#ARGS[@]} ]]; do
             ;;
         --algo)
             ALGO_VAL="${ARGS[$((i+1))]}"
-            ((i+=2))
-            ;;
-        --api-port)
-            API_PORT="${ARGS[$((i+1))]}"
             ((i+=2))
             ;;
         *)

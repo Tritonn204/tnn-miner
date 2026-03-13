@@ -61,6 +61,8 @@ This miner can be activated from the command line with the following parameters.
 General:
   --help                    Produce help message
   --broadcast               Creates an http server to query miner stats
+  --mmpos                   Enable mmpOS-compatible /mmpos API endpoint
+                            (implies --broadcast)
   --testnet                 Adjusts in-house parameters to mine on testnets
   --daemon-address arg      Node/pool URL or IP address to mine to
   --port arg                The port used to connect to the node
@@ -71,6 +73,10 @@ General:
                             minimum is 1
   --report-interval arg     Your desired status update interval in seconds
   --no-lock                 Disables CPU affinity / CPU core binding
+  --priority arg            <normal|above|high> Set mining thread priority
+                            (default: normal). WARNING: 'high' may reduce
+                            system responsiveness on Windows
+  --no-msr                  Disable MSR optimization
   --ignore-wallet           Disables wallet validation, for specific uses with
                             pool mining
 
@@ -83,11 +89,14 @@ Stratum:
                             on Pools or Bridges
 
 Coin Selection:
-  --<symbol>                Will mine the coin corresponding to <symbol> if
-                            supported
+  --<symbol>                Mine the coin corresponding to <symbol>. For
+                            versioned algorithms, append version: --xel-v3,
+                            --xel=v2, etc. Supported versioned coins: XEL
+                            (v1/v2/v3, default v3)
   --randomx                 For mining RandomX coins
   --yespower arg            Mine with custom yespower parameters (format:
-                            N=2048,R=32,pers=string)
+                            N=2048,R=32,pers=string,ver=1.0). ver is optional,
+                            defaults to 1.0 (use 0.5 for yescrypt)
 
 Dero:
   --dero-benchmark arg      Runs a mining benchmark for <arg> seconds (adheres
@@ -96,6 +105,8 @@ Dero:
 Xelis:
   --xatum                   Required for mining to Xatum pools on Xelis
   --bench-xelis             Run a benchmark of xelis-hash with 1 thread
+  --xelis-simd arg          <avx512|avx2|aes|none> Override stage 1 SIMD
+                            dispatch level
 
 RandomX:
   --rx-hugepages            Use huge pages for RandomX
@@ -107,11 +118,16 @@ Testing:
   --test-spectre            Run detailed diagnostics for SpectreX
   --test-xelis              Run the xelis-hash tests from the official source
                             code
+  --hip-test-xelis          Run stage-by-stage validation of Xelis v3 GPU
+                            kernels
+  --test-yespower           Run yespower known-vector tests for all builtin
+                            variants
   --test-astrix             Run a basic astrix-hash validation test
   --test-hoosat             Run a basic hoohash validation test
   --test-nexellia           Run a basic nxl-hash validation test
   --test-waglayla           Run a basic wala-hash validation test
   --test-shai               Run a basic shai-hive validation test
+  --test-rin                Run a basic rinhash validation test
 
 Advanced:
   --tune-warmup arg (=1)    Number of seconds to warmup the CPU before starting
@@ -122,6 +138,8 @@ Advanced:
   --no-tune arg             <branch|lookup|avx2|wolf|aarch64> Use the specified
                             AstroBWTv3 algorithm and skip tuning
   --mine-time arg (=0)      Mine for a given number of seconds and then exit
+  --gpu-retune              Delete GPU autotune cache and re-run tuning from
+                            scratch
 
 DEBUG:
   --op arg                  Sets which branch op to benchmark (0-255),
@@ -131,10 +149,42 @@ DEBUG:
   --sabench                 Runs a benchmark for divsufsort on snapshot files
                             in the 'tests' directory
   --quiet                   Do not print TNN banner or stratum job messages
+  --log-level arg           <off|info|debug|trace> Set log verbosity (default:
+                            info)
 ```
 ### If the miner is run without any args, a CLI wizard will simply ask you to provide the required options one at a time.
 
-If you intend to build from source without dev fees, please consider a one-time donation to the Dero address **_tritonn_** (Dero Name Service). 
+## mmpos (mmpOS) Setup
+
+tnn-miner ships with custom miner wrappers for [mmpOS](https://app.mmpos.eu/). Three variants are provided:
+
+| Variant | Binary | Broadcast Port | Use Case |
+|---------|--------|---------------|----------|
+| `hiveos+mmpos` | `tnn-miner` | 8989 | CPU mining |
+| `hiveos+mmpos-amd` | `tnn-miner-rocm` | 8990 | AMD GPU mining |
+| `hiveos+mmpos-nvidia` | `tnn-miner-cuda` | 8991 | NVIDIA GPU mining |
+
+### Installation
+
+CPU, NVIDIA, and AMD each require their own wrapper — make sure to use the one matching your hardware.
+
+1. Download the appropriate wrapper archive from the [releases page](https://git.tritonn.dev/Tritonn/tnn-miner/-/releases)
+2. Upload it as a custom miner in mmpOS
+
+### Flight Sheet Configuration
+
+- **Pool**: `pool_host:port` (do not include `stratum+tcp://` prefix)
+- **Wallet**: Your wallet address
+- **Password**: Optional, defaults to `x`
+- **Algorithm**: mmpOS does not pass `--algo` by default. The wrapper defaults to Xelis (`--XEL`). To mine a different coin, add the coin flag in **extra arguments**, e.g. `--algo --XMR`
+
+### Features
+
+- Native `/mmpos` HTTP endpoint with per-device hashrate, PCI bus IDs, and per-device share tracking (accepted/rejected)
+- Per-GPU stats: hashrate, PCI bus mapping, share counts
+- Stats served directly from the miner process (no log parsing)
+
+If you intend to build from source without dev fees, please consider a one-time donation to the Dero address **_tritonn_** (Dero Name Service).
 
 Dev fees allow me to invest more time into maintaining, updating, and improving tnn-miner.
 
