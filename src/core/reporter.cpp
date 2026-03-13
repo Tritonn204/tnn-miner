@@ -9,6 +9,7 @@ extern std::atomic<bool> datasetInitInProgress;
 
 #ifdef TNN_HIP
 extern std::atomic<bool> g_mining_started;
+#include <tnn_hip/core/devInfo.hip.h>
 #endif
 
 extern bool beQuiet;
@@ -166,12 +167,32 @@ int update_handler(const boost::system::error_code& error)
             setcolor(BRIGHT_YELLOW);
 
             for (int i = 0; i < HIP_deviceCount; i++) {
-                printf("\n[ GPU #%d | PCIe ID: %s | %s | %lf%sH/s ]",
-                    i,
-                    HIP_pcieID[i].c_str(),
-                    HIP_names[i].c_str(),
-                    gpu_hashrates[i],
-                    units[gpu_unit_indices[i]].c_str());
+                int a = deviceAccepted[i].load(std::memory_order_relaxed);
+                int r = deviceRejected[i].load(std::memory_order_relaxed);
+
+                if (g_powerMonAvail) {
+                    double watts = getDevicePowerWatts(i);
+                    if (watts > 0.0) {
+                        // Reconstruct raw H/s for efficiency calc
+                        double raw_hs = gpu_hashrates[i];
+                        for (int u = 0; u < gpu_unit_indices[i]; u++) raw_hs *= 1000.0;
+                        double eff = raw_hs / watts;
+                        int effUnit = 0;
+                        while (eff >= 1000 && effUnit < 5) { effUnit++; eff /= 1000.0; }
+
+                        printf("\n[ GPU #%d | PCIe ID: %s | %s | %lf%sH/s | %.1fW | %.2f%sH/W | A:%d R:%d ]",
+                            i, HIP_pcieID[i].c_str(), HIP_names[i].c_str(),
+                            gpu_hashrates[i], units[gpu_unit_indices[i]].c_str(),
+                            watts, eff, units[effUnit].c_str(),
+                            a, r);
+                        continue;
+                    }
+                }
+
+                printf("\n[ GPU #%d | PCIe ID: %s | %s | %lf%sH/s | A:%d R:%d ]",
+                    i, HIP_pcieID[i].c_str(), HIP_names[i].c_str(),
+                    gpu_hashrates[i], units[gpu_unit_indices[i]].c_str(),
+                    a, r);
             }
 
             fflush(stdout);

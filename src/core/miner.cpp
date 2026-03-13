@@ -94,6 +94,7 @@ const char *tnnTargetArch = XSTR(CPU_ARCHTARGET);
 double latest_hashrate = 0.0;
 
 bool gpuMine = false;
+bool g_powerMonAvail = false;
 bool printHashrateOnExit = false;
 std::string wallet = "NULL";
 std::string devWallet = "NULL";
@@ -400,6 +401,7 @@ int tnn_main(int argc, char **argv)
     HIP_names[i] = getDeviceName(i);
     HIP_pcieID[i] = getPCIBusId(i);
   }
+  g_powerMonAvail = initPowerMonitoring();
 #endif
   // printf("post test\n");
 
