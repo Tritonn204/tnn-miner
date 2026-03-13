@@ -1,109 +1,73 @@
 #!/usr/bin/env bash
 source /hive/miners/custom/tnn-miner-rocm/h-manifest.sh
 
-
-start_time=$(date +%s)
-
-get_cpu_temps () {
-  local t_core=`cpu-temp`
-  local i=0
-  local l_num_cores=$1
-  local l_temp=
-  for (( i=0; i < ${l_num_cores}; i++ )); do
-    l_temp+="$t_core "
-  done
-  echo ${l_temp[@]} | tr " " "\n" | jq -cs '.'
-}
-
-get_cpu_fans () {
-  local t_fan=0
-  local i=0
-  local l_num_cores=$1
-  local l_fan=
-  for (( i=0; i < ${l_num_cores}; i++ )); do
-    l_fan+="$t_fan "
-  done
-  echo ${l_fan[@]} | tr " " "\n" | jq -cs '.'
-}
-
-
-
-get_log_time_diff(){
-  local a=0
-  let a=`date +%s`-`stat --format='%Y' $log_name`
-  echo $a
-}
-
-
-
 uptime=$(get_miner_uptime)
 [[ $uptime -lt 60 ]] && head -n 50 $log_name > $log_head_name
-echo "miner uptime is: $uptime"
-
-cpu_temp=`cpu-temp`
-[[ $cpu_temp = "" ]] && cpu_temp=null
 
 DATA=$(curl -s http://localhost:8990/stats)
+[[ -z "$DATA" ]] && echo "No stats from miner API" && return
 
-# Per-GPU hashrates (H/s from API)
 gpu_count=$(jq '.gpus | length // 0' <<< "$DATA")
 hs=()
-temp=()
-fan=()
-busid=()
+bus_numbers=()
 
 if [[ "$gpu_count" -gt 0 ]]; then
   for (( i=0; i < gpu_count; i++ )); do
     gpu_hr=$(jq ".gpus[$i].hashrate // 0" <<< "$DATA")
-    gpu_hr_khs=$(echo "scale=2; $gpu_hr / 1000" | bc)
-    hs+=($gpu_hr_khs)
-    # GPU temps/fans via gpu-stats if available, else use cpu-temp as fallback
-    temp+=($cpu_temp)
-    fan+=(0)
-    gpu_busid=$(jq -r ".gpus[$i].pcie_id // \"gpu$i\"" <<< "$DATA")
-    busid+=("$gpu_busid")
+    hs+=($gpu_hr)
+
+    # Parse PCI bus ID (e.g. "0000:0a:00.0") to decimal bus number
+    pcie_id=$(jq -r ".gpus[$i].pcie_id // \"\"" <<< "$DATA")
+    if [[ -n "$pcie_id" ]]; then
+      bus_hex=$(echo "$pcie_id" | sed -n 's/.*:\([0-9a-fA-F]\{2\}\):.*/\1/p')
+      if [[ -n "$bus_hex" ]]; then
+        bus_numbers+=($((16#$bus_hex)))
+      else
+        bus_numbers+=($i)
+      fi
+    else
+      bus_numbers+=($i)
+    fi
   done
 else
-  # Fallback: single aggregate hashrate
   total_hr=$(jq '.hashrate // 0' <<< "$DATA")
-  total_khs=$(echo "scale=2; $total_hr / 1000" | bc)
-  hs+=($total_khs)
-  temp+=($cpu_temp)
-  fan+=(0)
+  hs+=($total_hr)
 fi
 
-total_khs=0
+# Total hashrate in khs for the $khs variable HiveOS expects
+total_hs=0
 for h in "${hs[@]}"; do
-  total_khs=$(echo "scale=2; $total_khs + $h" | bc)
+  total_hs=$(echo "$total_hs + $h" | bc)
 done
-khs=$total_khs
+khs=$(echo "scale=2; $total_hs / 1000" | bc)
 
 ac=$(jq '.accepted // 0' <<< "$DATA")
 rj=$(jq '.rejected // 0' <<< "$DATA")
 uptime=$(jq '.uptime // 0' <<< "$DATA")
-ver=$(jq '.version // "unknown"' <<< "$DATA")
-echo "$ver"
+ver=$(jq -r '.version // "unknown"' <<< "$DATA")
 algo=$(jq -r '.algo // "UNKNOWN"' <<< "$DATA")
-hs_units="khs"
 
-echo "total_khs: $total_khs"
-echo "gpu_count: $gpu_count"
+# GPU temps and fans from HiveOS gpu-stats
+temp='[]'
+fan='[]'
+if [[ -f /run/hive/gpu-stats.json ]]; then
+  temp=$(jq -c '[.temp[]? // 0]' /run/hive/gpu-stats.json 2>/dev/null || echo '[]')
+  fan=$(jq -c '[.fan[]? // 0]' /run/hive/gpu-stats.json 2>/dev/null || echo '[]')
+fi
 
 stats=$(jq -nc \
-        --argjson total_khs "$total_khs" \
-        --argjson khs "$total_khs" \
-        --arg hs_units "$hs_units" \
+        --argjson khs "$khs" \
+        --arg hs_units "hs" \
         --argjson hs "$(printf '%s\n' "${hs[@]}" | jq -cs '.')" \
-        --argjson temp "$(printf '%s\n' "${temp[@]}" | jq -cs '.')" \
-        --argjson fan "$(printf '%s\n' "${fan[@]}" | jq -cs '.')" \
+        --argjson temp "$temp" \
+        --argjson fan "$fan" \
         --arg uptime "$uptime" \
-        --argjson ver "$ver" \
+        --arg ver "$ver" \
         --argjson ac "$ac" --argjson rj "$rj" \
         --arg algo "$algo" \
-        '{$total_khs, $khs, $hs_units, $hs, $temp, $fan, $uptime, $ver, ar: [$ac, $rj], $algo }')
+        --argjson bus_numbers "$(printf '%s\n' "${bus_numbers[@]}" | jq -cs '.')" \
+        '{$khs, $hs_units, $hs, $temp, $fan, $uptime, $ver, ar: [$ac, $rj], $algo, $bus_numbers}')
 
-# debug output
-
- echo khs:   ${hs[@]}
- echo stats: $stats
- echo ----------
+echo khs: $khs
+echo stats: $stats
+echo ----------

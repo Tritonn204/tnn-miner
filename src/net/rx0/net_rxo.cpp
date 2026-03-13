@@ -277,6 +277,12 @@ void rx0_session(
         if (res && res->status == 200)
         {
           boost::json::object result = boost::json::parse(res->body).as_object();
+          int submitDevice = -1;
+          if (result.contains("id") && result["id"].is_int64()) {
+            int respId = static_cast<int>(result["id"].as_int64());
+            if (SubmitTracker::isSubmitId(respId))
+              submitDevice = submitTracker.resolve(respId);
+          }
           if (!result["error"].is_null()) {
             setcolor(isDev ? CYAN : RED);
             if (result["error"].is_object() && result["error"].as_object().contains("message")) {
@@ -286,6 +292,7 @@ void rx0_session(
             fflush(stdout);
             setcolor(BRIGHT_WHITE);
             rejected++;
+            if (!isDev) recordDeviceShare(submitDevice, false);
           } else {
             setcolor(isDev ? CYAN : BRIGHT_YELLOW);
             printf("\n");
@@ -294,6 +301,7 @@ void rx0_session(
             fflush(stdout);
             setcolor(BRIGHT_WHITE);
             accepted++;
+            if (!isDev) recordDeviceShare(submitDevice, true);
 
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             rx0_getTemplate();

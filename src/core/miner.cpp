@@ -115,6 +115,9 @@ std::vector<std::vector<int64_t>> HIP_rates5min(32);
 std::vector<std::vector<int64_t>> HIP_rates1min(32);
 std::vector<std::vector<int64_t>> HIP_rates30sec(32);
 
+std::atomic<int> deviceAccepted[33] = {};
+std::atomic<int> deviceRejected[33] = {};
+
 std::atomic<int64_t> counter = 0;
 std::atomic<int64_t> benchCounter = 0;
 boost::asio::io_context my_context;
@@ -1110,6 +1113,12 @@ int tnn_main(int argc, char **argv)
   {
     broadcastStats = true;
   }
+
+  if (vm.count("mmpos"))
+  {
+    mmposMode = true;
+    broadcastStats = true;
+  }
   // GPU-specific
   if (vm.count("batch-size"))
   {
@@ -1604,6 +1613,7 @@ Mining:
       BroadcastServer::gpu_pcie_ids_ptr = HIP_pcieID;
     }
 #endif
+    BroadcastServer::mmposEnabled = mmposMode;
     std::thread BROADCAST(BroadcastServer::serverThread, &rate30sec, &accepted, &rejected, algoName(miningProfile.coin.miningAlgo), versionString, reportInterval);
     BROADCAST.detach();
   }

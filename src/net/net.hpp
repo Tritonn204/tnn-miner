@@ -14,6 +14,8 @@
 
 #include <iostream>
 #include <atomic>
+#include <queue>
+#include <unordered_map>
 
 #include "sessions.hpp"
 
@@ -36,6 +38,71 @@ extern boost::json::object devShare;
 
 extern bool submitting;
 extern bool submittingDev;
+
+// ---------------------------------------------------------------------------
+// Per-device share tracking via dynamic RPC IDs
+// ---------------------------------------------------------------------------
+// Submit IDs start at SUBMIT_ID_BASE (100) to avoid collisions with
+// subscribe (1), authorize (2), and the legacy static submitID (7).
+// Each submit gets a unique monotonic ID; a map records which device
+// (GPU index, or -1 for CPU) originated it.  Response handlers call
+// resolve() to look up + consume the mapping.
+// ---------------------------------------------------------------------------
+struct SubmitTracker {
+    static constexpr int SUBMIT_ID_BASE = 100;
+
+    // Generate the next submit ID and associate it with `device`.
+    int nextId(int device) {
+        int id = counter_.fetch_add(1, std::memory_order_relaxed);
+        {
+            std::lock_guard<std::mutex> lk(mu_);
+            pending_[id] = device;
+        }
+        return id;
+    }
+
+    // Look up the device for a response ID.  Returns the device index
+    // and removes the entry, or returns -1 if the ID is not ours.
+    int resolve(int id) {
+        std::lock_guard<std::mutex> lk(mu_);
+        auto it = pending_.find(id);
+        if (it == pending_.end()) return -1;
+        int dev = it->second;
+        pending_.erase(it);
+        return dev;
+    }
+
+    // Quick check: is this ID one of our submit IDs?
+    static bool isSubmitId(int id) { return id >= SUBMIT_ID_BASE; }
+
+    // --- Solo FIFO (for protocols without ID echo) ---
+    // Push device index when submitting a solo block.
+    void pushSoloDevice(int device, bool isDev) {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (isDev) soloDevFifo_.push(device);
+        else       soloFifo_.push(device);
+    }
+
+    // Pop device index when a solo response arrives.
+    // Returns -1 if queue is empty.
+    int popSoloDevice(bool isDev) {
+        std::lock_guard<std::mutex> lk(mu_);
+        auto& q = isDev ? soloDevFifo_ : soloFifo_;
+        if (q.empty()) return -1;
+        int dev = q.front();
+        q.pop();
+        return dev;
+    }
+
+private:
+    std::atomic<int> counter_{SUBMIT_ID_BASE};
+    std::mutex mu_;
+    std::unordered_map<int, int> pending_;
+    std::queue<int> soloFifo_;
+    std::queue<int> soloDevFifo_;
+};
+
+extern SubmitTracker submitTracker;
 
 extern std::condition_variable cv;
 extern std::mutex mutex;
@@ -104,6 +171,19 @@ inline void fail(char const *where, char const *why) noexcept
     std::cerr << '\n' << where << ": " << why << "\n";
     setcolor(BRIGHT_WHITE);
     std::cerr.flush();
+}
+
+// TNN Convention: mining code sets "rpc_id" on share/devShare.
+// Network submit code calls hoist_rpc_id() before serializing
+// to move it to the wire-format "id" field.
+// Returns the ID value, or -1 if not present.
+inline int hoist_rpc_id(boost::json::object& obj) {
+    auto it = obj.find("rpc_id");
+    if (it == obj.end()) return -1;
+    int id = static_cast<int>(it->value().to_number<int64_t>());
+    obj["id"] = id;
+    obj.erase("rpc_id");
+    return id;
 }
 
 inline tcp::endpoint resolve_host(

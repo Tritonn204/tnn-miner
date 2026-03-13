@@ -440,6 +440,7 @@ void verus_stratum_session(
         boost::json::object *S = &share;
         if (isDev)
           S = &devShare;
+        hoist_rpc_id(*S);
 
         boost::system::error_code ec;
         std::string msg = boost::json::serialize((*S)) + "\n";

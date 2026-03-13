@@ -168,6 +168,7 @@ waitForJob:
             switch (devMiningProfile.protocol)
             {
             case PROTO_SPECTRE_SOLO:
+              submitTracker.pushSoloDevice(-1, true);
               devShare = {{"block_template", hexStr(&WORK[0], SpectreX::INPUT_SIZE).c_str()}};
               break;
             case PROTO_SPECTRE_STRATUM:
@@ -175,7 +176,7 @@ waitForJob:
               Num(std::to_string(n).c_str(),10).print(nonceStr, 16);
               std::string fullWorkerName = std::string(devWorkerName);
               fullWorkerName += "-" + std::string(tnnTargetArch);
-              devShare = {{{"id", SpectreStratum::submitID},
+              devShare = {{{"rpc_id", submitTracker.nextId(-1)},
                         {"method", SpectreStratum::submit.method.c_str()},
                         {"params", {fullWorkerName.c_str(),
                                     myJobDev.at("jobId").as_string().c_str(),
@@ -193,12 +194,13 @@ waitForJob:
             switch (miningProfile.protocol)
             {
             case PROTO_SPECTRE_SOLO:
+              submitTracker.pushSoloDevice(-1, false);
               share = {{"block_template", hexStr(&WORK[0], SpectreX::INPUT_SIZE).c_str()}};
               break;
             case PROTO_SPECTRE_STRATUM:
               std::vector<char> nonceStr;
               Num(std::to_string(n).c_str(),10).print(nonceStr, 16);
-              share = {{{"id", SpectreStratum::submitID},
+              share = {{{"rpc_id", submitTracker.nextId(-1)},
                         {"method", SpectreStratum::submit.method.c_str()},
                         {"params", {workerName,
                                     myJob.at("jobId").as_string().c_str(),

@@ -224,8 +224,10 @@ int handleAstrixStratumResponse(boost::json::object packet, bool isDev)
       }
     }
     break;
-    case AstrixStratum::submitID:
+    default:
     {
+      if (!SubmitTracker::isSubmitId(id)) break;
+      int submitDevice = submitTracker.resolve(id);
       printf("\n");
       if (isDev)
       {
@@ -235,6 +237,7 @@ int handleAstrixStratumResponse(boost::json::object packet, bool isDev)
       if (!packet["result"].is_null() && packet.at("result").get_bool())
       {
         if (!isDev) accepted++;
+        if (!isDev) recordDeviceShare(submitDevice, true);
         std::cout << "Stratum: share accepted" << std::endl;
         fflush(stdout);
         setcolor(BRIGHT_WHITE);
@@ -242,6 +245,7 @@ int handleAstrixStratumResponse(boost::json::object packet, bool isDev)
       else
       {
         if (!isDev) rejected++;
+        if (!isDev) recordDeviceShare(submitDevice, false);
         if (!isDev)
           setcolor(RED);
 
@@ -450,6 +454,7 @@ void astrix_stratum_session(
         boost::json::object *S = &share;
         if (isDev)
           S = &devShare;
+        hoist_rpc_id(*S);
 
         boost::system::error_code ec;
         std::string msg = boost::json::serialize((*S)) + "\n";

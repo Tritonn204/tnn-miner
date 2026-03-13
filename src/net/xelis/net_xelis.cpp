@@ -183,7 +183,9 @@ void xelis_session(
           if(response.is_string()) {
             std::string resp = std::string(response.as_string());
             if(resp == "block_accepted") {
+              int submitDevice = submitTracker.popSoloDevice(isDev);
               accepted++;
+              if (!isDev) recordDeviceShare(submitDevice, true);
               setcolor(BRIGHT_YELLOW);
               if (!isDev) {
                 printf("Block Accepted!\n");
@@ -191,9 +193,11 @@ void xelis_session(
               }
               setcolor(BRIGHT_WHITE);
             }
-          } 
+          }
           else if(response.is_object() && response.as_object().contains("block_rejected")) {
+            int submitDevice = submitTracker.popSoloDevice(isDev);
             rejected++;
+            if (!isDev) recordDeviceShare(submitDevice, false);
             setcolor(RED);
             if (!isDev) {
               std::string rejectReason = std::string(response.as_object()["block_rejected"].as_string());

@@ -41,6 +41,7 @@ int testOp = -1;
 int testLen = -1;
 int processPriority = 0;
 bool broadcastStats = false;
+bool mmposMode = false;
 bool checkWallet = true;
 
 int tuneWarmupSec;

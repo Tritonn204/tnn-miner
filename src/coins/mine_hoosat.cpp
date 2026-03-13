@@ -232,13 +232,14 @@ waitForJob:
             switch (devMiningProfile.protocol)
             {
             case PROTO_KAS_SOLO:
+              submitTracker.pushSoloDevice(-1, true);
               devShare = {{"block_template", hexStr(&WORK[0], HooHash::INPUT_SIZE).c_str()}};
               break;
             case PROTO_KAS_STRATUM:
               std::vector<char> nonceStr;
               // Num(std::to_string((n << enLen*8) >> enLen*8).c_str(),10).print(nonceStr, 16);
               Num(std::to_string(n).c_str(),10).print(nonceStr, 16);
-              devShare = {{{"id", KasStratum::submitID},
+              devShare = {{{"rpc_id", submitTracker.nextId(-1)},
                         {"method", KasStratum::submit.method.c_str()},
                         {"params", {devWorkerName,                                   // WORKER
                                     myJobDev.at("jobId").as_string().c_str(), // JOB ID
@@ -264,13 +265,14 @@ waitForJob:
             switch (miningProfile.protocol)
             {
             case PROTO_KAS_SOLO:
+              submitTracker.pushSoloDevice(-1, false);
               share = {{"block_template", hexStr(&WORK[0], HooHash::INPUT_SIZE).c_str()}};
               break;
             case PROTO_KAS_STRATUM:
               std::vector<char> nonceStr;
               // Num(std::to_string((n << enLen*8) >> enLen*8).c_str(),10).print(nonceStr, 16);
               Num(std::to_string(n).c_str(),10).print(nonceStr, 16);
-              share = {{{"id", KasStratum::submitID},
+              share = {{{"rpc_id", submitTracker.nextId(-1)},
                         {"method", KasStratum::submit.method.c_str()},
                         {"params", {workerName,                                   // WORKER
                                     myJob.at("jobId").as_string().c_str(), // JOB ID

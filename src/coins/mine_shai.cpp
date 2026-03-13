@@ -158,6 +158,7 @@ waitForJob:
             if (devMine)
             {
               submittingDev = true;
+              submitTracker.pushSoloDevice(-1, true);
               devShare = { {"type","submit"},{"miner_id",devMiningProfile.wallet.c_str()},
                         {"nonce",uint32ToHex(sN).c_str()},
                         {"job_id",job_id},
@@ -167,6 +168,7 @@ waitForJob:
             else
             {
               submitting = true;
+              submitTracker.pushSoloDevice(-1, false);
               share = { {"type","submit"},{"miner_id",miningProfile.wallet.c_str()},
                         {"nonce",uint32ToHex(sN).c_str()},
                         {"job_id",job_id},

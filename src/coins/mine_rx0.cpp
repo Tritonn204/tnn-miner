@@ -593,7 +593,7 @@ waitForJob:
               N = __builtin_bswap32(N);
               devShare = {
                 {"method", rx0Stratum::submit.method.c_str()},
-                {"id", rx0Stratum::submit.id},
+                {"id", submitTracker.nextId(-1)},
                 {"params", {
                   {"id", randomx_login_dev.c_str()},
                   {"job_id", myJobDev.at("job_id").as_string().c_str()},
@@ -627,7 +627,7 @@ waitForJob:
                   share = {
                     {"jsonrpc", "2.0"},
                     {"method", "submit_block"},
-                    {"id", 7},
+                    {"id", submitTracker.nextId(-1)},
                     {"params", {hexStr(fullBlob, fbSize).c_str()}}
                   };
                   delete[] fullBlob;
@@ -638,7 +638,7 @@ waitForJob:
                   N = __builtin_bswap32(N);
                   share = {
                     {"method", rx0Stratum::submit.method.c_str()},
-                    {"id", rx0Stratum::submit.id},
+                    {"id", submitTracker.nextId(-1)},
                     {"params", {
                       {"id", randomx_login.c_str()},
                       {"job_id", myJob.at("job_id").as_string().c_str()},

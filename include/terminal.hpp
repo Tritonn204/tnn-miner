@@ -168,6 +168,7 @@ inline po::options_description get_prog_opts()
   general.add_options()
     ("help", "Produce help message")
     ("broadcast", "Creates an http server to query miner stats")
+    ("mmpos", "Enable mmpOS-compatible /mmpos API endpoint (implies --broadcast)")
     ("testnet", "Adjusts in-house parameters to mine on testnets")
     ("daemon-address", po::value<std::string>(), "Node/pool URL or IP address to mine to") // todo: parse out port and/or wss:// or ws://
     ("port", po::value<int>(), "The port used to connect to the node")

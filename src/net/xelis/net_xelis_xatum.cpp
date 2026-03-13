@@ -47,11 +47,15 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
     // Safely compare strings
     std::string msgStr = std::string(data.at("msg").as_string());
     
-    if (Xatum::accepted_msg == msgStr)
+    if (Xatum::accepted_msg == msgStr) {
       accepted += !isDev;
+      if (!isDev) recordDeviceShare(submitTracker.popSoloDevice(isDev), true);
+    }
 
-    if (Xatum::stale_msg == msgStr)
+    if (Xatum::stale_msg == msgStr) {
       rejected += !isDev;
+      if (!isDev) recordDeviceShare(submitTracker.popSoloDevice(isDev), false);
+    }
 
     int msgLevel = data.at("lvl").to_number<int64_t>();
     if (msgLevel < Xatum::logLevel)
@@ -163,10 +167,12 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
       printf("\nXatum: share accepted!\n");
       fflush(stdout);
       accepted++;
+      recordDeviceShare(submitTracker.popSoloDevice(isDev), true);
     }
     else
     {
       rejected++;
+      recordDeviceShare(submitTracker.popSoloDevice(isDev), false);
       setcolor(RED);
       printf("\nXatum Share Rejected: %s\n", msgStr.c_str());
       fflush(stdout);

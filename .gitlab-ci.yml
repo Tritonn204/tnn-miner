@@ -183,8 +183,6 @@ build-hiveos-mmpos-amd:
   needs:
     - build-linux-amd64-hip-amd
   stage: wrap
-  variables:
-    HIVEOS_MMPOS_HIP_AMD_TGZ: "tnn-miner-hiveos_mmpos_hip-amd_${PACKAGE_VERSION}.tar.gz"
   script:
     - tar -xvf ${LINUX_HIP_AMD_TGZ}
     - mv ./tnn-miner-rocm ./wrappers/hiveos+mmpos-amd/tnn-miner/tnn-miner-rocm
@@ -210,8 +208,6 @@ build-hiveos-mmpos-nvidia:
   needs:
     - build-linux-amd64-hip-nvidia
   stage: wrap
-  variables:
-    HIVEOS_MMPOS_HIP_NVIDIA_TGZ: "tnn-miner-hiveos_mmpos_hip-nvidia_${PACKAGE_VERSION}.tar.gz"
   script:
     - tar -xvf ${LINUX_HIP_NVIDIA_TGZ}
     - mv ./tnn-miner-cuda ./wrappers/hiveos+mmpos-nvidia/tnn-miner/tnn-miner-cuda

@@ -68,7 +68,7 @@ CMD+=( "$ALGO_VAL" )
 [[ -n "$USER_VAL" ]] && CMD+=( --wallet "$USER_VAL" )
 [[ -n "$PASS_VAL" ]] && CMD+=( --pass "$PASS_VAL" )
 
-CMD+=( --broadcast )
+CMD+=( --mmpos )
 
 # pass-through extra args
 CMD+=( "${FINAL_ARGS[@]}" )

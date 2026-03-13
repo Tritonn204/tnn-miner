@@ -90,16 +90,18 @@ static std::optional<GPUSubmitEntry> xelis_build_solution(
     switch (profile.protocol)
     {
     case PROTO_XELIS_SOLO:
+      submitTracker.pushSoloDevice(gpu_id, devMine);
       payload = {{"block_template", hexStr(finalWork, XELIS_TEMPLATE_SIZE).c_str()}};
       break;
     case PROTO_XELIS_XATUM:
+      submitTracker.pushSoloDevice(gpu_id, devMine);
       payload = {
           {"data", b64.c_str()},
           {"hash", hexStr(hash_for_submit, 32).c_str()},
       };
       break;
     case PROTO_XELIS_STRATUM:
-      payload = {{{"id", XelisStratum::submitID},
+      payload = {{{"rpc_id", submitTracker.nextId(gpu_id)},
                    {"method", XelisStratum::submit.method.c_str()},
                    {"params", {devMine ? devWorkerName : workerName,
                                job_snapshot.job_id_str.c_str(),

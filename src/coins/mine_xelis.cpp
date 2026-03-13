@@ -179,16 +179,18 @@ waitForJob:
             switch (devMiningProfile.protocol)
             {
             case PROTO_XELIS_SOLO:
+              submitTracker.pushSoloDevice(-1, true);
               devShare = {{"block_template", hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str()}};
               break;
             case PROTO_XELIS_XATUM:
+              submitTracker.pushSoloDevice(-1, true);
               devShare = {
                   {"data", b64.c_str()},
                   {"hash", hexStr(&powHash[0], 32).c_str()},
               };
               break;
             case PROTO_XELIS_STRATUM:
-              devShare = {{{"id", XelisStratum::submitID},
+              devShare = {{{"rpc_id", submitTracker.nextId(-1)},
                            {"method", XelisStratum::submit.method.c_str()},
                            {"params", {devWorkerName,
                                        myJobDev.at("jobId").as_string().c_str(),
@@ -211,16 +213,18 @@ waitForJob:
             switch (miningProfile.protocol)
             {
             case PROTO_XELIS_SOLO:
+              submitTracker.pushSoloDevice(-1, false);
               share = {{"block_template", hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str()}};
               break;
             case PROTO_XELIS_XATUM:
+              submitTracker.pushSoloDevice(-1, false);
               share = {
                   {"data", b64.c_str()},
                   {"hash", hexStr(&powHash[0], 32).c_str()},
               };
               break;
             case PROTO_XELIS_STRATUM:
-              share = {{{"id", XelisStratum::submitID},
+              share = {{{"rpc_id", submitTracker.nextId(-1)},
                         {"method", XelisStratum::submit.method.c_str()},
                         {"params", {workerName,
                                     myJob.at("jobId").as_string().c_str(),
@@ -477,16 +481,18 @@ waitForJob:
             switch (devMiningProfile.protocol)
             {
             case PROTO_XELIS_SOLO:
+              submitTracker.pushSoloDevice(-1, true);
               devShare = {{"block_template", hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str()}};
               break;
             case PROTO_XELIS_XATUM:
+              submitTracker.pushSoloDevice(-1, true);
               devShare = {
                   {"data", b64.c_str()},
                   {"hash", hexStr(&powHash[0], 32).c_str()},
               };
               break;
             case PROTO_XELIS_STRATUM:
-              devShare = {{{"id", XelisStratum::submitID},
+              devShare = {{{"rpc_id", submitTracker.nextId(-1)},
                            {"method", XelisStratum::submit.method.c_str()},
                            {"params", {devWorkerName,
                                        myJobDev.at("jobId").as_string().c_str(),
@@ -509,16 +515,18 @@ waitForJob:
             switch (miningProfile.protocol)
             {
             case PROTO_XELIS_SOLO:
+              submitTracker.pushSoloDevice(-1, false);
               share = {{"block_template", hexStr(&WORK[0], XELIS_TEMPLATE_SIZE).c_str()}};
               break;
             case PROTO_XELIS_XATUM:
+              submitTracker.pushSoloDevice(-1, false);
               share = {
                   {"data", b64.c_str()},
                   {"hash", hexStr(&powHash[0], 32).c_str()},
               };
               break;
             case PROTO_XELIS_STRATUM:
-              share = {{{"id", XelisStratum::submitID},
+              share = {{{"rpc_id", submitTracker.nextId(-1)},
                         {"method", XelisStratum::submit.method.c_str()},
                         {"params", {workerName,
                                     myJob.at("jobId").as_string().c_str(),

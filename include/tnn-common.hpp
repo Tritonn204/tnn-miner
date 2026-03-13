@@ -441,6 +441,20 @@ extern std::vector<std::atomic<uint64_t>> HIP_counters;
 extern std::vector<std::vector<int64_t>> HIP_rates5min;
 extern std::vector<std::vector<int64_t>> HIP_rates1min;
 extern std::vector<std::vector<int64_t>> HIP_rates30sec;
+// Per-device share counters.  [0..31] = GPU index, [32] = CPU.
+// Updated by net response handlers via recordDeviceShare().
+constexpr int DEVICE_SHARE_CPU = 32;
+extern std::atomic<int> deviceAccepted[33];
+extern std::atomic<int> deviceRejected[33];
+
+inline void recordDeviceShare(int device, bool accepted) {
+    int idx = (device < 0) ? DEVICE_SHARE_CPU : device;
+    if (idx > DEVICE_SHARE_CPU) idx = DEVICE_SHARE_CPU;
+    if (accepted)
+        deviceAccepted[idx].fetch_add(1, std::memory_order_relaxed);
+    else
+        deviceRejected[idx].fetch_add(1, std::memory_order_relaxed);
+}
 
 extern std::vector<int64_t> rate5min;
 extern std::vector<int64_t> rate1min;

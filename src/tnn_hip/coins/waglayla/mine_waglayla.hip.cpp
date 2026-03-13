@@ -107,7 +107,7 @@ void jobThread(
           case PROTO_KAS_STRATUM:
             std::vector<char> nonceStr;
             Num(std::to_string(nonce).c_str(),10).print(nonceStr, 16);
-            devShare = {{{"id", SpectreStratum::submitID},
+            devShare = {{{"rpc_id", submitTracker.nextId(d)},
                       {"method", SpectreStratum::submit.method.c_str()},
                       {"params", {devWorkerName,                                   // WORKER
                                   jobId.c_str(), // JOB ID
@@ -128,7 +128,7 @@ void jobThread(
           case PROTO_KAS_STRATUM:
             std::vector<char> nonceStr;
             Num(std::to_string(nonce).c_str(),10).print(nonceStr, 16);
-            share = {{{"id", SpectreStratum::submitID},
+            share = {{{"rpc_id", submitTracker.nextId(d)},
                       {"method", SpectreStratum::submit.method.c_str()},
                       {"params", {workerName,                                   // WORKER
                                   jobId.c_str(), // JOB ID

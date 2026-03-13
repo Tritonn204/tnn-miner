@@ -366,8 +366,10 @@ int handleBTCStratumResponse(boost::json::object packet, BTCStratum::jobCache *c
   }
   break;
 
-  case BTCStratum::submitID:
+  default:
   {
+    if (!SubmitTracker::isSubmitId(id)) break;
+    int submitDevice = submitTracker.resolve(id);
     printf("\n");
     if (isDev)
     {
@@ -378,6 +380,7 @@ int handleBTCStratumResponse(boost::json::object packet, BTCStratum::jobCache *c
     {
       if (!isDev)
         accepted++;
+      if (!isDev) recordDeviceShare(submitDevice, true);
       std::cout << "Stratum: share accepted" << std::endl;
       fflush(stdout);
       setcolor(BRIGHT_WHITE);
@@ -386,6 +389,7 @@ int handleBTCStratumResponse(boost::json::object packet, BTCStratum::jobCache *c
     {
       if (!isDev)
         rejected++;
+      if (!isDev) recordDeviceShare(submitDevice, false);
       if (!isDev)
         setcolor(RED);
 
@@ -491,6 +495,7 @@ void btc_stratum_session(
             try {
                 boost::json::object *S = &share;
                 if (isDev) S = &devShare;
+                hoist_rpc_id(*S);
 
                 std::string msg = boost::json::serialize((*S)) + "\n";
                 beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(1));
@@ -730,6 +735,7 @@ void btc_stratum_session_nossl(
             try {
                 boost::json::object *S = &share;
                 if (isDev) S = &devShare;
+                hoist_rpc_id(*S);
 
                 std::string msg = boost::json::serialize((*S)) + "\n";
                 beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(1));

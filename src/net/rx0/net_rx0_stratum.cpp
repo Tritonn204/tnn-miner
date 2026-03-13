@@ -182,8 +182,10 @@ int handleRandomXStratumResponse(boost::json::object packet, bool isDev)
     *C = true;
   }
   break;
-  case rx0Stratum::submitID:
+  default:
   {
+    if (!SubmitTracker::isSubmitId(id)) break;
+    int submitDevice = submitTracker.resolve(id);
     printf("\n");
     if (isDev)
     {
@@ -247,12 +249,14 @@ int handleRandomXStratumResponse(boost::json::object packet, bool isDev)
     if (shareAccepted)
     {
       accepted += !isDev;
+      if (!isDev) recordDeviceShare(submitDevice, true);
       if (!isDev) setcolor(BRIGHT_YELLOW);
       std::cout << "Stratum share accepted" << std::endl;
     }
     else
     {
       rejected += !isDev;
+      if (!isDev) recordDeviceShare(submitDevice, false);
       if (!isDev) setcolor(RED);
       std::cout << "Stratum share rejected";
       if (!errorMessage.empty())
@@ -381,6 +385,7 @@ void rx0_stratum_session(
       
       try {
         boost::json::object &S = isDev ? devShare : share;
+        hoist_rpc_id(S);
         std::string msg = boost::json::serialize(S) + "\n";
         
         {
@@ -656,6 +661,7 @@ void rx0_stratum_session_nossl(
       
       try {
         boost::json::object &S = isDev ? devShare : share;
+        hoist_rpc_id(S);
         std::string msg = boost::json::serialize(S) + "\n";
         
         {

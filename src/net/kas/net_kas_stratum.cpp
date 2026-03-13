@@ -236,8 +236,10 @@ int handleKasStratumResponse(boost::json::object packet, bool isDev)
       return 0;
     }
     break;
-    case KasStratum::submitID:
+    default:
     {
+      if (!SubmitTracker::isSubmitId(id)) break;
+      int submitDevice = submitTracker.resolve(id);
       printf("\n");
       if (isDev)
       {
@@ -247,6 +249,7 @@ int handleKasStratumResponse(boost::json::object packet, bool isDev)
       if (!packet["result"].is_null() && packet.at("result").get_bool())
       {
         if (!isDev)accepted++;
+        if (!isDev) recordDeviceShare(submitDevice, true);
         std::cout << "Stratum: share accepted" << std::endl;
         fflush(stdout);
         setcolor(BRIGHT_WHITE);
@@ -254,6 +257,7 @@ int handleKasStratumResponse(boost::json::object packet, bool isDev)
       else
       {
         if (!isDev) rejected++;
+        if (!isDev) recordDeviceShare(submitDevice, false);
         if (!isDev) setcolor(RED);
 
         std::string errStr = "Unknown error";
@@ -428,6 +432,7 @@ void kas_stratum_session(
 
       try {
         boost::json::object *S = isDev ? &devShare : &share;
+        hoist_rpc_id(*S);
         std::string msg = boost::json::serialize(*S) + "\n";
         
         {
@@ -719,6 +724,7 @@ void kas_stratum_session_nossl(
 
       try {
         boost::json::object *S = isDev ? &devShare : &share;
+        hoist_rpc_id(*S);
         std::string msg = boost::json::serialize(*S) + "\n";
         
         {

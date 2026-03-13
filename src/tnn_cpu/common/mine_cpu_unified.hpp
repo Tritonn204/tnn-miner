@@ -257,10 +257,12 @@ waitForJob:
                     switch (profile.protocol) {
                     // Xelis protocols
                     case PROTO_XELIS_SOLO:
+                        submitTracker.pushSoloDevice(-1, devMine);
                         shareTarget = {{"block_template", hexStr(work_output.data(), config.template_size).c_str()}};
                         break;
                     case PROTO_XELIS_XATUM:
                     {
+                        submitTracker.pushSoloDevice(-1, devMine);
                         std::string b64 = base64::to_base64(std::string((char*)work_output.data(), config.template_size));
                         shareTarget = {
                             {"data", b64.c_str()},
@@ -273,7 +275,7 @@ waitForJob:
                         auto* jobId = jobData.as_object().if_contains("jobId");
                         if (jobId && jobId->is_string()) {
                             shareTarget = {{
-                                {"id", XelisStratum::submitID},
+                                {"rpc_id", submitTracker.nextId(-1)},
                                 {"method", XelisStratum::submit.method.c_str()},
                                 {"params", {
                                     workerNameStr,
@@ -290,6 +292,7 @@ waitForJob:
 
                     // KAS-family protocols
                     case PROTO_KAS_SOLO:
+                        submitTracker.pushSoloDevice(-1, devMine);
                         shareTarget = {{"block_template", hexStr(work_output.data(), config.template_size).c_str()}};
                         break;
                     case PROTO_KAS_STRATUM:
@@ -299,7 +302,7 @@ waitForJob:
                             std::vector<char> nonceStr;
                             Num(std::to_string(found_nonce).c_str(), 10).print(nonceStr, 16);
                             shareTarget = {{
-                                {"id", KasStratum::submitID},
+                                {"rpc_id", submitTracker.nextId(-1)},
                                 {"method", KasStratum::submit.method.c_str()},
                                 {"params", {
                                     workerNameStr,

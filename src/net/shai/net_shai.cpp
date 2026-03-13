@@ -126,6 +126,7 @@ void shai_session(
         boost::json::object *S = &share;
         if (isDev)
           S = &devShare;
+        hoist_rpc_id(*S);
 
         std::string msg = boost::json::serialize((*S)) + "\n";
         // std::cout << "sending in: " << msg << std::endl;
@@ -291,6 +292,7 @@ void shai_session(
             std::cout << "Nonce accepted!" << std::endl << std::flush;
             setcolor(BRIGHT_WHITE);
             accepted+=!isDev;
+            if (!isDev) recordDeviceShare(submitTracker.popSoloDevice(isDev), true);
           } else if(whatType && whatType->as_string() == "rejected") {
             printf("\n");
             if (isDev) {
@@ -303,6 +305,7 @@ void shai_session(
             fflush(stdout);
             setcolor(BRIGHT_WHITE);
             rejected+=!isDev;
+            if (!isDev) recordDeviceShare(submitTracker.popSoloDevice(isDev), false);
           } else {
             // handle accept/reject
             std::cout << "Handle this!" << std::endl;

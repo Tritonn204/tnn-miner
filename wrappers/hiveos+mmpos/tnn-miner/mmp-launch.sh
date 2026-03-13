@@ -69,7 +69,7 @@ CMD+=( "$ALGO_VAL" )
 [[ -n "$PASS_VAL" ]] && CMD+=( --pass "$PASS_VAL" )
 
 CMD+=( --threads "$(nproc)" )
-CMD+=( --broadcast )
+CMD+=( --mmpos )
 
 # pass-through extra args
 CMD+=( "${FINAL_ARGS[@]}" )

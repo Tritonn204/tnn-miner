@@ -34,6 +34,7 @@ boost::json::object devShare = {};
 
 bool submitting = false;
 bool submittingDev = false;
+SubmitTracker submitTracker;
 std::condition_variable cv;
 bool data_ready = false;
 bool doShutdown = false;
