@@ -185,14 +185,14 @@ build-hiveos-mmpos-amd:
   stage: wrap
   script:
     - tar -xvf ${LINUX_HIP_AMD_TGZ}
-    - mv ./tnn-miner-rocm ./wrappers/hiveos+mmpos-amd/tnn-miner/tnn-miner-rocm
-    - sed "s/^EXTERNAL_VERSION=custom/EXTERNAL_VERSION=$PACKAGE_VERSION/g" -i ./wrappers/hiveos+mmpos-amd/tnn-miner/mmp-external.conf
-    - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner/tnn-miner-rocm
-    - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner/h-run.sh
-    - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner/h-stats.sh
-    - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner/mmp-stats.sh
-    - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner/mmp-launch.sh
-    - tar -czvf ${HIVEOS_MMPOS_HIP_AMD_TGZ} -C ./wrappers/hiveos+mmpos-amd/ tnn-miner
+    - mv ./tnn-miner-rocm ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/tnn-miner-rocm
+    - sed "s/^EXTERNAL_VERSION=custom/EXTERNAL_VERSION=$PACKAGE_VERSION/g" -i ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/mmp-external.conf
+    - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/tnn-miner-rocm
+    - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/h-run.sh
+    - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/h-stats.sh
+    - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/mmp-stats.sh
+    - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/mmp-launch.sh
+    - tar -czvf ${HIVEOS_MMPOS_HIP_AMD_TGZ} -C ./wrappers/hiveos+mmpos-amd/ tnn-miner-rocm
   after_script:
     - echo "HIVEOS_MMPOS_HIP_AMD_BUILD_JOB_ID=$CI_JOB_ID" >> hiveos-hip-amd-job.env
   artifacts:
@@ -210,14 +210,14 @@ build-hiveos-mmpos-nvidia:
   stage: wrap
   script:
     - tar -xvf ${LINUX_HIP_NVIDIA_TGZ}
-    - mv ./tnn-miner-cuda ./wrappers/hiveos+mmpos-nvidia/tnn-miner/tnn-miner-cuda
-    - sed "s/^EXTERNAL_VERSION=custom/EXTERNAL_VERSION=$PACKAGE_VERSION/g" -i ./wrappers/hiveos+mmpos-nvidia/tnn-miner/mmp-external.conf
-    - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner/tnn-miner-cuda
-    - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner/h-run.sh
-    - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner/h-stats.sh
-    - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner/mmp-stats.sh
-    - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner/mmp-launch.sh
-    - tar -czvf ${HIVEOS_MMPOS_HIP_NVIDIA_TGZ} -C ./wrappers/hiveos+mmpos-nvidia/ tnn-miner
+    - mv ./tnn-miner-cuda ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/tnn-miner-cuda
+    - sed "s/^EXTERNAL_VERSION=custom/EXTERNAL_VERSION=$PACKAGE_VERSION/g" -i ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/mmp-external.conf
+    - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/tnn-miner-cuda
+    - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/h-run.sh
+    - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/h-stats.sh
+    - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/mmp-stats.sh
+    - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/mmp-launch.sh
+    - tar -czvf ${HIVEOS_MMPOS_HIP_NVIDIA_TGZ} -C ./wrappers/hiveos+mmpos-nvidia/ tnn-miner-cuda
   after_script:
     - echo "HIVEOS_MMPOS_HIP_NVIDIA_BUILD_JOB_ID=$CI_JOB_ID" >> hiveos-hip-nvidia-job.env
   artifacts:
