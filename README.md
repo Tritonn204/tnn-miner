@@ -176,7 +176,7 @@ CPU, NVIDIA, and AMD each require their own wrapper — make sure to use the one
 - **Pool**: `pool_host:port` (do not include `stratum+tcp://` prefix)
 - **Wallet**: Your wallet address
 - **Password**: Optional, defaults to `x`
-- **Algorithm**: mmpOS does not pass `--algo` by default. The wrapper defaults to Xelis (`--XEL`). To mine a different coin, add the coin flag in **extra arguments**, e.g. `--algo --XMR`
+- **Algorithm**: The wrapper defaults to Xelis (`--XEL`). To mine a different coin, add the coin flag in **extra arguments**, e.g. `--XMR`
 
 ### Features
 
