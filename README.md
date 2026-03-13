@@ -173,7 +173,7 @@ CPU, NVIDIA, and AMD each require their own wrapper — make sure to use the one
 
 ### Flight Sheet Configuration
 
-- **Pool**: `pool_host:port` (do not include `stratum+tcp://` prefix)
+- **Pool**: `pool_host:port` or `stratum+tcp://pool_host:port`
 - **Wallet**: Your wallet address
 - **Password**: Optional, defaults to `x`
 - **Algorithm**: The wrapper defaults to Xelis (`--XEL`). To mine a different coin, add the coin flag in **extra arguments**, e.g. `--XMR`
