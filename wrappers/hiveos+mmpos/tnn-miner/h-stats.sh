@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
+# shellcheck source=/dev/null
 source /hive/miners/custom/tnn-miner/h-manifest.sh
 
 uptime=$(get_miner_uptime)
-[[ $uptime -lt 60 ]] && head -n 50 $log_name > $log_head_name
+# shellcheck disable=SC2154 # log_name and log_head_name are set by HiveOS
+[[ $uptime -lt 60 ]] && head -n 50 "$log_name" > "$log_head_name"
 
 cpu_temp=$(cpu-temp)
 [[ -z "$cpu_temp" ]] && cpu_temp=0
@@ -30,6 +32,6 @@ stats=$(jq -nc \
         --arg algo "$algo" \
         '{$khs, $hs_units, $hs, $temp, $fan, $uptime, $ver, ar: [$ac, $rj], $algo}')
 
-echo khs: $khs
-echo stats: $stats
+echo "khs: $khs"
+echo "stats: $stats"
 echo ----------
