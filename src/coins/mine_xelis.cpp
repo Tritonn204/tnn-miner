@@ -47,7 +47,7 @@ waitForJob:
         localJobCounter = jobCounter;
       }
 
-      if (!myJob.at("template").is_string())
+      if (!myJob.is_object() || !myJob.as_object().contains("template") || !myJob.at("template").is_string())
         continue;
       if (ourHeight == 0 && devHeight == 0)
         continue;
@@ -76,7 +76,7 @@ waitForJob:
         i = 0;
       }
 
-      if (devConnected && myJobDev.at("template").is_string())
+      if (devConnected && myJobDev.is_object() && myJobDev.as_object().contains("template") && myJobDev.at("template").is_string())
       {
         if (devHeight == 0 || localDevHeight != devHeight)
         {
@@ -317,7 +317,7 @@ waitForJob:
         localJobCounter = jobCounter;
       }
 
-      if (!myJob.at("miner_work").is_string())
+      if (!myJob.is_object() || !myJob.as_object().contains("miner_work") || !myJob.at("miner_work").is_string())
         continue;
       if (ourHeight == 0 && devHeight == 0)
         continue;
@@ -346,7 +346,7 @@ waitForJob:
         i = 0;
       }
 
-      if (devConnected && myJobDev.at("miner_work").is_string())
+      if (devConnected && myJobDev.is_object() && myJobDev.as_object().contains("miner_work") && myJobDev.at("miner_work").is_string())
       {
         if (devHeight == 0 || localDevHeight != devHeight)
         {

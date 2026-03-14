@@ -158,6 +158,7 @@ build-hiveos-mmpos:
   script:
     - tar -xvf ${LINUX_AMD64_TGZ}
     - mv ./tnn-miner-cpu ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
+    - "[ -d ./tunes ] && cp -r ./tunes ./wrappers/hiveos+mmpos/tnn-miner/tunes || true"
     - sed "s/^EXTERNAL_VERSION=custom/EXTERNAL_VERSION=$PACKAGE_VERSION/g" -i ./wrappers/hiveos+mmpos/tnn-miner/mmp-external.conf
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/h-run.sh
@@ -186,6 +187,7 @@ build-hiveos-mmpos-amd:
   script:
     - tar -xvf ${LINUX_HIP_AMD_TGZ}
     - mv ./tnn-miner-rocm ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/tnn-miner-rocm
+    - "[ -d ./tunes ] && cp -r ./tunes ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/tunes || true"
     - sed "s/^EXTERNAL_VERSION=custom/EXTERNAL_VERSION=$PACKAGE_VERSION/g" -i ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/mmp-external.conf
     - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/tnn-miner-rocm
     - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/h-run.sh
@@ -211,6 +213,7 @@ build-hiveos-mmpos-nvidia:
   script:
     - tar -xvf ${LINUX_HIP_NVIDIA_TGZ}
     - mv ./tnn-miner-cuda ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/tnn-miner-cuda
+    - "[ -d ./tunes ] && cp -r ./tunes ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/tunes || true"
     - sed "s/^EXTERNAL_VERSION=custom/EXTERNAL_VERSION=$PACKAGE_VERSION/g" -i ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/mmp-external.conf
     - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/tnn-miner-cuda
     - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/h-run.sh
@@ -241,7 +244,8 @@ build-windows:
     - dir .\build\
     - dir .\build\bin\
     - move build\bin\tnn-miner-cpu.exe .\
-    - Compress-Archive -Path tnn-miner-cpu.exe -DestinationPath ${WIN_AMD64_ZIP}
+    - if (Test-Path .\build\bin\tunes) { Copy-Item -Recurse .\build\bin\tunes .\tunes }
+    - Compress-Archive -Path tnn-miner-cpu.exe,tunes -DestinationPath ${WIN_AMD64_ZIP}
     #- 7z.exe a ${WIN_AMD64_ZIP} tnn-miner-cpu.exe
   after_script:
     - echo "WIN_BUILD_JOB_ID=$CI_JOB_ID" >> win-job.env
@@ -341,7 +345,8 @@ build-macos-aarch64:
     - make -j$(sysctl -n hw.logicalcpu)
     - cd ..
     - mv ./build/bin/tnn-miner-cpu ./tnn-miner
-    - tar -czvf ${TARGZ_FILE} ./tnn-miner
+    - "[ -d ./build/bin/tunes ] && cp -r ./build/bin/tunes ./tunes || true"
+    - tar -czvf ${TARGZ_FILE} ./tnn-miner ./tunes
   after_script:
     - echo "MACOS_BUILD_JOB_ID=$CI_JOB_ID" >> macos-arm64-job.env
   artifacts:

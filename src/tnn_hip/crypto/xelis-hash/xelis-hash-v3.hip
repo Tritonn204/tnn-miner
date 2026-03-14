@@ -1023,7 +1023,7 @@ __device__ __forceinline__ uint64_t execute_op_offset(
     t1 = a | 2;
     if (U128_LT(b, c, t0, t1))
       return c;
-    t2 = div64_hwrecip(b, t0);
+    t2 = (t0 > 0) ? div64_hwrecip(b, t0) : 0;
     return c - t1 * t2;
   }
   case 9:
@@ -1033,7 +1033,7 @@ __device__ __forceinline__ uint64_t execute_op_offset(
   case 10:
   {
     t0 = ROTL(result, r);
-    return U128_GT(t0, b, a, (c | 8)) ? div64_hwrecip(t0, a) : (a ^ b);
+    return U128_GT(t0, b, a, (c | 8)) ? ((a > 0) ? div64_hwrecip(t0, a) : 0) : (a ^ b);
   }
   case 11:
   {

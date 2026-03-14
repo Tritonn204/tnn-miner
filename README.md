@@ -98,6 +98,16 @@ Coin Selection:
                             N=2048,R=32,pers=string,ver=1.0). ver is optional,
                             defaults to 1.0 (use 0.5 for yescrypt)
 
+GPU Overclocking (requires root/CAP_SYS_ADMIN):
+  --gpu-plimit<N>           Power limit in watts (on Windows AMD/ADL: % offset
+                            from stock TDP). Single value = all GPUs; comma
+                            list = per-device L-to-R; append index for one GPU:
+                            --gpu-plimit0 250
+  --gpu-cclock<N>           Lock core clock to absolute MHz
+  --gpu-coff<N>             Core clock offset, MHz (+/-). NVML native; AMD =
+                            offset from stock max
+  --gpu-moff<N>             Memory clock offset, MHz (+/-)
+
 Dero:
   --dero-benchmark arg      Runs a mining benchmark for <arg> seconds (adheres
                             to -t threads option)

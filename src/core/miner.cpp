@@ -66,6 +66,8 @@
 #include <boost/json/src.hpp>
 #include <tnn_hip/common/gpu_rtc.hpp>
 #include <tnn_hip/common/gpu_algo.hpp>
+#include <tnn_hip/core/gpuOC.hip.h>
+#include <tnn_hip/core/gpuOCArgs.hpp>
 #include <tnn_hip/coins/xelis/test_xelis_hip.h>
 #endif
 
@@ -95,6 +97,7 @@ double latest_hashrate = 0.0;
 
 bool gpuMine = false;
 bool g_powerMonAvail = false;
+bool g_ocAvail = false;
 bool printHashrateOnExit = false;
 std::string wallet = "NULL";
 std::string devWallet = "NULL";
@@ -157,7 +160,7 @@ int accepted;
 
 bool lockThreads = true;
 bool msrDisabled = false;
-int threadPriorityLevel = 0;  // 0 = normal (don't set), 1 = above normal, 2 = high
+int threadPriorityLevel = 0; // 0 = normal (don't set), 1 = above normal, 2 = high
 
 // static int firstRejected;
 
@@ -432,10 +435,24 @@ int tnn_main(int argc, char **argv)
 
   po::variables_map vm;
   po::options_description opts = get_prog_opts();
+
+  // Strip GPU OC args (--gpu-coff, --gpu-plimit, etc.) BEFORE boost parsing,
+  // because boost doesn't know about them and chokes on their negative values
+  // (e.g. "--gpu-coff -10" — boost sees "-10" as an unknown short option).
+#ifdef TNN_HIP
+  auto ocRes = hip_oc_args::extract(argc, argv);
+  for (const auto &e : ocRes.errors)
+    TNN_LOG_ERROR("%s\n", e.c_str());
+#endif
+
   try
   {
     int style = get_prog_style();
+#ifdef TNN_HIP
+    po::parsed_options parsed = po::command_line_parser(ocRes.remaining)
+#else
     po::parsed_options parsed = po::command_line_parser(argc, argv)
+#endif
                                     .options(opts)
                                     .style(style)
                                     .allow_unregistered() // Allow unknown args
@@ -470,14 +487,42 @@ int tnn_main(int argc, char **argv)
     if (vm.count("log-level"))
     {
       std::string lvl = vm["log-level"].as<std::string>();
-      if (lvl == "off")        tnn_set_log_level(TnnLogLevel::Off);
-      else if (lvl == "info")  tnn_set_log_level(TnnLogLevel::Info);
-      else if (lvl == "debug") tnn_set_log_level(TnnLogLevel::Debug);
-      else if (lvl == "trace") tnn_set_log_level(TnnLogLevel::Trace);
-      else {
+      if (lvl == "off")
+        tnn_set_log_level(TnnLogLevel::Off);
+      else if (lvl == "info")
+        tnn_set_log_level(TnnLogLevel::Info);
+      else if (lvl == "debug")
+        tnn_set_log_level(TnnLogLevel::Debug);
+      else if (lvl == "trace")
+        tnn_set_log_level(TnnLogLevel::Trace);
+      else
+      {
         printf("Unknown log level '%s', using 'info'. Valid: off, info, debug, trace\n", lvl.c_str());
+        fflush(stdout);
       }
     }
+
+#ifdef TNN_HIP
+    if (!ocRes.tuneArgs.empty())
+    {
+      g_ocAvail = initGpuTuning();
+      if (g_ocAvail)
+      {
+        TNN_LOG_INFO("[GPU OC] Backend: %s\n", getTuneBackendName().c_str());
+        std::vector<bool> touched;
+        auto perDev = hip_oc_args::expand(ocRes.tuneArgs, HIP_deviceCount, &touched);
+
+        for (int d = 0; d < HIP_deviceCount; ++d)
+          if (touched[d])
+            applyGpuTuning(d, perDev[d]);
+        std::atexit(shutdownGpuTuning);
+      }
+      else
+      {
+        TNN_LOG_INFO("[GPU OC] No OC backend available — GPU overclock args ignored\n");
+      }
+    }
+#endif
 
     // Check if any unrecognized option is a coin symbol
     std::vector<std::string> stillUnrecognized;
@@ -678,7 +723,7 @@ int tnn_main(int argc, char **argv)
 #endif
   }
 
-{
+  {
     int _ypCoin = miningProfile.coin.coinId;
     if (_ypCoin == COIN_ADVC || _ypCoin == COIN_TIDE || _ypCoin == COIN_YPR16 ||
         _ypCoin == COIN_YCR16 || _ypCoin == COIN_YCR8 || _ypCoin == COIN_MGPC ||
@@ -916,7 +961,8 @@ int tnn_main(int argc, char **argv)
   if (vm.count("bench-xelis"))
   {
 #if defined(TNN_XELISHASH) && !defined(TNN_HIP)
-    if (!msrDisabled) {
+    if (!msrDisabled)
+    {
       if (applyMSROptimization("XelisV3"))
         std::atexit(cleanupMSROnExit);
     }
@@ -1091,15 +1137,20 @@ int tnn_main(int argc, char **argv)
   if (vm.count("priority"))
   {
     std::string prio = vm["priority"].as<std::string>();
-    if (prio == "above") {
+    if (prio == "above")
+    {
       threadPriorityLevel = 1;
       setcolor(CYAN);
       printf("Thread priority: ABOVE NORMAL\n");
-    } else if (prio == "high") {
+    }
+    else if (prio == "high")
+    {
       threadPriorityLevel = 2;
       setcolor(CYAN);
       printf("Thread priority: HIGH\n");
-    } else {
+    }
+    else
+    {
       setcolor(YELLOW);
       printf("Unknown priority '%s', using normal\n", prio.c_str());
     }
@@ -1365,7 +1416,8 @@ fillBlanks:
 #ifdef TNN_XELISHASH
   if (miningProfile.coin.miningAlgo == ALGO_XELISV3)
   {
-    if (vm.count("xelis-simd")) {
+    if (vm.count("xelis-simd"))
+    {
       std::string simd = vm["xelis-simd"].as<std::string>();
       xelis_set_simd_override(simd.c_str());
       setcolor(CYAN);
@@ -1373,7 +1425,8 @@ fillBlanks:
       setcolor(BRIGHT_WHITE);
     }
 
-    if (!msrDisabled) {
+    if (!msrDisabled)
+    {
       if (applyMSROptimization("XelisV3"))
         std::atexit(cleanupMSROnExit);
     }
@@ -1536,7 +1589,8 @@ Mining:
     }
 
     randomx_set_flags(true);
-    if (!msrDisabled) {
+    if (!msrDisabled)
+    {
       if (applyMSROptimization("RandomX"))
         std::atexit(cleanupMSROnExit);
     }
@@ -1563,7 +1617,8 @@ Mining:
 #ifdef TNN_HIP
     std::cout << "Starting GPU worker.." << std::endl;
     auto gpuFunc = getMiningFunc(miningProfile.coin.miningAlgo, true);
-    std::thread t([gpuFunc]() { gpuFunc(0); });
+    std::thread t([gpuFunc]()
+                  { gpuFunc(0); });
     t.detach();
 #else
     printf("Please use a GPU TNN Miner binary...\n");
@@ -1608,7 +1663,8 @@ Mining:
   if (broadcastStats)
   {
 #ifdef TNN_HIP
-    if (gpuMine) {
+    if (gpuMine)
+    {
       BroadcastServer::gpu_count = HIP_deviceCount;
       BroadcastServer::gpu_rates1min_ptr = &HIP_rates1min;
       BroadcastServer::gpu_names_ptr = HIP_names;

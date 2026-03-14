@@ -25,6 +25,8 @@ if (WITH_HIP)
     "${PROJECT_SOURCE_DIR}/src/tnn_hip/core/gpu_rtc_precompile.cpp"
     "${PROJECT_SOURCE_DIR}/src/tnn_hip/hello-world.hip"
     "${PROJECT_SOURCE_DIR}/src/tnn_hip/core/devInfo.hip"
+    "${PROJECT_SOURCE_DIR}/src/tnn_hip/core/gpuOC.hip"
+    "${PROJECT_SOURCE_DIR}/src/tnn_hip/core/gpuOCArgs.cpp"
     "${PROJECT_SOURCE_DIR}/src/core/hipkill.hip"
   )
 

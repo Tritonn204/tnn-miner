@@ -717,20 +717,32 @@ private:
                 size_t required = cached.batch_size * config_.scratch_per_hash;
                 size_t free_mem, total_mem;
                 hipMemGetInfo(&free_mem, &total_mem);
-                
-                if (required > free_mem * 0.95) {
+
+                size_t usable = (size_t)(free_mem * 0.95);
+                if (required > usable && config_.scratch_per_hash > 0) {
+                    // Scale batch down to fit available memory instead of discarding the tune
+                    uint32_t max_batch = (uint32_t)(usable / config_.scratch_per_hash);
+                    // Round down to multiple of block_size
+                    max_batch = (max_batch / cached.block_size) * cached.block_size;
+                    if (max_batch == 0) {
+                        TuneOutputBuffer out(device_id_);
+                        out.printf("[AUTOTUNE] GPU %d: Not enough memory for even 1 block, re-tuning\n",
+                                   device_id_);
+                        return false;
+                    }
                     TuneOutputBuffer out(device_id_);
-                    out.printf("[AUTOTUNE] GPU %d: Cache batch_size too large for memory, re-tuning\n",
-                               device_id_);
-                    return false;
+                    out.printf("[AUTOTUNE] GPU %d: Scaled batch_size %u -> %u to fit available memory (%.0f MB free)\n",
+                               device_id_, cached.batch_size, max_batch, free_mem / (1024.0 * 1024.0));
+                    cached.batch_size = max_batch;
+                    cached.num_blocks = max_batch / cached.block_size;
                 }
-                
+
                 cached.valid = true;
                 tuning_result_ = cached;
                 block_size_ = cached.block_size;
                 num_blocks_ = cached.num_blocks;
                 batch_size_ = cached.batch_size;
-                
+
                 return true;  // Caller will print the success message
             }
         } catch (const std::exception& e) {

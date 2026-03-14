@@ -227,10 +227,8 @@ waitForJob:
       myJob = job;
       myJobDev = devJob;
 
-      if (!myJob.at("miner_work").is_string())
+      if (!myJob.is_object() || !myJob.as_object().contains("miner_work") || !myJob.at("miner_work").is_string())
       {
-        printf("NO WORK\n");
-        fflush(stdout);
         continue;
       }
       if (ourHeight == 0 && devHeight == 0)
@@ -314,7 +312,7 @@ waitForJob:
       }
 
       // Update dev work if needed
-      if (devConnected && myJobDev.at("miner_work").is_string())
+      if (devConnected && myJobDev.is_object() && myJobDev.as_object().contains("miner_work") && myJobDev.at("miner_work").is_string())
       {
         if (devHeight == 0 || localDevHeight != devHeight)
         {
@@ -367,7 +365,8 @@ waitForJob:
     catch (std::exception &e)
     {
       setcolor(RED);
-      std::cerr << "Error in GPU POW Function: " << e.what() << "\n";
+      std::cerr << "Error in POW Function" << std::endl;
+      std::cerr << e.what() << std::endl << std::flush;
       setcolor(BRIGHT_WHITE);
       localOurHeight = -1;
       localDevHeight = -1;

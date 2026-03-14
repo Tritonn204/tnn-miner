@@ -1096,4 +1096,12 @@ else()
   set_target_properties(${TNN_OUTPUT_NAME} PROPERTIES OUTPUT_NAME ${TNN_OUTPUT_NAME})
 endif()
 
+# Copy default-tunes → tunes next to the binary
+add_custom_command(
+  TARGET ${TNN_OUTPUT_NAME} POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_SOURCE_DIR}/default-tunes"
+    "$<TARGET_FILE_DIR:${TNN_OUTPUT_NAME}>/tunes"
+)
+
 unset(HIP_LANG CACHE)

@@ -60,6 +60,7 @@ extern bool useLookupMine;
 
 extern bool gpuMine;
 extern bool g_powerMonAvail;
+extern bool g_ocAvail;
 extern std::string devWallet;
 
 extern std::map<int, int> threadToPhysicalCore;

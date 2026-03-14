@@ -394,6 +394,14 @@ static void shutdownADL() {
         g_adlLegacyInit = false;
     }
 }
+
+void* adlGetContext()              { return g_adl2Context; }
+void* adlGetLibHandle()            { return (void*)g_powerLib; }
+int   adlGetAdapterIndex(int hip)  {
+    return (hip >= 0 && hip < (int)g_hipToAdlIndex.size())
+           ? g_hipToAdlIndex[hip] : -1;
+}
+
 #endif // _WIN32
 
 // ============== Public API ==============

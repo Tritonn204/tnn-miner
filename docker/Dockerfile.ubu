@@ -34,9 +34,11 @@ RUN --mount=type=cache,target=/src/_deps ./scripts/prereqs.sh
 RUN --mount=type=cache,target=/src/_deps mkdir ./build && cd ./build && cmake $CMAKE_ARGS -DTNN_VERSION=$PACKAGE_VERSION ..
 RUN --mount=type=cache,target=/src/_deps cd ./build && make -j$(nproc)
 RUN ls -la ./build/bin/ ./build/ && mv ./build/bin/tnn-miner-* ./ || mv ./build/tnn-miner-* ./
+# Copy tunes directory (created by CMake post-build from default-tunes)
+RUN if [ -d ./build/bin/tunes ]; then cp -r ./build/bin/tunes ./tunes; elif [ -d ./build/tunes ]; then cp -r ./build/tunes ./tunes; fi
 #RUN ./tnn-miner-* --test-spectre
 RUN ls -la ./
-RUN tar -czvf ${TARGZ_FILE} ./tnn-miner*
+RUN tar -czvf ${TARGZ_FILE} ./tnn-miner* ./tunes
 RUN md5sum ./${TARGZ_FILE}
 
 FROM scratch
@@ -44,3 +46,4 @@ ARG  PACKAGE_VERSION
 ARG  TARGZ_FILE=miner.tar.gz
 COPY --from=build /src/${TARGZ_FILE} /
 COPY --from=build /src/tnn-miner* /
+COPY --from=build /src/tunes/ /tunes/

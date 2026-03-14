@@ -2,6 +2,13 @@
 
 #include <string>
 
+#ifdef _WIN32
+// Shared ADL state for the OC layer. Only valid after initPowerMonitoring()
+// has succeeded with the ADL backend.
+void* adlGetContext();                 // ADL_CONTEXT_HANDLE as void*, or nullptr
+int   adlGetAdapterIndex(int hipDev);  // -1 if unmapped
+#endif
+
 int getGPUCount();
 std::string getDeviceName(int device);
 std::string getPCIBusId(int device);

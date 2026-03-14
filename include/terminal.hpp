@@ -251,8 +251,21 @@ inline po::options_description get_prog_opts()
     ("log-level", po::value<std::string>(), "<off|info|debug|trace> Set log verbosity (default: info)")
   ;
 
+  po::options_description gpuOC("GPU Overclocking (requires root/CAP_SYS_ADMIN)", col_width);
+  gpuOC.add_options()
+    ("gpu-plimit<N>", "Power limit in watts (on Windows AMD/ADL: % offset from stock TDP). "
+                      "Single value = all GPUs; comma list = per-device L-to-R; "
+                      "append index for one GPU: --gpu-plimit0 250")
+    ("gpu-cclock<N>", "Lock core clock to absolute MHz")
+    ("gpu-coff<N>",   "Core clock offset, MHz (+/-). NVML native; AMD = offset from stock max")
+    ("gpu-moff<N>",   "Memory clock offset, MHz (+/-)")
+  ;
+
   general.add(stratum);
   general.add(coins);
+  #ifdef TNN_HIP
+  general.add(gpuOC);
+  #endif
   general.add(dero);
   general.add(xelis);
   general.add(randomX);
