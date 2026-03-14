@@ -6,6 +6,7 @@
 #include <memory>
 #include <optional>
 #include <functional>
+#include <set>
 #include <unordered_set>
 #include <unordered_map>
 #include <condition_variable>
@@ -392,6 +393,13 @@ struct GPUTuningOverrides {
     std::vector<int> gpu_block_sizes;
     bool disable_autotune = false;
     bool force_retune = false;
+    std::set<int> retune_devices;  // empty = retune all (when force_retune is set)
+
+    bool should_retune(int device_id) const {
+        if (!force_retune) return false;
+        if (retune_devices.empty()) return true;
+        return retune_devices.count(device_id) > 0;
+    }
     
     std::optional<uint32_t> get_batch_override(int device_id) const {
         if (device_id >= 0 && device_id < (int)gpu_batch_sizes.size()) {

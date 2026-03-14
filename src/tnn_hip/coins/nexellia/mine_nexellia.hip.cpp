@@ -221,6 +221,7 @@ waitForJob:
       }
 
       for (d = 0; d < ctx.GPUCount; d++) {
+        TNN_GPU_GATE(d)
         Nxl_HIP_Worker::setDevice(d);
         Nxl_HIP::copyWork<false>(devWork);
         Nxl_HIP::newMatrix(work, false);
@@ -248,6 +249,7 @@ waitForJob:
         }
 
         for (d = 0; d < ctx.GPUCount; d++) {
+          TNN_GPU_GATE(d)
           Nxl_HIP_Worker::setDevice(d);
           Nxl_HIP::copyWork<true>(devWork);
           Nxl_HIP::newMatrix(devWork, true);
@@ -296,14 +298,15 @@ waitForJob:
 
       // printf("end of job application\n");
       for(d = 0; d < ctx.GPUCount; d++) {
-        workers.emplace_back(jobThread, 
-          d, 
-          ctx, 
-          localJobCounter, 
-          devMine ? localDevHeight : localOurHeight, 
-          n, 
+        TNN_GPU_GATE(d)
+        workers.emplace_back(jobThread,
+          d,
+          ctx,
+          localJobCounter,
+          devMine ? localDevHeight : localOurHeight,
+          n,
           nonceMask,
-          work, 
+          work,
           devMine ? myJobDev.at("jobId").as_string().c_str() : myJob.at("jobId").as_string().c_str(),
           devMine
         );

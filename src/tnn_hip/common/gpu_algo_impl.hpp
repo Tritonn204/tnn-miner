@@ -1013,7 +1013,7 @@ private:
         }
         
         // Check disk cache first (before doing expensive tuning)
-        if (!g_tuning_overrides.force_retune && load_cached_tune()) {
+        if (!g_tuning_overrides.should_retune(device_id_) && load_cached_tune()) {
             TuneOutputBuffer out(device_id_);
             out.printf("[AUTOTUNE] GPU %d: Loaded cached tune for %s\n", 
                        device_id_, config_.name.c_str());

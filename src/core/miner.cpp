@@ -30,6 +30,7 @@
 #include <functional>
 #include <iostream>
 #include <string>
+#include <sstream>
 #include <numeric>
 
 #include "miner.h"
@@ -103,6 +104,8 @@ std::string wallet = "NULL";
 std::string devWallet = "NULL";
 
 int HIP_deviceCount = 0;
+std::set<int> HIP_includeDevices;
+std::set<int> HIP_excludeDevices;
 
 uint256_t bigDiff(0);
 uint256_t bigDiff_dev(0);
@@ -1181,6 +1184,35 @@ int tnn_main(int argc, char **argv)
   if (vm.count("gpu-retune"))
   {
     g_tuning_overrides.force_retune = true;
+    std::string csv = vm["gpu-retune"].as<std::string>();
+    if (!csv.empty()) {
+      std::istringstream ss(csv);
+      std::string tok;
+      while (std::getline(ss, tok, ',')) {
+        try { g_tuning_overrides.retune_devices.insert(std::stoi(tok)); }
+        catch (...) {}
+      }
+    }
+  }
+  if (vm.count("devices"))
+  {
+    std::string csv = vm["devices"].as<std::string>();
+    std::istringstream ss(csv);
+    std::string tok;
+    while (std::getline(ss, tok, ',')) {
+      try { HIP_includeDevices.insert(std::stoi(tok)); }
+      catch (...) {}
+    }
+  }
+  if (vm.count("gpu-disable"))
+  {
+    std::string csv = vm["gpu-disable"].as<std::string>();
+    std::istringstream ss(csv);
+    std::string tok;
+    while (std::getline(ss, tok, ',')) {
+      try { HIP_excludeDevices.insert(std::stoi(tok)); }
+      catch (...) {}
+    }
   }
 #endif
 

@@ -221,6 +221,7 @@ waitForJob:
       }
 
       for (d = 0; d < ctx.GPUCount; d++) {
+        TNN_GPU_GATE(d)
         Astrix_HIP_Worker::setDevice(d);
         Astrix_HIP::copyWork<false>(devWork);
         Astrix_HIP::newMatrix(work, false);
@@ -248,6 +249,7 @@ waitForJob:
         }
 
         for (d = 0; d < ctx.GPUCount; d++) {
+          TNN_GPU_GATE(d)
           Astrix_HIP_Worker::setDevice(d);
           Astrix_HIP::copyWork<true>(devWork);
           Astrix_HIP::newMatrix(devWork, true);
@@ -296,7 +298,8 @@ waitForJob:
 
       // printf("end of job application\n");
       for(d = 0; d < ctx.GPUCount; d++) {
-        workers.emplace_back(jobThread, 
+        TNN_GPU_GATE(d)
+        workers.emplace_back(jobThread,
           d, 
           ctx, 
           localJobCounter, 

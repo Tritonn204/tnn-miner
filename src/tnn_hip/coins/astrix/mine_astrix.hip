@@ -1,5 +1,6 @@
 #include <hip/hip_runtime.h>
 #include <tnn_hip/crypto/astrix-hash/astrix_archdef.h>
+#include "tnn_hip/common/gpu_device_filter.hpp"
 
 #include <iostream>
 
@@ -19,6 +20,7 @@ namespace Astrix_HIP_Worker {
     int d = 0;
 
     GPU_FOR(d, ctx.GPUCount) {
+      TNN_GPU_GATE(d)
       hipDeviceProp_t deviceProps;
       hipGetDeviceProperties(&deviceProps, d); // Query device properties
       int smCount = deviceProps.multiProcessorCount;
@@ -40,9 +42,10 @@ namespace Astrix_HIP_Worker {
   __host__ void ctxMalloc(workerCtx &ctx) {
     int d = 0;
     GPU_FOR(d, ctx.GPUCount) {
+      TNN_GPU_GATE(d)
       hipSetDevice(d);
 
-      hipMalloc(&ctx.d_nonceCount, sizeof(int)); 
+      hipMalloc(&ctx.d_nonceCount, sizeof(int));
       hipMalloc(&ctx.d_hashBuffer, 32*ctx.batchSizes[d]);
       hipMalloc(&ctx.d_nonceBuffer, sizeof(uint64_t)*Astrix_HIP::MAX_NONCES);
 

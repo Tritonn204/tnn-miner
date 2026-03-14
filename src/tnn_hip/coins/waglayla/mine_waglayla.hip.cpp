@@ -220,6 +220,7 @@ waitForJob:
       }
 
       for (d = 0; d < ctx.GPUCount; d++) {
+        TNN_GPU_GATE(d)
         Wala_HIP_Worker::setDevice(d);
         Wala_HIP::copyWork<false>(devWork);
         Wala_HIP::newMatrix(work, false);
@@ -247,6 +248,7 @@ waitForJob:
         }
 
         for (d = 0; d < ctx.GPUCount; d++) {
+          TNN_GPU_GATE(d)
           Wala_HIP_Worker::setDevice(d);
           Wala_HIP::copyWork<true>(devWork);
           Wala_HIP::newMatrix(devWork, true);
@@ -303,12 +305,13 @@ waitForJob:
 
       // printf("end of job application\n");
       for(d = 0; d < ctx.GPUCount; d++) {
-        workers.emplace_back(jobThread, 
-          d, 
-          ctx, 
-          localJobCounter, 
-          devMine ? localDevHeight : localOurHeight, 
-          n, 
+        TNN_GPU_GATE(d)
+        workers.emplace_back(jobThread,
+          d,
+          ctx,
+          localJobCounter,
+          devMine ? localDevHeight : localOurHeight,
+          n,
           nonceMask,
           work, 
           devMine ? myJobDev.at("jobId").as_string().c_str() : myJob.at("jobId").as_string().c_str(),

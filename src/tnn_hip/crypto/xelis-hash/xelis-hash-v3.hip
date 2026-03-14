@@ -1304,61 +1304,58 @@ XELIS_HOT __device__ void stage_3_hybrid_v2(uint64_t *my_scratch, const uint8_t 
     uint64_t result = ~(hash1 ^ hash2);
 
     uint64_t idx_a_read = map_index(result);
-    prefetch_l1(&mem_buffer_a[idx_a_read]);
 
-    // Deferred writeback state for pipelined RMW tail
     int pending_store = 0;
-    uint64_t pending_idx_a_write = 0;
-    uint64_t pending_idx_b_write = 0;
-    uint64_t pending_store_a = 0;
-    uint64_t pending_store_b = 0;
+    uint64_t pending_idx_a_write = 0, pending_idx_b_write = 0;
+    uint64_t pending_store_a = 0, pending_store_b = 0;
+
+    uint64_t a_preloaded = load_scratch(&mem_buffer_a[idx_a_read]);
 
     for (uint32_t j = 0; j < XELIS_BUFFER_SIZE_V3; j++)
     {
-      // Commit previous iteration's deferred stores first
       if (pending_store)
       {
         store_scratch(&mem_buffer_b[pending_idx_b_write], pending_store_b);
         store_scratch(&mem_buffer_a[pending_idx_a_write], pending_store_a);
       }
 
-      // Random reads (idx_a_read already computed + prefetched)
-      uint64_t a = load_scratch(&mem_buffer_a[idx_a_read]);
+      // RAW forwarding: if deferred store hit the preloaded slot, use store value
+      uint64_t a = (pending_store && pending_idx_a_write == idx_a_read)
+                   ? pending_store_a
+                   : a_preloaded;
+
+#if HAS_HBM
+      prefetch_l1(&my_scratch[r + 8]);
+#endif
+      uint64_t c = my_scratch[r];
       uint64_t rot_res = ~ROTR(result, r);
+      r++;
+      uint32_t op_idx = (ROTL(result, (uint32_t)c) + 13) & 0xF;
+
       uint64_t b_val = load_scratch(&mem_buffer_b[map_index(a ^ rot_res)]);
 
-      // Sequential read - CACHED
-      uint64_t c = my_scratch[r];
-
-      r++;
-
-      uint32_t op_idx = (ROTL(result, (uint32_t)c) + 13) & 0xF;
       uint64_t v = execute_op_offset(op_idx, a, b_val, c, r, result, i, j);
 
       uint64_t idx_seed = v ^ result;
       result = ROTL(idx_seed, r);
 
-      // Arm next iteration's random A read as early as possible
+      // Early load next A into registers (~800cy flight time before j+1)
       idx_a_read = map_index(result);
-      prefetch_l1(&mem_buffer_a[idx_a_read]);
+      a_preloaded = load_scratch(&mem_buffer_a[idx_a_read]);
 
-      int use_buffer_b = pick_half(v);
       uint64_t idx_t = map_index(idx_seed);
-
-      // Conditional random read
 #if HAS_HBM
       uint64_t t_a = load_scratch(&mem_buffer_a[idx_t]);
       uint64_t t_b = load_scratch(&mem_buffer_b[idx_t]);
-      uint64_t t = (use_buffer_b ? t_b : t_a) ^ result;
+      uint64_t t = (pick_half(v) ? t_b : t_a) ^ result;
 #else
-      uint64_t t = (use_buffer_b ? load_scratch(&mem_buffer_b[idx_t])
+      uint64_t t = (pick_half(v) ? load_scratch(&mem_buffer_b[idx_t])
                                  : load_scratch(&mem_buffer_a[idx_t])) ^ result;
 #endif
 
       uint64_t idx_a_write = map_index(t ^ result ^ XELIS_GOLDEN_RATIO);
       uint64_t idx_b_write = map_index(idx_a_write ^ ~result ^ XELIS_SCATTER_CONST);
 
-      // Issue the two RMW reads now; stores are deferred to next iteration
       uint64_t old_mem_a = load_scratch(&mem_buffer_a[idx_a_write]);
       uint64_t old_b     = load_scratch(&mem_buffer_b[idx_b_write]);
 
@@ -1369,7 +1366,6 @@ XELIS_HOT __device__ void stage_3_hybrid_v2(uint64_t *my_scratch, const uint8_t 
       pending_store = 1;
     }
 
-    // Flush final deferred stores from the last inner-loop iteration
     if (pending_store)
     {
       store_scratch(&mem_buffer_b[pending_idx_b_write], pending_store_b);

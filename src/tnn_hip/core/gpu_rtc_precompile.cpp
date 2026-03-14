@@ -60,7 +60,8 @@ extern "C" bool precompile_all_kernels()
     for (int d = 0; d < deviceCount; ++d) {
         hipDeviceProp_t props{};
         (void)hipGetDeviceProperties(&props, d);
-        printf("[PRECOMPILE]   Device %d: %s\n", d, props.name);
+        printf("[PRECOMPILE]   Device %d: %s%s\n", d, props.name,
+               shouldUseDevice(d) ? "" : " (skipped)");
     }
     fflush(stdout);
 
@@ -106,6 +107,7 @@ extern "C" bool precompile_all_kernels()
 
         // Precompile per device (per-props, per-arch, per-maxregs)
         for (int d = 0; d < deviceCount; ++d) {
+            TNN_GPU_GATE(d)
             hipDeviceProp_t props{};
             (void)hipGetDeviceProperties(&props, d);
 

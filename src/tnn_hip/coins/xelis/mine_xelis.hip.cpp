@@ -132,6 +132,7 @@ void mineXelis_hip(int tid)
   // Initialize one miner per GPU
   for (int d = 0; d < gpuCount; d++)
   {
+    TNN_GPU_GATE(d)
     TNN_LOG_TRACE("[TRACE] mineXelis_hip: Initializing GPU %d...\n", d);
 
     try

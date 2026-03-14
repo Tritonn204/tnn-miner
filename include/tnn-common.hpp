@@ -8,6 +8,7 @@
 #include <string>
 #include <random>
 #include <map>
+#include <set>
 
 #include <boost/program_options.hpp>
 
@@ -432,6 +433,10 @@ extern uint64_t nonce0_dev;
 
 extern double doubleDiff;
 extern double doubleDiffDev;
+
+#ifdef TNN_HIP
+#include "tnn_hip/common/gpu_device_filter.hpp"
+#endif
 
 extern int HIP_deviceCount;
 extern std::string HIP_names[32];
