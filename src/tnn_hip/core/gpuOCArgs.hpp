@@ -1,5 +1,6 @@
 #pragma once
 #include "gpuOC.hip.h"
+#include <cstdint>
 #include <vector>
 #include <string>
 #include <array>
