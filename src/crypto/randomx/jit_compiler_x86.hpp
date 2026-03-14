@@ -48,8 +48,8 @@ namespace randomx {
 		JitCompilerX86();
 		~JitCompilerX86();
 		static void initEngine();
-		void generateProgram(Program&, ProgramConfiguration&);
-		void generateProgramLight(Program&, ProgramConfiguration&, uint32_t);
+		void generateProgram(Program&, ProgramConfiguration&, uint32_t flags = 0);
+		void generateProgramLight(Program&, ProgramConfiguration&, uint32_t, uint32_t flags = 0);
 		template<size_t N>
 		void generateSuperscalarHash(SuperscalarProgram (&programs)[N], std::vector<uint64_t> &);
 		void generateDatasetInitCode();
@@ -74,6 +74,9 @@ namespace randomx {
 		uint8_t* allocatedCode_ = nullptr;
 		size_t allocatedSize_ = 0;
 		int32_t codePos;
+		uint32_t vm_flags = 0;
+		int32_t prevCFROUND = -1;
+		int32_t prevFPOperation = -1;
 
 		void generateProgramPrologue(Program&, ProgramConfiguration&);
 		void generateProgramEpilogue(Program&, ProgramConfiguration&);

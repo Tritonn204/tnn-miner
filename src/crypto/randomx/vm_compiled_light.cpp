@@ -52,7 +52,7 @@ namespace randomx {
 		if (secureJit) {
 			compiler.enableWriting();
 		}
-		compiler.generateProgramLight(program, config, datasetOffset);
+		compiler.generateProgramLight(program, config, datasetOffset, this->vm_flags);
 		if (secureJit) {
 			compiler.enableExecution();
 		}

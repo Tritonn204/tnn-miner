@@ -70,6 +70,7 @@ protected:
 	};
 	uint64_t datasetOffset;
 public:
+	uint32_t vm_flags = 0;
 	std::string cacheKey;
 	alignas(16) uint64_t tempHash[8]; //8 64-bit values used to store intermediate data
 };

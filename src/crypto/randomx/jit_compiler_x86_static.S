@@ -91,6 +91,12 @@ DECL(randomx_program_prologue):
 	and eax, RANDOMX_SCRATCHPAD_MASK
 	ror rdx, 32
 	and edx, RANDOMX_SCRATCHPAD_MASK
+	sub rsp, 40
+	mov dword ptr [rsp], 0x9FC0
+	mov dword ptr [rsp+4], 0xBFC0
+	mov dword ptr [rsp+8], 0xDFC0
+	mov dword ptr [rsp+12], 0xFFC0
+	mov dword ptr [rsp+32], -1
 	jmp rx_program_loop_begin
 
 .balign 64

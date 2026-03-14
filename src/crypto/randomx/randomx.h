@@ -53,7 +53,8 @@ typedef enum
   RANDOMX_FLAG_ARGON2_SSSE3 = 32,
   RANDOMX_FLAG_ARGON2_AVX2 = 64,
   RANDOMX_FLAG_ARGON2_AVX512 = 128,
-  RANDOMX_FLAG_ARGON2 = 224
+  RANDOMX_FLAG_ARGON2 = 224,
+  RANDOMX_FLAG_AMD = 256
 } randomx_flags;
 
 typedef struct randomx_dataset randomx_dataset;

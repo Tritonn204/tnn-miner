@@ -185,8 +185,11 @@ namespace randomx {
 	static const uint8_t REX_MAXPD[] = { 0x66, 0x41, 0x0f, 0x5f };
 	static const uint8_t REX_DIVPD[] = { 0x66, 0x41, 0x0f, 0x5e };
 	static const uint8_t SQRTPD[] = { 0x66, 0x0f, 0x51 };
-	static const uint8_t AND_OR_MOV_LDMXCSR[] = { 0x25, 0x00, 0x60, 0x00, 0x00, 0x0D, 0xC0, 0x9F, 0x00, 0x00, 0x50, 0x0F, 0xAE, 0x14, 0x24, 0x58 };
-	static const uint8_t ROL_RAX[] = { 0x48, 0xc1, 0xc0 };
+	static const uint8_t AND_EAX_0C[] = { 0x83, 0xE0, 0x0C };
+	static const uint8_t LDMXCSR_RSP_RAX[] = { 0x0F, 0xAE, 0x14, 0x04 };
+	static const uint8_t CMP_EAX_RSP_20[] = { 0x3B, 0x44, 0x24, 0x20 };
+	static const uint8_t MOV_RSP_20_EAX[] = { 0x89, 0x44, 0x24, 0x20 };
+	static const uint8_t ROR_RAX[] = { 0x48, 0xC1, 0xC8 };
 	static const uint8_t XOR_ECX_ECX[] = { 0x33, 0xC9 };
 	static const uint8_t REX_CMP_R32I[] = { 0x41, 0x81 };
 	static const uint8_t REX_CMP_M32I[] = { 0x81, 0x3c, 0x06 };
@@ -218,8 +221,15 @@ namespace randomx {
 	static const uint8_t NOP6[] = { 0x66, 0x0F, 0x1F, 0x44, 0x00, 0x00 };
 	static const uint8_t NOP7[] = { 0x0F, 0x1F, 0x80, 0x00, 0x00, 0x00, 0x00 };
 	static const uint8_t NOP8[] = { 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00 };
+	static const uint8_t NOP9[] = { 0x66, 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
-	static const uint8_t* NOPX[] = { NOP1, NOP2, NOP3, NOP4, NOP5, NOP6, NOP7, NOP8 };
+	static const uint8_t* NOPX[] = { NOP1, NOP2, NOP3, NOP4, NOP5, NOP6, NOP7, NOP8, NOP9 };
+
+	// Fixed-size NOP sequences for CFROUND NOP-out (must match exact instruction sizes)
+	static const uint8_t NOP13[] = { 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0F, 0x1F, 0x44, 0x00, 0x00 };
+	static const uint8_t NOP14[] = { 0x0F, 0x1F, 0x80, 0x00, 0x00, 0x00, 0x00, 0x0F, 0x1F, 0x80, 0x00, 0x00, 0x00, 0x00 };
+	static const uint8_t NOP25[] = { 0x66, 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00 };
+	static const uint8_t NOP26[] = { 0x66, 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0x66, 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
 	// CS segment override prefixes used to align branches away from 32-byte boundaries
 	// (JCC erratum mitigation for AMD Zen/Zen2/Zen3)
@@ -278,14 +288,16 @@ namespace randomx {
 		setPagesRX(allocatedCode_, allocatedSize_);
 	}
 
-	void JitCompilerX86::generateProgram(Program& prog, ProgramConfiguration& pcfg) {
+	void JitCompilerX86::generateProgram(Program& prog, ProgramConfiguration& pcfg, uint32_t flags) {
+		vm_flags = flags;
 		generateProgramPrologue(prog, pcfg);
 		memcpy(code + codePos, codeReadDataset, readDatasetSize);
 		codePos += readDatasetSize;
 		generateProgramEpilogue(prog, pcfg);
 	}
 
-	void JitCompilerX86::generateProgramLight(Program& prog, ProgramConfiguration& pcfg, uint32_t datasetOffset) {
+	void JitCompilerX86::generateProgramLight(Program& prog, ProgramConfiguration& pcfg, uint32_t datasetOffset, uint32_t flags) {
+		vm_flags = flags;
 		generateProgramPrologue(prog, pcfg);
 		emit(codeReadDatasetLightSshInit, readDatasetLightInitSize);
 		emit(ADD_EBX_I);
@@ -337,6 +349,8 @@ namespace randomx {
 		for (unsigned i = 0; i < RegistersCount; ++i) {
 			registerUsage[i] = -1;
 		}
+		prevCFROUND = -1;
+		prevFPOperation = -1;
 
 		codePos = prologueSize;
 		memcpy(code + codePos - 48, &pcfg.eMask, sizeof(pcfg.eMask));
@@ -784,6 +798,7 @@ namespace randomx {
 	}
 
 	void JitCompilerX86::h_FADD_R(Instruction& instr, int i) {
+
 		instr.dst %= RegisterCountFlt;
 		instr.src %= RegisterCountFlt;
 		emit(REX_ADDPD);
@@ -791,6 +806,7 @@ namespace randomx {
 	}
 
 	void JitCompilerX86::h_FADD_M(Instruction& instr, int i) {
+
 		instr.dst %= RegisterCountFlt;
 		genAddressReg(instr);
 		emit(REX_CVTDQ2PD_XMM12);
@@ -799,6 +815,7 @@ namespace randomx {
 	}
 
 	void JitCompilerX86::h_FSUB_R(Instruction& instr, int i) {
+
 		instr.dst %= RegisterCountFlt;
 		instr.src %= RegisterCountFlt;
 		emit(REX_SUBPD);
@@ -806,6 +823,7 @@ namespace randomx {
 	}
 
 	void JitCompilerX86::h_FSUB_M(Instruction& instr, int i) {
+
 		instr.dst %= RegisterCountFlt;
 		genAddressReg(instr);
 		emit(REX_CVTDQ2PD_XMM12);
@@ -820,6 +838,7 @@ namespace randomx {
 	}
 
 	void JitCompilerX86::h_FMUL_R(Instruction& instr, int i) {
+
 		instr.dst %= RegisterCountFlt;
 		instr.src %= RegisterCountFlt;
 		emit(REX_MULPD);
@@ -827,6 +846,7 @@ namespace randomx {
 	}
 
 	void JitCompilerX86::h_FDIV_M(Instruction& instr, int i) {
+
 		instr.dst %= RegisterCountFlt;
 		genAddressReg(instr);
 		emit(REX_CVTDQ2PD_XMM12);
@@ -836,6 +856,7 @@ namespace randomx {
 	}
 
 	void JitCompilerX86::h_FSQRT_R(Instruction& instr, int i) {
+
 		instr.dst %= RegisterCountFlt;
 		emit(SQRTPD);
 		emitByte(0xe4 + 9 * instr.dst);
@@ -844,25 +865,20 @@ namespace randomx {
 	void JitCompilerX86::h_CFROUND(Instruction& instr, int i) {
 		emit(REX_MOV_RR64);
 		emitByte(0xc0 + instr.src);
-		int rotate = (13 - (instr.getImm32() & 63)) & 63;
-		if (rotate != 0) {
-			emit(ROL_RAX);
-			emitByte(rotate);
-		}
-		emit(AND_OR_MOV_LDMXCSR);
+		int rotate = (static_cast<int>(instr.getImm32() & 63) - 2) & 63;
+		emit(ROR_RAX);
+		emitByte(rotate);
+		emit(AND_EAX_0C);
+		emit(LDMXCSR_RSP_RAX);
 	}
 
 	// BMI2: rorx rax, r[src], rotate (single non-destructive rotate, no mov needed)
 	void JitCompilerX86::h_CFROUND_BMI2(Instruction& instr, int i) {
-		// Standard uses: mov rax,r[src] + rol rax,(13-imm)&63  (7 bytes, 2 insns)
-		// BMI2 uses:     rorx rax, r[src], (imm-13)&63         (6 bytes, 1 insn)
-		// rol N == ror (64-N), so rol (13-imm)&63 == ror (imm-13)&63
-		int rotate = (static_cast<int>(instr.getImm32() & 63) - 13) & 63;
-		// rorx rax, r[src], rotate -> VEX.LZ.F2.0F3A.W1 F0 /r ib
-		// C4 C3 FB F0 (C0+src) rotate
+		int rotate = (static_cast<int>(instr.getImm32() & 63) - 2) & 63;
 		uint64_t rorx = 0xC0F0FBC3C4ULL | (static_cast<uint64_t>(instr.src) << 32) | (static_cast<uint64_t>(rotate) << 40);
 		emit(reinterpret_cast<const uint8_t*>(&rorx), 6);
-		emit(AND_OR_MOV_LDMXCSR);
+		emit(AND_EAX_0C);
+		emit(LDMXCSR_RSP_RAX);
 	}
 
 	template<bool jccErratum>

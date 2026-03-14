@@ -57,6 +57,9 @@ extern "C" {
 		if (HAVE_AES && cpu.hasAes()) {
 			flags |= RANDOMX_FLAG_HARD_AES;
 		}
+		if (cpu.isAmd()) {
+			flags |= RANDOMX_FLAG_AMD;
+		}
     #ifdef __x86_64
 		if (randomx_argon2_impl_avx512() != nullptr && cpu.hasAvx512()) {
 			flags |= RANDOMX_FLAG_ARGON2_AVX512;
@@ -324,6 +327,8 @@ extern "C" {
 				default:
 					UNREACHABLE;
 			}
+
+			vm->vm_flags = static_cast<uint32_t>(flags);
 
 			if(cache != nullptr) {
 				vm->setCache(cache);
