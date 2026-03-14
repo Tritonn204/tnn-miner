@@ -229,6 +229,8 @@ namespace randomx {
 	}
 
 	JitCompilerX86::JitCompilerX86() {
+		if (engine[0] == nullptr)
+			initEngine();
 		allocatedSize_ = CodeSize * 2;
 		allocatedCode_ = (uint8_t*)allocMemoryPages(allocatedSize_);
 		if (allocatedCode_ == nullptr)
