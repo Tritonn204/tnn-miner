@@ -485,6 +485,39 @@ __device__ __forceinline__ void store_glc_slc(uint64_t *ptr, uint64_t val)
 #endif  // Cache control intrinsics
 
 // ============================================================================
+// Large-L2 scratch access — cached loads/stores for GPUs with big L2
+// ============================================================================
+// NVIDIA: A100/CMP170HX (sm_80=40MB), RTX 40xx (sm_89=24-72MB), H100 (sm_90=50MB)
+// AMD:    MI300 (gfx940/941/942)
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ == 800 || __CUDA_ARCH__ == 890 || __CUDA_ARCH__ == 900)
+  #define LARGE_L2 1
+#elif defined(__gfx940__) || defined(__gfx941__) || defined(__gfx942__)
+  #define LARGE_L2 1
+#else
+  #define LARGE_L2 0
+#endif
+
+#if LARGE_L2
+  __device__ __forceinline__ uint64_t load_scratch(const uint64_t *p) { return *p; }
+  __device__ __forceinline__ void store_scratch(uint64_t *p, uint64_t v) { *p = v; }
+#else
+  __device__ __forceinline__ uint64_t load_scratch(const uint64_t *p) { return load_uncached(p); }
+  __device__ __forceinline__ void store_scratch(uint64_t *p, uint64_t v) { store_glc_slc(p, v); }
+#endif
+
+// HBM detection — bandwidth-rich GPUs can afford speculative dual-loads
+// NVIDIA: A100/CMP170HX (sm_80), H100 (sm_90) — NOT RTX 40xx (GDDR6X)
+// AMD:    Vega (gfx900), RVII (gfx906), MI200 (gfx90a), MI300 (gfx940/941/942)
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ == 800 || __CUDA_ARCH__ == 900)
+  #define HAS_HBM 1
+#elif defined(__gfx900__) || defined(__gfx906__) || defined(__gfx90a__) || \
+      defined(__gfx940__) || defined(__gfx941__) || defined(__gfx942__)
+  #define HAS_HBM 1
+#else
+  #define HAS_HBM 0
+#endif
+
+// ============================================================================
 // ChaCha20 Implementation (Platform-Specific)
 // ============================================================================
 
@@ -1260,9 +1293,9 @@ XELIS_HOT __device__ void stage_3_hybrid_v2(uint64_t *my_scratch, const uint8_t 
 
   for (uint32_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V3; i++)
   {
-    // Random - uncached
-    uint64_t mem_a = load_uncached(&mem_buffer_a[map_index(addr_a)]);
-    uint64_t mem_b = load_uncached(&mem_buffer_b[map_index(mem_a ^ addr_b)]);
+    // Random reads
+    uint64_t mem_a = load_scratch(&mem_buffer_a[map_index(addr_a)]);
+    uint64_t mem_b = load_scratch(&mem_buffer_b[map_index(mem_a ^ addr_b)]);
 
     uint64_t hash1 = mem_b;
     uint64_t hash2 = mem_a;
@@ -1273,14 +1306,28 @@ XELIS_HOT __device__ void stage_3_hybrid_v2(uint64_t *my_scratch, const uint8_t 
     uint64_t idx_a_read = map_index(result);
     prefetch_l1(&mem_buffer_a[idx_a_read]);
 
+    // Deferred writeback state for pipelined RMW tail
+    int pending_store = 0;
+    uint64_t pending_idx_a_write = 0;
+    uint64_t pending_idx_b_write = 0;
+    uint64_t pending_store_a = 0;
+    uint64_t pending_store_b = 0;
+
     for (uint32_t j = 0; j < XELIS_BUFFER_SIZE_V3; j++)
     {
-      // Random reads - uncached (idx_a_read already computed + prefetched)
-      uint64_t a = load_uncached(&mem_buffer_a[idx_a_read]);
-      uint64_t rot_res = ~ROTR(result, r);
-      uint64_t b_val = load_uncached(&mem_buffer_b[map_index(a ^ rot_res)]);
+      // Commit previous iteration's deferred stores first
+      if (pending_store)
+      {
+        store_scratch(&mem_buffer_b[pending_idx_b_write], pending_store_b);
+        store_scratch(&mem_buffer_a[pending_idx_a_write], pending_store_a);
+      }
 
-      // Sequential read - CACHED (benefits from prefetcher)
+      // Random reads (idx_a_read already computed + prefetched)
+      uint64_t a = load_scratch(&mem_buffer_a[idx_a_read]);
+      uint64_t rot_res = ~ROTR(result, r);
+      uint64_t b_val = load_scratch(&mem_buffer_b[map_index(a ^ rot_res)]);
+
+      // Sequential read - CACHED
       uint64_t c = my_scratch[r];
 
       r++;
@@ -1291,30 +1338,49 @@ XELIS_HOT __device__ void stage_3_hybrid_v2(uint64_t *my_scratch, const uint8_t 
       uint64_t idx_seed = v ^ result;
       result = ROTL(idx_seed, r);
 
-      // Lookahead: compute next iteration's index and prefetch
+      // Arm next iteration's random A read as early as possible
       idx_a_read = map_index(result);
       prefetch_l1(&mem_buffer_a[idx_a_read]);
 
       int use_buffer_b = pick_half(v);
       uint64_t idx_t = map_index(idx_seed);
 
-      // Conditional random read - uncached
-      uint64_t t = (use_buffer_b ? load_uncached(&mem_buffer_b[idx_t]) : load_uncached(&mem_buffer_a[idx_t])) ^ result;
+      // Conditional random read
+#if HAS_HBM
+      uint64_t t_a = load_scratch(&mem_buffer_a[idx_t]);
+      uint64_t t_b = load_scratch(&mem_buffer_b[idx_t]);
+      uint64_t t = (use_buffer_b ? t_b : t_a) ^ result;
+#else
+      uint64_t t = (use_buffer_b ? load_scratch(&mem_buffer_b[idx_t])
+                                 : load_scratch(&mem_buffer_a[idx_t])) ^ result;
+#endif
 
       uint64_t idx_a_write = map_index(t ^ result ^ XELIS_GOLDEN_RATIO);
       uint64_t idx_b_write = map_index(idx_a_write ^ ~result ^ XELIS_SCATTER_CONST);
 
-      // Read-modify-write - uncached read, uncached store
-      uint64_t old_mem_a = load_uncached(&mem_buffer_a[idx_a_write]);
-      uint64_t old_b = load_uncached(&mem_buffer_b[idx_b_write]);
-      store_glc_slc(&mem_buffer_b[idx_b_write], old_b ^ old_mem_a ^ ROTR(t, i + j));
-      store_glc_slc(&mem_buffer_a[idx_a_write], t);
+      // Issue the two RMW reads now; stores are deferred to next iteration
+      uint64_t old_mem_a = load_scratch(&mem_buffer_a[idx_a_write]);
+      uint64_t old_b     = load_scratch(&mem_buffer_b[idx_b_write]);
+
+      pending_idx_a_write = idx_a_write;
+      pending_idx_b_write = idx_b_write;
+      pending_store_a = t;
+      pending_store_b = old_b ^ old_mem_a ^ ROTR(t, i + j);
+      pending_store = 1;
+    }
+
+    // Flush final deferred stores from the last inner-loop iteration
+    if (pending_store)
+    {
+      store_scratch(&mem_buffer_b[pending_idx_b_write], pending_store_b);
+      store_scratch(&mem_buffer_a[pending_idx_a_write], pending_store_a);
     }
 
     addr_a = modular_power(addr_a, addr_b, result);
     addr_b = isqrt(result) * (r + 1) * isqrt(addr_a);
   }
 }
+
 
 // GPU-side difficulty check: Compare hash <= target
 __device__ __forceinline__ bool check_difficulty_gpu(const uint8_t *hash, const uint64_t *target)
