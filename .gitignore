@@ -77,3 +77,5 @@ nvrtc_debug/
 !/src/tnn_hip/CMakeLists.txt
 # hiprtc
 !/lib/hiprtc/*.dll
+# Default tune files
+!/default-tunes/**

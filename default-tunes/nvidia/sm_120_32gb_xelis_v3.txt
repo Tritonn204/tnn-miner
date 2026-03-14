@@ -1,0 +1,10 @@
+# Tuning cache for xelis_v3
+# Device: NVIDIA GeForce RTX 5090
+# Generated: 2026-03-11 21:17:59
+compute_units=170
+strategy=2
+block_size=352
+num_blocks=123
+batch_size=43296
+hashrate=29474
+batch_time_ms=1468.95

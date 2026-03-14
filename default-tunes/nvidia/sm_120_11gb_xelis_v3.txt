@@ -1,0 +1,10 @@
+# Tuning cache for xelis_v3
+# Device: NVIDIA GeForce RTX 5070
+# Generated: 2026-03-13 23:37:03
+compute_units=48
+strategy=2
+block_size=480
+num_blocks=46
+batch_size=22080
+hashrate=10308.9
+batch_time_ms=2141.83
