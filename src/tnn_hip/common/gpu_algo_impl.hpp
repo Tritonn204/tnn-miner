@@ -150,15 +150,14 @@ public:
 
     bool initialize(int device_id = 0) override
     {
-        printf("[TRACE] GPUAlgorithm::initialize: Entry for device %d\n", device_id);
-        fflush(stdout);
+        TNN_LOG_TRACE("[TRACE] GPUAlgorithm::initialize: Entry for device %d\n", device_id);
 
         device_id_ = device_id;
         
         hipError_t err = hipSetDevice(device_id);
         if (err != hipSuccess)
         {
-            printf("[ERROR] hipSetDevice(%d) failed: %s\n", device_id, hipGetErrorString(err));
+            TNN_LOG_ERROR("[ERROR] hipSetDevice(%d) failed: %s\n", device_id, hipGetErrorString(err));
             return false;
         }
 
@@ -169,7 +168,7 @@ public:
             if (err == hipSuccess) {
                 (void)hipFree(dummy);
             } else {
-                printf("[ERROR] Failed to initialize CUDA context: %s\n", hipGetErrorString(err));
+                TNN_LOG_ERROR("[ERROR] Failed to initialize CUDA context: %s\n", hipGetErrorString(err));
                 return false;
             }
         }
@@ -179,7 +178,6 @@ public:
         compute_units_ = device_props_.multiProcessorCount;
         
         TNN_LOG_INFO("[INFO] GPU %d: %s (%d CUs)\n", device_id, device_props_.name, compute_units_);
-        fflush(stdout);
 
         if (!compile_kernel()) {
             return false;
@@ -276,14 +274,14 @@ public:
         hipError_t last_err = hipGetLastError();
 
         if (!success) {
-            fprintf(stderr, "[ERROR] GPU %d: Kernel launch reported failure\n", device_id_);
+            TNN_LOG_ERROR("[ERROR] GPU %d: Kernel launch reported failure\n", device_id_);
         }
         if (sync_err != hipSuccess) {
-            fprintf(stderr, "[ERROR] GPU %d: hipEventSynchronize failed: %s\n",
+            TNN_LOG_ERROR("[ERROR] GPU %d: hipEventSynchronize failed: %s\n",
                     device_id_, hipGetErrorString(sync_err));
         }
         if (last_err != hipSuccess) {
-            fprintf(stderr, "[ERROR] GPU %d: Async kernel error: %s\n",
+            TNN_LOG_ERROR("[ERROR] GPU %d: Async kernel error: %s\n",
                     device_id_, hipGetErrorString(last_err));
         }
 
@@ -421,31 +419,30 @@ private:
                     kernels_[kernel_name] = func;
                     TNN_LOG_INFO("[INFO] GPU %d: Loaded kernel '%s'\n", device_id_, kernel_name.c_str());
                 } else {
-                    printf("[WARN] GPU %d: Could not load kernel '%s': %s\n", 
+                    TNN_LOG_DEBUG("[WARN] GPU %d: Could not load kernel '%s': %s\n",
                            device_id_, kernel_name.c_str(), hipGetErrorString(err));
                 }
             }
             
             if (kernels_.empty()) {
-                fprintf(stderr, "[ERROR] No kernels loaded!\n");
+                TNN_LOG_ERROR("[ERROR] No kernels loaded!\n");
                 return false;
             }
 
-            // Debug: Print loaded kernels for this device
-            TNN_LOG_INFO("[INFO] GPU %d: Loaded %zu kernel(s):\n", device_id_, kernels_.size());
+            TNN_LOG_DEBUG("[DEBUG] GPU %d: Loaded %zu kernel(s):\n", device_id_, kernels_.size());
             for (const auto& kv : kernels_) {
-                TNN_LOG_INFO("[INFO] GPU %d:   - %s\n", device_id_, kv.first.c_str());
+                TNN_LOG_DEBUG("[DEBUG] GPU %d:   - %s\n", device_id_, kv.first.c_str());
             }
             if (config_.execute_fn) {
-                TNN_LOG_INFO("[INFO] GPU %d: Using custom execution strategy\n", device_id_);
+                TNN_LOG_DEBUG("[DEBUG] GPU %d: Using custom execution strategy\n", device_id_);
             } else {
-                TNN_LOG_INFO("[INFO] GPU %d: Using default monolithic execution\n", device_id_);
+                TNN_LOG_DEBUG("[DEBUG] GPU %d: Using default monolithic execution\n", device_id_);
             }
 
             return true;
         }
         catch (const std::exception &e) {
-            fprintf(stderr, "[ERROR] RTC compilation failed: %s\n", e.what());
+            TNN_LOG_ERROR("[ERROR] RTC compilation failed: %s\n", e.what());
             return false;
         }
     }
@@ -458,7 +455,7 @@ private:
         // Ensure correct device context for allocation
         hipError_t set_err = hipSetDevice(device_id_);
         if (set_err != hipSuccess) {
-            fprintf(stderr, "[ERROR] GPU %d: hipSetDevice failed before allocation: %s\n",
+            TNN_LOG_ERROR("[ERROR] GPU %d: hipSetDevice failed before allocation: %s\n",
                     device_id_, hipGetErrorString(set_err));
             return false;
         }
@@ -466,20 +463,19 @@ private:
         hipError_t err;
 
         size_t scratch_size = batch_size_ * config_.scratch_per_hash;
-        TNN_LOG_INFO("[INFO] GPU %d: Allocating buffers (batch=%u, scratch=%zu MB)\n",
+        TNN_LOG_DEBUG("[DEBUG] GPU %d: Allocating buffers (batch=%u, scratch=%zu MB)\n",
                device_id_, batch_size_, scratch_size / (1024*1024));
-        fflush(stdout);
 
         err = hipMalloc(&d_input_, config_.template_size);
         if (err != hipSuccess) {
-            fprintf(stderr, "[ERROR] GPU %d: hipMalloc d_input_ (%zu bytes) failed: %s\n",
+            TNN_LOG_ERROR("[ERROR] GPU %d: hipMalloc d_input_ (%zu bytes) failed: %s\n",
                     device_id_, config_.template_size, hipGetErrorString(err));
             return false;
         }
 
         err = hipMalloc(&d_outputs_, batch_size_ * config_.hash_size);
         if (err != hipSuccess) {
-            fprintf(stderr, "[ERROR] GPU %d: hipMalloc d_outputs_ (%zu bytes) failed: %s\n",
+            TNN_LOG_ERROR("[ERROR] GPU %d: hipMalloc d_outputs_ (%zu bytes) failed: %s\n",
                     device_id_, batch_size_ * config_.hash_size, hipGetErrorString(err));
             cleanup_batch_buffers();
             return false;
@@ -487,7 +483,7 @@ private:
 
         err = hipMalloc(&d_scratch_, scratch_size);
         if (err != hipSuccess) {
-            fprintf(stderr, "[ERROR] GPU %d: hipMalloc d_scratch_ (%zu MB) failed: %s\n",
+            TNN_LOG_ERROR("[ERROR] GPU %d: hipMalloc d_scratch_ (%zu MB) failed: %s\n",
                     device_id_, scratch_size / (1024*1024), hipGetErrorString(err));
             cleanup_batch_buffers();
             return false;
@@ -495,7 +491,7 @@ private:
 
         err = hipMalloc(&d_difficulty_target_, 32);
         if (err != hipSuccess) {
-            fprintf(stderr, "[ERROR] GPU %d: hipMalloc d_difficulty_target_ failed: %s\n",
+            TNN_LOG_ERROR("[ERROR] GPU %d: hipMalloc d_difficulty_target_ failed: %s\n",
                     device_id_, hipGetErrorString(err));
             cleanup_batch_buffers();
             return false;
@@ -504,14 +500,13 @@ private:
         size_t solutions_size = 8 + 1024 * 40 + 16;
         err = hipMalloc(&d_solutions_, solutions_size);
         if (err != hipSuccess) {
-            fprintf(stderr, "[ERROR] GPU %d: hipMalloc d_solutions_ failed: %s\n",
+            TNN_LOG_ERROR("[ERROR] GPU %d: hipMalloc d_solutions_ failed: %s\n",
                     device_id_, hipGetErrorString(err));
             cleanup_batch_buffers();
             return false;
         }
 
-        TNN_LOG_INFO("[INFO] GPU %d: Buffer allocation successful\n", device_id_);
-        fflush(stdout);
+        TNN_LOG_DEBUG("[DEBUG] GPU %d: Buffer allocation successful\n", device_id_);
         return true;
     }
     
@@ -915,9 +910,8 @@ private:
         // Check for async kernel errors after completion
         hipError_t post_err = hipGetLastError();
         if (post_err != hipSuccess) {
-            fprintf(stderr, "[AUTOTUNE] GPU %d: Kernel execution error: %s (batch=%u, block=%d, strategy=%u)\n",
+            TNN_LOG_ERROR("[AUTOTUNE] GPU %d: Kernel execution error: %s (batch=%u, block=%d, strategy=%u)\n",
                     device_id_, hipGetErrorString(post_err), test_batch, test_block_size, test_strategy);
-            fflush(stderr);
             (void)hipEventDestroy(start_ev);
             (void)hipEventDestroy(stop_ev);
             return result;
@@ -927,9 +921,8 @@ private:
         hipError_t time_err = hipEventElapsedTime(&ms, start_ev, stop_ev);
 
         if (time_err != hipSuccess) {
-            fprintf(stderr, "[AUTOTUNE] GPU %d: hipEventElapsedTime failed: %s\n",
+            TNN_LOG_ERROR("[AUTOTUNE] GPU %d: hipEventElapsedTime failed: %s\n",
                     device_id_, hipGetErrorString(time_err));
-            fflush(stderr);
             (void)hipEventDestroy(start_ev);
             (void)hipEventDestroy(stop_ev);
             return result;
@@ -955,7 +948,7 @@ private:
         // In multi-GPU setups, device context can switch between threads
         hipError_t err = hipSetDevice(device_id_);
         if (err != hipSuccess) {
-            fprintf(stderr, "[ERROR] run_autotune: hipSetDevice(%d) failed: %s\n",
+            TNN_LOG_ERROR("[ERROR] run_autotune: hipSetDevice(%d) failed: %s\n",
                     device_id_, hipGetErrorString(err));
             return calculate_static_batch();
         }
@@ -1206,11 +1199,8 @@ private:
                 int test_num_blocks = probe_batch / test_block_size;
 
                 // Warmup run
-                if (tnn_log_enabled(TnnLogLevel::Trace)) {
-                    fprintf(stderr, "[TRACE] GPU %d: Warmup: strategy=%u, batch=%u, block=%d, blocks=%d\n",
+                TNN_LOG_TRACE("[TRACE] GPU %d: Warmup: strategy=%u, batch=%u, block=%d, blocks=%d\n",
                             device_id_, test_strategy, probe_batch, test_block_size, test_num_blocks);
-                    fflush(stderr);
-                }
 
                 auto warmup = run_timed_kernel_test(
                     probe_batch, test_block_size, test_num_blocks,
@@ -1218,11 +1208,8 @@ private:
                     tune_stream, timeout_ms * 2, test_strategy
                 );
 
-                if (tnn_log_enabled(TnnLogLevel::Trace)) {
-                    fprintf(stderr, "[TRACE] GPU %d: Warmup: valid=%d, time=%.2fms\n",
+                TNN_LOG_TRACE("[TRACE] GPU %d: Warmup: valid=%d, time=%.2fms\n",
                             device_id_, warmup.valid, warmup.time_ms);
-                    fflush(stderr);
-                }
 
                 if (!warmup.valid) {
                     block_out.printf("[AUTOTUNE] GPU %d:   %.1fx (batch=%6u): WARMUP FAILED\n",
@@ -1241,11 +1228,8 @@ private:
                 bool any_timeout = false;
 
                 for (int iter = 0; iter < config_.autotune_iterations; iter++) {
-                    if (tnn_log_enabled(TnnLogLevel::Trace)) {
-                        fprintf(stderr, "[TRACE] GPU %d: Bench %d/%d: strategy=%u, batch=%u, block=%d\n",
+                    TNN_LOG_TRACE("[TRACE] GPU %d: Bench %d/%d: strategy=%u, batch=%u, block=%d\n",
                                 device_id_, iter + 1, config_.autotune_iterations, test_strategy, probe_batch, test_block_size);
-                        fflush(stderr);
-                    }
 
                     auto result = run_timed_kernel_test(
                         probe_batch, test_block_size, test_num_blocks,
@@ -1253,16 +1237,12 @@ private:
                         tune_stream, timeout_ms, test_strategy
                     );
 
-                    if (tnn_log_enabled(TnnLogLevel::Trace)) {
-                        fprintf(stderr, "[TRACE] GPU %d: Bench %d: valid=%d, time=%.2fms\n",
+                    TNN_LOG_TRACE("[TRACE] GPU %d: Bench %d: valid=%d, time=%.2fms\n",
                                 device_id_, iter + 1, result.valid, result.time_ms);
-                        fflush(stderr);
-                    }
 
                     if (!result.valid) {
-                        fprintf(stderr, "[AUTOTUNE] GPU %d: Benchmark iter %d FAILED (strategy=%u, batch=%u, block=%d)\n",
+                        TNN_LOG_ERROR("[AUTOTUNE] GPU %d: Benchmark iter %d FAILED (strategy=%u, batch=%u, block=%d)\n",
                                 device_id_, iter + 1, test_strategy, probe_batch, test_block_size);
-                        fflush(stderr);
                         break;
                     }
 
