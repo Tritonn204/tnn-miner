@@ -145,7 +145,7 @@ extern "C" void test_hiprtc_isolation() {
     #if defined(__HIP_PLATFORM_NVIDIA__)
         {
             char buf[64];
-            snprintf(buf, sizeof(buf), "--gpu-architecture=sm_%d%d", props.major, props.minor, props.major, props.minor);
+            snprintf(buf, sizeof(buf), "--gpu-architecture=sm_%d%d", props.major, props.minor);
             arch_option = buf;
             printf("[ISOLATION TEST] Platform: NVIDIA (%s)\n", buf);
         }

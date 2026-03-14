@@ -162,7 +162,7 @@ inline bool xelis_v3_execute(
     const KernelLaunchContext& ctx
 ) {
     int dev = 0;
-    hipGetDevice(&dev);
+    (void)hipGetDevice(&dev);
 
     const auto strategy = static_cast<XelisStrategy>(ctx.strategy);
     uint32_t scratch_offset = 0;

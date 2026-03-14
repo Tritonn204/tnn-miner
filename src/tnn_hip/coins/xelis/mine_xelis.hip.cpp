@@ -117,11 +117,11 @@ void mineXelis_hip(int tid)
   TNN_LOG_TRACE("[TRACE] mineXelis_hip: Entry, tid=%d\n", tid);
 
   // Bind CUDA context to this thread before any other HIP calls
-  hipSetDevice(0);
+  (void)hipSetDevice(0);
 
   std::vector<std::unique_ptr<GPUMiner>> miners;
   int gpuCount;
-  hipGetDeviceCount(&gpuCount);
+  (void)hipGetDeviceCount(&gpuCount);
 
   TNN_LOG_TRACE("[TRACE] mineXelis_hip: Found %d GPU(s)\n", gpuCount);
 

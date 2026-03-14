@@ -4,7 +4,9 @@
 #include "astroworker.h"
 
 #ifdef _MSC_VER
+#ifndef NOMINMAX
 #define NOMINMAX // Disable Windows macros for min and max
+#endif
 #endif
 
 #include <algorithm>

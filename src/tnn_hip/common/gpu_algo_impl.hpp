@@ -122,14 +122,14 @@ public:
         if (!initialized_) return false;
 
         // Ensure correct device context
-        hipSetDevice(device_id_);
+        (void)hipSetDevice(device_id_);
 
         batch_size = (batch_size / block_size_) * block_size_;
         if (batch_size == 0) batch_size = block_size_;
 
         size_t required = batch_size * config_.scratch_per_hash;
         size_t free_mem, total_mem;
-        hipMemGetInfo(&free_mem, &total_mem);
+        (void)hipMemGetInfo(&free_mem, &total_mem);
         
         if (required > free_mem * config_.memory_usage_factor) {
             return false;
@@ -167,7 +167,7 @@ public:
             void *dummy = nullptr;
             err = hipMalloc(&dummy, 256);
             if (err == hipSuccess) {
-                hipFree(dummy);
+                (void)hipFree(dummy);
             } else {
                 printf("[ERROR] Failed to initialize CUDA context: %s\n", hipGetErrorString(err));
                 return false;
@@ -175,7 +175,7 @@ public:
         }
 #endif
 
-        hipGetDeviceProperties(&device_props_, device_id);
+        (void)hipGetDeviceProperties(&device_props_, device_id);
         compute_units_ = device_props_.multiProcessorCount;
         
         TNN_LOG_INFO("[INFO] GPU %d: %s (%d CUs)\n", device_id, device_props_.name, compute_units_);
@@ -193,8 +193,8 @@ public:
             return false;
         }
 
-        hipEventCreate(&start_event_);
-        hipEventCreate(&stop_event_);
+        (void)hipEventCreate(&start_event_);
+        (void)hipEventCreate(&stop_event_);
 
         initialized_ = true;
         
@@ -207,42 +207,42 @@ public:
     void cleanup() override
     {
         // Ensure correct device context for cleanup
-        if (device_id_ >= 0) hipSetDevice(device_id_);
+        if (device_id_ >= 0) (void)hipSetDevice(device_id_);
 
         cleanup_batch_buffers();
-        if (start_event_) { hipEventDestroy(start_event_); start_event_ = nullptr; }
-        if (stop_event_) { hipEventDestroy(stop_event_); stop_event_ = nullptr; }
+        if (start_event_) { (void)hipEventDestroy(start_event_); start_event_ = nullptr; }
+        if (stop_event_) { (void)hipEventDestroy(stop_event_); stop_event_ = nullptr; }
         initialized_ = false;
     }
 
     void set_work(const uint8_t *work_template, uint64_t difficulty) override
     {
         // Ensure correct device context
-        hipSetDevice(device_id_);
+        (void)hipSetDevice(device_id_);
 
         // Save host-side copy for solution verification (prevents race with job updates)
         h_work_template_.resize(config_.template_size);
         memcpy(h_work_template_.data(), work_template, config_.template_size);
 
-        hipMemcpy(d_input_, work_template, config_.template_size, hipMemcpyHostToDevice);
+        (void)hipMemcpy(d_input_, work_template, config_.template_size, hipMemcpyHostToDevice);
         uint64_t target[4];
         compute_target(difficulty, target);
-        hipMemcpy(d_difficulty_target_, target, 32, hipMemcpyHostToDevice);
+        (void)hipMemcpy(d_difficulty_target_, target, 32, hipMemcpyHostToDevice);
     }
 
     // Get the currently-active work template for this miner (for solution verification)
-    const uint8_t* get_current_work_template() const {
+    const uint8_t* get_current_work_template() const override {
         return h_work_template_.empty() ? nullptr : h_work_template_.data();
     }
 
     BatchResult mine_batch(uint64_t nonce_start, uint32_t count = 0) override
     {
         // Ensure correct device context for mining
-        hipSetDevice(device_id_);
+        (void)hipSetDevice(device_id_);
 
         if (count == 0) count = batch_size_;
 
-        hipMemset(d_solutions_, 0, 24);
+        (void)hipMemset(d_solutions_, 0, 24);
 
         // Build launch context
         KernelLaunchContext ctx;
@@ -259,7 +259,7 @@ public:
         ctx.config = &config_;
         ctx.stream = nullptr;  // Default stream
 
-        hipEventRecord(start_event_);
+        (void)hipEventRecord(start_event_);
 
         // Execute using strategy (custom or default)
         bool success;
@@ -269,7 +269,7 @@ public:
             success = default_monolithic_execute(kernels_, ctx);
         }
 
-        hipEventRecord(stop_event_);
+        (void)hipEventRecord(stop_event_);
         hipError_t sync_err = hipEventSynchronize(stop_event_);
 
         // Check for async kernel errors (illegal memory access, stack overflow, etc.)
@@ -288,7 +288,7 @@ public:
         }
 
         float ms;
-        hipEventElapsedTime(&ms, start_event_, stop_event_);
+        (void)hipEventElapsedTime(&ms, start_event_, stop_event_);
         last_hashrate_ = (count * 1000.0) / ms;
 
         // Rest unchanged - extract solutions
@@ -297,7 +297,7 @@ public:
         result.count = count;
 
         uint64_t solution_count = 0;
-        hipMemcpy(&solution_count, d_solutions_, sizeof(uint64_t), hipMemcpyDeviceToHost);
+        (void)hipMemcpy(&solution_count, d_solutions_, sizeof(uint64_t), hipMemcpyDeviceToHost);
 
         if (solution_count > count) solution_count = 0;
         if (solution_count > 1024) solution_count = 1024;
@@ -308,7 +308,7 @@ public:
             size_t solution_bytes = solution_count * 40;
             std::vector<uint64_t> raw_solutions(solution_count * 5);
 
-            hipMemcpy(raw_solutions.data(), d_solutions_ + 1, solution_bytes, hipMemcpyDeviceToHost);
+            (void)hipMemcpy(raw_solutions.data(), d_solutions_ + 1, solution_bytes, hipMemcpyDeviceToHost);
 
             result.valid_nonces.reserve(solution_count);
             result.valid_hashes.resize(solution_count * config_.hash_size);
@@ -517,13 +517,13 @@ private:
     
     void cleanup_batch_buffers() {
         // Ensure correct device context for deallocation
-        if (device_id_ >= 0) hipSetDevice(device_id_);
+        if (device_id_ >= 0) (void)hipSetDevice(device_id_);
 
-        if (d_input_) { hipFree(d_input_); d_input_ = nullptr; }
-        if (d_outputs_) { hipFree(d_outputs_); d_outputs_ = nullptr; }
-        if (d_scratch_) { hipFree(d_scratch_); d_scratch_ = nullptr; }
-        if (d_difficulty_target_) { hipFree(d_difficulty_target_); d_difficulty_target_ = nullptr; }
-        if (d_solutions_) { hipFree(d_solutions_); d_solutions_ = nullptr; }
+        if (d_input_) { (void)hipFree(d_input_); d_input_ = nullptr; }
+        if (d_outputs_) { (void)hipFree(d_outputs_); d_outputs_ = nullptr; }
+        if (d_scratch_) { (void)hipFree(d_scratch_); d_scratch_ = nullptr; }
+        if (d_difficulty_target_) { (void)hipFree(d_difficulty_target_); d_difficulty_target_ = nullptr; }
+        if (d_solutions_) { (void)hipFree(d_solutions_); d_solutions_ = nullptr; }
     }
 
     // ========================================================================
@@ -559,12 +559,12 @@ private:
     
     bool calculate_static_batch() {
         // Ensure correct device context for memory queries
-        hipSetDevice(device_id_);
+        (void)hipSetDevice(device_id_);
 
         block_size_ = config_.preferred_block_size;
 
         size_t free_mem, total_mem;
-        hipMemGetInfo(&free_mem, &total_mem);
+        (void)hipMemGetInfo(&free_mem, &total_mem);
 
         size_t reserved = (size_t)(config_.memory_reserve_mb * 1024 * 1024);
         size_t available = (size_t)((free_mem - reserved) * config_.memory_usage_factor);
@@ -676,7 +676,7 @@ private:
 
     bool load_cached_tune() {
         // Ensure correct device context for memory validation
-        hipSetDevice(device_id_);
+        (void)hipSetDevice(device_id_);
 
         std::string path = get_tune_cache_path();
         std::ifstream f(path);
@@ -716,7 +716,7 @@ private:
             if (cached.block_size > 0 && cached.batch_size > 0) {
                 size_t required = cached.batch_size * config_.scratch_per_hash;
                 size_t free_mem, total_mem;
-                hipMemGetInfo(&free_mem, &total_mem);
+                (void)hipMemGetInfo(&free_mem, &total_mem);
 
                 size_t usable = (size_t)(free_mem * 0.95);
                 if (required > usable && config_.scratch_per_hash > 0) {
@@ -831,19 +831,19 @@ private:
         ctx.config = &config_;
         ctx.stream = stream;
         
-        hipMemsetAsync(test_solutions, 0, 8, stream);
+        (void)hipMemsetAsync(test_solutions, 0, 8, stream);
 
         hipEvent_t start_ev, stop_ev;
-        hipEventCreate(&start_ev);
-        hipEventCreate(&stop_ev);
+        (void)hipEventCreate(&start_ev);
+        (void)hipEventCreate(&stop_ev);
 
-        hipEventRecord(start_ev, stream);
+        (void)hipEventRecord(start_ev, stream);
 
         // Check if kernels are loaded
         if (kernels_.empty()) {
             TNN_LOG_DEBUG("[TUNE DEBUG] GPU %d: No kernels loaded!\n", device_id_);
-            hipEventDestroy(start_ev);
-            hipEventDestroy(stop_ev);
+            (void)hipEventDestroy(start_ev);
+            (void)hipEventDestroy(stop_ev);
             return result;
         }
 
@@ -857,8 +857,8 @@ private:
 
         if (!success) {
             TNN_LOG_DEBUG("[TUNE DEBUG] GPU %d: Kernel launch returned failure\n", device_id_);
-            hipEventDestroy(start_ev);
-            hipEventDestroy(stop_ev);
+            (void)hipEventDestroy(start_ev);
+            (void)hipEventDestroy(stop_ev);
             return result;
         }
 
@@ -867,12 +867,12 @@ private:
         if (launch_err != hipSuccess) {
             TNN_LOG_DEBUG("[TUNE DEBUG] GPU %d: Kernel launch error: %s\n",
                     device_id_, hipGetErrorString(launch_err));
-            hipEventDestroy(start_ev);
-            hipEventDestroy(stop_ev);
+            (void)hipEventDestroy(start_ev);
+            (void)hipEventDestroy(stop_ev);
             return result;
         }
 
-        hipEventRecord(stop_ev, stream);
+        (void)hipEventRecord(stop_ev, stream);
         
         // Poll for completion with timeout
         auto wall_start = std::chrono::steady_clock::now();
@@ -885,8 +885,8 @@ private:
             }
             
             if (query != hipErrorNotReady) {
-                hipEventDestroy(start_ev);
-                hipEventDestroy(stop_ev);
+                (void)hipEventDestroy(start_ev);
+                (void)hipEventDestroy(stop_ev);
                 return result;
             }
             
@@ -895,17 +895,17 @@ private:
             
             if (elapsed_ms > timeout_ms) {
                 result.timed_out = true;
-                hipStreamSynchronize(stream);
-                
+                (void)hipStreamSynchronize(stream);
+
                 float actual_ms;
-                hipEventElapsedTime(&actual_ms, start_ev, stop_ev);
+                (void)hipEventElapsedTime(&actual_ms, start_ev, stop_ev);
                 
                 result.valid = true;
                 result.time_ms = actual_ms;
                 result.hashrate = (test_batch * 1000.0) / actual_ms;
-                
-                hipEventDestroy(start_ev);
-                hipEventDestroy(stop_ev);
+
+                (void)hipEventDestroy(start_ev);
+                (void)hipEventDestroy(stop_ev);
                 return result;
             }
             
@@ -918,8 +918,8 @@ private:
             fprintf(stderr, "[AUTOTUNE] GPU %d: Kernel execution error: %s (batch=%u, block=%d, strategy=%u)\n",
                     device_id_, hipGetErrorString(post_err), test_batch, test_block_size, test_strategy);
             fflush(stderr);
-            hipEventDestroy(start_ev);
-            hipEventDestroy(stop_ev);
+            (void)hipEventDestroy(start_ev);
+            (void)hipEventDestroy(stop_ev);
             return result;
         }
 
@@ -930,8 +930,8 @@ private:
             fprintf(stderr, "[AUTOTUNE] GPU %d: hipEventElapsedTime failed: %s\n",
                     device_id_, hipGetErrorString(time_err));
             fflush(stderr);
-            hipEventDestroy(start_ev);
-            hipEventDestroy(stop_ev);
+            (void)hipEventDestroy(start_ev);
+            (void)hipEventDestroy(stop_ev);
             return result;
         }
 
@@ -945,8 +945,8 @@ private:
         result.time_ms = ms;
         result.hashrate = (test_batch * 1000.0) / ms;
 
-        hipEventDestroy(start_ev);
-        hipEventDestroy(stop_ev);
+        (void)hipEventDestroy(start_ev);
+        (void)hipEventDestroy(stop_ev);
         return result;
     }
 
@@ -1048,7 +1048,7 @@ private:
 #endif
         
         size_t free_mem, total_mem;
-        hipMemGetInfo(&free_mem, &total_mem);
+        (void)hipMemGetInfo(&free_mem, &total_mem);
         size_t reserved = (size_t)(config_.memory_reserve_mb * 1024 * 1024);
         size_t max_usable = (size_t)((free_mem - reserved) * config_.memory_usage_factor);
         
@@ -1071,13 +1071,13 @@ private:
                 for (size_t i = 0; i < waiters.size(); i++) {
                     out.printf("%d%s", waiters[i], (i < waiters.size() - 1) ? ", " : "");
                 }
-                out.printf("\n");
+                out.printf("%s", "\n");
             }
             out.newline();
         }
         
         hipStream_t tune_stream;
-        hipStreamCreate(&tune_stream);
+        (void)hipStreamCreate(&tune_stream);
 
         TuningResult best;
         best.hashrate = 0;
@@ -1105,7 +1105,7 @@ private:
                         : "?";
                     out.printf("%s %s(%u)", si == 0 ? ":" : ",", sname, strategies_to_test[si]);
                 }
-                out.printf("\n");
+                out.printf("%s", "\n");
             }
             out.newline();
         }
@@ -1195,13 +1195,13 @@ private:
                 }
 
                 // Allocate auxiliary buffers
-                hipMalloc(&test_input, config_.template_size);
-                hipMalloc(&test_outputs, probe_batch * config_.hash_size);
-                hipMalloc(&test_target, 32);
-                hipMalloc(&test_solutions, 8 + 1024 * 40 + 16);
+                (void)hipMalloc(&test_input, config_.template_size);
+                (void)hipMalloc(&test_outputs, probe_batch * config_.hash_size);
+                (void)hipMalloc(&test_target, 32);
+                (void)hipMalloc(&test_solutions, 8 + 1024 * 40 + 16);
 
-                hipMemset(test_input, 0, config_.template_size);
-                hipMemset(test_target, 0xFF, 32);
+                (void)hipMemset(test_input, 0, config_.template_size);
+                (void)hipMemset(test_target, 0xFF, 32);
 
                 int test_num_blocks = probe_batch / test_block_size;
 
@@ -1227,11 +1227,11 @@ private:
                 if (!warmup.valid) {
                     block_out.printf("[AUTOTUNE] GPU %d:   %.1fx (batch=%6u): WARMUP FAILED\n",
                                      device_id_, mult_display, probe_batch);
-                    hipFree(test_scratch);
-                    hipFree(test_input);
-                    hipFree(test_outputs);
-                    hipFree(test_target);
-                    hipFree(test_solutions);
+                    (void)hipFree(test_scratch);
+                    (void)hipFree(test_input);
+                    (void)hipFree(test_outputs);
+                    (void)hipFree(test_target);
+                    (void)hipFree(test_solutions);
                     break;
                 }
 
@@ -1279,11 +1279,11 @@ private:
                 }
 
                 // Cleanup
-                hipFree(test_scratch);
-                hipFree(test_input);
-                hipFree(test_outputs);
-                hipFree(test_target);
-                hipFree(test_solutions);
+                (void)hipFree(test_scratch);
+                (void)hipFree(test_input);
+                (void)hipFree(test_outputs);
+                (void)hipFree(test_target);
+                (void)hipFree(test_solutions);
 
                 if (valid_runs == 0) {
                     block_out.printf("[AUTOTUNE] GPU %d:   %.1fx (batch=%6u): NO VALID RUNS\n",
@@ -1347,7 +1347,7 @@ private:
 
         } // end strategy loop
 
-        hipStreamDestroy(tune_stream);
+        (void)hipStreamDestroy(tune_stream);
         
         // Results block
         bool tune_success = false;

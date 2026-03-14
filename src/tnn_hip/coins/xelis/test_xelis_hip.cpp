@@ -217,11 +217,11 @@ static int run_test_case(
     delete[] cpu_scratch_s1;
     delete[] cpu_scratch_s3;
     delete[] cpu_hashes;
-    hipFree(d_input);
-    hipFree(d_scratch);
-    hipFree(d_output);
-    hipFree(d_difficulty);
-    hipFree(d_solutions);
+    (void)hipFree(d_input);
+    (void)hipFree(d_scratch);
+    (void)hipFree(d_output);
+    (void)hipFree(d_difficulty);
+    (void)hipFree(d_solutions);
 
     return all_pass ? 0 : 1;
 }
@@ -300,7 +300,7 @@ static int test_xelis_hip_impl() {
 
         // Arch-dependent stage3 register cap
         hipDeviceProp_t props;
-        hipGetDeviceProperties(&props, 0);
+        (void)hipGetDeviceProperties(&props, 0);
         int s3_nreg = (props.major >= 9) ? 40 : (props.major >= 8) ? 64 : 80;
         compile_opts.push_back("-DXELIS_S3_NREG=" + std::to_string(s3_nreg));
     }
@@ -417,7 +417,7 @@ static int test_threaded_level1(
 
     std::atomic<int> result{-1};
     std::thread gpu_thread([&]() {
-        hipSetDevice(0);
+        (void)hipSetDevice(0);
         result = run_test_case(
             "Threaded: std::thread GPU",
             stage1_func, stage3_func, blake3_func,
@@ -463,7 +463,7 @@ static int test_threaded_level2(
 
     std::atomic<int> result{-1};
     std::thread gpu_thread([&]() {
-        hipSetDevice(0);
+        (void)hipSetDevice(0);
         result = run_test_case(
             "Threaded: GPU + asio io_context",
             stage1_func, stage3_func, blake3_func,
@@ -519,7 +519,7 @@ static int test_threaded_level3(
 
     std::atomic<int> result{-1};
     std::thread gpu_thread([&]() {
-        hipSetDevice(0);
+        (void)hipSetDevice(0);
         result = run_test_case(
             "Threaded: GPU + boost::asio::spawn",
             stage1_func, stage3_func, blake3_func,
@@ -568,7 +568,7 @@ static int test_threaded_level4(
 
     std::atomic<int> result{-1};
     std::thread gpu_thread([&]() {
-        hipSetDevice(0);
+        (void)hipSetDevice(0);
         result = run_test_case(
             "Threaded: GPU + SSL ctx",
             stage1_func, stage3_func, blake3_func,
@@ -624,7 +624,7 @@ static int test_threaded_level5(
 
     std::atomic<int> result{-1};
     std::thread gpu_thread([&]() {
-        hipSetDevice(0);
+        (void)hipSetDevice(0);
         result = run_test_case(
             "Threaded: GPU + SSL + resolve",
             stage1_func, stage3_func, blake3_func,
@@ -697,7 +697,7 @@ static int test_threaded_level6(
 
     std::atomic<int> result{-1};
     std::thread gpu_thread([&]() {
-        hipSetDevice(0);
+        (void)hipSetDevice(0);
         result = run_test_case(
             "Threaded: full getWork sim",
             stage1_func, stage3_func, blake3_func,
@@ -743,7 +743,7 @@ int test_xelis_hip() {
             std::string(hip_xelis_v3_source::SRC_TNN_HIP_CRYPTO_XELIS_HASH_XELIS_HASH_V3_HIP_SOURCE);
 
         hipDeviceProp_t props;
-        hipGetDeviceProperties(&props, 0);
+        (void)hipGetDeviceProperties(&props, 0);
 
         #if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
         bool is_amd = false;
@@ -772,8 +772,8 @@ int test_xelis_hip() {
 
         hipFunction_t stage1_func = module_kernel.function;
         hipFunction_t stage3_func = nullptr, blake3_func = nullptr;
-        hipModuleGetFunction(&stage3_func, module_kernel.module, "xelis_s3_hybrid_v2_noblake_kernel");
-        hipModuleGetFunction(&blake3_func, module_kernel.module, "xelis_blake3_batch");
+        (void)hipModuleGetFunction(&stage3_func, module_kernel.module, "xelis_s3_hybrid_v2_noblake_kernel");
+        (void)hipModuleGetFunction(&blake3_func, module_kernel.module, "xelis_blake3_batch");
 
         int failures = 0;
         failures += test_threaded_level1(stage1_func, stage3_func, blake3_func);

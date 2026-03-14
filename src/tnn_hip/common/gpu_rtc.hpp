@@ -182,7 +182,7 @@ public:
         std::lock_guard<std::mutex> lock(cache_mutex_);
         for (auto& kv : module_cache_) {
             if (kv.second.module) {
-                hipModuleUnload(kv.second.module);
+                (void)hipModuleUnload(kv.second.module);
             }
         }
         module_cache_.clear();
@@ -429,7 +429,7 @@ private:
 
         err = hipModuleGetFunction(&kernel.function, kernel.module, kernel.kernel_name.c_str());
         if (err != hipSuccess) {
-            hipModuleUnload(kernel.module);
+            (void)hipModuleUnload(kernel.module);
             throw std::runtime_error("Failed to get kernel function: " + kernel.kernel_name);
         }
 
@@ -501,7 +501,7 @@ private:
             fflush(stdout);
         }
         __except(EXCEPTION_EXECUTE_HANDLER) {
-            printf("[ERROR] RTCCompiler: hiprtcCreateProgram crashed! Exception code: 0x%08X\n", GetExceptionCode());
+            printf("[ERROR] RTCCompiler: hiprtcCreateProgram crashed! Exception code: 0x%08X\n", (unsigned int)GetExceptionCode());
             fflush(stdout);
             throw std::runtime_error("hiprtcCreateProgram crashed with SEH exception");
         }
@@ -553,7 +553,7 @@ private:
             );
         }
         __except(EXCEPTION_EXECUTE_HANDLER) {
-            printf("[ERROR] RTCCompiler: hiprtcCompileProgram crashed! Exception code: 0x%08X\n", GetExceptionCode());
+            printf("[ERROR] RTCCompiler: hiprtcCompileProgram crashed! Exception code: 0x%08X\n", (unsigned int)GetExceptionCode());
             fflush(stdout);
             hiprtcDestroyProgram(&prog);
             throw std::runtime_error("hiprtcCompileProgram crashed with SEH exception");
@@ -596,15 +596,15 @@ private:
         TNN_LOG_TRACE("[TRACE] About to load module (%zu bytes code)\n", code_size);
 
         size_t free_mem = 0, total_mem = 0;
-        hipMemGetInfo(&free_mem, &total_mem);
+        (void)hipMemGetInfo(&free_mem, &total_mem);
         TNN_LOG_TRACE("[TRACE] GPU memory: %zu MB free / %zu MB total\n",
                free_mem / (1024 * 1024), total_mem / (1024 * 1024));
         fflush(stdout);
 
         hipError_t err = hipModuleLoadData(&kernel.module, code.data());
         if (err != hipSuccess) {
-            printf("[ERROR] hipModuleLoadData failed: %d (%s)\n", err, hipGetErrorString(err));
-            hipMemGetInfo(&free_mem, &total_mem);
+            printf("[ERROR] hipModuleLoadData failed: %d (%s)\n", (int)err, hipGetErrorString(err));
+            (void)hipMemGetInfo(&free_mem, &total_mem);
             printf("[ERROR] GPU memory after failure: %zu MB free / %zu MB total\n",
                    free_mem / (1024 * 1024), total_mem / (1024 * 1024));
             fflush(stdout);
@@ -613,7 +613,7 @@ private:
 
         err = hipModuleGetFunction(&kernel.function, kernel.module, kernel.kernel_name.c_str());
         if (err != hipSuccess) {
-            hipModuleUnload(kernel.module);
+            (void)hipModuleUnload(kernel.module);
             throw std::runtime_error("Failed to get kernel function: " + kernel_name);
         }
 

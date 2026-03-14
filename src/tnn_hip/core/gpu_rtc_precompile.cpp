@@ -59,7 +59,7 @@ extern "C" bool precompile_all_kernels()
     printf("[PRECOMPILE] Found %d HIP device(s)\n", deviceCount);
     for (int d = 0; d < deviceCount; ++d) {
         hipDeviceProp_t props{};
-        hipGetDeviceProperties(&props, d);
+        (void)hipGetDeviceProperties(&props, d);
         printf("[PRECOMPILE]   Device %d: %s\n", d, props.name);
     }
     fflush(stdout);
@@ -68,9 +68,9 @@ extern "C" bool precompile_all_kernels()
     // Force context creation early (fixes NV + Windows hazards)
     {
         printf("[PRECOMPILE] Precreating CUDA/HIP context...\n");
-        hipSetDevice(0);
+        (void)hipSetDevice(0);
         void* p = nullptr;
-        if (hipMalloc(&p, 256) == hipSuccess) hipFree(p);
+        if (hipMalloc(&p, 256) == hipSuccess) (void)hipFree(p);
         fflush(stdout);
     }
 #endif
@@ -107,7 +107,7 @@ extern "C" bool precompile_all_kernels()
         // Precompile per device (per-props, per-arch, per-maxregs)
         for (int d = 0; d < deviceCount; ++d) {
             hipDeviceProp_t props{};
-            hipGetDeviceProperties(&props, d);
+            (void)hipGetDeviceProperties(&props, d);
 
             printf("\n");
             printf("------------------------------------------------\n");
@@ -128,7 +128,7 @@ extern "C" bool precompile_all_kernels()
             {
                 void* p = nullptr;
                 hipError_t ce = hipMalloc(&p, 256);
-                if (ce == hipSuccess) hipFree(p);
+                if (ce == hipSuccess) (void)hipFree(p);
                 else {
                     printf("[PRECOMPILE] ERROR: context init hipMalloc failed on device %d: %s\n",
                            d, hipGetErrorString(ce));

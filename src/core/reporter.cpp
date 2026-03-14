@@ -163,6 +163,7 @@ int update_handler(const boost::system::error_code& error)
     if (reportCounter >= reportInterval) {
         
         // GPU hashrates
+#ifdef TNN_HIP
         if (gpuMine) {
             setcolor(BRIGHT_YELLOW);
 
@@ -198,6 +199,7 @@ int update_handler(const boost::system::error_code& error)
             fflush(stdout);
             setcolor(BRIGHT_WHITE);
         }
+#endif
 
         // Overall status line
         setcolor(BRIGHT_WHITE);

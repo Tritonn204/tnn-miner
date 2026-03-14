@@ -57,7 +57,7 @@ public:
                     printf("%02x", work_template[i]);
                     if ((i+1) % 32 == 0) printf("\n  ");
                 }
-                printf("\n  Difficulty: %lu\n", difficulty);
+                printf("\n  Difficulty: %llu\n", (unsigned long long)difficulty);
                 fflush(stdout);
             }
             logged_template = true;
@@ -245,7 +245,7 @@ private:
                     uint64_t winning_nonce = result.valid_nonces[i];
                     const uint8_t* hash = result.valid_hashes.data() + i * hash_size;
 
-                    TNN_LOG_TRACE("[TRACE] GPU%d SOLUTION FOUND (nonce=%lu), calling solution builder\n",
+                    TNN_LOG_TRACE("[TRACE] GPU%d SOLUTION FOUND (nonce=%llu), calling solution builder\n",
                           device_id_, winning_nonce);
 
                     if (solution_builder_) {
