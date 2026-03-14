@@ -221,6 +221,27 @@ namespace randomx {
 
 	static const uint8_t* NOPX[] = { NOP1, NOP2, NOP3, NOP4, NOP5, NOP6, NOP7, NOP8 };
 
+	// CS segment override prefixes used to align branches away from 32-byte boundaries
+	// (JCC erratum mitigation for AMD Zen/Zen2/Zen3)
+	static const uint8_t JMP_ALIGN_PREFIX[14][16] = {
+		{},
+		{0x2E},
+		{0x2E, 0x2E},
+		{0x2E, 0x2E, 0x2E},
+		{0x2E, 0x2E, 0x2E, 0x2E},
+		{0x2E, 0x2E, 0x2E, 0x2E, 0x2E},
+		{0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E},
+		{0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E},
+		{0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E},
+		{0x90, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E},
+		{0x66, 0x90, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E},
+		{0x66, 0x66, 0x90, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E},
+		{0x0F, 0x1F, 0x40, 0x00, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E},
+		{0x0F, 0x1F, 0x44, 0x00, 0x00, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E},
+	};
+
+	static bool BranchesWithin32B = false;
+
 	static std::atomic<size_t> codeOffset;
 	constexpr size_t codeOffsetIncrement = 59 * 64;
 
@@ -341,6 +362,22 @@ namespace randomx {
 		emit(ADDR(randomx_prefetch_scratchpad), ADDR(randomx_prefetch_scratchpad_end) - ADDR(randomx_prefetch_scratchpad));
 		memcpy(code + codePos, codeLoopStore, loopStoreSize);
 		codePos += loopStoreSize;
+
+		if (BranchesWithin32B) {
+			// Align the loop-back branch (sub+jnz = 9 bytes) to not cross 32-byte boundary
+			const uint32_t branch_begin = static_cast<uint32_t>(codePos);
+			const uint32_t branch_end = branch_begin + 9;
+
+			if ((branch_begin ^ branch_end) >= 32) {
+				uint32_t alignment_size = 32 - (branch_begin & 31);
+				if (alignment_size > 8) {
+					emit(NOPX[alignment_size - 9], alignment_size - 8);
+					alignment_size = 8;
+				}
+				emit(NOPX[alignment_size - 1], alignment_size);
+			}
+		}
+
 		emit(SUB_EBX);
 		emit(JNZ);
 		emit32(prologueSize - codePos - 4);
@@ -828,9 +865,27 @@ namespace randomx {
 		emit(AND_OR_MOV_LDMXCSR);
 	}
 
+	template<bool jccErratum>
 	void JitCompilerX86::h_CBRANCH(Instruction& instr, int i) {
 		int reg = instr.dst;
 		int target = registerUsage[reg] + 1;
+		int32_t jmp_target = instructionOffsets[target];
+
+		// jmp_offset relative to end of short jz (codePos + 7 add + 7 test + 2 short_jz = +16)
+		int32_t jmp_offset = jmp_target - (codePos + 16);
+
+		if constexpr (jccErratum) {
+			// Check if branch (test+jz) crosses a 32-byte boundary
+			const uint32_t branch_begin = static_cast<uint32_t>(codePos + 7);
+			const uint32_t branch_end = branch_begin + ((jmp_offset >= -128) ? 9 : 13);
+
+			if ((branch_begin ^ branch_end) >= 32) {
+				const uint32_t alignment_size = 32 - (branch_begin & 31);
+				jmp_offset -= alignment_size;
+				emit(JMP_ALIGN_PREFIX[alignment_size], alignment_size);
+			}
+		}
+
 		emit(REX_ADD_I);
 		emitByte(0xc0 + reg);
 		int shift = instr.getModCond() + ConditionOffset;
@@ -841,13 +896,23 @@ namespace randomx {
 		emit(REX_TEST);
 		emitByte(0xc0 + reg);
 		emit32(ConditionMask << shift);
-		emit(JZ);
-		emit32(instructionOffsets[target] - (codePos + 4));
+
+		if (jmp_offset >= -128) {
+			emitByte(0x74);
+			emitByte(static_cast<uint8_t>(jmp_offset));
+		} else {
+			emit(JZ);
+			emit32(jmp_offset - 4);
+		}
+
 		//mark all registers as used
 		for (unsigned j = 0; j < RegistersCount; ++j) {
 			registerUsage[j] = i;
 		}
 	}
+
+	template void JitCompilerX86::h_CBRANCH<false>(Instruction&, int);
+	template void JitCompilerX86::h_CBRANCH<true>(Instruction&, int);
 
 	void JitCompilerX86::h_ISTORE(Instruction& instr, int i) {
 		genAddressRegDst(instr);
@@ -877,6 +942,7 @@ namespace randomx {
 #if defined(_M_X64) || defined(__x86_64__)
 		static Cpu cpu;
 		const bool hasBMI2 = cpu.hasBmi2();
+		BranchesWithin32B = cpu.hasJccErratum();
 #else
 		const bool hasBMI2 = false;
 #endif
@@ -914,7 +980,11 @@ namespace randomx {
 		FILL_DEFAULT(FMUL_R);
 		FILL_DEFAULT(FDIV_M);
 		FILL_DEFAULT(FSQRT_R);
-		FILL_DEFAULT(CBRANCH);
+		if (BranchesWithin32B) {
+			FILL_HANDLE(CBRANCH, h_CBRANCH<true>);
+		} else {
+			FILL_HANDLE(CBRANCH, h_CBRANCH<false>);
+		}
 
 		if (hasBMI2) {
 			FILL_HANDLE(CFROUND, h_CFROUND_BMI2);

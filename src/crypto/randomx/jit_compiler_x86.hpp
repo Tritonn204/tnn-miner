@@ -138,6 +138,7 @@ namespace randomx {
 		void h_FMUL_R(Instruction&, int);
 		void h_FDIV_M(Instruction&, int);
 		void h_FSQRT_R(Instruction&, int);
+		template<bool jccErratum>
 		void h_CBRANCH(Instruction&, int);
 		void h_CFROUND(Instruction&, int);
 		void h_CFROUND_BMI2(Instruction&, int);
