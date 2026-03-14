@@ -23,7 +23,7 @@ __constant__ uint64_t XELIS_GOLDEN_RATIO = 0x9e3779b97f4a7c15ULL;
 __constant__ uint64_t XELIS_SCATTER_CONST = 0xd2b74407b1ce6e93ULL;
 __constant__ uint64_t XELIS_PICK_HALF_BIT = (1ULL << 58);
 
-constexpr uint8_t AES_KEY[16] = {'x', 'e', 'l', 'i', 's', 'h', 'a', 's', 'h', '-', 'p', 'o', 'w', '-', 'v', '3'};
+__device__ constexpr uint8_t AES_KEY[16] = {'x', 'e', 'l', 'i', 's', 'h', 'a', 's', 'h', '-', 'p', 'o', 'w', '-', 'v', '3'};
 
 // Hot path hint — supported by hipclang, silently ignored by NVRTC
 #if defined(__HIP_PLATFORM_AMD__) || defined(__clang__)
