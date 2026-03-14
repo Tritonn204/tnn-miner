@@ -37,13 +37,24 @@ RUN ls -la ./build/bin/ ./build/ && mv ./build/bin/tnn-miner-* ./ || mv ./build/
 # Copy tunes directory (created by CMake post-build from default-tunes)
 RUN if [ -d ./build/bin/tunes ]; then cp -r ./build/bin/tunes ./tunes; elif [ -d ./build/tunes ]; then cp -r ./build/tunes ./tunes; fi
 #RUN ./tnn-miner-* --test-spectre
-# Bundle NVRTC .so for CUDA builds (ensures __maxnreg__ works on older drivers)
+# Bundle GPU runtime .so files for wrapper compatibility with older HiveOS
+# NVRTC for CUDA builds (ensures __maxnreg__ works on older drivers)
 RUN mkdir -p ./nvrtc_libs && \
     (cp /usr/local/cuda/lib64/libnvrtc.so* ./nvrtc_libs/ 2>/dev/null || true) && \
     (cp /usr/local/cuda/lib64/libnvrtc-builtins.so* ./nvrtc_libs/ 2>/dev/null || true) && \
     ls -la ./nvrtc_libs/ || true
+# HIP/ROCm runtime + HIPRTC for AMD builds
+RUN mkdir -p ./hip_libs && \
+    (cp /opt/rocm/lib/libamdhip64.so* ./hip_libs/ 2>/dev/null || true) && \
+    (cp /opt/rocm/lib/libhiprtc.so* ./hip_libs/ 2>/dev/null || true) && \
+    (cp /opt/rocm/lib/libhiprtc-builtins.so* ./hip_libs/ 2>/dev/null || true) && \
+    (cp /opt/rocm/lib/libhsa-runtime64.so* ./hip_libs/ 2>/dev/null || true) && \
+    (cp /opt/rocm/lib/libamd_comgr.so* ./hip_libs/ 2>/dev/null || true) && \
+    ls -la ./hip_libs/ || true
 RUN ls -la ./
-RUN tar -czvf ${TARGZ_FILE} ./tnn-miner* ./tunes $([ -n "$(ls ./nvrtc_libs/ 2>/dev/null)" ] && echo "./nvrtc_libs")
+RUN tar -czvf ${TARGZ_FILE} ./tnn-miner* ./tunes \
+    $([ -n "$(ls ./nvrtc_libs/ 2>/dev/null)" ] && echo "./nvrtc_libs") \
+    $([ -n "$(ls ./hip_libs/ 2>/dev/null)" ] && echo "./hip_libs")
 RUN md5sum ./${TARGZ_FILE}
 
 FROM scratch
@@ -53,3 +64,4 @@ COPY --from=build /src/${TARGZ_FILE} /
 COPY --from=build /src/tnn-miner* /
 COPY --from=build /src/tunes/ /tunes/
 COPY --from=build /src/nvrtc_libs/ /nvrtc_libs/
+COPY --from=build /src/hip_libs/ /hip_libs/

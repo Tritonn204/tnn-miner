@@ -1044,6 +1044,14 @@ if (WITH_HIP)
           ${HIPRTC_LIB}
           -Wl,-Bstatic udns numa -Wl,-Bdynamic
       )
+      # Bake RPATH so the binary finds bundled NVRTC .so files
+      if (HIP_PLATFORM MATCHES "nvidia")
+        set_target_properties(${TNN_OUTPUT_NAME} PROPERTIES
+          BUILD_RPATH_USE_ORIGIN TRUE
+          INSTALL_RPATH "$ORIGIN/nvrtc_libs"
+          BUILD_RPATH "$ORIGIN/nvrtc_libs"
+        )
+      endif()
     endif()
 
     # Global HIP flags

@@ -10,7 +10,8 @@ if [[ -z $CUSTOM_CONFIG_FILENAME ]]; then
 	echo -e "The config file is not defined"
 fi
 
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/hive/lib
+MINER_DIR="/hive/miners/custom/$MINER_NAME"
+export LD_LIBRARY_PATH="$MINER_DIR/hip_libs:$LD_LIBRARY_PATH:/hive/lib"
 
 CUSTOM_USER_CONFIG=$(< "$CUSTOM_CONFIG_FILENAME")
 

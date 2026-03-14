@@ -188,6 +188,7 @@ build-hiveos-mmpos-amd:
     - tar -xvf ${LINUX_HIP_AMD_TGZ}
     - mv ./tnn-miner-rocm ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/tnn-miner-rocm
     - "[ -d ./tunes ] && cp -r ./tunes ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/tunes || true"
+    - "[ -d ./hip_libs ] && cp -r ./hip_libs ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/hip_libs || true"
     - sed "s/^EXTERNAL_VERSION=custom/EXTERNAL_VERSION=$PACKAGE_VERSION/g" -i ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/mmp-external.conf
     - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/tnn-miner-rocm
     - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/h-run.sh
@@ -214,7 +215,7 @@ build-hiveos-mmpos-nvidia:
     - tar -xvf ${LINUX_HIP_NVIDIA_TGZ}
     - mv ./tnn-miner-cuda ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/tnn-miner-cuda
     - "[ -d ./tunes ] && cp -r ./tunes ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/tunes || true"
-    - "[ -d ./nvrtc_libs ] && cp ./nvrtc_libs/*.so* ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/ || true"
+    - "[ -d ./nvrtc_libs ] && cp -r ./nvrtc_libs ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/nvrtc_libs || true"
     - sed "s/^EXTERNAL_VERSION=custom/EXTERNAL_VERSION=$PACKAGE_VERSION/g" -i ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/mmp-external.conf
     - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/tnn-miner-cuda
     - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/h-run.sh
