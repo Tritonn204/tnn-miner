@@ -5,6 +5,7 @@
 #include <string>
 
 #include <tnn-common.hpp>
+#include <tnn_log.hpp>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -31,57 +32,41 @@
 extern "C" bool precompile_all_kernels()
 {
 #if !defined(TNN_HIP) || !defined(TNN_XELISHASH)
-    printf("[PRECOMPILE] HIP or TNN_XELISHASH not enabled — skipping.\n");
-    fflush(stdout);
+    TNN_LOG_DEBUG("[PRECOMPILE] HIP or TNN_XELISHASH not enabled — skipping.\n");
     return false;
 #else
 
-    printf("\n");
-    printf("========================================\n");
-    printf("[PRECOMPILE] GPU kernel precompile (main thread)\n");
+    TNN_LOG_DEBUG("[PRECOMPILE] GPU kernel precompile (main thread)\n");
 #ifdef _WIN32
-    printf("[PRECOMPILE] Thread ID: %lu\n", (unsigned long)GetCurrentThreadId());
+    TNN_LOG_DEBUG("[PRECOMPILE] Thread ID: %lu\n", (unsigned long)GetCurrentThreadId());
 #endif
-    printf("========================================\n");
-    fflush(stdout);
 
-    //----------------------------------------------------------------------
-    // STEP 1: Enumerate devices
-    //----------------------------------------------------------------------
     int deviceCount = 0;
     hipError_t err = hipGetDeviceCount(&deviceCount);
     if (err != hipSuccess || deviceCount == 0) {
-        printf("[PRECOMPILE] No HIP devices found (err=%d)\n", err);
-        fflush(stdout);
+        TNN_LOG_ERROR("[PRECOMPILE] No HIP devices found (err=%d)\n", err);
         return false;
     }
 
-    printf("[PRECOMPILE] Found %d HIP device(s)\n", deviceCount);
+    TNN_LOG_DEBUG("[PRECOMPILE] Found %d HIP device(s)\n", deviceCount);
     for (int d = 0; d < deviceCount; ++d) {
         hipDeviceProp_t props{};
         (void)hipGetDeviceProperties(&props, d);
-        printf("[PRECOMPILE]   Device %d: %s%s\n", d, props.name,
+        TNN_LOG_DEBUG("[PRECOMPILE]   Device %d: %s%s\n", d, props.name,
                shouldUseDevice(d) ? "" : " (skipped)");
     }
-    fflush(stdout);
 
 #if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
-    // Force context creation early (fixes NV + Windows hazards)
     {
-        printf("[PRECOMPILE] Precreating CUDA/HIP context...\n");
+        TNN_LOG_DEBUG("[PRECOMPILE] Precreating CUDA/HIP context...\n");
         (void)hipSetDevice(0);
         void* p = nullptr;
         if (hipMalloc(&p, 256) == hipSuccess) (void)hipFree(p);
-        fflush(stdout);
     }
 #endif
 
-    //----------------------------------------------------------------------
-    // STEP 2: Decide which algorithm to precompile
-    //----------------------------------------------------------------------
     const int algo = miningProfile.coin.miningAlgo;
-    printf("[PRECOMPILE] miningAlgo = %d\n", algo);
-    fflush(stdout);
+    TNN_LOG_DEBUG("[PRECOMPILE] miningAlgo = %d\n", algo);
 
     RTCCompiler& rtc = RTCCompiler::instance();
     bool ok = true;
@@ -91,56 +76,46 @@ extern "C" bool precompile_all_kernels()
     case ALGO_XELISV2:
     case ALGO_XELISV3:
     {
-        printf("[PRECOMPILE] Selected Xelis algorithm — building config...\n");
-        fflush(stdout);
+        TNN_LOG_DEBUG("[PRECOMPILE] Selected Xelis algorithm\n");
 
         AlgoConfig cfg = XELIS_V3_CONFIG;
 
-        printf("[PRECOMPILE] Source size = %zu bytes\n", cfg.source.size());
-        printf("[PRECOMPILE] Header count = %zu\n", cfg.rtc_headers.size());
-        fflush(stdout);
+        TNN_LOG_DEBUG("[PRECOMPILE] Source size = %zu bytes, headers = %zu\n",
+                      cfg.source.size(), cfg.rtc_headers.size());
 
-        // Register headers once (RTCCompiler::add_header_source is idempotent by include_name)
         for (const auto& header : cfg.rtc_headers) {
             rtc.add_header_source(std::string(header.name), std::string(header.source));
         }
 
-        // Precompile per device (per-props, per-arch, per-maxregs)
         for (int d = 0; d < deviceCount; ++d) {
             TNN_GPU_GATE(d)
             hipDeviceProp_t props{};
             (void)hipGetDeviceProperties(&props, d);
 
-            printf("\n");
-            printf("------------------------------------------------\n");
-            printf("[PRECOMPILE] Device %d: %s\n", d, props.name);
-            printf("------------------------------------------------\n");
-            fflush(stdout);
+            TNN_LOG_INFO("[PRECOMPILE] Device %d: %s — compiling kernels...\n", d, props.name);
 
             hipError_t setErr = hipSetDevice(d);
             if (setErr != hipSuccess) {
-                printf("[PRECOMPILE] ERROR: hipSetDevice(%d) failed: %s\n",
-                       d, hipGetErrorString(setErr));
+                TNN_LOG_ERROR("[PRECOMPILE] hipSetDevice(%d) failed: %s\n",
+                              d, hipGetErrorString(setErr));
                 ok = false;
                 continue;
             }
 
 #if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
-            // Ensure context exists on this device too
             {
                 void* p = nullptr;
                 hipError_t ce = hipMalloc(&p, 256);
                 if (ce == hipSuccess) (void)hipFree(p);
                 else {
-                    printf("[PRECOMPILE] ERROR: context init hipMalloc failed on device %d: %s\n",
-                           d, hipGetErrorString(ce));
+                    TNN_LOG_ERROR("[PRECOMPILE] Context init failed on device %d: %s\n",
+                                  d, hipGetErrorString(ce));
                     ok = false;
                     continue;
                 }
             }
 #endif
 
-            // Pick per-backend block-size range => WG hints
 #if defined(__HIP_PLATFORM_AMD__)
             const BlockSizeLimits& limits = cfg.amd_blocks;
 #else
@@ -149,29 +124,21 @@ extern "C" bool precompile_all_kernels()
             const int min_wg = limits.block_min;
             const int max_wg = limits.block_max;
 
-            printf("[PRECOMPILE] Block size limits: min=%d, max=%d, step=%d\n",
-                   limits.block_min, limits.block_max, limits.step);
-            printf("[PRECOMPILE] WG hints: XELIS_MIN_WG=%d, XELIS_MAX_WG=%d\n",
-                   min_wg, max_wg);
-            fflush(stdout);
+            TNN_LOG_DEBUG("[PRECOMPILE] Block limits: min=%d, max=%d, step=%d\n",
+                          limits.block_min, limits.block_max, limits.step);
 
-            // Set compiler arch for THIS device so caching separates by architecture
-            // (RTCCompiler already knows how to format for NVIDIA/AMD)
 #if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
             {
                 char buf[32];
                 std::snprintf(buf, sizeof(buf), "sm_%d%d", props.major, props.minor);
                 rtc.set_gpu_arch(buf);
-                printf("[PRECOMPILE] Using arch=%s\n", buf);
+                TNN_LOG_DEBUG("[PRECOMPILE] arch=%s\n", buf);
             }
 #else
-            // AMD HIP provides gcnArchName (e.g. gfx1100)
             rtc.set_gpu_arch(props.gcnArchName);
-            printf("[PRECOMPILE] Using arch=%s\n", props.gcnArchName);
+            TNN_LOG_DEBUG("[PRECOMPILE] arch=%s\n", props.gcnArchName);
 #endif
-            fflush(stdout);
 
-            // Build options (per device)
             std::vector<std::string> opts;
 
 #if defined(__HIP_PLATFORM_AMD__)
@@ -186,23 +153,18 @@ extern "C" bool precompile_all_kernels()
             opts.push_back("-DXELIS_MIN_WG=" + std::to_string(min_wg));
             opts.push_back("-DXELIS_MAX_WG=" + std::to_string(max_wg));
 
-            // Arch-dependent stage3 register cap (must match gpu_algo_impl.hpp)
             {
                 int s3_nreg = (props.major <= 7) ? 56 : 40;
                 opts.push_back("-DXELIS_S3_NREG=" + std::to_string(s3_nreg));
             }
 
-            // Per-device module key (NVIDIA modules are bound to a CUDA context)
             opts.push_back("-DDEVICE_ID=" + std::to_string(d));
 #endif
-            fflush(stdout);
 
             try {
                 std::string primary_kernel = cfg.get_primary_kernel();
 
-                printf("[PRECOMPILE] Compiling module (primary kernel: %s)\n",
-                       primary_kernel.c_str());
-                fflush(stdout);
+                TNN_LOG_DEBUG("[PRECOMPILE] Compiling (primary: %s)\n", primary_kernel.c_str());
 
                 auto compiled = rtc.compile_from_source(
                     std::string(cfg.source),
@@ -211,37 +173,31 @@ extern "C" bool precompile_all_kernels()
                     opts
                 );
 
-                printf("[PRECOMPILE] JIT compiled.\n");
-                printf("[PRECOMPILE]   module = %p\n", (void*)compiled.module);
-                printf("[PRECOMPILE]   primary function = %p\n", (void*)compiled.function);
-                fflush(stdout);
+                TNN_LOG_DEBUG("[PRECOMPILE] JIT compiled, module=%p\n", (void*)compiled.module);
 
-                // Verify all expected kernels exist in the module
                 int loaded_count = 0;
                 for (const auto& kname : cfg.get_kernel_names()) {
                     hipFunction_t func = nullptr;
                     hipError_t herr = hipModuleGetFunction(&func, compiled.module, kname.c_str());
                     if (herr == hipSuccess && func) {
-                        printf("[PRECOMPILE]   OK: '%s' @ %p\n", kname.c_str(), (void*)func);
+                        TNN_LOG_DEBUG("[PRECOMPILE]   OK: '%s'\n", kname.c_str());
                         ++loaded_count;
                     } else {
-                        printf("[PRECOMPILE]   MISSING: '%s' : %s\n",
-                               kname.c_str(), hipGetErrorString(herr));
+                        TNN_LOG_ERROR("[PRECOMPILE]   MISSING: '%s' : %s\n",
+                                      kname.c_str(), hipGetErrorString(herr));
                         ok = false;
                     }
                 }
 
                 if (loaded_count == 0) {
-                    printf("[PRECOMPILE]   ERROR: No kernels loaded from module.\n");
+                    TNN_LOG_ERROR("[PRECOMPILE] No kernels loaded from module on device %d\n", d);
                     ok = false;
                 } else {
-                    printf("[PRECOMPILE]   Total kernels loaded: %d\n", loaded_count);
+                    TNN_LOG_INFO("[PRECOMPILE] Device %d: %d kernel(s) loaded\n", d, loaded_count);
                 }
-                fflush(stdout);
             }
             catch (const std::exception& e) {
-                printf("[PRECOMPILE] ERROR: device %d precompile failed: %s\n", d, e.what());
-                fflush(stdout);
+                TNN_LOG_ERROR("[PRECOMPILE] Device %d precompile failed: %s\n", d, e.what());
                 ok = false;
             }
         }
@@ -250,16 +206,11 @@ extern "C" bool precompile_all_kernels()
     }
 
     default:
-        printf("[PRECOMPILE] No RTC precompile required for algo %d\n", algo);
-        fflush(stdout);
+        TNN_LOG_DEBUG("[PRECOMPILE] No RTC precompile required for algo %d\n", algo);
         break;
     }
 
-    printf("\n");
-    printf("========================================\n");
-    printf("[PRECOMPILE] Result: %s\n", ok ? "SUCCESS" : "FAILURE");
-    printf("========================================\n\n");
-    fflush(stdout);
+    TNN_LOG_INFO("[PRECOMPILE] %s\n", ok ? "All kernels compiled" : "FAILED");
 
     return ok;
 
