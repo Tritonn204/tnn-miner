@@ -69,6 +69,9 @@ NUMAMemoryManager<RxCacheWrapper> rx_cache_manager;
 NUMAMemoryManager<RxCacheWrapper> rx_cache_dev_manager;
 
 void randomx_init_intern(int threadCount) {
+#if defined(RANDOMX_COMPILER_X86)
+  randomx::JitCompilerX86::initEngine();
+#endif
   if (nullptr == randomx::selectArgonImpl(rxFlags)) {
     throw std::runtime_error("Unsupported Argon2 implementation");
   }

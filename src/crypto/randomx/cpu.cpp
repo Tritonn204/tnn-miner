@@ -26,6 +26,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#include <cstdint>
 #include "cpu.hpp"
 
 #if defined(_M_X64) || defined(__x86_64__)
@@ -53,15 +54,26 @@ namespace randomx {
 		int info[4];
 		cpuid(info, 0);
 		int nIds = info[0];
+
+		// Check vendor string for AMD (EBX='Auth', EDX='enti', ECX='cAMD')
+		amd_ = (info[1] == 0x68747541) && (info[3] == 0x69746e65) && (info[2] == 0x444d4163);
+
 		if (nIds >= 0x00000001) {
 			cpuid(info, 0x00000001);
 			ssse3_ = (info[2] & (1 << 9)) != 0;
 			aes_ = (info[2] & (1 << 25)) != 0;
+
+			// JCC erratum affects AMD Zen/Zen2/Zen3 (family 0x17 and 0x19)
+			if (amd_) {
+				const uint32_t family = ((info[0] >> 8) & 0xf) + ((info[0] >> 20) & 0xff);
+				jccErratum_ = (family == 0x17) || (family == 0x19);
+			}
 		}
 		if (nIds >= 0x00000007) {
 			cpuid(info, 0x00000007);
 			avx2_ = (info[1] & (1 << 5)) != 0;
-      avx512_ = (info[1] & (1 << 16)) != 0;
+			avx512_ = (info[1] & (1 << 16)) != 0;
+			bmi2_ = (info[1] & (1 << 8)) != 0;
 		}
 #elif defined(__aarch64__)
 	#if defined(HWCAP_AES)

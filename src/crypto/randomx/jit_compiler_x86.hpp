@@ -47,6 +47,7 @@ namespace randomx {
 	public:
 		JitCompilerX86();
 		~JitCompilerX86();
+		static void initEngine();
 		void generateProgram(Program&, ProgramConfiguration&);
 		void generateProgramLight(Program&, ProgramConfiguration&, uint32_t);
 		template<size_t N>
@@ -116,7 +117,9 @@ namespace randomx {
 		void h_IMUL_R(Instruction&, int);
 		void h_IMUL_M(Instruction&, int);
 		void h_IMULH_R(Instruction&, int);
+		void h_IMULH_R_BMI2(Instruction&, int);
 		void h_IMULH_M(Instruction&, int);
+		void h_IMULH_M_BMI2(Instruction&, int);
 		void h_ISMULH_R(Instruction&, int);
 		void h_ISMULH_M(Instruction&, int);
 		void h_IMUL_RCP(Instruction&, int);
@@ -137,6 +140,7 @@ namespace randomx {
 		void h_FSQRT_R(Instruction&, int);
 		void h_CBRANCH(Instruction&, int);
 		void h_CFROUND(Instruction&, int);
+		void h_CFROUND_BMI2(Instruction&, int);
 		void h_ISTORE(Instruction&, int);
 		void h_NOP(Instruction&, int);
 	};

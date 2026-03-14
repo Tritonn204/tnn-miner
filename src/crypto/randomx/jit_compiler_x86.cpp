@@ -31,6 +31,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <climits>
 #include <atomic>
 #include "jit_compiler_x86.hpp"
+#include "cpu.hpp"
 #include "jit_compiler_x86_static.hpp"
 #include "superscalar.hpp"
 #include "program.hpp"
@@ -576,6 +577,15 @@ namespace randomx {
 		emitByte(0xc2 + 8 * instr.dst);
 	}
 
+	// BMI2: mov rdx,r[dst] + mulx r[dst],rcx,r[src] (8 bytes vs 9 for standard)
+	void JitCompilerX86::h_IMULH_R_BMI2(Instruction& instr, int i) {
+		registerUsage[instr.dst] = i;
+		uint32_t word1 = 0xC4D08B49 + (instr.dst << 16);
+		uint32_t word2 = 0xC0F6FB42 + (instr.dst << 27) + (instr.src << 24);
+		emit32(word1);
+		emit32(word2);
+	}
+
 	void JitCompilerX86::h_IMULH_M(Instruction& instr, int i) {
 		registerUsage[instr.dst] = i;
 		if (instr.src != instr.dst) {
@@ -593,6 +603,26 @@ namespace randomx {
 		}
 		emit(REX_MOV_R64R);
 		emitByte(0xc2 + 8 * instr.dst);
+	}
+
+	// BMI2: mov rdx,r[dst] + mulx r[dst],rcx,[rsi+rax/imm] (avoids separate mul+mov rdx)
+	void JitCompilerX86::h_IMULH_M_BMI2(Instruction& instr, int i) {
+		registerUsage[instr.dst] = i;
+		if (instr.src != instr.dst) {
+			genAddressReg(instr, false);
+			// mov rdx, r[dst] (3 bytes) + VEX prefix (1 byte) packed
+			uint32_t w1 = static_cast<uint32_t>(0xC4D08B49 + (instr.dst << 16));
+			emit32(w1);
+			// mulx r[dst], rcx, [rsi+rcx] -> C4 62 FB F6 0E04
+			uint64_t w2 = 0x0E04F6FB62ULL + (static_cast<uint64_t>(instr.dst) << 27);
+			emit(reinterpret_cast<const uint8_t*>(&w2), 5);
+		}
+		else {
+			// mov rdx, r[dst] + mulx r[dst], rcx, [rsi+imm32]
+			uint64_t w1 = 0x86F6FB62C4D08B49ULL + (static_cast<uint64_t>(instr.dst) << 16) + (static_cast<uint64_t>(instr.dst) << 59);
+			emit(reinterpret_cast<const uint8_t*>(&w1), 8);
+			genAddressImm(instr);
+		}
 	}
 
 	void JitCompilerX86::h_ISMULH_R(Instruction& instr, int i) {
@@ -783,6 +813,19 @@ namespace randomx {
 		emit(AND_OR_MOV_LDMXCSR);
 	}
 
+	// BMI2: rorx rax, r[src], rotate (single non-destructive rotate, no mov needed)
+	void JitCompilerX86::h_CFROUND_BMI2(Instruction& instr, int i) {
+		// Standard uses: mov rax,r[src] + rol rax,(13-imm)&63  (7 bytes, 2 insns)
+		// BMI2 uses:     rorx rax, r[src], (imm-13)&63         (6 bytes, 1 insn)
+		// rol N == ror (64-N), so rol (13-imm)&63 == ror (imm-13)&63
+		int rotate = (static_cast<int>(instr.getImm32() & 63) - 13) & 63;
+		// rorx rax, r[src], rotate -> VEX.LZ.F2.0F3A.W1 F0 /r ib
+		// C4 C3 FB F0 (C0+src) rotate
+		uint64_t rorx = 0xC0F0FBC3C4ULL | (static_cast<uint64_t>(instr.src) << 32) | (static_cast<uint64_t>(rotate) << 40);
+		emit(reinterpret_cast<const uint8_t*>(&rorx), 6);
+		emit(AND_OR_MOV_LDMXCSR);
+	}
+
 	void JitCompilerX86::h_CBRANCH(Instruction& instr, int i) {
 		int reg = instr.dst;
 		int target = registerUsage[reg] + 1;
@@ -816,39 +859,72 @@ namespace randomx {
 	}
 
 #include "instruction_weights.hpp"
-#define INST_HANDLE(x) REPN(&JitCompilerX86::h_##x, WT(x))
 
-	InstructionGeneratorX86 JitCompilerX86::engine[256] = {
-		INST_HANDLE(IADD_RS)
-		INST_HANDLE(IADD_M)
-		INST_HANDLE(ISUB_R)
-		INST_HANDLE(ISUB_M)
-		INST_HANDLE(IMUL_R)
-		INST_HANDLE(IMUL_M)
-		INST_HANDLE(IMULH_R)
-		INST_HANDLE(IMULH_M)
-		INST_HANDLE(ISMULH_R)
-		INST_HANDLE(ISMULH_M)
-		INST_HANDLE(IMUL_RCP)
-		INST_HANDLE(INEG_R)
-		INST_HANDLE(IXOR_R)
-		INST_HANDLE(IXOR_M)
-		INST_HANDLE(IROR_R)
-		INST_HANDLE(IROL_R)
-		INST_HANDLE(ISWAP_R)
-		INST_HANDLE(FSWAP_R)
-		INST_HANDLE(FADD_R)
-		INST_HANDLE(FADD_M)
-		INST_HANDLE(FSUB_R)
-		INST_HANDLE(FSUB_M)
-		INST_HANDLE(FSCAL_R)
-		INST_HANDLE(FMUL_R)
-		INST_HANDLE(FDIV_M)
-		INST_HANDLE(FSQRT_R)
-		INST_HANDLE(CBRANCH)
-		INST_HANDLE(CFROUND)
-		INST_HANDLE(ISTORE)
-		INST_HANDLE(NOP)
-	};
+	InstructionGeneratorX86 JitCompilerX86::engine[256] = {};
+
+	void JitCompilerX86::initEngine() {
+		uint32_t k = 0;
+
+#define FILL_HANDLE(x, handler) \
+		for (uint32_t i = 0; i < RANDOMX_FREQ_##x; ++i, ++k) { \
+			engine[k] = &JitCompilerX86::handler; \
+		}
+
+#define FILL_DEFAULT(x) FILL_HANDLE(x, h_##x)
+
+#if defined(_M_X64) || defined(__x86_64__)
+		static Cpu cpu;
+		const bool hasBMI2 = cpu.hasBmi2();
+#else
+		const bool hasBMI2 = false;
+#endif
+
+		FILL_DEFAULT(IADD_RS);
+		FILL_DEFAULT(IADD_M);
+		FILL_DEFAULT(ISUB_R);
+		FILL_DEFAULT(ISUB_M);
+		FILL_DEFAULT(IMUL_R);
+		FILL_DEFAULT(IMUL_M);
+
+		if (hasBMI2) {
+			FILL_HANDLE(IMULH_R, h_IMULH_R_BMI2);
+			FILL_HANDLE(IMULH_M, h_IMULH_M_BMI2);
+		} else {
+			FILL_DEFAULT(IMULH_R);
+			FILL_DEFAULT(IMULH_M);
+		}
+
+		FILL_DEFAULT(ISMULH_R);
+		FILL_DEFAULT(ISMULH_M);
+		FILL_DEFAULT(IMUL_RCP);
+		FILL_DEFAULT(INEG_R);
+		FILL_DEFAULT(IXOR_R);
+		FILL_DEFAULT(IXOR_M);
+		FILL_DEFAULT(IROR_R);
+		FILL_DEFAULT(IROL_R);
+		FILL_DEFAULT(ISWAP_R);
+		FILL_DEFAULT(FSWAP_R);
+		FILL_DEFAULT(FADD_R);
+		FILL_DEFAULT(FADD_M);
+		FILL_DEFAULT(FSUB_R);
+		FILL_DEFAULT(FSUB_M);
+		FILL_DEFAULT(FSCAL_R);
+		FILL_DEFAULT(FMUL_R);
+		FILL_DEFAULT(FDIV_M);
+		FILL_DEFAULT(FSQRT_R);
+		FILL_DEFAULT(CBRANCH);
+
+		if (hasBMI2) {
+			FILL_HANDLE(CFROUND, h_CFROUND_BMI2);
+		} else {
+			FILL_DEFAULT(CFROUND);
+		}
+
+		FILL_DEFAULT(ISTORE);
+		FILL_DEFAULT(NOP);
+
+#undef FILL_DEFAULT
+#undef FILL_HANDLE
+	}
 
 }
