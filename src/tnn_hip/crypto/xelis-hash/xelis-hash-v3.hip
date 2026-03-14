@@ -1346,8 +1346,10 @@ __device__ __forceinline__ bool check_difficulty_gpu(const uint8_t *hash, const 
 // Stage 1 only kernel - prepares scratchpad (standard)
 #if defined(__HIP_PLATFORM_AMD__)
 extern "C" __attribute__((amdgpu_flat_work_group_size(XELIS_MIN_WG, XELIS_MAX_WG)))
-#else
+#elif defined(__CUDA_ARCH__)
 extern "C" __maxnreg__(96)
+#else
+extern "C"
 #endif
 __global__ void xelis_stage1_kernel(
     const uint8_t *__restrict__ input_template,

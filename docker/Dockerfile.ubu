@@ -37,8 +37,13 @@ RUN ls -la ./build/bin/ ./build/ && mv ./build/bin/tnn-miner-* ./ || mv ./build/
 # Copy tunes directory (created by CMake post-build from default-tunes)
 RUN if [ -d ./build/bin/tunes ]; then cp -r ./build/bin/tunes ./tunes; elif [ -d ./build/tunes ]; then cp -r ./build/tunes ./tunes; fi
 #RUN ./tnn-miner-* --test-spectre
+# Bundle NVRTC .so for CUDA builds (ensures __maxnreg__ works on older drivers)
+RUN mkdir -p ./nvrtc_libs && \
+    (cp /usr/local/cuda/lib64/libnvrtc.so* ./nvrtc_libs/ 2>/dev/null || true) && \
+    (cp /usr/local/cuda/lib64/libnvrtc-builtins.so* ./nvrtc_libs/ 2>/dev/null || true) && \
+    ls -la ./nvrtc_libs/ || true
 RUN ls -la ./
-RUN tar -czvf ${TARGZ_FILE} ./tnn-miner* ./tunes
+RUN tar -czvf ${TARGZ_FILE} ./tnn-miner* ./tunes $([ -n "$(ls ./nvrtc_libs/ 2>/dev/null)" ] && echo "./nvrtc_libs")
 RUN md5sum ./${TARGZ_FILE}
 
 FROM scratch
@@ -47,3 +52,4 @@ ARG  TARGZ_FILE=miner.tar.gz
 COPY --from=build /src/${TARGZ_FILE} /
 COPY --from=build /src/tnn-miner* /
 COPY --from=build /src/tunes/ /tunes/
+COPY --from=build /src/nvrtc_libs/ /nvrtc_libs/
