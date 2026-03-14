@@ -29,6 +29,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdexcept>
 #include <cstring>
 #include <climits>
+#include <atomic>
 #include "jit_compiler_x86.hpp"
 #include "jit_compiler_x86_static.hpp"
 #include "superscalar.hpp"
@@ -219,32 +220,38 @@ namespace randomx {
 
 	static const uint8_t* NOPX[] = { NOP1, NOP2, NOP3, NOP4, NOP5, NOP6, NOP7, NOP8 };
 
+	static std::atomic<size_t> codeOffset;
+	constexpr size_t codeOffsetIncrement = 59 * 64;
+
 	size_t JitCompilerX86::getCodeSize() {
 		return CodeSize;
 	}
 
 	JitCompilerX86::JitCompilerX86() {
-		code = (uint8_t*)allocMemoryPages(CodeSize);
-		if (code == nullptr)
+		allocatedSize_ = CodeSize * 2;
+		allocatedCode_ = (uint8_t*)allocMemoryPages(allocatedSize_);
+		if (allocatedCode_ == nullptr)
 			throw std::runtime_error("allocMemoryPages");
+		code = allocatedCode_ + (codeOffset.fetch_add(codeOffsetIncrement) % CodeSize);
 		memcpy(code, codePrologue, prologueSize);
 		memcpy(code + epilogueOffset, codeEpilogue, epilogueSize);
 	}
 
 	JitCompilerX86::~JitCompilerX86() {
-		freePagedMemory(code, CodeSize);
+		codeOffset.fetch_sub(codeOffsetIncrement);
+		freePagedMemory(allocatedCode_, allocatedSize_);
 	}
 
 	void JitCompilerX86::enableAll() {
-		setPagesRWX(code, CodeSize);
+		setPagesRWX(allocatedCode_, allocatedSize_);
 	}
 
 	void JitCompilerX86::enableWriting() {
-		setPagesRW(code, CodeSize);
+		setPagesRW(allocatedCode_, allocatedSize_);
 	}
 
 	void JitCompilerX86::enableExecution() {
-		setPagesRX(code, CodeSize);
+		setPagesRX(allocatedCode_, allocatedSize_);
 	}
 
 	void JitCompilerX86::generateProgram(Program& prog, ProgramConfiguration& pcfg) {

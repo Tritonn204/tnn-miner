@@ -70,6 +70,8 @@ namespace randomx {
 		std::vector<int32_t> instructionOffsets;
 		int registerUsage[RegistersCount];
 		uint8_t* code;
+		uint8_t* allocatedCode_ = nullptr;
+		size_t allocatedSize_ = 0;
 		int32_t codePos;
 
 		void generateProgramPrologue(Program&, ProgramConfiguration&);
