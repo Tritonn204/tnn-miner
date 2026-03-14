@@ -77,6 +77,8 @@ namespace randomx {
 		uint32_t vm_flags = 0;
 		int32_t prevCFROUND = -1;
 		int32_t prevFPOperation = -1;
+		uint8_t* imul_rcp_storage = nullptr;
+		uint32_t imul_rcp_storage_used = 0;
 
 		void generateProgramPrologue(Program&, ProgramConfiguration&);
 		void generateProgramEpilogue(Program&, ProgramConfiguration&);

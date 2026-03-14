@@ -103,6 +103,7 @@ namespace randomx {
 #endif
 
 	const uint8_t* codePrologue = ADDR(randomx_program_prologue);
+	const uint8_t* codeImulRcpStore = ADDR(randomx_program_imul_rcp_store);
 	const uint8_t* codeLoopBegin = ADDR(randomx_program_loop_begin);
 	const uint8_t* codeLoopLoad = ADDR(randomx_program_loop_load);
 	const uint8_t* codeProgamStart = ADDR(randomx_program_start);
@@ -352,8 +353,11 @@ namespace randomx {
 		prevCFROUND = -1;
 		prevFPOperation = -1;
 
+		imul_rcp_storage = code + (codeImulRcpStore - codePrologue) + 2;
+		imul_rcp_storage_used = 0;
+
+		memcpy(imul_rcp_storage - 34, &pcfg.eMask, sizeof(pcfg.eMask));
 		codePos = prologueSize;
-		memcpy(code + codePos - 48, &pcfg.eMask, sizeof(pcfg.eMask));
 		memcpy(code + codePos, codeLoopLoad, loopLoadSize);
 		codePos += loopLoadSize;
 		for (unsigned i = 0; i < prog.getSize(); ++i) {
@@ -711,10 +715,22 @@ namespace randomx {
 		const uint32_t divisor = instr.getImm32();
 		if (!isZeroOrPowerOf2(divisor)) {
 			registerUsage[instr.dst] = i;
-			emit(MOV_RAX_I);
-			emit64(randomx_reciprocal_fast(divisor));
-			emit(REX_IMUL_RM);
-			emitByte(0xc0 + 8 * instr.dst);
+			const uint64_t reciprocal = randomx_reciprocal_fast(divisor);
+			if (imul_rcp_storage_used < 16) {
+				memcpy(imul_rcp_storage, &reciprocal, sizeof(reciprocal));
+				// imul r[dst], [rsp+disp8]: 4C 0F AF 44 24 disp8
+				const uint64_t dst = instr.dst;
+				const uint8_t disp = 248 - imul_rcp_storage_used * 8;
+				*(uint64_t*)(code + codePos) = 0x2444AF0F4Cull + (dst << 27) + (static_cast<uint64_t>(disp) << 40);
+				codePos += 6;
+				++imul_rcp_storage_used;
+				imul_rcp_storage += 11;
+			} else {
+				emit(MOV_RAX_I);
+				emit64(reciprocal);
+				emit(REX_IMUL_RM);
+				emitByte(0xc0 + 8 * instr.dst);
+			}
 		}
 	}
 

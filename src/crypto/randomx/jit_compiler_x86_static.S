@@ -40,6 +40,7 @@
 .global DECL(randomx_prefetch_scratchpad)
 .global DECL(randomx_prefetch_scratchpad_end)
 .global DECL(randomx_program_prologue)
+.global DECL(randomx_program_imul_rcp_store)
 .global DECL(randomx_program_loop_begin)
 .global DECL(randomx_program_loop_load)
 .global DECL(randomx_program_start)
@@ -97,10 +98,14 @@ DECL(randomx_program_prologue):
 	mov dword ptr [rsp+8], 0xDFC0
 	mov dword ptr [rsp+12], 0xFFC0
 	mov dword ptr [rsp+32], -1
-	jmp rx_program_loop_begin
+	jmp DECL(randomx_program_imul_rcp_store)
 
 .balign 64
 	#include "asm/program_xmm_constants.inc"
+
+DECL(randomx_program_imul_rcp_store):
+	#include "asm/program_imul_rcp_store.inc"
+	jmp rx_program_loop_begin
 
 .balign 64
 DECL(randomx_program_loop_begin):
