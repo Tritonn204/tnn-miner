@@ -798,7 +798,7 @@ namespace randomx {
 	}
 
 	void JitCompilerX86::h_FADD_R(Instruction& instr, int i) {
-
+		prevFPOperation = codePos;
 		instr.dst %= RegisterCountFlt;
 		instr.src %= RegisterCountFlt;
 		emit(REX_ADDPD);
@@ -806,7 +806,7 @@ namespace randomx {
 	}
 
 	void JitCompilerX86::h_FADD_M(Instruction& instr, int i) {
-
+		prevFPOperation = codePos;
 		instr.dst %= RegisterCountFlt;
 		genAddressReg(instr);
 		emit(REX_CVTDQ2PD_XMM12);
@@ -815,7 +815,7 @@ namespace randomx {
 	}
 
 	void JitCompilerX86::h_FSUB_R(Instruction& instr, int i) {
-
+		prevFPOperation = codePos;
 		instr.dst %= RegisterCountFlt;
 		instr.src %= RegisterCountFlt;
 		emit(REX_SUBPD);
@@ -823,7 +823,7 @@ namespace randomx {
 	}
 
 	void JitCompilerX86::h_FSUB_M(Instruction& instr, int i) {
-
+		prevFPOperation = codePos;
 		instr.dst %= RegisterCountFlt;
 		genAddressReg(instr);
 		emit(REX_CVTDQ2PD_XMM12);
@@ -838,7 +838,7 @@ namespace randomx {
 	}
 
 	void JitCompilerX86::h_FMUL_R(Instruction& instr, int i) {
-
+		prevFPOperation = codePos;
 		instr.dst %= RegisterCountFlt;
 		instr.src %= RegisterCountFlt;
 		emit(REX_MULPD);
@@ -846,7 +846,7 @@ namespace randomx {
 	}
 
 	void JitCompilerX86::h_FDIV_M(Instruction& instr, int i) {
-
+		prevFPOperation = codePos;
 		instr.dst %= RegisterCountFlt;
 		genAddressReg(instr);
 		emit(REX_CVTDQ2PD_XMM12);
@@ -856,29 +856,67 @@ namespace randomx {
 	}
 
 	void JitCompilerX86::h_FSQRT_R(Instruction& instr, int i) {
-
+		prevFPOperation = codePos;
 		instr.dst %= RegisterCountFlt;
 		emit(SQRTPD);
 		emitByte(0xe4 + 9 * instr.dst);
 	}
 
 	void JitCompilerX86::h_CFROUND(Instruction& instr, int i) {
+		if (prevCFROUND > prevFPOperation) {
+			if (vm_flags & RANDOMX_FLAG_AMD) {
+				memcpy(code + prevCFROUND, NOP26, 26);
+			} else {
+				memcpy(code + prevCFROUND, NOP14, 14);
+			}
+		}
+		prevCFROUND = codePos;
+
 		emit(REX_MOV_RR64);
 		emitByte(0xc0 + instr.src);
 		int rotate = (static_cast<int>(instr.getImm32() & 63) - 2) & 63;
 		emit(ROR_RAX);
 		emitByte(rotate);
 		emit(AND_EAX_0C);
-		emit(LDMXCSR_RSP_RAX);
+		if (vm_flags & RANDOMX_FLAG_AMD) {
+			emit(CMP_EAX_RSP_20);
+			emitByte(0x74); // je
+			emitByte(10);   // skip ldmxcsr(4) + jmp(2) + mov(4)
+			emit(LDMXCSR_RSP_RAX);
+			emitByte(0xEB); // jmp +0
+			emitByte(0x00);
+			emit(MOV_RSP_20_EAX);
+		} else {
+			emit(LDMXCSR_RSP_RAX);
+		}
 	}
 
 	// BMI2: rorx rax, r[src], rotate (single non-destructive rotate, no mov needed)
 	void JitCompilerX86::h_CFROUND_BMI2(Instruction& instr, int i) {
+		if (prevCFROUND > prevFPOperation) {
+			if (vm_flags & RANDOMX_FLAG_AMD) {
+				memcpy(code + prevCFROUND, NOP25, 25);
+			} else {
+				memcpy(code + prevCFROUND, NOP13, 13);
+			}
+		}
+		prevCFROUND = codePos;
+
 		int rotate = (static_cast<int>(instr.getImm32() & 63) - 2) & 63;
 		uint64_t rorx = 0xC0F0FBC3C4ULL | (static_cast<uint64_t>(instr.src) << 32) | (static_cast<uint64_t>(rotate) << 40);
 		emit(reinterpret_cast<const uint8_t*>(&rorx), 6);
 		emit(AND_EAX_0C);
-		emit(LDMXCSR_RSP_RAX);
+		if (vm_flags & RANDOMX_FLAG_AMD) {
+			emit(CMP_EAX_RSP_20);
+			emitByte(0x74); // je
+			emitByte(10);   // skip ldmxcsr(4) + jmp(2) + mov(4)
+			emit(LDMXCSR_RSP_RAX);
+			emitByte(0xEB); // jmp +0
+			emitByte(0x00);
+			emit(MOV_RSP_20_EAX);
+		} else {
+			emit(LDMXCSR_RSP_RAX);
+		}
 	}
 
 	template<bool jccErratum>
@@ -919,6 +957,11 @@ namespace randomx {
 		} else {
 			emit(JZ);
 			emit32(jmp_offset - 4);
+		}
+
+		// if branch target crosses prevFPOperation, treat as if FP op happened now
+		if (jmp_target <= prevFPOperation) {
+			prevFPOperation = codePos;
 		}
 
 		//mark all registers as used
