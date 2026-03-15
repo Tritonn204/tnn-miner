@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 
 EXEC="./tnn-miner-cuda"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Persist CUDA driver JIT cache next to the miner
+export CUDA_CACHE_DISABLE=0
+export CUDA_CACHE_PATH="$SCRIPT_DIR/.nv_cache"
+export CUDA_CACHE_MAXSIZE=1073741824
+mkdir -p "$CUDA_CACHE_PATH"
 
 ARGS=("$@")
 FINAL_ARGS=()

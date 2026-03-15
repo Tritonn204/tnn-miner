@@ -8,7 +8,7 @@ if [ -n "$DYNAMIC_PART" ]; then
     EVALUATED_DYNAMIC_PART=$(eval echo "$DYNAMIC_PART")
     if eval echo "$DYNAMIC_PART" > /dev/null 2>&1; then
         SAFE_DYNAMIC_PART=$(printf '%s\n' "$DYNAMIC_PART" | sed 's:[][\/.^$*]:\\&:g')
-        conf=$(echo "$CUSTOM_USER_CONFIG" | sed "s/$SAFE_DYNAMIC_PART/$EVALUATED_DYNAMIC_PART/")
+        conf="${CUSTOM_USER_CONFIG//$SAFE_DYNAMIC_PART/$EVALUATED_DYNAMIC_PART}"
         echo "Modified config after removing executed command: $conf"
     else
         echo "Error in executing dynamic part. No modifications made."

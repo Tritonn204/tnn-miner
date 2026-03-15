@@ -13,6 +13,12 @@ fi
 MINER_DIR="/hive/miners/custom/$MINER_NAME"
 export LD_LIBRARY_PATH="$MINER_DIR/nvrtc_libs:$LD_LIBRARY_PATH:/hive/lib"
 
+# Persist CUDA driver JIT cache next to the miner (HiveOS clears ~/.nv)
+export CUDA_CACHE_DISABLE=0
+export CUDA_CACHE_PATH="$MINER_DIR/.nv_cache"
+export CUDA_CACHE_MAXSIZE=1073741824
+mkdir -p "$CUDA_CACHE_PATH"
+
 CUSTOM_USER_CONFIG=$(< "$CUSTOM_CONFIG_FILENAME")
 
 echo "args: $CUSTOM_USER_CONFIG"
@@ -25,5 +31,6 @@ echo "args are now: $CLEAN"
 echo "We are using miner: $MINER"
 date +%s > "/tmp/miner_start_time"
 /hive/miners/custom/"$MINER"/"$MINER" -v 2>&1 | grep 'Miner version:' | awk '{print $3}' > /tmp/.tnn-miner-version
+# shellcheck disable=SC2086 # Intentional word splitting: CLEAN contains multiple args
 /hive/miners/custom/"$MINER"/"$MINER" $CLEAN --broadcast 2>&1 | tee -a "${CUSTOM_LOG_BASENAME}.log"
 echo "Miner has exited"
