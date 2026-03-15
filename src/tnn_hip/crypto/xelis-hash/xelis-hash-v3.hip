@@ -905,7 +905,6 @@ __device__ __forceinline__ uint64_t div64_frcp(uint64_t a, uint64_t d) {
 // ------------------------------------------------------------
 // split32 — 32-bit hardware division path
 // Handles all divisor sizes correctly including tiny d (isqrt case 14).
-// 2.48x faster than hwrecip, 0 errors in micro.cu validation.
 // ------------------------------------------------------------
 
 __device__ __forceinline__ uint64_t mod64_split32(uint64_t a, uint64_t d) {
@@ -919,13 +918,38 @@ __device__ __forceinline__ uint64_t mod64_split32(uint64_t a, uint64_t d) {
         uint64_t rem = mid - (uint64_t)q_lo * d32;
         return rem;
     }
-    uint32_t d_hi = (uint32_t)(d >> 32);
-    uint32_t a_hi = (uint32_t)(a >> 32);
-    uint32_t q = a_hi / (d_hi + 1);
+    int s = __clzll(d);
+    uint64_t dn = d << s;
+    uint32_t v = (uint32_t)(dn >> 32);           // v >= 2^31 after normalization
+    uint64_t a_shifted = (s == 0) ? (a >> 32) : (a >> (32 - s));
+    uint32_t q = (v == 0xFFFFFFFFu) ? (uint32_t)a_shifted
+                                    : (uint32_t)(a_shifted / ((uint64_t)v + 1));
     uint64_t rem = a - (uint64_t)q * d;
-    if (rem >= d) rem -= d;
-    if (rem >= d) rem -= d;
+    if (rem > a) rem += d;             // undershot: q too large, rem underflowed
+    else if (rem >= d) rem -= d;       // overshot: q too small
     return rem;
+}
+
+__device__ __forceinline__ uint64_t div64_split32(uint64_t a, uint64_t d) {
+    if (d <= 0xFFFFFFFFULL) {
+        uint32_t d32 = (uint32_t)d;
+        uint32_t a_hi = (uint32_t)(a >> 32);
+        uint32_t q_hi = a_hi / d32;
+        uint32_t r_hi = a_hi - q_hi * d32;
+        uint64_t mid = ((uint64_t)r_hi << 32) | (uint32_t)a;
+        uint32_t q_lo = (uint32_t)(mid / d32);
+        return ((uint64_t)q_hi << 32) | q_lo;
+    }
+    int s = __clzll(d);
+    uint64_t dn = d << s;
+    uint32_t v = (uint32_t)(dn >> 32);           // v >= 2^31 after normalization
+    uint64_t a_shifted = (s == 0) ? (a >> 32) : (a >> (32 - s));
+    uint32_t q = (v == 0xFFFFFFFFu) ? (uint32_t)a_shifted
+                                    : (uint32_t)(a_shifted / ((uint64_t)v + 1));
+    uint64_t rem = a - (uint64_t)q * d;
+    if (rem > a) { q--; }              // undershot: q too large, rem underflowed
+    else if (rem >= d) { q++; }        // overshot: q too small
+    return q;
 }
 
 // ------------------------------------------------------------
@@ -999,7 +1023,33 @@ __device__ __forceinline__ uint64_t div128by64_frcp(uint64_t hi, uint64_t lo, ui
     return ((uint64_t)q1 << 32) | q0;
 }
 
-// Barrett modular exponentiation — precompute mu once, ~4.8x faster than frcp loop
+__device__ __forceinline__ uint64_t div128by64_split32(uint64_t hi, uint64_t lo, uint64_t d) {
+    uint64_t r = mod64_split32(hi, d);
+    int s = __clzll(d);
+    uint64_t dn = d << s;
+    double recip = recip_norm(dn);
+    uint64_t n_hi = s ? ((r << s) | (lo >> (64 - s))) : r;
+    uint64_t n_lo = lo << s;
+    uint64_t rem;
+    uint32_t q1 = div96by64_q32_frcp(n_hi, (uint32_t)(n_lo >> 32), dn, recip, &rem);
+    uint32_t q0 = div96by64_q32_frcp(rem,  (uint32_t)n_lo,          dn, recip, &rem);
+    return ((uint64_t)q1 << 32) | q0;
+}
+
+__device__ __forceinline__ uint64_t mod128by64_split32(uint64_t hi, uint64_t lo, uint64_t d) {
+    uint64_t r = mod64_split32(hi, d);
+    int s = __clzll(d);
+    uint64_t dn = d << s;
+    double recip = recip_norm(dn);
+    uint64_t n_hi = s ? ((r << s) | (lo >> (64 - s))) : r;
+    uint64_t n_lo = lo << s;
+    uint64_t rem;
+    (void)div96by64_q32_frcp(n_hi, (uint32_t)(n_lo >> 32), dn, recip, &rem);
+    (void)div96by64_q32_frcp(rem,  (uint32_t)n_lo,          dn, recip, &rem);
+    return rem >> s;
+}
+
+// Barrett modular exponentiation — precompute mu once
 __device__ __forceinline__ uint64_t modular_power_barrett(uint64_t base, uint64_t exp, uint64_t mod) {
     mod += (mod == 0);
     if (mod == 1) return 0;
@@ -1008,10 +1058,10 @@ __device__ __forceinline__ uint64_t modular_power_barrett(uint64_t base, uint64_
     if (base < 2) return base;
     if (exp == 0) return 1;
 
-    // Precompute mu = floor((2^128 - 1) / mod) using frcp division (one-time cost)
-    uint64_t mu_hi = div64_frcp(0xFFFFFFFFFFFFFFFFULL, mod);
-    uint64_t rem   = mod64_frcp(0xFFFFFFFFFFFFFFFFULL, mod);
-    uint64_t mu_lo = div128by64_frcp(rem, 0xFFFFFFFFFFFFFFFFULL, mod);
+    // Precompute mu = floor((2^128 - 1) / mod) using split32 (exact, CLZ-normalized)
+    uint64_t mu_hi = div64_split32(0xFFFFFFFFFFFFFFFFULL, mod);
+    uint64_t rem   = mod64_split32(0xFFFFFFFFFFFFFFFFULL, mod);
+    uint64_t mu_lo = div128by64_split32(rem, 0xFFFFFFFFFFFFFFFFULL, mod);
 
     uint64_t result = 1;
 
@@ -1042,25 +1092,25 @@ __device__ __forceinline__ uint64_t execute_op_offset(
   if ((1u << offset_op) & 0xE780u) {
     uint64_t t0, t1, t2;
     switch (offset_op) {
-    case 7:   // d = c|1 : uniform 64-bit → proven tier inside mod128 is fine
-      return mod128by64_frcp(a, b, (c | 1));
+    case 7:   // d = c|1 : uniform 64-bit
+      return mod128by64_split32(a, b, (c | 1));
     case 8:
       t0 = ROTL(result, r);
       t1 = a | 2;
       if (U128_LT(b, c, t0, t1)) return c;
-      t2 = (t0 > 0) ? div64_frcp(b, t0) : 0;           // t0 uniform
+      t2 = (t0 > 0) ? div64_split32(b, t0) : 0;         // t0 uniform
       return c - t1 * t2;
     case 9:   // d = b|4 : uniform
-      return div128by64_frcp(c, a, (b | 4));
+      return div128by64_split32(c, a, (b | 4));
     case 10:
       t0 = ROTL(result, r);
       return U128_GT(t0, b, a, (c | 8))
-           ? ((a > 0) ? div64_frcp(t0, a) : 0)         // a uniform
+           ? ((a > 0) ? div64_split32(t0, a) : 0)       // a uniform
            : (a ^ b);
     case 13:  // t1 = murmur|1 : uniform
       t0 = isqrt(b + j);
       t1 = murmurhash3(c ^ result ^ i ^ j) | 1;
-      return mod128by64_frcp(a + i, t0, t1);
+      return mod128by64_split32(a + i, t0, t1);
     case 14:  // *** t0 = isqrt ∈ [1, 2^32], can be tiny → safe tier ***
       t0 = isqrt(b | 2);
       t1 = isqrt(a + j);
