@@ -839,6 +839,16 @@ if (WITH_HIP)
   # Apply normal C++ linking to the static library (no HIP linking issues here)
   setup_target_libraries(${TNN_CORE_LIB})
 
+  # Per-platform stats API port: CPU=8989, AMD=8990, NVIDIA=8991, Intel=8992
+  # Must be on tnn-core-lib since broadcastServer.cpp is compiled here.
+  if (HIP_PLATFORM MATCHES "amd")
+    target_compile_definitions(${TNN_CORE_LIB} PRIVATE TNN_BROADCAST_PORT=8990)
+  elseif (HIP_PLATFORM MATCHES "nvidia")
+    target_compile_definitions(${TNN_CORE_LIB} PRIVATE TNN_BROADCAST_PORT=8991)
+  elseif (HIP_PLATFORM MATCHES "intel")
+    target_compile_definitions(${TNN_CORE_LIB} PRIVATE TNN_BROADCAST_PORT=8992)
+  endif()
+
   #
   # Windows + NVIDIA HIP: manual hipcc compilation of HIP sources
   #
@@ -986,14 +996,7 @@ if (WITH_HIP)
       ${TNN_HIP_SOURCES}
     )
 
-    # Per-platform stats API port: CPU=8989, AMD=8990, NVIDIA=8991, Intel=8992
-    if (HIP_PLATFORM MATCHES "amd")
-      target_compile_definitions(${TNN_OUTPUT_NAME} PRIVATE TNN_BROADCAST_PORT=8990)
-    elseif (HIP_PLATFORM MATCHES "nvidia")
-      target_compile_definitions(${TNN_OUTPUT_NAME} PRIVATE TNN_BROADCAST_PORT=8991)
-    elseif (HIP_PLATFORM MATCHES "intel")
-      target_compile_definitions(${TNN_OUTPUT_NAME} PRIVATE TNN_BROADCAST_PORT=8992)
-    endif()
+    # NOTE: TNN_BROADCAST_PORT is set on tnn-core-lib (where broadcastServer.cpp lives)
 
     if (WIN32 AND HIP_PLATFORM MATCHES "nvidia")
       set(CMAKE_HIP_LINK_EXECUTABLE
