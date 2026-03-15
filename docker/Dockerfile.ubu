@@ -37,20 +37,21 @@ RUN ls -la ./build/bin/ ./build/ && mv ./build/bin/tnn-miner-* ./ || mv ./build/
 # Copy tunes directory (created by CMake post-build from default-tunes)
 RUN if [ -d ./build/bin/tunes ]; then cp -r ./build/bin/tunes ./tunes; elif [ -d ./build/tunes ]; then cp -r ./build/tunes ./tunes; fi
 #RUN ./tnn-miner-* --test-spectre
-# Bundle GPU runtime .so files for wrapper compatibility with older HiveOS
-# NVRTC for CUDA builds (ensures __maxnreg__ works on older drivers)
-RUN mkdir -p ./nvrtc_libs && \
-    (cp /usr/local/cuda/lib64/libnvrtc.so* ./nvrtc_libs/ 2>/dev/null || true) && \
-    (cp /usr/local/cuda/lib64/libnvrtc-builtins.so* ./nvrtc_libs/ 2>/dev/null || true) && \
-    ls -la ./nvrtc_libs/ || true
-# HIP/ROCm runtime + HIPRTC for AMD builds
-RUN mkdir -p ./hip_libs && \
-    (cp /opt/rocm/lib/libamdhip64.so* ./hip_libs/ 2>/dev/null || true) && \
-    (cp /opt/rocm/lib/libhiprtc.so* ./hip_libs/ 2>/dev/null || true) && \
-    (cp /opt/rocm/lib/libhiprtc-builtins.so* ./hip_libs/ 2>/dev/null || true) && \
-    (cp /opt/rocm/lib/libhsa-runtime64.so* ./hip_libs/ 2>/dev/null || true) && \
-    (cp /opt/rocm/lib/libamd_comgr.so* ./hip_libs/ 2>/dev/null || true) && \
-    ls -la ./hip_libs/ || true
+# Bundle only the relevant GPU runtime libs based on HIP_PLATFORM
+# NVRTC for NVIDIA builds (ensures __maxnreg__ works on older drivers)
+RUN mkdir -p ./nvrtc_libs ./hip_libs && \
+    if echo "$CMAKE_ARGS" | grep -q "HIP_PLATFORM=nvidia"; then \
+      (cp /usr/local/cuda/lib64/libnvrtc.so* ./nvrtc_libs/ 2>/dev/null || true) && \
+      (cp /usr/local/cuda/lib64/libnvrtc-builtins.so* ./nvrtc_libs/ 2>/dev/null || true) && \
+      ls -la ./nvrtc_libs/; \
+    elif echo "$CMAKE_ARGS" | grep -q "HIP_PLATFORM=amd"; then \
+      (cp /opt/rocm/lib/libamdhip64.so* ./hip_libs/ 2>/dev/null || true) && \
+      (cp /opt/rocm/lib/libhiprtc.so* ./hip_libs/ 2>/dev/null || true) && \
+      (cp /opt/rocm/lib/libhiprtc-builtins.so* ./hip_libs/ 2>/dev/null || true) && \
+      (cp /opt/rocm/lib/libhsa-runtime64.so* ./hip_libs/ 2>/dev/null || true) && \
+      (cp /opt/rocm/lib/libamd_comgr.so* ./hip_libs/ 2>/dev/null || true) && \
+      ls -la ./hip_libs/; \
+    fi
 RUN ls -la ./
 RUN tar -czvf ${TARGZ_FILE} ./tnn-miner* ./tunes \
     $([ -n "$(ls ./nvrtc_libs/ 2>/dev/null)" ] && echo "./nvrtc_libs") \
