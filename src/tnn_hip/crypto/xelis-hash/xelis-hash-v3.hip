@@ -1068,81 +1068,100 @@ __device__ __forceinline__ uint64_t modular_power_barrett(uint64_t base, uint64_
 #define U128_GT(a_hi,a_lo,b_hi,b_lo) (((a_hi) > (b_hi)) || (((a_hi) == (b_hi)) && ((a_lo) > (b_lo))))
 
 __device__ __forceinline__ uint64_t execute_op_offset(
-    uint32_t offset_op, uint64_t a, uint64_t b, uint64_t c,
+    uint32_t op, uint64_t a, uint64_t b, uint64_t c,
     uint32_t r, uint64_t result, uint32_t i, uint32_t j)
 {
-  if ((1u << offset_op) & 0xE780u) {
-    // --- 128-bit divmod group: cases 7, 9, 13 (uniform pipeline) ---
-    if ((1u << offset_op) & 0x2280u) {  // bits 7, 9, 13
-      // Precompute isqrt/murmurhash speculatively (cheap, avoids divergence)
-      uint64_t sqrt_bj = isqrt(b + j);
-      uint64_t mur     = murmurhash3(c ^ result ^ i ^ j) | 1;
+  // Raw op index (no +13 offset). Mapping from old case numbers:
+  //   old 0→3, 1→4, 2→5, 3→6, 4→7, 5→8, 6→9,
+  //   old 7→10, 8→11, 9→12, 10→13, 11→14, 12→15, 13→0, 14→1, 15→2
 
-      // Branchless argument selection
-      uint64_t m7  = -(uint64_t)(offset_op == 7);
-      uint64_t m9  = -(uint64_t)(offset_op == 9);
-      uint64_t m13 = -(uint64_t)(offset_op == 13);
+  // --- Cheap path: always computed, grouped by shared structure ---
+  uint64_t ab = a * b, ac = a * c, bc = b * c;
 
-      uint64_t dv_hi = (a     & m7) | (c       & m9) | ((a + i)  & m13);
-      uint64_t dv_lo = (b     & m7) | (a       & m9) | (sqrt_bj  & m13);
-      uint64_t dv_d  = ((c|1) & m7) | ((b|4)   & m9) | (mur      & m13);
+  // Group 3-4 (old 0-1): ac±(second product)
+  uint64_t m3 = -(uint64_t)(op == 3);
+  uint64_t m4 = -(uint64_t)(op == 4);
+  uint64_t g34_a = (ac & m3) | (ab & m4);
+  uint64_t g34_b = (bc & m3) | (ac & m4);
 
-      // One unified division — all threads execute same instructions
-      divmod_result dm = divmod128by64_split32(dv_hi, dv_lo, dv_d);
+  // Group 5-6 (old 2-3): X - Y + Z with selected operands
+  uint64_t m5 = -(uint64_t)(op == 5);
+  uint64_t m6 = -(uint64_t)(op == 6);
+  uint64_t g56_x = (c & m5) | (a & m6);
+  uint64_t g56_y = (a & m5) | (b & m6);
+  uint64_t g56_z = (b & m5) | (c & m6);
 
-      // Cases 7, 13 want remainder; case 9 wants quotient
-      return (offset_op == 9) ? dm.q : dm.r;
-    }
+  // Group 7-8 (old 4-5): product + scalar
+  uint64_t m7 = -(uint64_t)(op == 7);
+  uint64_t m8 = -(uint64_t)(op == 8);
+  uint64_t g78_prod = (bc & m7) | (ac & m8);
+  uint64_t g78_add  = (a  & m7) | (b  & m8);
 
-    // --- 64-bit divmod group: cases 8, 10 ---
-    if ((1u << offset_op) & 0x500u) {  // bits 8, 10
-      uint64_t t0 = ROTL(result, r);
+  // Group 14-15 (old 11-12): unified __umul64hi
+  uint64_t m14 = -(uint64_t)(op == 14);
+  uint64_t m15 = -(uint64_t)(op == 15);
+  uint64_t uo1 = (a & m14) | (c & m15);
+  uint64_t uo2 = (c & m14) | (b & m15);
+  uint64_t umhi = __umul64hi(uo1, uo2);
+  uint64_t umlo = (bc & m14) | ((ab + c * ROTR(result, r)) & m15);
 
-      // Case 8: div64(b, t0), guarded by U128_LT
-      // Case 10: div64(t0, a), guarded by U128_GT
-      uint64_t m8  = -(uint64_t)(offset_op == 8);
-      uint64_t m10 = -(uint64_t)(offset_op == 10);
+  uint64_t cheap = 0;
+  cheap |= (g34_a + g34_b) & m3;
+  cheap |= (g34_a - g34_b) & m4;
+  cheap |= (g56_x - g56_y + g56_z) & (m5 | m6);
+  cheap |= (g78_prod + g78_add) & (m7 | m8);
+  cheap |= (ab * c) & -(uint64_t)(op == 9);
+  cheap |= (umhi + umlo) & (m14 | m15);
 
-      uint64_t dividend = (b  & m8) | (t0 & m10);
-      uint64_t divisor  = (t0 & m8) | (a  & m10);
+  // Early out: cheap ops are bits 3-9,14,15 = 0xC3F8
+  if (!((1u << op) & 0x3C07u))
+    return cheap;
 
-      // Guard: case 8 needs t0>0, case 10 needs a>0
-      uint64_t guard = (t0 & m8) | (a & m10);
-      uint64_t q = (guard > 0) ? divmod64_split32(dividend, divisor).q : 0;
+  // --- 128-bit divmod group: raw 0,10,12 (old 13,7,9) ---
+  if ((1u << op) & 0x1401u) {
+    uint64_t sqrt_bj = isqrt(b + j);
+    uint64_t mur     = murmurhash3(c ^ result ^ i ^ j) | 1;
 
-      // Post-processing
-      // Case 8:  if (U128_LT(b,c,t0,a|2)) return c; else return c - (a|2)*q
-      // Case 10: if (U128_GT(t0,b,a,c|8)) return q; else return a^b
-      uint64_t t1_8 = a | 2;
-      uint64_t early_8  = U128_LT(b, c, t0, t1_8) ? c : (c - t1_8 * q);
-      uint64_t early_10 = U128_GT(t0, b, a, (c | 8)) ? q : (a ^ b);
+    uint64_t m_0  = -(uint64_t)(op == 0);
+    uint64_t m10  = -(uint64_t)(op == 10);
+    uint64_t m12  = -(uint64_t)(op == 12);
 
-      return (early_8 & m8) | (early_10 & m10);
-    }
+    uint64_t dv_hi = ((a + i) & m_0) | (a       & m10) | (c       & m12);
+    uint64_t dv_lo = (sqrt_bj & m_0) | (b       & m10) | (a       & m12);
+    uint64_t dv_d  = (mur     & m_0) | ((c|1)   & m10) | ((b|4)   & m12);
 
-    // --- isqrt group: cases 14, 15 ---
-    if (offset_op == 14) {
-      uint64_t t0 = isqrt(b | 2);
-      uint64_t t1 = isqrt(a + j);
-      uint64_t t2 = (t0 > 0) ? mod64_split32((c + i), t0) : 0;
-      return ROTL(t2, i + j) * t1;
-    }
-    // 15
-    return (isqrt(a + i) * isqrt(c + j)) ^ (b + i + j);
+    divmod_result dm = divmod128by64_split32(dv_hi, dv_lo, dv_d);
+    return (op == 12) ? dm.q : dm.r;
   }
 
-  uint64_t ab = a * b, ac = a * c, bc = b * c;
-  uint64_t out = 0;
-  out |= (ac + bc)   & -(uint64_t)(offset_op == 0);
-  out |= (ab - ac)   & -(uint64_t)(offset_op == 1);
-  out |= (c - a + b) & -(uint64_t)(offset_op == 2);
-  out |= (a - b + c) & -(uint64_t)(offset_op == 3);
-  out |= (bc + a)    & -(uint64_t)(offset_op == 4);
-  out |= (ac + b)    & -(uint64_t)(offset_op == 5);
-  out |= (ab * c)    & -(uint64_t)(offset_op == 6);
-  out |= (__umul64hi(a, c) + bc)                       & -(uint64_t)(offset_op == 11);
-  out |= (__umul64hi(c, b) + ab + c * ROTR(result, r)) & -(uint64_t)(offset_op == 12);
-  return out;
+  // --- Unified 64-bit divmod group: raw 1,2,11,13 (old 14,15,8,10) ---
+  uint64_t m1  = -(uint64_t)(op == 1);
+  uint64_t m2  = -(uint64_t)(op == 2);
+  uint64_t m11 = -(uint64_t)(op == 11);
+  uint64_t m13 = -(uint64_t)(op == 13);
+
+  // Speculative: ROTL for 11/13(old 8/10), isqrt pair for 1/2(old 14/15)
+  uint64_t t0 = ROTL(result, r);
+  uint64_t sa1 = ((b | 2) & m1) | ((a + i) & m2);
+  uint64_t sa2 = ((a + j) & m1) | ((c + j) & m2);
+  uint64_t s1 = isqrt(sa1);
+  uint64_t s2 = isqrt(sa2);
+
+  // Branchless operand selection — one divmod for all 4 cases
+  uint64_t dividend = ((c + i) & m1) | (b      & m11) | (t0    & m13);
+  uint64_t divisor  = (s1      & m1) | (t0     & m11) | (a     & m13) | (1 & m2);
+  divisor |= (uint64_t)(divisor == 0);  // guard div-by-zero for 11/13
+
+  divmod_result dm = divmod64_split32(dividend, divisor);
+
+  // Post-processing: 11/13(old 8/10) use q, 1(old 14) uses r, 2(old 15) ignores division
+  uint64_t t1_11 = a | 2;
+  uint64_t early_11 = U128_LT(b, c, t0, t1_11) ? c : (c - t1_11 * dm.q);
+  uint64_t early_13 = U128_GT(t0, b, a, (c | 8)) ? dm.q : (a ^ b);
+  uint64_t r1 = ROTL(dm.r, i + j) * s2;
+  uint64_t r2 = (s1 * s2) ^ (b + i + j);
+
+  return (early_11 & m11) | (early_13 & m13) | (r1 & m1) | (r2 & m2);
 }
 
 #if defined(__CUDA_ARCH__) || defined(__HIP_PLATFORM_NVIDIA__)
@@ -1206,7 +1225,7 @@ __device__ void stage_3(uint64_t *my_scratch)
 
       r++;
 
-      uint32_t op_idx = (ROTL(result, (uint32_t)c) + 13) & 0xF;
+      uint32_t op_idx = ROTL(result, (uint32_t)c) & 0xF;
       uint64_t v = execute_op_offset(op_idx, a, b_val, c, r, result, i, j);
 
       uint64_t idx_seed = v ^ result;
@@ -1289,7 +1308,7 @@ __device__ void stage_3_efficient(uint64_t *my_scratch)
 
       r++;
 
-      uint32_t op_idx = (ROTL(result, (uint32_t)c) + 13) & 0xF;
+      uint32_t op_idx = ROTL(result, (uint32_t)c) & 0xF;
       uint64_t v = execute_op_offset(op_idx, a, b_val, c, r, result, i, j);
 
       uint64_t idx_seed = v ^ result;
@@ -1376,7 +1395,7 @@ XELIS_HOT __device__ void stage_3_hybrid_v2(uint64_t *my_scratch, const uint8_t 
       uint64_t c = my_scratch[r];
       uint64_t rot_res = ~ROTR(result, r);
       r++;
-      uint32_t op_idx = (ROTL(result, (uint32_t)c) + 13) & 0xF;
+      uint32_t op_idx = ROTL(result, (uint32_t)c) & 0xF;
 
       uint64_t b_val = load_scratch(&mem_buffer_b[map_index(a ^ rot_res)]);
 
