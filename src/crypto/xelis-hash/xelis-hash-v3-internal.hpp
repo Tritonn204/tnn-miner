@@ -627,7 +627,8 @@ static inline uint64_t execute_operation_merged(
     uint64_t v;
     uint64_t dv_hi, dv_lo, dv_d;
     bool want_quot;
-    uint64_t t0, s2, dividend, divisor;
+    uint64_t t0 = ROTL(result, r_next);  // hoisted — used by 11,13,15
+    uint64_t s2, dividend, divisor;
     goto *dispatch_table[idx];
 
     // --- 128-bit group: goto labels set operands, converge to div128 ---
@@ -638,16 +639,17 @@ m_op10: dv_hi = a; dv_lo = b; dv_d = c|1;
 m_op12: dv_hi = c; dv_lo = a; dv_d = b|4;
         want_quot = true;  goto div128;
 
-    // --- 64-bit group: goto labels set operands, converge to div64 ---
-m_op1:  { uint64_t sb = isqrt(b|2); s2 = isqrt(a+j_off);
-          dividend = c+i; divisor = sb; goto div64_mod; }
+    // --- 64-bit group: early-out checks in labels, then converge to div64 ---
+m_op1:  { s2 = isqrt(a+j_off);
+          dividend = c+i; divisor = isqrt(b|2); goto div64; }
 m_op2:  v = (isqrt(a+i)*isqrt(c+j_off))^(b+i+j_off); goto m_done;
-m_op11: t0 = ROTL(result,r_next);
-        dividend = b; divisor = t0; goto div64_case8;
-m_op13: t0 = ROTL(result,r_next);
-        dividend = t0; divisor = a; goto div64_case10;
+m_op11: { uint64_t t2_lo = a|2;
+          if (t0>b||(t0==b&&t2_lo>c)) { v=c; goto m_done; }
+          dividend = b; divisor = t0; goto div64; }
+m_op13: { if (!(t0>a||(t0==a&&b>(c|8)))) { v=a^b; goto m_done; }
+          dividend = t0; divisor = a; goto div64; }
 
-    // --- Cheap ops: identical to goto dispatch ---
+    // --- Cheap ops ---
 m_op3:  v = (a+b)*c; goto m_done;
 m_op4:  v = (b-c)*a; goto m_done;
 m_op5:  v = c-a+b;   goto m_done;
@@ -665,22 +667,17 @@ div128: {
         v = want_quot ? (uint64_t)(dd / dv_d) : (uint64_t)(dd % dv_d);
         goto m_done; }
 
-    // --- Shared 64-bit division sites ---
-div64_mod: {
-        uint64_t rem = (divisor != 0) ? dividend % divisor : 0;
-        v = ROTL(rem, i+j_off) * s2;
-        goto m_done; }
-
-div64_case8: {
-        uint64_t t2_lo = a|2;
-        if (t0>b||(t0==b&&t2_lo>c)) { v=c; goto m_done; }
-        uint64_t q = (t0 != 0) ? b/t0 : 0;
-        v = (uint64_t)(COMBINE_UINT64(b,c) - COMBINE_UINT64(t0,t2_lo)*q);
-        goto m_done; }
-
-div64_case10: {
-        uint64_t rr = t0;
-        v = (rr>a||(rr==a&&b>(c|8))) ? ((a!=0)?(rr/a):0) : (a^b);
+    // --- Shared 64-bit division site (one divq → q and rem) ---
+div64: {
+        uint64_t q = (divisor != 0) ? dividend / divisor : 0;
+        uint64_t rem = dividend - q * divisor;
+        // Post-processing: 1 uses rem, 11 uses q in U128 subtract, 13 returns q
+        if (idx == 1) { v = ROTL(rem, i+j_off) * s2; }
+        else if (idx == 11) {
+            v = (uint64_t)(COMBINE_UINT64(b,c) - COMBINE_UINT64(t0, a|2) * q);
+        } else {
+            v = q;
+        }
         goto m_done; }
 
 m_done:
