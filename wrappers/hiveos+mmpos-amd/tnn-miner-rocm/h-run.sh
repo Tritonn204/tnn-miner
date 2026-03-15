@@ -13,6 +13,10 @@ fi
 MINER_DIR="/hive/miners/custom/$MINER_NAME"
 export LD_LIBRARY_PATH="$MINER_DIR/hip_libs:$LD_LIBRARY_PATH:/hive/lib"
 
+# Persist HIPRTC compiled kernel cache next to the miner
+export TNN_HIP_CACHE_PATH="$MINER_DIR/.hip_cache"
+mkdir -p "$TNN_HIP_CACHE_PATH"
+
 CUSTOM_USER_CONFIG=$(< "$CUSTOM_CONFIG_FILENAME")
 
 echo "args: $CUSTOM_USER_CONFIG"

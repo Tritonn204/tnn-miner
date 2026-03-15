@@ -13,10 +13,12 @@
 #include <filesystem>
 #include <mutex>
 #include <algorithm>
+#include <functional>
 #include "tnn_log.hpp"
 
 #ifdef _WIN32
 #include <windows.h>
+#include <shlobj.h>
 #endif
 
 class RTCCompiler {
@@ -126,6 +128,28 @@ public:
                 return kernel;
             }
         }
+
+        // AMD disk cache: check before expensive compilation
+#if !defined(__HIP_PLATFORM_NVIDIA__) && !defined(__CUDACC_RTC__)
+        {
+            std::string disk_hash = make_disk_cache_hash(source, kernel_name, code_options);
+            auto disk_code = load_from_disk_cache(disk_hash, kernel_name);
+            if (disk_code.has_value()) {
+                TNN_LOG_INFO("[PRECOMPILE] Disk cache hit: %s\n", kernel_name.c_str());
+                fflush(stdout);
+                try {
+                    CompiledKernel kernel = load_module_from_code(disk_code.value());
+                    std::lock_guard<std::mutex> lock(cache_mutex_);
+                    code_cache_[code_key] = std::move(disk_code.value());
+                    module_cache_[module_key] = kernel;
+                    return kernel;
+                } catch (...) {
+                    TNN_LOG_DEBUG("[PRECOMPILE] Disk cache binary failed to load, recompiling\n");
+                    // Fall through to compile
+                }
+            }
+        }
+#endif
 
         TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_from_source: Not in cache, calling compile_internal\n");
         fflush(stdout);
@@ -332,6 +356,8 @@ private:
         TNN_LOG_TRACE("[TRACE] RTCCompiler: Detected AMD GPU, arch=%s\n", gpu_arch_.c_str());
         fflush(stdout);
 #endif
+
+        init_disk_cache_dir();
     }
 
     ~RTCCompiler() {
@@ -437,6 +463,159 @@ private:
         fflush(stdout);
 
         return kernel;
+    }
+
+    // ----------------------------
+    // Disk cache (AMD only)
+    // ----------------------------
+
+    // FNV-1a 64-bit hash — simple, fast, good distribution for cache keys
+    static uint64_t fnv1a_hash(const void* data, size_t len) {
+        const uint8_t* p = static_cast<const uint8_t*>(data);
+        uint64_t h = 0xcbf29ce484222325ULL;
+        for (size_t i = 0; i < len; ++i) {
+            h ^= p[i];
+            h *= 0x100000001b3ULL;
+        }
+        return h;
+    }
+
+    static std::string to_hex16(uint64_t v) {
+        char buf[17];
+        std::snprintf(buf, sizeof(buf), "%016llx", (unsigned long long)v);
+        return buf;
+    }
+
+    // Hash source + all headers + options into a stable hex string for filename
+    std::string make_disk_cache_hash(
+        const std::string& source,
+        const std::string& kernel_name,
+        const std::vector<std::string>& sorted_options
+    ) const {
+        // Build a single blob to hash: source + headers (sorted by name) + options + kernel name
+        std::string blob;
+        blob.reserve(source.size() + 4096);
+        blob.append(source);
+        blob.push_back('\0');
+        blob.append(kernel_name);
+        blob.push_back('\0');
+
+        // Sort headers by name for deterministic ordering
+        std::vector<const Header*> sorted_headers;
+        sorted_headers.reserve(headers_.size());
+        for (const auto& h : headers_) sorted_headers.push_back(&h);
+        std::sort(sorted_headers.begin(), sorted_headers.end(),
+                  [](const Header* a, const Header* b) { return a->name < b->name; });
+
+        for (const auto* h : sorted_headers) {
+            blob.append(h->name);
+            blob.push_back('\0');
+            blob.append(h->source);
+            blob.push_back('\0');
+        }
+
+        for (const auto& opt : sorted_options) {
+            blob.append(opt);
+            blob.push_back('\0');
+        }
+
+        // Use two independent FNV-1a passes (different seeds via offset) for 128-bit key
+        uint64_t h1 = fnv1a_hash(blob.data(), blob.size());
+        // Second hash: offset by 1 byte to get independent hash
+        uint64_t h2 = fnv1a_hash(blob.data() + 1, blob.size() - 1);
+
+        return to_hex16(h1) + to_hex16(h2);
+    }
+
+    void init_disk_cache_dir() {
+        // Check env var first (set by wrapper scripts on HiveOS/mmpOS)
+        const char* env_path = std::getenv("TNN_HIP_CACHE_PATH");
+        if (env_path && env_path[0]) {
+            disk_cache_dir_ = env_path;
+        } else {
+#ifdef _WIN32
+            // %LOCALAPPDATA%/TNN-Miner/HipCache
+            char appdata[MAX_PATH] = {0};
+            if (SHGetFolderPathA(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0, appdata) == S_OK) {
+                disk_cache_dir_ = std::string(appdata) + "\\TNN-Miner\\HipCache";
+            } else {
+                const char* tmp = std::getenv("TEMP");
+                disk_cache_dir_ = std::string(tmp ? tmp : ".") + "\\TNN-Miner\\HipCache";
+            }
+#else
+            // ~/.cache/tnn-miner/hip_cache
+            const char* home = std::getenv("HOME");
+            if (home) {
+                disk_cache_dir_ = std::string(home) + "/.cache/tnn-miner/hip_cache";
+            } else {
+                disk_cache_dir_ = "/tmp/tnn-miner/hip_cache";
+            }
+#endif
+        }
+
+        // Create directory if it doesn't exist
+        std::error_code ec;
+        std::filesystem::create_directories(disk_cache_dir_, ec);
+        if (ec) {
+            TNN_LOG_DEBUG("[DISK CACHE] Failed to create cache dir '%s': %s\n",
+                          disk_cache_dir_.c_str(), ec.message().c_str());
+            disk_cache_dir_.clear(); // Disable disk cache
+        } else {
+            TNN_LOG_INFO("[DISK CACHE] Using: %s\n", disk_cache_dir_.c_str());
+        }
+    }
+
+    std::optional<CompiledCode> load_from_disk_cache(
+        const std::string& hash,
+        const std::string& kernel_name
+    ) {
+        if (disk_cache_dir_.empty()) return std::nullopt;
+
+        std::string path = disk_cache_dir_ +
+#ifdef _WIN32
+            "\\"
+#else
+            "/"
+#endif
+            + hash + ".bin";
+
+        std::ifstream file(path, std::ios::binary | std::ios::ate);
+        if (!file.is_open()) return std::nullopt;
+
+        auto size = file.tellg();
+        if (size <= 0 || size > 256 * 1024 * 1024) return std::nullopt; // sanity: max 256MB
+
+        file.seekg(0);
+        CompiledCode code;
+        code.code.resize(static_cast<size_t>(size));
+        code.kernel_name = kernel_name;
+
+        if (!file.read(code.code.data(), size)) return std::nullopt;
+
+        TNN_LOG_DEBUG("[DISK CACHE] Loaded %zu bytes from %s\n",
+                      code.code.size(), path.c_str());
+        return code;
+    }
+
+    void save_to_disk_cache(const std::string& hash, const std::vector<char>& code) {
+        if (disk_cache_dir_.empty()) return;
+
+        std::string path = disk_cache_dir_ +
+#ifdef _WIN32
+            "\\"
+#else
+            "/"
+#endif
+            + hash + ".bin";
+
+        std::ofstream file(path, std::ios::binary | std::ios::trunc);
+        if (!file.is_open()) {
+            TNN_LOG_DEBUG("[DISK CACHE] Failed to write %s\n", path.c_str());
+            return;
+        }
+
+        file.write(code.data(), code.size());
+        TNN_LOG_DEBUG("[DISK CACHE] Saved %zu bytes to %s\n", code.size(), path.c_str());
     }
 
     // ----------------------------
@@ -590,6 +769,15 @@ private:
 
         hiprtcDestroyProgram(&prog);
 
+        // Save to AMD disk cache
+#if !defined(__HIP_PLATFORM_NVIDIA__) && !defined(__CUDACC_RTC__)
+        {
+            auto code_options = filter_device_specific_options(norm.sorted);
+            std::string disk_hash = make_disk_cache_hash(source, kernel_name, code_options);
+            save_to_disk_cache(disk_hash, code);
+        }
+#endif
+
         CompiledKernel kernel;
         kernel.kernel_name = kernel_name;
 
@@ -641,6 +829,7 @@ private:
 private:
     Backend backend_ = Backend::UNKNOWN;
     std::string gpu_arch_;
+    std::string disk_cache_dir_;
 
     mutable std::mutex cache_mutex_;
     // Two-tier cache system:

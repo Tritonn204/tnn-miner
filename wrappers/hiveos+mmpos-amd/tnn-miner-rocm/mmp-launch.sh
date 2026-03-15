@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 
 EXEC="./tnn-miner-rocm"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Persist HIPRTC compiled kernel cache next to the miner
+export TNN_HIP_CACHE_PATH="$SCRIPT_DIR/.hip_cache"
+mkdir -p "$TNN_HIP_CACHE_PATH"
 
 ARGS=("$@")
 FINAL_ARGS=()
