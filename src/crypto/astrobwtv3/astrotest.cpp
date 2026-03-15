@@ -159,8 +159,16 @@ int DeroTesting(int testOp, int testLen, bool useLookup) {
   failedTests += TestAstroBWTv3(false);
   for(int x = 0; x < numAstroFuncs; x++) {
     astroCompFunc = allAstroFuncs[x].funcPtr;
-    printf("Testing %s\n", allAstroFuncs[x].funcName.c_str());
-    failedTests += TestAstroBWTv3(true);
+    printf("Testing %s... ", allAstroFuncs[x].funcName.c_str());
+    fflush(stdout);
+    int rc = TestAstroBWTv3(true);
+    if (rc == 0) {
+      printf("PASSED\n");
+    } else {
+      printf("FAILED (%d errors)\n", rc);
+    }
+    fflush(stdout);
+    failedTests += rc;
   }
   
   // TestAstroBWTv3_cuda();

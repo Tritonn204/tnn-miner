@@ -23,8 +23,7 @@ if (WITH_XELISHASH)
     list(FILTER xelisSources EXCLUDE REGEX src/xelis-hash/target/*)
     list(FILTER xelisSources EXCLUDE REGEX "\\.spec\\.cpp$")
 
-    # Generate per-SIMD-tier TUs from spec files
-    include(cmake/simd_tiers.cmake)
+    # Generate per-SIMD-tier TUs from spec files (SimdTiers from tnn-prism CPM)
     set(xelis_simd_generated "")
     simd_tiers_generate(
       SPEC   src/crypto/xelis-hash/xelis-hash-v3-fmv.spec.cpp

@@ -76,7 +76,17 @@ static inline const char* xelis_pick_stage1(int dev) {
 #if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
     cooperative = is_nvidia_ampere_plus(dev);
 #else
-    cooperative = is_amd_rdna_plus(dev);
+    if (is_amd_rdna_plus(dev)) {
+        cooperative = true;
+    } else {
+        hipDeviceProp_t props{};
+        if (hipGetDeviceProperties(&props, dev) == hipSuccess) {
+            const int gfx = parse_gfx_number(props.gcnArchName);
+            // Vega (900), RVII (906), MI200 (90, from gfx90a), MI300 (940-942)
+            cooperative = (gfx == 900 || gfx == 906 || gfx == 90 ||
+                           (gfx >= 940 && gfx <= 942));
+        }
+    }
 #endif
     return cooperative ? "xelis_stage1_cooperative" : "xelis_stage1_kernel";
 }

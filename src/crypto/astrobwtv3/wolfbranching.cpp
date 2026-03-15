@@ -1,11 +1,8 @@
 #include "astrobwtv3.h"
-#include "compile.h"
 #include <inttypes.h>
 #include <stdio.h>
 
 // The base for the following code was contributed by @Wolf9466 on Discord
-
-#define TNN_TARGETS_X86_AVX512_WOLF "avx512f,avx512bw,avx512vl", TNN_FEATURES_ZNVER4, TNN_FEATURES_ZNVER5
 
 // Last instruction is a special case, and duplicated.
 alignas(32) uint32_t CodeLUT[257] =
@@ -60,37 +57,6 @@ void initWolfLUT() {
 
   // printf("%02X\n", CodeLUT_16[0]);
 }
-
-#if defined(__x86_64__)
-
-#ifndef TNN_LEGACY_AMD64
-static __m256i vec_3 = _mm256_set1_epi8(3);
-
-#define WOLF_BRANCH_AVX2(IN, POS2VAL, OPCODE, WORKER)                           \
-                                                                                \
-  for (int i = 3; i >= 0; --i) {                                                \
-    uint8_t insn = ((OPCODE) >> (i << 2)) & 0xF;                                \
-    switch (insn) {                                                             \
-      case 0: (IN) = _mm256_add_epi8((IN), (IN)); break;                        \
-      case 1: (IN) = _mm256_sub_epi8((IN), _mm256_xor_si256((IN), _mm256_set1_epi8(97))); break; \
-      case 2: (IN) = _mm256_mul_epi8((IN), (IN)); break;                        \
-      case 3: (IN) = _mm256_xor_si256((IN), _mm256_set1_epi8((POS2VAL))); break; \
-      case 4: (IN) = _mm256_xor_si256((IN), _mm256_set1_epi64x(-1LL)); break;   \
-      case 5: (IN) = _mm256_and_si256((IN), _mm256_set1_epi8((POS2VAL))); break;\
-      case 6: (IN) = _mm256_sllv_epi8((IN), _mm256_and_si256((IN), vec_3)); break;\
-      case 7: (IN) = _mm256_srlv_epi8((IN), _mm256_and_si256((IN), vec_3)); break;\
-      case 8: (IN) = _mm256_reverse_epi8((IN)); break;                          \
-      case 9: (IN) = _mm256_xor_si256((IN), popcnt256_epi8((IN))); break;       \
-      case 10: (IN) = _mm256_rolv_epi8((IN), (IN)); break;                      \
-      case 11: (IN) = _mm256_rol_epi8((IN), 1); break;                          \
-      case 12: (IN) = _mm256_xor_si256((IN), _mm256_rol_epi8((IN), 2)); break;  \
-      case 13: (IN) = _mm256_rol_epi8((IN), 3); break;                          \
-      case 14: (IN) = _mm256_xor_si256((IN), _mm256_rol_epi8((IN), 4)); break;  \
-      case 15: (IN) = _mm256_rol_epi8((IN), 5); break;                          \
-    }                                                                           \
-  }                                                                             
-#endif
-#endif
 
 uint8_t wolfBranch(uint8_t val, uint8_t pos2val, uint32_t opcode)
 {
@@ -155,27 +121,9 @@ uint8_t wolfBranch(uint8_t val, uint8_t pos2val, uint32_t opcode)
   return (val);
 }
 
-#if defined(__x86_64__)
-#ifndef TNN_LEGACY_AMD64
-
-TNN_TARGET_CLONE(
-  wolfPermute,
-  void,
-  (uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker),
-  {
-    uint32_t Opcode = CodeLUT_16[op];
-    __m256i data = _mm256_loadu_si256((__m256i *)&in[pos1]);
-    __m256i old = data;
-    WOLF_BRANCH_AVX2(data, in[pos2], Opcode, worker);
-    data = _mm256_blendv_epi8(old, data, genMask_avx2(pos2 - pos1));
-    _mm256_storeu_si256((__m256i *)&out[pos1], data);
-  },
-  TNN_TARGETS_X86_AVX2, TNN_TARGETS_X86_AVX512_WOLF
-)
-#endif
-
-__attribute__((target("default")))
-#endif
+// Scalar wolfPermute — used by ARM and as the spec fallback tier's reference.
+// On x86, the spec system generates SIMD-tiered wolfPermute variants; this
+// plain function is still compiled but only called on non-x86 or legacy builds.
 void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker)
 {
   uint32_t Opcode = CodeLUT[op];

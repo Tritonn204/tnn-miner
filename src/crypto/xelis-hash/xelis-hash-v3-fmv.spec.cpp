@@ -1,5 +1,6 @@
 //@ spec xelis_v3_fmv
 //@ section xelis
+//@ guard __x86_64__
 
 //@ tier aes aes,sse4.1
 //@ tier avx2 avx2,lzcnt

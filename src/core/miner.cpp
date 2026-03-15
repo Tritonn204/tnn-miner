@@ -199,6 +199,7 @@ bool beQuiet = false;
 
 /* Start definitions from astrobwtv3.h */
 #if defined(TNN_ASTROBWTV3)
+
 AstroFunc allAstroFuncs[] = {
     // {"branch", branchComputeCPU},
     // {"lookup", lookupCompute},

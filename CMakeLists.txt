@@ -615,6 +615,15 @@ else()
   endif()
 
   CPMAddPackage(
+    NAME tnn-prism
+    GITHUB_REPOSITORY Tritonn204/tnn-prism
+    GIT_TAG b029466
+  )
+  list(APPEND CMAKE_MODULE_PATH "${tnn-prism_SOURCE_DIR}/cmake")
+  include(SimdTiers)
+  include_directories("${tnn-prism_SOURCE_DIR}/include")
+
+  CPMAddPackage(
     NAME Boost
     VERSION 1.86.0 # Versions less than 1.85.0 may need patches for installation targets.
     URL "${PROJECT_SOURCE_DIR}/_deps/boost-1.86.0-cmake.tar.xz"
