@@ -133,6 +133,11 @@ static void stage_3_sw(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
     XELIS_STAGE3_SOFT_AES_BODY_SWITCH
 }
 
+static void stage_3_merged(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
+{
+    XELIS_STAGE3_SOFT_AES_BODY_MERGED
+}
+
 #endif // !defined(__x86_64__)
 
 // ============================================================================
@@ -229,10 +234,26 @@ static Stage3Fn pick_stage_3_switch() {
     return fn;
 }
 
+static Stage3Fn pick_stage_3_merged() {
+    static Stage3Fn fn = [] {
+        bool has_aes = __builtin_cpu_supports("aes") && __builtin_cpu_supports("sse4.1");
+        if (__builtin_cpu_supports("avx512f") && __builtin_cpu_supports("avx512dq")
+            && __builtin_cpu_supports("avx512bw"))
+            return (Stage3Fn)(has_aes ? stage_3_hw_merged_avx512 : stage_3_merged_avx512);
+        if (__builtin_cpu_supports("avx2"))
+            return (Stage3Fn)(has_aes ? stage_3_hw_merged_avx2 : stage_3_merged_avx2);
+        if (has_aes)
+            return (Stage3Fn)stage_3_merged_aes;
+        return (Stage3Fn)stage_3_merged_fallback;
+    }();
+    return fn;
+}
+
 #else
 static Stage3Fn pick_stage_3() { return stage_3; }
 static Stage3Fn pick_stage_3_l2() { return stage_3_l2; }
 static Stage3Fn pick_stage_3_switch() { return stage_3_sw; }
+static Stage3Fn pick_stage_3_merged() { return stage_3_merged; }
 #endif
 
 struct HashVariant {
@@ -247,7 +268,7 @@ static HashVariant HASH_VARIANTS[] = {
     // id              description                               s1                    s3              enabled
     { "baseline",      "S1:pipelined + S3:baseline",            get_stage_1(),        pick_stage_3(),  true },
     { "s1_serial",     "S1:serial    + S3:baseline",            get_stage_1_serial(), pick_stage_3(),  true },
-    { "s1_nt",         "S1:NT-store  + S3:baseline",            get_stage_1_nt(),     pick_stage_3(),  true },
+    { "s3_merged",     "S1:pipelined + S3:merged-div",          get_stage_1(),        pick_stage_3_merged(), true },
 };
 
 static constexpr size_t NUM_VARIANTS = sizeof(HASH_VARIANTS) / sizeof(HASH_VARIANTS[0]);

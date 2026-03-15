@@ -513,9 +513,9 @@ static inline uint64_t modular_power_fast(uint64_t base, uint64_t exp, uint64_t 
 }
 
 // Op dispatch strategy selector
-enum class OpDispatch { Switch, Goto };
+enum class OpDispatch { Switch, Goto, Merged };
 
-// ---------- Strategy 1: Switch ----------
+// ---------- Strategy 1: Switch (original, per-case dispatch) ----------
 
 __attribute__((noinline))
 static uint64_t execute_op_heavy_switch(
@@ -567,7 +567,7 @@ static inline uint64_t execute_operation_switch(
     return execute_op_heavy_switch(op_idx, a, b, c, r_next, result, i, j_off);
 }
 
-// ---------- Strategy 2: Goto dispatch ----------
+// ---------- Strategy 2: Goto dispatch (original, per-case goto) ----------
 
 __attribute__((always_inline, hot, aligned(64)))
 static inline uint64_t execute_operation_goto(
@@ -612,6 +612,81 @@ done:
     return v;
 }
 
+// ---------- Strategy 3: Merged (goto labels → shared division sites) ----------
+
+__attribute__((always_inline, hot, aligned(64)))
+static inline uint64_t execute_operation_merged(
+    uint32_t idx, uint64_t a, uint64_t b, uint64_t c,
+    int r_next, uint64_t result, int i, int j_off)
+{
+    __asm__ volatile ("" ::: "memory");
+    static void *const dispatch_table[] = {
+        &&m_op0,&&m_op1,&&m_op2,&&m_op3,&&m_op4,&&m_op5,&&m_op6,&&m_op7,
+        &&m_op8,&&m_op9,&&m_op10,&&m_op11,&&m_op12,&&m_op13,&&m_op14,&&m_op15};
+
+    uint64_t v;
+    uint64_t dv_hi, dv_lo, dv_d;
+    bool want_quot;
+    uint64_t t0, s2, dividend, divisor;
+    goto *dispatch_table[idx];
+
+    // --- 128-bit group: goto labels set operands, converge to div128 ---
+m_op0:  dv_hi = a+i; dv_lo = isqrt(b+j_off); dv_d = murmurhash3(c^result^i^j_off)|1;
+        want_quot = false; goto div128;
+m_op10: dv_hi = a; dv_lo = b; dv_d = c|1;
+        want_quot = false; goto div128;
+m_op12: dv_hi = c; dv_lo = a; dv_d = b|4;
+        want_quot = true;  goto div128;
+
+    // --- 64-bit group: goto labels set operands, converge to div64 ---
+m_op1:  { uint64_t sb = isqrt(b|2); s2 = isqrt(a+j_off);
+          dividend = c+i; divisor = sb; goto div64_mod; }
+m_op2:  v = (isqrt(a+i)*isqrt(c+j_off))^(b+i+j_off); goto m_done;
+m_op11: t0 = ROTL(result,r_next);
+        dividend = b; divisor = t0; goto div64_case8;
+m_op13: t0 = ROTL(result,r_next);
+        dividend = t0; divisor = a; goto div64_case10;
+
+    // --- Cheap ops: identical to goto dispatch ---
+m_op3:  v = (a+b)*c; goto m_done;
+m_op4:  v = (b-c)*a; goto m_done;
+m_op5:  v = c-a+b;   goto m_done;
+m_op6:  v = a-b+c;   goto m_done;
+m_op7:  v = b*c+a;   goto m_done;
+m_op8:  v = c*a+b;   goto m_done;
+m_op9:  v = a*b*c;   goto m_done;
+m_op14: v = umul64_hi(a,c)+b*c; goto m_done;
+m_op15: { uint64_t rr=ROTR(result,r_next);
+          v=a*b+c*rr+umul64_hi(c,b); goto m_done; }
+
+    // --- Shared 128-bit division site ---
+div128: {
+        __uint128_t dd = COMBINE_UINT64(dv_hi, dv_lo);
+        v = want_quot ? (uint64_t)(dd / dv_d) : (uint64_t)(dd % dv_d);
+        goto m_done; }
+
+    // --- Shared 64-bit division sites ---
+div64_mod: {
+        uint64_t rem = (divisor != 0) ? dividend % divisor : 0;
+        v = ROTL(rem, i+j_off) * s2;
+        goto m_done; }
+
+div64_case8: {
+        uint64_t t2_lo = a|2;
+        if (t0>b||(t0==b&&t2_lo>c)) { v=c; goto m_done; }
+        uint64_t q = (t0 != 0) ? b/t0 : 0;
+        v = (uint64_t)(COMBINE_UINT64(b,c) - COMBINE_UINT64(t0,t2_lo)*q);
+        goto m_done; }
+
+div64_case10: {
+        uint64_t rr = t0;
+        v = (rr>a||(rr==a&&b>(c|8))) ? ((a!=0)?(rr/a):0) : (a^b);
+        goto m_done; }
+
+m_done:
+    return v;
+}
+
 // ---------- Unified dispatch ----------
 
 template<OpDispatch D = OpDispatch::Goto>
@@ -623,6 +698,9 @@ static inline uint64_t execute_operation(
     if constexpr (D == OpDispatch::Switch) {
         uint32_t op_idx = (raw_rotl + 13) & 0xF;
         return execute_operation_switch(op_idx, a, b, c, r_next, result, i, j_off);
+    } else if constexpr (D == OpDispatch::Merged) {
+        uint32_t op_idx = (raw_rotl + 13) & 0xF;
+        return execute_operation_merged(op_idx, a, b, c, r_next, result, i, j_off);
     } else {
         uint32_t op_idx = raw_rotl & 0xF;
         return execute_operation_goto(op_idx, a, b, c, r_next, result, i, j_off);
@@ -791,6 +869,9 @@ static inline void prefetch_W(const void *p) {
 // Switch dispatch variant
 #define XELIS_STAGE3_SOFT_AES_BODY_SWITCH XELIS_STAGE3_SOFT_AES_BODY_FULL(prefetch_L1, prefetch_none, prefetch_L1, OpDispatch::Switch)
 
+// Merged dispatch variant (shared division calls)
+#define XELIS_STAGE3_SOFT_AES_BODY_MERGED XELIS_STAGE3_SOFT_AES_BODY_FULL(prefetch_L1, prefetch_none, prefetch_L1, OpDispatch::Merged)
+
 #if defined(__x86_64__)
 // HW AES full: PF=lookahead, PF_W=write-intent, PF_S=scratch read, OPD=dispatch mode
 // Also L2-prefetches scratch_pad[r+32] unconditionally.
@@ -871,4 +952,7 @@ static inline void prefetch_W(const void *p) {
 
 // Switch dispatch variant
 #define XELIS_STAGE3_HW_AES_BODY_SWITCH XELIS_STAGE3_HW_AES_BODY_FULL(prefetch_L1, prefetch_none, prefetch_L1, OpDispatch::Switch)
+
+// Merged dispatch variant (shared division calls)
+#define XELIS_STAGE3_HW_AES_BODY_MERGED XELIS_STAGE3_HW_AES_BODY_FULL(prefetch_L1, prefetch_none, prefetch_L1, OpDispatch::Merged)
 #endif

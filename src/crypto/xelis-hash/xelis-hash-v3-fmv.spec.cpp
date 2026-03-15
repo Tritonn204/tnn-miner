@@ -66,6 +66,16 @@ __attribute__((target("avx512f,avx512dq,avx512bw,aes"))) void stage_3_hw_sw(uint
   XELIS_STAGE3_HW_AES_BODY_SWITCH
 }
 
+__attribute__((target("avx512f,avx512dq,avx512bw"))) void stage_3_merged(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
+{
+  XELIS_STAGE3_SOFT_AES_BODY_MERGED
+}
+
+__attribute__((target("avx512f,avx512dq,avx512bw,aes"))) void stage_3_hw_merged(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
+{
+  XELIS_STAGE3_HW_AES_BODY_MERGED
+}
+
 //@ end
 
 // =========================================================================
@@ -123,6 +133,16 @@ __attribute__((target("avx2,aes"))) void stage_3_hw_sw(uint64_t *scratch_pad, wo
   XELIS_STAGE3_HW_AES_BODY_SWITCH
 }
 
+__attribute__((target("avx2"))) void stage_3_merged(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
+{
+  XELIS_STAGE3_SOFT_AES_BODY_MERGED
+}
+
+__attribute__((target("avx2,aes"))) void stage_3_hw_merged(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
+{
+  XELIS_STAGE3_HW_AES_BODY_MERGED
+}
+
 //@ end
 
 // =========================================================================
@@ -163,6 +183,11 @@ __attribute__((target("aes,sse4.1"))) void stage_3_l2(uint64_t *scratch_pad, wor
 __attribute__((target("aes,sse4.1"))) void stage_3_sw(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
 {
   XELIS_STAGE3_HW_AES_BODY_SWITCH
+}
+
+__attribute__((target("aes,sse4.1"))) void stage_3_merged(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
+{
+  XELIS_STAGE3_HW_AES_BODY_MERGED
 }
 
 //@ end
@@ -217,6 +242,11 @@ __attribute__((target("default"))) void stage_3_l2(uint64_t *scratch_pad, worker
 __attribute__((target("default"))) void stage_3_sw(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
 {
   XELIS_STAGE3_SOFT_AES_BODY_SWITCH
+}
+
+__attribute__((target("default"))) void stage_3_merged(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
+{
+  XELIS_STAGE3_SOFT_AES_BODY_MERGED
 }
 
 //@ end
