@@ -14,6 +14,7 @@
 #include <mutex>
 #include <algorithm>
 #include <functional>
+#include <optional>
 #include "tnn_log.hpp"
 
 #ifdef _WIN32
