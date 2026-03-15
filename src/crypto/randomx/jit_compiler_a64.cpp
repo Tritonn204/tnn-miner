@@ -174,7 +174,7 @@ void JitCompilerA64::generateProgram(Program& program, ProgramConfiguration& con
 #endif
 }
 
-void JitCompilerA64::generateProgramLight(Program& program, ProgramConfiguration& config, uint32_t datasetOffset)
+void JitCompilerA64::generateProgramLight(Program& program, ProgramConfiguration& config, uint32_t datasetOffset, uint32_t)
 {
 	uint32_t codePos = MainLoopBegin + 4;
 

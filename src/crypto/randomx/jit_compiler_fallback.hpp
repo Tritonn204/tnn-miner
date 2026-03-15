@@ -47,7 +47,7 @@ namespace randomx {
 		void generateProgram(Program&, ProgramConfiguration&, uint32_t = 0) {
 
 		}
-		void generateProgramLight(Program&, ProgramConfiguration&, uint32_t) {
+		void generateProgramLight(Program&, ProgramConfiguration&, uint32_t, uint32_t = 0) {
 
 		}
 		template<size_t N>

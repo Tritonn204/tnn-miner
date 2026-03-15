@@ -633,7 +633,7 @@ namespace randomx {
 		clearCache(state);
 	}
 
-	void JitCompilerRV64::generateProgramLight(Program& prog, ProgramConfiguration& pcfg, uint32_t datasetOffset) {
+	void JitCompilerRV64::generateProgramLight(Program& prog, ProgramConfiguration& pcfg, uint32_t datasetOffset, uint32_t) {
 		emitProgramPrefix(state, prog, pcfg);
 		int32_t fixPos = state.codePos;
 		state.emit(codeDataReadLight, sizeDataReadLight);
