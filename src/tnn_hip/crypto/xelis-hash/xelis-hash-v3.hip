@@ -186,9 +186,6 @@ __device__ __forceinline__ uint64_t barrett_reduce(
     return r_lo;
 }
 
-// Forward declarations for hwrecip functions (defined later, needed by Barrett setup)
-__device__ __forceinline__ uint64_t mod64_hwrecip(uint64_t a, uint64_t d);
-
 
 __device__ __forceinline__ uint32_t le_bytes_to_uint32(const uint8_t *bytes)
 {
@@ -317,12 +314,6 @@ __device__ __forceinline__ void xelis_blake3_lean(const uint8_t* input, uint8_t*
 
 
 // ============================================================================
-// Optimized 128-bit Division
-// ============================================================================
-
-// COMBINE_UINT64 / U128 macros removed — all 128-bit ops use hwrecip functions
-
-// ============================================================================
 // Streaming Store Intrinsics (Platform-Specific)
 // ============================================================================
 
@@ -372,32 +363,6 @@ __device__ __forceinline__ void store_streaming_u256(uint64_t *ptr,
 __device__ __forceinline__ uint64_t load_default(const uint64_t *ptr)
 {
   return *ptr;
-}
-
-// GLC bit - Bypass L2 cache (reduces prefetcher activity)
-__device__ __forceinline__ uint64_t load_glc(const uint64_t *ptr)
-{
-  uint64_t val;
-  asm volatile(
-      "global_load_dwordx2 %0, %1, off glc\n\t"
-      "s_waitcnt vmcnt(0)"
-      : "=v"(val)
-      : "v"(ptr)
-      : "memory");
-  return val;
-}
-
-// SLC bit - Streaming/non-temporal hint
-__device__ __forceinline__ uint64_t load_slc(const uint64_t *ptr)
-{
-  uint64_t val;
-  asm volatile(
-      "global_load_dwordx2 %0, %1, off slc\n\t"
-      "s_waitcnt vmcnt(0)"
-      : "=v"(val)
-      : "v"(ptr)
-      : "memory");
-  return val;
 }
 
 // GLC + SLC - Full uncached
@@ -848,60 +813,6 @@ __device__ __forceinline__ void stage_1_cooperative(
 // Hardware Reciprocal Division Functions
 // ============================================================================
 
-__device__ __forceinline__ double recip_proven(uint64_t d) {
-    float  df = (float)d;
-    float  rf = __frcp_rn(df);
-    rf = rf * __fmaf_rn(-df, rf, 2.0f);        // FP32 NR
-    double dd = (double)d;
-    double x  = (double)rf;
-    x = x * __fma_rn(-dd, x, 2.0);             // FP64 NR
-    return x;
-}
-
-__device__ __forceinline__ uint64_t mod64_frcp(uint64_t a, uint64_t d) {
-    uint64_t q   = (uint64_t)((double)a * recip_proven(d));
-    uint64_t rem = a - q * d;
-    if (rem > a)  rem += d;
-    if (rem >= d) rem -= d;
-    return rem;
-}
-
-__device__ __forceinline__ uint64_t mod64_hwrecip(uint64_t a, uint64_t d) {
-    float df = (float)d;
-
-    // Fast reciprocal seed in FP32
-    float rf = __frcp_rn(df);
-
-    // One FP32 Newton step:
-    // rf = rf * (2 - d * rf)
-    rf = rf * __fmaf_rn(-df, rf, 2.0f);
-
-    // Widen and do one FP64 Newton step
-    double dd = (double)d;
-    double x  = (double)rf;
-    x = x * (2.0 - dd * x);
-
-    // Quotient estimate
-    uint64_t q = (uint64_t)((double)a * x);
-
-    // Initial remainder
-    uint64_t rem = a - q * d;
-
-    // Bounded correction: handle small quotient error robustly
-    if (rem > a) { rem += d; q--; }
-    if (rem >= d) { rem -= d; q++; }
-    return rem;
-}
-
-__device__ __forceinline__ uint64_t div64_frcp(uint64_t a, uint64_t d) {
-    uint64_t q = (uint64_t)((double)a * recip_proven(d));
-    q &= (uint64_t)-(a >= d);
-    uint64_t rem = a - q * d;
-    if (rem > a)  { rem += d; q--; }
-    if (rem >= d) { rem -= d; q++; }
-    return q;
-}
-
 // ------------------------------------------------------------
 // split32 — 32-bit hardware division path
 // Handles all divisor sizes correctly including tiny d (isqrt case 14).
@@ -955,8 +866,8 @@ __device__ __forceinline__ double recip_norm(uint64_t dn) {
 }
 
 // ------------------------------------------------------------
-// div96by64 — body identical to _hwrecip; only the recip source
-// differs. ±1 correction is sufficient with recip_norm.
+// div96by64 — used internally by 128-bit split32 division.
+// ±1 correction is sufficient with recip_norm.
 // ------------------------------------------------------------
 
 __device__ __forceinline__ uint32_t div96by64_q32_frcp(
@@ -984,32 +895,6 @@ __device__ __forceinline__ uint32_t div96by64_q32_frcp(
 // ------------------------------------------------------------
 // 128-bit ops: proven outer, norm inner
 // ------------------------------------------------------------
-
-__device__ __forceinline__ uint64_t mod128by64_frcp(uint64_t hi, uint64_t lo, uint64_t d) {
-    uint64_t r = mod64_frcp(hi, d);            // any d (proven)
-    int s = __clzll(d);
-    uint64_t dn = d << s;                      // dn ≥ 2^63
-    double recip = recip_norm(dn);             // cheap tier
-    uint64_t n_hi = s ? ((r << s) | (lo >> (64 - s))) : r;
-    uint64_t n_lo = lo << s;
-    uint64_t rem;
-    (void)div96by64_q32_frcp(n_hi, (uint32_t)(n_lo >> 32), dn, recip, &rem);
-    (void)div96by64_q32_frcp(rem,  (uint32_t)n_lo,          dn, recip, &rem);
-    return rem >> s;
-}
-
-__device__ __forceinline__ uint64_t div128by64_frcp(uint64_t hi, uint64_t lo, uint64_t d) {
-    uint64_t r = mod64_frcp(hi, d);
-    int s = __clzll(d);
-    uint64_t dn = d << s;
-    double recip = recip_norm(dn);
-    uint64_t n_hi = s ? ((r << s) | (lo >> (64 - s))) : r;
-    uint64_t n_lo = lo << s;
-    uint64_t rem;
-    uint32_t q1 = div96by64_q32_frcp(n_hi, (uint32_t)(n_lo >> 32), dn, recip, &rem);
-    uint32_t q0 = div96by64_q32_frcp(rem,  (uint32_t)n_lo,          dn, recip, &rem);
-    return ((uint64_t)q1 << 32) | q0;
-}
 
 __device__ __forceinline__ divmod_result divmod128by64_split32(uint64_t hi, uint64_t lo, uint64_t d) {
     uint64_t r = mod64_split32(hi, d);
@@ -1185,163 +1070,6 @@ __device__ __forceinline__ void prefetch_l2(const void *ptr) {
     __builtin_prefetch(ptr, 0, 1);
 }
 #endif
-
-// ============================================================================
-// Stage 3 - Memory-hard scratchpad iteration
-// ============================================================================
-
-__device__ void stage_3(uint64_t *my_scratch)
-{
-  uint64_t *mem_buffer_a = my_scratch;
-  uint64_t *mem_buffer_b = my_scratch + XELIS_BUFFER_SIZE_V3;
-
-  uint64_t addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V3 - 1];
-  uint64_t addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V3 - 1] >> 32;
-  uint32_t r = 0;
-
-#pragma unroll
-  for (uint32_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V3; i++)
-  {
-    uint64_t mem_a = mem_buffer_a[map_index(addr_a)];
-    uint64_t mem_b = mem_buffer_b[map_index(mem_a ^ addr_b)];
-
-    uint64_t hash1 = mem_b;
-    uint64_t hash2 = mem_a;
-    aes_round_u64_computed(&hash1, &hash2, AES_KEY);
-
-    uint64_t result = ~(hash1 ^ hash2);
-
-#pragma unroll 4
-    for (uint32_t j = 0; j < XELIS_BUFFER_SIZE_V3; j++)
-    {
-      uint64_t idx_a_read = map_index(result);
-      uint64_t a = mem_buffer_a[idx_a_read];
-
-      uint64_t rot_res = ~ROTR(result, r);
-      uint64_t idx_b_read = map_index(a ^ rot_res);
-
-      uint64_t b_val = mem_buffer_b[idx_b_read];
-      uint64_t c = my_scratch[r];
-
-      r++;
-
-      uint32_t op_idx = ROTL(result, (uint32_t)c) & 0xF;
-      uint64_t v = execute_op_offset(op_idx, a, b_val, c, r, result, i, j);
-
-      uint64_t idx_seed = v ^ result;
-      result = ROTL(idx_seed, r);
-
-      int use_buffer_b = pick_half(v);
-      uint64_t idx_t = map_index(idx_seed);
-
-      uint64_t t = (use_buffer_b ? mem_buffer_b[idx_t] : mem_buffer_a[idx_t]) ^ result;
-
-      uint64_t idx_a_write = map_index(t ^ result ^ XELIS_GOLDEN_RATIO);
-
-#if defined(__CUDA_ARCH__) || defined(__HIP_PLATFORM_NVIDIA__)
-      prefetch_l1(&mem_buffer_a[idx_a_write]);
-#endif
-
-      uint64_t idx_b_write = map_index(idx_a_write ^ ~result ^ XELIS_SCATTER_CONST);
-
-#if defined(__CUDA_ARCH__) || defined(__HIP_PLATFORM_NVIDIA__)
-      prefetch_l1(&mem_buffer_b[idx_b_write]);
-#endif
-
-      uint64_t old_mem_a = mem_buffer_a[idx_a_write];
-      mem_buffer_a[idx_a_write] = t;
-      mem_buffer_b[idx_b_write] ^= old_mem_a ^ ROTR(t, i + j);
-    }
-
-    addr_a = modular_power_barrett(addr_a, addr_b, result);
-    addr_b = isqrt(result) * (r + 1) * isqrt(addr_a);
-  }
-}
-
-// ============================================================================
-// Stage 3 Efficient - Optimized prefetch strategy (Split+Eff)
-// ============================================================================
-// Removes wasteful prefetches, downgrades write prefetches to L2
-// - Sequential access handled by HW prefetcher
-// - L2 prefetch sufficient for writes (avoids L1 cache churn)
-// - Critical dependent-load prefetches preserved
-
-__device__ void stage_3_efficient(uint64_t *my_scratch)
-{
-  uint64_t *mem_buffer_a = my_scratch;
-  uint64_t *mem_buffer_b = my_scratch + XELIS_BUFFER_SIZE_V3;
-
-  uint64_t addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V3 - 1];
-  uint64_t addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V3 - 1] >> 32;
-  uint32_t r = 0;
-
-#pragma unroll
-  for (uint32_t i = 0; i < XELIS_SCRATCHPAD_ITERS_V3; i++)
-  {
-    uint64_t idx_a0 = map_index(addr_a);
-
-
-    uint64_t mem_a = mem_buffer_a[idx_a0];
-    uint64_t idx_b0 = map_index(mem_a ^ addr_b);
-
-
-    uint64_t mem_b = mem_buffer_b[idx_b0];
-
-    uint64_t hash1 = mem_b;
-    uint64_t hash2 = mem_a;
-    aes_round_u64_computed(&hash1, &hash2, AES_KEY);
-
-    uint64_t result = ~(hash1 ^ hash2);
-
-    for (uint32_t j = 0; j < XELIS_BUFFER_SIZE_V3; j++)
-    {
-      // REMOVED: Loop prefetch for my_scratch[r_pf]
-      // Sequential access pattern, HW prefetcher handles it automatically
-
-      uint64_t idx_a_read = map_index(result);
-      uint64_t a = mem_buffer_a[idx_a_read];
-
-      uint64_t rot_res = ~ROTR(result, r);
-      uint64_t idx_b_read = map_index(a ^ rot_res);
-      uint64_t b_val = mem_buffer_b[idx_b_read];
-      uint64_t c = my_scratch[r];
-
-      r++;
-
-      uint32_t op_idx = ROTL(result, (uint32_t)c) & 0xF;
-      uint64_t v = execute_op_offset(op_idx, a, b_val, c, r, result, i, j);
-
-      uint64_t idx_seed = v ^ result;
-      result = ROTL(idx_seed, r);
-
-      int use_buffer_b = pick_half(v);
-      uint64_t idx_t = map_index(idx_seed);
-
-      uint64_t t = (use_buffer_b ? mem_buffer_b[idx_t] : mem_buffer_a[idx_t]) ^ result;
-
-      uint64_t idx_a_write = map_index(t ^ result ^ XELIS_GOLDEN_RATIO);
-
-#if defined(__CUDA_ARCH__) || defined(__HIP_PLATFORM_NVIDIA__)
-      // L2 write prefetch for mem_buffer_a (issued early to hide latency)
-      prefetch_l2(&mem_buffer_a[idx_a_write]);
-#endif
-
-      uint64_t idx_b_write = map_index(idx_a_write ^ ~result ^ XELIS_SCATTER_CONST);
-
-#if defined(__CUDA_ARCH__) || defined(__HIP_PLATFORM_NVIDIA__)
-      // L2 write prefetch for mem_buffer_b
-      prefetch_l2(&mem_buffer_b[idx_b_write]);
-#endif
-
-      uint64_t old_mem_a = mem_buffer_a[idx_a_write];
-      mem_buffer_a[idx_a_write] = t;
-      mem_buffer_b[idx_b_write] ^= old_mem_a ^ ROTR(t, i + j);
-    }
-
-    addr_a = modular_power_barrett(addr_a, addr_b, result);
-    addr_b = isqrt(result) * (r + 1) * isqrt(addr_a);
-  }
-}
 
 // ============================================================================
 // Stage 3 Hybrid V2 - Uncache random reads, cache sequential, uncached RMW
@@ -1692,7 +1420,7 @@ __global__ void xelis_blake3_batch(
 }
 
 // ============================================================================
-// ORIGINAL COMBINED KERNEL (API compatible - legacy)
+// Mono strategy: Stage1 + Stage3_hybrid_v2 + Blake3 combined
 // ============================================================================
 
 #if defined(__HIP_PLATFORM_AMD__)
