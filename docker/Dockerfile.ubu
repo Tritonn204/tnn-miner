@@ -50,6 +50,17 @@ RUN mkdir -p ./nvrtc_libs ./hip_libs && \
       (cp /opt/rocm/lib/libhiprtc-builtins.so* ./hip_libs/ 2>/dev/null || true) && \
       (cp /opt/rocm/lib/libhsa-runtime64.so* ./hip_libs/ 2>/dev/null || true) && \
       (cp /opt/rocm/lib/libamd_comgr.so* ./hip_libs/ 2>/dev/null || true) && \
+      (cp /opt/rocm/lib/librocprofiler-register.so* ./hip_libs/ 2>/dev/null || true) && \
+      echo "=== Resolving transitive deps ===" && \
+      for f in ./hip_libs/*.so; do \
+        ldd "$f" 2>/dev/null | grep '/opt/rocm' | awk '{print $3}' | while read -r dep; do \
+          base=$(basename "$dep"); \
+          if [ ! -f "./hip_libs/$base" ]; then \
+            echo "Adding transitive dep: $base"; \
+            cp "$dep"* ./hip_libs/ 2>/dev/null || true; \
+          fi; \
+        done; \
+      done && \
       ls -la ./hip_libs/; \
     fi
 RUN ls -la ./
