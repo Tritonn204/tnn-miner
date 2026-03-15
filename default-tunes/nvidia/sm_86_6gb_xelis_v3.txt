@@ -1,0 +1,10 @@
+# Tuning cache for xelis_v3
+# Device: NVIDIA RTX A2000
+# Generated: 2026-03-15 11:01:49
+compute_units=26
+strategy=3
+block_size=256
+num_blocks=26
+batch_size=6656
+hashrate=3924.62
+batch_time_ms=1695.96
