@@ -907,30 +907,9 @@ __device__ __forceinline__ uint64_t div64_frcp(uint64_t a, uint64_t d) {
 // Handles all divisor sizes correctly including tiny d (isqrt case 14).
 // ------------------------------------------------------------
 
-__device__ __forceinline__ uint64_t mod64_split32(uint64_t a, uint64_t d) {
-    if (d <= 0xFFFFFFFFULL) {
-        uint32_t d32 = (uint32_t)d;
-        uint32_t a_hi = (uint32_t)(a >> 32);
-        uint32_t a_lo = (uint32_t)a;
-        uint32_t r_hi = a_hi % d32;
-        uint64_t mid = ((uint64_t)r_hi << 32) | a_lo;
-        uint32_t q_lo = (uint32_t)(mid / d32);
-        uint64_t rem = mid - (uint64_t)q_lo * d32;
-        return rem;
-    }
-    int s = __clzll(d);
-    uint64_t dn = d << s;
-    uint32_t v = (uint32_t)(dn >> 32);           // v >= 2^31 after normalization
-    uint64_t a_shifted = (s == 0) ? (a >> 32) : (a >> (32 - s));
-    uint32_t q = (v == 0xFFFFFFFFu) ? (uint32_t)a_shifted
-                                    : (uint32_t)(a_shifted / ((uint64_t)v + 1));
-    uint64_t rem = a - (uint64_t)q * d;
-    if (rem > a) rem += d;             // undershot: q too large, rem underflowed
-    else if (rem >= d) rem -= d;       // overshot: q too small
-    return rem;
-}
+struct divmod_result { uint64_t q; uint64_t r; };
 
-__device__ __forceinline__ uint64_t div64_split32(uint64_t a, uint64_t d) {
+__device__ __forceinline__ divmod_result divmod64_split32(uint64_t a, uint64_t d) {
     if (d <= 0xFFFFFFFFULL) {
         uint32_t d32 = (uint32_t)d;
         uint32_t a_hi = (uint32_t)(a >> 32);
@@ -938,18 +917,27 @@ __device__ __forceinline__ uint64_t div64_split32(uint64_t a, uint64_t d) {
         uint32_t r_hi = a_hi - q_hi * d32;
         uint64_t mid = ((uint64_t)r_hi << 32) | (uint32_t)a;
         uint32_t q_lo = (uint32_t)(mid / d32);
-        return ((uint64_t)q_hi << 32) | q_lo;
+        uint64_t rem = mid - (uint64_t)q_lo * d32;
+        return { ((uint64_t)q_hi << 32) | q_lo, rem };
     }
     int s = __clzll(d);
     uint64_t dn = d << s;
-    uint32_t v = (uint32_t)(dn >> 32);           // v >= 2^31 after normalization
+    uint32_t v = (uint32_t)(dn >> 32);
     uint64_t a_shifted = (s == 0) ? (a >> 32) : (a >> (32 - s));
     uint32_t q = (v == 0xFFFFFFFFu) ? (uint32_t)a_shifted
                                     : (uint32_t)(a_shifted / ((uint64_t)v + 1));
     uint64_t rem = a - (uint64_t)q * d;
-    if (rem > a) { q--; }              // undershot: q too large, rem underflowed
-    else if (rem >= d) { q++; }        // overshot: q too small
-    return q;
+    if (rem > a) { q--; rem += d; }
+    else if (rem >= d) { q++; rem -= d; }
+    return { (uint64_t)q, rem };
+}
+
+// Convenience wrappers — zero-cost, compiler elides the unused field
+__device__ __forceinline__ uint64_t mod64_split32(uint64_t a, uint64_t d) {
+    return divmod64_split32(a, d).r;
+}
+__device__ __forceinline__ uint64_t div64_split32(uint64_t a, uint64_t d) {
+    return divmod64_split32(a, d).q;
 }
 
 // ------------------------------------------------------------
@@ -1023,7 +1011,7 @@ __device__ __forceinline__ uint64_t div128by64_frcp(uint64_t hi, uint64_t lo, ui
     return ((uint64_t)q1 << 32) | q0;
 }
 
-__device__ __forceinline__ uint64_t div128by64_split32(uint64_t hi, uint64_t lo, uint64_t d) {
+__device__ __forceinline__ divmod_result divmod128by64_split32(uint64_t hi, uint64_t lo, uint64_t d) {
     uint64_t r = mod64_split32(hi, d);
     int s = __clzll(d);
     uint64_t dn = d << s;
@@ -1033,20 +1021,14 @@ __device__ __forceinline__ uint64_t div128by64_split32(uint64_t hi, uint64_t lo,
     uint64_t rem;
     uint32_t q1 = div96by64_q32_frcp(n_hi, (uint32_t)(n_lo >> 32), dn, recip, &rem);
     uint32_t q0 = div96by64_q32_frcp(rem,  (uint32_t)n_lo,          dn, recip, &rem);
-    return ((uint64_t)q1 << 32) | q0;
+    return { ((uint64_t)q1 << 32) | q0, rem >> s };
 }
 
+__device__ __forceinline__ uint64_t div128by64_split32(uint64_t hi, uint64_t lo, uint64_t d) {
+    return divmod128by64_split32(hi, lo, d).q;
+}
 __device__ __forceinline__ uint64_t mod128by64_split32(uint64_t hi, uint64_t lo, uint64_t d) {
-    uint64_t r = mod64_split32(hi, d);
-    int s = __clzll(d);
-    uint64_t dn = d << s;
-    double recip = recip_norm(dn);
-    uint64_t n_hi = s ? ((r << s) | (lo >> (64 - s))) : r;
-    uint64_t n_lo = lo << s;
-    uint64_t rem;
-    (void)div96by64_q32_frcp(n_hi, (uint32_t)(n_lo >> 32), dn, recip, &rem);
-    (void)div96by64_q32_frcp(rem,  (uint32_t)n_lo,          dn, recip, &rem);
-    return rem >> s;
+    return divmod128by64_split32(hi, lo, d).r;
 }
 
 // Barrett modular exponentiation — precompute mu once
@@ -1090,35 +1072,63 @@ __device__ __forceinline__ uint64_t execute_op_offset(
     uint32_t r, uint64_t result, uint32_t i, uint32_t j)
 {
   if ((1u << offset_op) & 0xE780u) {
-    uint64_t t0, t1, t2;
-    switch (offset_op) {
-    case 7:   // d = c|1 : uniform 64-bit
-      return mod128by64_split32(a, b, (c | 1));
-    case 8:
-      t0 = ROTL(result, r);
-      t1 = a | 2;
-      if (U128_LT(b, c, t0, t1)) return c;
-      t2 = (t0 > 0) ? div64_split32(b, t0) : 0;         // t0 uniform
-      return c - t1 * t2;
-    case 9:   // d = b|4 : uniform
-      return div128by64_split32(c, a, (b | 4));
-    case 10:
-      t0 = ROTL(result, r);
-      return U128_GT(t0, b, a, (c | 8))
-           ? ((a > 0) ? div64_split32(t0, a) : 0)       // a uniform
-           : (a ^ b);
-    case 13:  // t1 = murmur|1 : uniform
-      t0 = isqrt(b + j);
-      t1 = murmurhash3(c ^ result ^ i ^ j) | 1;
-      return mod128by64_split32(a + i, t0, t1);
-    case 14:  // *** t0 = isqrt ∈ [1, 2^32], can be tiny → safe tier ***
-      t0 = isqrt(b | 2);
-      t1 = isqrt(a + j);
-      t2 = (t0 > 0) ? mod64_split32((c + i), t0) : 0;
-      return ROTL(t2, i + j) * t1;
-    default:  // 15
-      return (isqrt(a + i) * isqrt(c + j)) ^ (b + i + j);
+    // --- 128-bit divmod group: cases 7, 9, 13 (uniform pipeline) ---
+    if ((1u << offset_op) & 0x2280u) {  // bits 7, 9, 13
+      // Precompute isqrt/murmurhash speculatively (cheap, avoids divergence)
+      uint64_t sqrt_bj = isqrt(b + j);
+      uint64_t mur     = murmurhash3(c ^ result ^ i ^ j) | 1;
+
+      // Branchless argument selection
+      uint64_t m7  = -(uint64_t)(offset_op == 7);
+      uint64_t m9  = -(uint64_t)(offset_op == 9);
+      uint64_t m13 = -(uint64_t)(offset_op == 13);
+
+      uint64_t dv_hi = (a     & m7) | (c       & m9) | ((a + i)  & m13);
+      uint64_t dv_lo = (b     & m7) | (a       & m9) | (sqrt_bj  & m13);
+      uint64_t dv_d  = ((c|1) & m7) | ((b|4)   & m9) | (mur      & m13);
+
+      // One unified division — all threads execute same instructions
+      divmod_result dm = divmod128by64_split32(dv_hi, dv_lo, dv_d);
+
+      // Cases 7, 13 want remainder; case 9 wants quotient
+      return (offset_op == 9) ? dm.q : dm.r;
     }
+
+    // --- 64-bit divmod group: cases 8, 10 ---
+    if ((1u << offset_op) & 0x500u) {  // bits 8, 10
+      uint64_t t0 = ROTL(result, r);
+
+      // Case 8: div64(b, t0), guarded by U128_LT
+      // Case 10: div64(t0, a), guarded by U128_GT
+      uint64_t m8  = -(uint64_t)(offset_op == 8);
+      uint64_t m10 = -(uint64_t)(offset_op == 10);
+
+      uint64_t dividend = (b  & m8) | (t0 & m10);
+      uint64_t divisor  = (t0 & m8) | (a  & m10);
+
+      // Guard: case 8 needs t0>0, case 10 needs a>0
+      uint64_t guard = (t0 & m8) | (a & m10);
+      uint64_t q = (guard > 0) ? divmod64_split32(dividend, divisor).q : 0;
+
+      // Post-processing
+      // Case 8:  if (U128_LT(b,c,t0,a|2)) return c; else return c - (a|2)*q
+      // Case 10: if (U128_GT(t0,b,a,c|8)) return q; else return a^b
+      uint64_t t1_8 = a | 2;
+      uint64_t early_8  = U128_LT(b, c, t0, t1_8) ? c : (c - t1_8 * q);
+      uint64_t early_10 = U128_GT(t0, b, a, (c | 8)) ? q : (a ^ b);
+
+      return (early_8 & m8) | (early_10 & m10);
+    }
+
+    // --- isqrt group: cases 14, 15 ---
+    if (offset_op == 14) {
+      uint64_t t0 = isqrt(b | 2);
+      uint64_t t1 = isqrt(a + j);
+      uint64_t t2 = (t0 > 0) ? mod64_split32((c + i), t0) : 0;
+      return ROTL(t2, i + j) * t1;
+    }
+    // 15
+    return (isqrt(a + i) * isqrt(c + j)) ^ (b + i + j);
   }
 
   uint64_t ab = a * b, ac = a * c, bc = b * c;

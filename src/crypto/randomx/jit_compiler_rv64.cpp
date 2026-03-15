@@ -623,7 +623,7 @@ namespace randomx {
 		setPagesRX(entryDataInit, ExecutableSize);
 	}
 
-	void JitCompilerRV64::generateProgram(Program& prog, ProgramConfiguration& pcfg) {
+	void JitCompilerRV64::generateProgram(Program& prog, ProgramConfiguration& pcfg, uint32_t) {
 		emitProgramPrefix(state, prog, pcfg);
 		int32_t fixPos = state.codePos;
 		state.emit(codeDataRead, sizeDataRead);

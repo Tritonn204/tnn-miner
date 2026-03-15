@@ -44,7 +44,7 @@ namespace randomx {
 	public:
 		JitCompilerRV64();
 		~JitCompilerRV64();
-		void generateProgram(Program&, ProgramConfiguration&);
+		void generateProgram(Program&, ProgramConfiguration&, uint32_t flags = 0);
 		void generateProgramLight(Program&, ProgramConfiguration&, uint32_t);
 		void generateSuperscalarHash(SuperscalarProgram programs[RANDOMX_CACHE_ACCESSES], std::vector<uint64_t>&);
 		void generateDatasetInitCode() {}

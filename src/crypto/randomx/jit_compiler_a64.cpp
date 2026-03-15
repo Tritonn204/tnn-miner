@@ -123,7 +123,7 @@ void JitCompilerA64::enableAll()
 	setPagesRWX(code, CodeSize + CalcDatasetItemSize);
 }
 
-void JitCompilerA64::generateProgram(Program& program, ProgramConfiguration& config)
+void JitCompilerA64::generateProgram(Program& program, ProgramConfiguration& config, uint32_t)
 {
 	uint32_t codePos = MainLoopBegin + 4;
 

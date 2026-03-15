@@ -10,6 +10,7 @@ extern std::atomic<bool> datasetInitInProgress;
 #ifdef TNN_HIP
 extern std::atomic<bool> g_mining_started;
 #include <tnn_hip/core/devInfo.hip.h>
+#include <tnn_hip/common/gpu_device_filter.hpp>
 #endif
 
 extern bool beQuiet;
@@ -60,6 +61,7 @@ int update_handler(const boost::system::error_code& error)
         double elapsed_gpu = first_tick ? std::chrono::duration<double>(now - g_start_time).count() : 0.0;
 
         for (int i = 0; i < HIP_deviceCount; i++) {
+            if (!shouldUseDevice(i)) continue;
             uint64_t currentHashesG = HIP_counters[i].load();
             HIP_counters[i].store(0);
 
@@ -168,6 +170,7 @@ int update_handler(const boost::system::error_code& error)
             setcolor(BRIGHT_YELLOW);
 
             for (int i = 0; i < HIP_deviceCount; i++) {
+                if (!shouldUseDevice(i)) continue;
                 int a = deviceAccepted[i].load(std::memory_order_relaxed);
                 int r = deviceRejected[i].load(std::memory_order_relaxed);
 

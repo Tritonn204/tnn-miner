@@ -2,6 +2,9 @@
 #include "tnn-common.hpp"
 #include <chrono>
 #include <numeric>
+#ifdef TNN_HIP
+#include <tnn_hip/common/gpu_device_filter.hpp>
+#endif
 
 namespace BroadcastServer
 {
@@ -49,6 +52,9 @@ namespace BroadcastServer
       if (gpu_count > 0 && gpu_rates1min_ptr) {
         json_b::array gpus;
         for (int i = 0; i < gpu_count; i++) {
+#ifdef TNN_HIP
+          if (!shouldUseDevice(i)) continue;
+#endif
           json_b::object gpu;
           gpu["id"] = i;
 
@@ -135,6 +141,9 @@ namespace BroadcastServer
       json_b::object shares_obj;
       if (gpu_count > 0 && gpu_pcie_ids_ptr) {
         for (int i = 0; i < gpu_count; i++) {
+#ifdef TNN_HIP
+          if (!shouldUseDevice(i)) continue;
+#endif
           std::string key;
           const std::string &pcie = gpu_pcie_ids_ptr[i];
           unsigned int domain = 0, busNum = 0;
