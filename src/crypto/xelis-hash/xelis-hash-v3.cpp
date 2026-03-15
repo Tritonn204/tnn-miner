@@ -437,8 +437,8 @@ TNN_SECTION("xelis_hot") void xelis_stage1_v3(const uint8_t *input, uint64_t *sc
 
 TNN_SECTION("xelis_hot") void xelis_stage3_v3(uint64_t *scratch_pad)
 {
-    workerData_xelis_v3 worker;
-    pick_stage_3()(scratch_pad, worker);
+    static thread_local auto *worker = new workerData_xelis_v3();
+    pick_stage_3()(scratch_pad, *worker);
 }
 
 TNN_SECTION("xelis_hot") void xelis_blake3_v3(const uint8_t *scratch_pad, byte *hashResult)
