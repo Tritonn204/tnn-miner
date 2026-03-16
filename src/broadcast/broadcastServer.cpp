@@ -27,6 +27,9 @@ namespace BroadcastServer
   std::string *gpu_names_ptr = nullptr;
   std::string *gpu_pcie_ids_ptr = nullptr;
 
+  // CPU mining active (for hybrid CPU+GPU stats)
+  bool cpu_mining = true;
+
   void handleRequest(http::request<http::string_body> &req, http::response<http::string_body> &res)
   {
     if (req.method() == http::verb::get && req.target() == "/stats")
@@ -35,7 +38,22 @@ namespace BroadcastServer
       // Create a JSON object with some sample data
       json_b::object jsonData;
 
-      jsonData["hashrate"] = std::accumulate((*rate30sec_ptr).begin(), (*rate30sec_ptr).end(), 0LL) / (*rate30sec_ptr).size();
+      // Aggregate hashrate: CPU + all GPUs
+      double total_hr = 0.0;
+      if (cpu_mining && rate30sec_ptr && !rate30sec_ptr->empty()) {
+        total_hr += (double)std::accumulate(rate30sec_ptr->begin(), rate30sec_ptr->end(), 0LL) / (double)rate30sec_ptr->size();
+      }
+      if (gpu_count > 0 && gpu_rates1min_ptr) {
+        for (int i = 0; i < gpu_count; i++) {
+#ifdef TNN_HIP
+          if (!shouldUseDevice(i)) continue;
+#endif
+          auto& rates = (*gpu_rates1min_ptr)[i];
+          if (!rates.empty())
+            total_hr += (double)std::accumulate(rates.begin(), rates.end(), 0LL) / (double)rates.size();
+        }
+      }
+      jsonData["hashrate"] = total_hr;
       jsonData["accepted"] = *accepted_ptr;
       jsonData["rejected"] = *rejected_ptr;
 
@@ -47,6 +65,12 @@ namespace BroadcastServer
 
       jsonData["algo"] = algo_b;
       jsonData["version"] = version_b;
+
+      // CPU hashrate (from rate30sec rolling window)
+      if (cpu_mining && rate30sec_ptr && !rate30sec_ptr->empty()) {
+        double cpu_hr = (double)std::accumulate(rate30sec_ptr->begin(), rate30sec_ptr->end(), 0LL) / (double)rate30sec_ptr->size();
+        jsonData["cpu_hashrate"] = cpu_hr;
+      }
 
       // Per-GPU stats
       if (gpu_count > 0 && gpu_rates1min_ptr) {
@@ -92,12 +116,23 @@ namespace BroadcastServer
       json_b::array busid_arr;
       json_b::array hash_arr;
 
+      // CPU entry (listed first, like xmrig convention)
+      if (cpu_mining) {
+        busid_arr.push_back(nullptr);  // null bus ID for CPU
+        double hr = 0.0;
+        if (rate30sec_ptr && !rate30sec_ptr->empty())
+          hr = (double)std::accumulate(rate30sec_ptr->begin(), rate30sec_ptr->end(), 0LL) / (double)rate30sec_ptr->size();
+        hash_arr.push_back(hr);
+      }
+
+      // GPU entries
       if (gpu_count > 0 && gpu_rates1min_ptr) {
         for (int i = 0; i < gpu_count; i++) {
+#ifdef TNN_HIP
+          if (!shouldUseDevice(i)) continue;
+#endif
           // PCI bus ID as decimal, or fall back to device index
           if (gpu_pcie_ids_ptr && !gpu_pcie_ids_ptr[i].empty()) {
-            // hipDeviceGetPCIBusId returns "0000:0a:00.0" (domain:bus:dev.fn)
-            // mmpOS expects the bus number as decimal integer
             const std::string &pcie = gpu_pcie_ids_ptr[i];
             unsigned int domain = 0, busNum = 0;
             if (std::sscanf(pcie.c_str(), "%x:%x:", &domain, &busNum) == 2) {
@@ -117,13 +152,6 @@ namespace BroadcastServer
             hr = (double)std::accumulate(rates.begin(), rates.end(), 0LL) / (double)rates.size();
           hash_arr.push_back(hr);
         }
-      } else {
-        // CPU miner
-        busid_arr.push_back("cpu");
-        double hr = 0.0;
-        if (rate30sec_ptr && !rate30sec_ptr->empty())
-          hr = (double)std::accumulate(rate30sec_ptr->begin(), rate30sec_ptr->end(), 0LL) / (double)rate30sec_ptr->size();
-        hash_arr.push_back(hr);
       }
 
       jsonData["busid"] = busid_arr;
@@ -139,6 +167,13 @@ namespace BroadcastServer
 
       // Per-device shares: { "busid": [accepted, rejected, invalid], ... }
       json_b::object shares_obj;
+      if (cpu_mining) {
+        json_b::array cpu_shares;
+        cpu_shares.push_back(deviceAccepted[DEVICE_SHARE_CPU].load(std::memory_order_relaxed));
+        cpu_shares.push_back(deviceRejected[DEVICE_SHARE_CPU].load(std::memory_order_relaxed));
+        cpu_shares.push_back(0);
+        shares_obj["cpu"] = cpu_shares;
+      }
       if (gpu_count > 0 && gpu_pcie_ids_ptr) {
         for (int i = 0; i < gpu_count; i++) {
 #ifdef TNN_HIP
@@ -160,13 +195,6 @@ namespace BroadcastServer
           dev_shares.push_back(0); // invalid
           shares_obj[key] = dev_shares;
         }
-      } else {
-        // CPU miner
-        json_b::array cpu_shares;
-        cpu_shares.push_back(deviceAccepted[DEVICE_SHARE_CPU].load(std::memory_order_relaxed));
-        cpu_shares.push_back(deviceRejected[DEVICE_SHARE_CPU].load(std::memory_order_relaxed));
-        cpu_shares.push_back(0);
-        shares_obj["cpu"] = cpu_shares;
       }
       jsonData["shares"] = shares_obj;
 

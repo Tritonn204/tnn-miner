@@ -30,5 +30,8 @@ namespace BroadcastServer {
   extern std::string *gpu_names_ptr;      // array[32]
   extern std::string *gpu_pcie_ids_ptr;   // array[32]
 
+  // CPU mining active (for hybrid CPU+GPU stats)
+  extern bool cpu_mining;
+
   void serverThread(std::vector<int64_t> *HR30, int *accepted, int *rejected, const char *algo, const char *version, int rinterval);
 };

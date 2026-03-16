@@ -206,6 +206,58 @@ int update_handler(const boost::system::error_code& error)
         }
 #endif
 
+        // CPU hashrate line (in hybrid mode when both CPU and GPU are active)
+#ifdef TNN_HIP
+        if (cpuMine && gpuMine && hashrate > 0.001) {
+            int cpuA = deviceAccepted[DEVICE_SHARE_CPU].load(std::memory_order_relaxed);
+            int cpuR = deviceRejected[DEVICE_SHARE_CPU].load(std::memory_order_relaxed);
+            setcolor(BRIGHT_CYAN);
+            printf("\n[ CPU | %lf%sH/s | A:%d R:%d ]",
+                hashrate, units[unitIdx].c_str(), cpuA, cpuR);
+            fflush(stdout);
+            setcolor(BRIGHT_WHITE);
+        }
+#endif
+
+        // Compute aggregate hashrate for status line (CPU + GPU)
+        double agg_hashrate = hashrate;
+        int agg_unitIdx = unitIdx;
+#ifdef TNN_HIP
+        if (gpuMine && cpuMine) {
+            // Reconstruct raw H/s for CPU
+            double agg_raw = hashrate;
+            for (int u = 0; u < unitIdx; u++) agg_raw *= 1000.0;
+            // Add all GPU raw H/s
+            for (int i = 0; i < HIP_deviceCount; i++) {
+                if (!shouldUseDevice(i)) continue;
+                double gpu_raw = gpu_hashrates[i];
+                for (int u = 0; u < gpu_unit_indices[i]; u++) gpu_raw *= 1000.0;
+                agg_raw += gpu_raw;
+            }
+            agg_hashrate = agg_raw;
+            agg_unitIdx = 0;
+            while (agg_hashrate >= 1000 && agg_unitIdx < 5) {
+                agg_unitIdx++;
+                agg_hashrate /= 1000.0;
+            }
+        } else if (gpuMine) {
+            // GPU-only: aggregate from GPU rates
+            double agg_raw = 0.0;
+            for (int i = 0; i < HIP_deviceCount; i++) {
+                if (!shouldUseDevice(i)) continue;
+                double gpu_raw = gpu_hashrates[i];
+                for (int u = 0; u < gpu_unit_indices[i]; u++) gpu_raw *= 1000.0;
+                agg_raw += gpu_raw;
+            }
+            agg_hashrate = agg_raw;
+            agg_unitIdx = 0;
+            while (agg_hashrate >= 1000 && agg_unitIdx < 5) {
+                agg_unitIdx++;
+                agg_hashrate /= 1000.0;
+            }
+        }
+#endif
+
         // Overall status line
         setcolor(BRIGHT_WHITE);
         if (!gpuMine) std::cout << "\r";
@@ -214,7 +266,7 @@ int update_handler(const boost::system::error_code& error)
         std::cout << std::setw(2) << std::setfill('0') << consoleLine << versionString << " " << std::flush;
         setcolor(CYAN);
         std::cout << std::setw(2) << std::setprecision(3)
-                  << "HASHRATE " << hashrate << units[unitIdx] << "H/s" << " | " << std::flush;
+                  << "HASHRATE " << agg_hashrate << units[agg_unitIdx] << "H/s" << " | " << std::flush;
 
         std::string uptime =
             std::to_string(daysUp) + "d-" +

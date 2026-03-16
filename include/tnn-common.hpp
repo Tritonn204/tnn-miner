@@ -60,6 +60,7 @@ extern std::string stratumPassword;
 extern bool useLookupMine;
 
 extern bool gpuMine;
+extern bool cpuMine;
 extern bool g_powerMonAvail;
 extern bool g_ocAvail;
 extern std::string devWallet;

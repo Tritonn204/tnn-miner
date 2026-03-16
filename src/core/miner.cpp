@@ -101,6 +101,7 @@ const char *tnnTargetArch = XSTR(CPU_ARCHTARGET);
 double latest_hashrate = 0.0;
 
 bool gpuMine = false;
+bool cpuMine = true;
 bool g_powerMonAvail = false;
 bool g_ocAvail = false;
 bool printHashrateOnExit = false;
@@ -1198,6 +1199,10 @@ int tnn_main(int argc, char **argv)
   {
     gpuMine = true;
   }
+  if (vm.count("no-cpu"))
+  {
+    cpuMine = false;
+  }
 
   if (vm.count("broadcast"))
   {
@@ -1601,9 +1606,10 @@ Mining:
 #ifndef TNN_HIP
   printSupported();
 #else
-  gpuMine = true;
-  precompile_all_kernels();
-
+  gpuMine = !vm.count("no-gpu");
+  if (gpuMine) {
+    precompile_all_kernels();
+  }
 #endif
   //  mutex.unlock();1
   int rc = enhanceWallet(&miningProfile, checkWallet);
@@ -1680,7 +1686,6 @@ Mining:
   g_start_time = std::chrono::steady_clock::now();
   if (gpuMine)
   {
-    threads = 0;
 #ifdef TNN_HIP
     std::cout << "Starting GPU worker.." << std::endl;
     auto gpuFunc = getMiningFunc(miningProfile.coin.miningAlgo, true);
@@ -1693,6 +1698,12 @@ Mining:
 #endif
   }
 
+  // In GPU-only mode (no CPU mining), zero out CPU threads
+  if (!cpuMine)
+  {
+    threads = 0;
+  }
+
   std::thread GETWORK(getWork_v2, &miningProfile);
   GETWORK.detach();
 
@@ -1702,9 +1713,9 @@ Mining:
   DEVWORK.detach();
 
   std::vector<std::thread> minerThreads(threads);
-  if (!gpuMine)
+  if (cpuMine && threads > 0)
   {
-    std::cout << "Starting threads: ";
+    std::cout << "Starting CPU threads: ";
     for (int i = 0; i < threads; i++)
     {
       minerThreads[i] = std::thread(getMiningFunc(miningProfile.coin.miningAlgo, false), i + 1);
@@ -1730,13 +1741,14 @@ Mining:
   if (broadcastStats)
   {
 #ifdef TNN_HIP
-    if (gpuMine)
+    if (gpuMine && HIP_deviceCount > 0)
     {
       BroadcastServer::gpu_count = HIP_deviceCount;
       BroadcastServer::gpu_rates1min_ptr = &HIP_rates1min;
       BroadcastServer::gpu_names_ptr = HIP_names;
       BroadcastServer::gpu_pcie_ids_ptr = HIP_pcieID;
     }
+    BroadcastServer::cpu_mining = cpuMine && threads > 0;
 #endif
     BroadcastServer::mmposEnabled = mmposMode;
     std::thread BROADCAST(BroadcastServer::serverThread, &rate30sec, &accepted, &rejected, algoName(miningProfile.coin.miningAlgo), versionString, reportInterval);
