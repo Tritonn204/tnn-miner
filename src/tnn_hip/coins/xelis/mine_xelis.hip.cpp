@@ -117,23 +117,8 @@ void mineXelis_hip(int tid)
 {
   TNN_LOG_TRACE("[TRACE] mineXelis_hip: Entry, tid=%d\n", tid);
 
-  // Bind GPU context to this thread before any other calls
-  (void)oro_safe_set_device(0);
-
-  // Force GPU context initialization on this worker thread.
-  // Orochi dispatches via dlopen — the context from the main thread
-  // (where precompile ran) is not inherited by this thread.
-  {
-    void* dummy = nullptr;
-    oroError_t ce = oro_safe_malloc((oroDeviceptr*)&dummy, 256);
-    if (ce == oroSuccess) {
-      (void)oro_safe_free((oroDeviceptr)dummy);
-      TNN_LOG_TRACE("[TRACE] mineXelis_hip: GPU context initialized on worker thread\n");
-    } else {
-      TNN_LOG_ERROR("[ERROR] mineXelis_hip: context init failed: %s\n", tnn_error_string(ce));
-      return;
-    }
-  }
+  // Note: GPU contexts are created per-device in GPUAlgorithm::initialize().
+  // No context setup needed here.
 
   std::vector<std::unique_ptr<GPUMiner>> miners;
   int gpuCount;

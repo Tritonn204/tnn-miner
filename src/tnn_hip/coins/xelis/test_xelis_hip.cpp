@@ -241,21 +241,21 @@ static int test_xelis_hip_impl() {
 
     oroDeviceProp_t props;
     HIP_CHECK(oroGetDeviceProperties(&props, tnn_get_device(0)));
-    HIP_CHECK(oroSetDevice(0));
+
+    // Create GPU context on main thread — worker threads reuse via oroCtxSetCurrent
+    oroCtx main_ctx;
+    HIP_CHECK(oroCtxCreate(&main_ctx, 0, tnn_get_device(0)));
 
     printf("[TEST] Using device 0: %s\n", props.name);
     printf("[TEST] Compute capability: %d.%d\n", props.major, props.minor);
 
-    bool is_amd = tnn_is_amd_device();
+    bool is_amd = tnn_is_amd_device(0);
 
-    // Set GPU architecture for RTCCompiler (same as precompile does)
     if (is_amd) {
-        RTCCompiler::instance().set_gpu_arch(props.gcnArchName);
         printf("[TEST] Using arch=%s (AMD)\n\n", props.gcnArchName);
     } else {
         char buf[32];
         std::snprintf(buf, sizeof(buf), "sm_%d%d", props.major, props.minor);
-        RTCCompiler::instance().set_gpu_arch(buf);
         printf("[TEST] Using arch=%s (NVIDIA)\n\n", buf);
     }
 
@@ -284,6 +284,9 @@ static int test_xelis_hip_impl() {
         compile_opts = {"-O3", "-mno-cumode", "-ffast-math"};
         compile_opts.push_back("-DXELIS_MIN_WG=64");
         compile_opts.push_back("-DXELIS_MAX_WG=256");
+        if (props.gcnArchName[0] != '\0') {
+            compile_opts.push_back(std::string("--gpu-architecture=") + props.gcnArchName);
+        }
     } else {
         compile_opts = {"--dopt=on", "--use_fast_math"};
 #ifdef __linux__
@@ -291,6 +294,11 @@ static int test_xelis_hip_impl() {
 #endif
         compile_opts.push_back("-DXELIS_MIN_WG=32");
         compile_opts.push_back("-DXELIS_MAX_WG=128");
+        {
+            char arch_buf[32];
+            std::snprintf(arch_buf, sizeof(arch_buf), "sm_%d%d", props.major, props.minor);
+            compile_opts.push_back(std::string("--gpu-architecture=") + arch_buf);
+        }
 
         // Arch-dependent stage3 register cap
         oroDeviceProp_t props;
@@ -402,6 +410,7 @@ static int test_xelis_hip_impl() {
 
 // Level 1: GPU work runs on a spawned std::thread (not main thread)
 static int test_threaded_level1(
+    oroCtx gpu_ctx,
     oroFunction_t stage1_func,
     oroFunction_t stage3_func,
     oroFunction_t blake3_func)
@@ -411,7 +420,7 @@ static int test_threaded_level1(
 
     std::atomic<int> result{-1};
     std::thread gpu_thread([&]() {
-        (void)oroSetDevice(0);
+        oroCtxSetCurrent(gpu_ctx);
         result = run_test_case(
             "Threaded: std::thread GPU",
             stage1_func, stage3_func, blake3_func,
@@ -425,6 +434,7 @@ static int test_threaded_level1(
 
 // Level 2: boost::asio::io_context running on another thread alongside GPU
 static int test_threaded_level2(
+    oroCtx gpu_ctx,
     oroFunction_t stage1_func,
     oroFunction_t stage3_func,
     oroFunction_t blake3_func)
@@ -457,7 +467,7 @@ static int test_threaded_level2(
 
     std::atomic<int> result{-1};
     std::thread gpu_thread([&]() {
-        (void)oroSetDevice(0);
+        oroCtxSetCurrent(gpu_ctx);
         result = run_test_case(
             "Threaded: GPU + asio io_context",
             stage1_func, stage3_func, blake3_func,
@@ -477,6 +487,7 @@ static int test_threaded_level2(
 
 // Level 3: boost::asio::spawn (Boost.Context coroutines) running alongside GPU
 static int test_threaded_level3(
+    oroCtx gpu_ctx,
     oroFunction_t stage1_func,
     oroFunction_t stage3_func,
     oroFunction_t blake3_func)
@@ -513,7 +524,7 @@ static int test_threaded_level3(
 
     std::atomic<int> result{-1};
     std::thread gpu_thread([&]() {
-        (void)oroSetDevice(0);
+        oroCtxSetCurrent(gpu_ctx);
         result = run_test_case(
             "Threaded: GPU + boost::asio::spawn",
             stage1_func, stage3_func, blake3_func,
@@ -532,6 +543,7 @@ static int test_threaded_level3(
 
 // Level 4: SSL context + load_root_certificates alongside GPU
 static int test_threaded_level4(
+    oroCtx gpu_ctx,
     oroFunction_t stage1_func,
     oroFunction_t stage3_func,
     oroFunction_t blake3_func)
@@ -562,7 +574,7 @@ static int test_threaded_level4(
 
     std::atomic<int> result{-1};
     std::thread gpu_thread([&]() {
-        (void)oroSetDevice(0);
+        oroCtxSetCurrent(gpu_ctx);
         result = run_test_case(
             "Threaded: GPU + SSL ctx",
             stage1_func, stage3_func, blake3_func,
@@ -581,6 +593,7 @@ static int test_threaded_level4(
 
 // Level 5: SSL + TCP resolver inside spawn coroutine (like do_session_v2)
 static int test_threaded_level5(
+    oroCtx gpu_ctx,
     oroFunction_t stage1_func,
     oroFunction_t stage3_func,
     oroFunction_t blake3_func)
@@ -618,7 +631,7 @@ static int test_threaded_level5(
 
     std::atomic<int> result{-1};
     std::thread gpu_thread([&]() {
-        (void)oroSetDevice(0);
+        oroCtxSetCurrent(gpu_ctx);
         result = run_test_case(
             "Threaded: GPU + SSL + resolve",
             stage1_func, stage3_func, blake3_func,
@@ -637,6 +650,7 @@ static int test_threaded_level5(
 
 // Level 6: Full miner sim - 2x getWork_v2-like threads + mutex/cv + SSL
 static int test_threaded_level6(
+    oroCtx gpu_ctx,
     oroFunction_t stage1_func,
     oroFunction_t stage3_func,
     oroFunction_t blake3_func)
@@ -691,7 +705,7 @@ static int test_threaded_level6(
 
     std::atomic<int> result{-1};
     std::thread gpu_thread([&]() {
-        (void)oroSetDevice(0);
+        oroCtxSetCurrent(gpu_ctx);
         result = run_test_case(
             "Threaded: full getWork sim",
             stage1_func, stage3_func, blake3_func,
@@ -739,7 +753,7 @@ int test_xelis_hip() {
         oroDeviceProp_t props;
         (void)oroGetDeviceProperties(&props, tnn_get_device(0));
 
-        bool is_amd = tnn_is_amd_device();
+        bool is_amd = tnn_is_amd_device(0);
 
         std::vector<std::string> compile_opts;
         if (is_amd) {
@@ -760,28 +774,32 @@ int test_xelis_hip() {
         auto module_kernel = compiler.compile_from_source(
             xelis_source, "xelis-hash-v3.hip", "xelis_stage1_kernel", compile_opts);
 
+        // Get current context for worker threads to reuse
+        oroCtx main_ctx;
+        oroCtxGetCurrent(&main_ctx);
+
         oroFunction_t stage1_func = module_kernel.function;
         oroFunction_t stage3_func = nullptr, blake3_func = nullptr;
         (void)oroModuleGetFunction(&stage3_func, module_kernel.module, "xelis_s3_hybrid_v2_noblake_kernel");
         (void)oroModuleGetFunction(&blake3_func, module_kernel.module, "xelis_blake3_batch");
 
         int failures = 0;
-        failures += test_threaded_level1(stage1_func, stage3_func, blake3_func);
+        failures += test_threaded_level1(main_ctx, stage1_func, stage3_func, blake3_func);
         if (failures) { printf("\n[THREAD-TEST] STOPPED at Level 1\n"); return 1; }
 
-        failures += test_threaded_level2(stage1_func, stage3_func, blake3_func);
+        failures += test_threaded_level2(main_ctx, stage1_func, stage3_func, blake3_func);
         if (failures) { printf("\n[THREAD-TEST] STOPPED at Level 2\n"); return 1; }
 
-        failures += test_threaded_level3(stage1_func, stage3_func, blake3_func);
+        failures += test_threaded_level3(main_ctx, stage1_func, stage3_func, blake3_func);
         if (failures) { printf("\n[THREAD-TEST] STOPPED at Level 3\n"); return 1; }
 
-        failures += test_threaded_level4(stage1_func, stage3_func, blake3_func);
+        failures += test_threaded_level4(main_ctx, stage1_func, stage3_func, blake3_func);
         if (failures) { printf("\n[THREAD-TEST] STOPPED at Level 4\n"); return 1; }
 
-        failures += test_threaded_level5(stage1_func, stage3_func, blake3_func);
+        failures += test_threaded_level5(main_ctx, stage1_func, stage3_func, blake3_func);
         if (failures) { printf("\n[THREAD-TEST] STOPPED at Level 5\n"); return 1; }
 
-        failures += test_threaded_level6(stage1_func, stage3_func, blake3_func);
+        failures += test_threaded_level6(main_ctx, stage1_func, stage3_func, blake3_func);
         if (failures) { printf("\n[THREAD-TEST] STOPPED at Level 6\n"); return 1; }
 
         printf("\n========================================\n");

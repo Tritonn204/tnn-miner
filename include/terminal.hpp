@@ -9,6 +9,9 @@
 #endif
 
 #if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 #include <Windows.h>
 #endif
 
@@ -180,8 +183,8 @@ inline po::options_description get_prog_opts()
     ("priority", po::value<std::string>(), "<normal|above|high> Set mining thread priority (default: normal). WARNING: 'high' may reduce system responsiveness on Windows")
     ("no-msr", "Disable MSR optimization")
     ("ignore-wallet", "Disables wallet validation, for specific uses with pool mining")
-    // ("gpu", "Mine with GPU instead of CPU")
-    // ("batch-size", po::value<int>(), "(GPU Setting) Sets batch size used for GPU mining")
+    ("no-cpu", "Disable CPU mining (GPU only)")
+    ("no-gpu", "Disable GPU mining (CPU only)")
   ;
 
   po::options_description stratum("Stratum", col_width);

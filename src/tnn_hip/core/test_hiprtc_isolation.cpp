@@ -141,7 +141,7 @@ extern "C" void test_hiprtc_isolation() {
 
     // Architecture option (for TEST 1 only)
     std::string arch_option;
-    if (tnn_is_nvidia_device()) {
+    if (tnn_is_nvidia_device(0)) {
         char buf[64];
         snprintf(buf, sizeof(buf), "--gpu-architecture=sm_%d%d", props.major, props.minor);
         arch_option = buf;

@@ -80,7 +80,8 @@ public:
         const std::string& source,
         const std::string& source_name,
         const std::string& kernel_name,
-        const std::vector<std::string>& extra_options = {}
+        const std::vector<std::string>& extra_options = {},
+        int device_id = 0
     ) {
         TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_from_source: Entry\n");
         TNN_LOG_TRACE("[TRACE]   source_name: %s\n", source_name.c_str());
@@ -89,7 +90,7 @@ public:
         fflush(stdout);
 
         // Build normalized options
-        const auto defaults = build_default_options();
+        const auto defaults = build_default_options(device_id);
         const auto norm = normalize_options(defaults, extra_options);
 
         // Module cache key (includes device-specific options like -DDEVICE_ID)
@@ -121,7 +122,7 @@ public:
         }
 
         // AMD disk cache: check before expensive compilation
-        if (tnn_is_amd_device()) {
+        if (tnn_is_amd_device(device_id)) {
             std::string disk_hash = make_disk_cache_hash(source, kernel_name, code_options);
             auto disk_code = load_from_disk_cache(disk_hash, kernel_name);
             if (disk_code.has_value()) {
@@ -143,17 +144,18 @@ public:
         TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_from_source: Not in cache, calling compile_internal\n");
         fflush(stdout);
 
-        return compile_internal(source, source_name, kernel_name, extra_options, module_key, code_key);
+        return compile_internal(source, source_name, kernel_name, extra_options, module_key, code_key, device_id);
     }
 
     // Compile from file path (fallback)
     CompiledKernel compile(
         const std::string& source_path,
         const std::string& kernel_name,
-        const std::vector<std::string>& extra_options = {}
+        const std::vector<std::string>& extra_options = {},
+        int device_id = 0
     ) {
         // Build normalized options
-        const auto defaults = build_default_options();
+        const auto defaults = build_default_options(device_id);
         const auto norm = normalize_options(defaults, extra_options);
 
         // Module cache key (includes device-specific options)
@@ -175,13 +177,7 @@ public:
         }
 
         std::string source = load_text_file(source_path);
-        return compile_internal(source, source_path, kernel_name, extra_options, module_key, code_key);
-    }
-
-    // Manual override; whatever you set here is passed directly as
-    //   --gpu-architecture=<arch>
-    void set_gpu_arch(const std::string& arch) {
-        gpu_arch_ = arch;
+        return compile_internal(source, source_path, kernel_name, extra_options, module_key, code_key, device_id);
     }
 
     void clear_cache() {
@@ -196,12 +192,6 @@ public:
     }
 
 private:
-    enum class Backend {
-        AMD,
-        NVIDIA,
-        UNKNOWN
-    };
-
     struct Header {
         std::string name;   // include name, e.g. "xelis_common.h"
         std::string source; // full header text
@@ -313,32 +303,6 @@ private:
     // ----------------------------
 
     RTCCompiler() {
-        oroDeviceProp_t props{};
-        oroError_t err = oroGetDeviceProperties(&props, tnn_get_device(0));
-        if (err != oroSuccess) {
-            backend_ = Backend::UNKNOWN;
-            gpu_arch_.clear();
-            TNN_LOG_TRACE("[TRACE] RTCCompiler: Failed to get device properties\n");
-            fflush(stdout);
-            return;
-        }
-
-        if (tnn_is_nvidia_device()) {
-            backend_ = Backend::NVIDIA;
-            if (props.major != 0 || props.minor != 0) {
-                char buf[32];
-                std::snprintf(buf, sizeof(buf), "sm_%d%d", props.major, props.minor);
-                gpu_arch_ = buf; // e.g. "sm_86"
-                TNN_LOG_TRACE_COLOR(BRIGHT_GREEN, "[TRACE] RTCCompiler: Detected NVIDIA GPU, arch=%s\n", gpu_arch_.c_str());
-                fflush(stdout);
-            }
-        } else {
-            backend_  = Backend::AMD;
-            gpu_arch_ = props.gcnArchName; // e.g. "gfx1100"
-            TNN_LOG_TRACE_COLOR(RED, "[TRACE] RTCCompiler: Detected AMD GPU, arch=%s\n", gpu_arch_.c_str());
-            fflush(stdout);
-        }
-
         init_disk_cache_dir();
     }
 
@@ -368,24 +332,19 @@ private:
         headers_.push_back(std::move(h));
     }
 
-    std::vector<std::string> build_default_options() const {
+    std::vector<std::string> build_default_options(int device_id = 0) const {
         std::vector<std::string> d;
 
-        // Common
-        if (tnn_is_amd_device()) {
+        bool is_amd = tnn_is_amd_device(device_id);
+
+        if (is_amd) {
             d.emplace_back("-O3");
         }
         d.emplace_back("-std=c++20");
 
-        // Arch
-        if (!gpu_arch_.empty()) {
-            d.emplace_back("--gpu-architecture=" + gpu_arch_);
-        }
-
-        // Your platform macro (not HIP built-ins)
-        if (backend_ == Backend::AMD) {
+        if (is_amd) {
             d.emplace_back("-DHIP_PLATFORM_AMD");
-        } else if (backend_ == Backend::NVIDIA) {
+        } else {
             d.emplace_back("-DHIP_PLATFORM_NVIDIA");
         }
 
@@ -610,7 +569,8 @@ private:
         const std::string& kernel_name,
         const std::vector<std::string>& extra_options,
         const std::string& module_key,
-        const std::string& code_key
+        const std::string& code_key,
+        int device_id = 0
     ) {
         TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_internal: Entry\n");
         TNN_LOG_TRACE("[TRACE]   source_name: %s\n", source_name.c_str());
@@ -752,7 +712,7 @@ private:
         orortcDestroyProgram(&prog);
 
         // Save to AMD disk cache
-        if (tnn_is_amd_device()) {
+        if (tnn_is_amd_device(device_id)) {
             auto code_options = filter_device_specific_options(norm.sorted);
             std::string disk_hash = make_disk_cache_hash(source, kernel_name, code_options);
             save_to_disk_cache(disk_hash, code);
@@ -807,8 +767,6 @@ private:
     }
 
 private:
-    Backend backend_ = Backend::UNKNOWN;
-    std::string gpu_arch_;
     std::string disk_cache_dir_;
 
     mutable std::mutex cache_mutex_;

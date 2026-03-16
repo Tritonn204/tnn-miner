@@ -114,22 +114,32 @@ inline const char* tnn_error_string(oroError_t err) {
     return str ? str : "unknown error";
 }
 
-// ---- Platform query ----
-// Under Orochi, s_api is thread_local and set by the active context,
-// so this returns the vendor for whichever device context the calling thread holds.
-// Under direct HIP, the platform is fixed at compile time.
+// ---- Platform query (per-device) ----
+// Orochi encodes the API type in the oroDevice handle itself (lower 4 bits),
+// so we can query per-device without relying on the thread-local s_api.
+// This is essential for mixed AMD+NVIDIA systems and for worker threads
+// that never call oroCtxCreate.
 #ifdef WITH_OROCHI
-inline bool tnn_is_amd_device()    { return oroGetCurAPI(0) == ORO_API_HIP; }
-inline bool tnn_is_nvidia_device() { return oroGetCurAPI(0) == ORO_API_CUDA; }
+inline oroApi tnn_device_api(int ordinal) {
+    // oroDevice handle layout: bits[3:0] = API, bits[19:4] = device index
+    // Extract API from the handle returned by oroDeviceGet.
+    oroDevice dev = tnn_get_device(ordinal);
+    return (oroApi)(((unsigned)dev) & 0xF);
+}
+inline bool tnn_is_amd_device(int ordinal)    { return tnn_device_api(ordinal) == ORO_API_HIP; }
+inline bool tnn_is_nvidia_device(int ordinal) { return tnn_device_api(ordinal) & ORO_API_CUDADRIVER; }
+// No-arg overloads: use device 0 as default (backward compat for single-vendor systems)
+inline bool tnn_is_amd_device()    { return tnn_is_amd_device(0); }
+inline bool tnn_is_nvidia_device() { return tnn_is_nvidia_device(0); }
 #else
-inline bool tnn_is_amd_device() {
+inline bool tnn_is_amd_device(int = 0) {
 #ifdef __HIP_PLATFORM_AMD__
     return true;
 #else
     return false;
 #endif
 }
-inline bool tnn_is_nvidia_device() {
+inline bool tnn_is_nvidia_device(int = 0) {
 #ifdef __HIP_PLATFORM_NVIDIA__
     return true;
 #else

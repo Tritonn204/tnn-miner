@@ -144,30 +144,19 @@ public:
 
 private:
     void mine_loop() {
-        // Ensure CUDA/HIP context is bound to this worker thread.
-        // The context was created on the parent thread (which may be a
-        // boost::thread); CUDA primary contexts are per-thread on Windows
-        // and may not be inherited across thread boundaries.
-        oroError_t ctx_err = oro_safe_set_device(device_id_);
-        if (ctx_err != oroSuccess) {
-            TNN_LOG_ERROR("[ERROR] GPU %d: mine_loop oroSetDevice failed: %s\n",
-                    device_id_, tnn_error_string(ctx_err));
+        // Reuse the GPU context created during initialize().
+        // This sets the thread-local s_api and binds the context (with its
+        // compiled modules/kernels) to this worker thread.
+        oroCtx ctx = algo_->get_ctx();
+        if (!ctx) {
+            TNN_LOG_ERROR("[ERROR] GPU %d: mine_loop has no context (initialize not called?)\n", device_id_);
             return;
         }
-
-        // Force GPU context initialization on this worker thread.
-        // Required by Orochi on all backends and by CUDA's per-thread
-        // context model — the parent thread's context is not inherited.
-        {
-            void* dummy = nullptr;
-            oroError_t ce = oro_safe_malloc((oroDeviceptr*)&dummy, 256);
-            if (ce == oroSuccess) {
-                (void)oro_safe_free((oroDeviceptr)dummy);
-            } else {
-                TNN_LOG_ERROR("[ERROR] GPU %d: mine_loop context init failed: %s\n",
-                              device_id_, tnn_error_string(ce));
-                return;
-            }
+        oroError_t ctx_err = oroCtxSetCurrent(ctx);
+        if (ctx_err != oroSuccess) {
+            TNN_LOG_ERROR("[ERROR] GPU %d: mine_loop oroCtxSetCurrent failed: %s\n",
+                    device_id_, tnn_error_string(ctx_err));
+            return;
         }
 
         // Nonce segmentation:

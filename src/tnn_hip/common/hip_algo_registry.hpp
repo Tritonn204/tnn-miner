@@ -32,7 +32,7 @@ static inline int parse_gfx_number(const char* gcnArchName) {
 }
 
 static inline bool is_amd_rdna_plus(int device_id) {
-    if (!tnn_is_amd_device()) return false;
+    if (!tnn_is_amd_device(device_id)) return false;
     oroDeviceProp_t props{};
     if (oroGetDeviceProperties(&props, tnn_get_device(device_id)) != oroSuccess) return false;
     const int gfx = parse_gfx_number(props.gcnArchName);
@@ -40,7 +40,7 @@ static inline bool is_amd_rdna_plus(int device_id) {
 }
 
 static inline bool is_nvidia_ampere_plus(int device_id) {
-    if (!tnn_is_nvidia_device()) return false;
+    if (!tnn_is_nvidia_device(device_id)) return false;
     oroDeviceProp_t props{};
     if (oroGetDeviceProperties(&props, tnn_get_device(device_id)) != oroSuccess) return false;
     return (props.major >= 8);
@@ -65,7 +65,7 @@ enum class XelisStrategy : uint8_t {
 // Helper: choose which stage1 kernel to use based on GPU capabilities
 static inline const char* xelis_pick_stage1(int dev) {
     bool cooperative = false;
-    if (tnn_is_nvidia_device()) {
+    if (tnn_is_nvidia_device(dev)) {
         cooperative = is_nvidia_ampere_plus(dev);
     } else {
         if (is_amd_rdna_plus(dev)) {

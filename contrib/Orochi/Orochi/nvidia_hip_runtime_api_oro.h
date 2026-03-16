@@ -2823,6 +2823,52 @@ inline static hipError_t hipGetDevicePropertiesR0600_cu4oro(hipDeviceProp_t* p_p
        return hipErrorInvalidValue;
     }
 
+    // cudaGetDeviceProperties_v2 requires cudart (Runtime API) and was removed
+    // in CUDA 13. If the function pointer is NULL, fall back to Driver API
+    // (cuDeviceGetAttribute + cuDeviceGetName + cuDeviceTotalMem) which is
+    // always available via nvcuda.dll.
+    if (cudaGetDeviceProperties_v2_oro == nullptr) {
+       memset(p_prop, 0, sizeof(*p_prop));
+       CUdevice cuDev;
+       cuDeviceGet(&cuDev, device);
+       cuDeviceGetName(p_prop->name, 256, cuDev);
+       size_t totalMem = 0;
+       cuDeviceTotalMem_v2(&totalMem, cuDev);
+       p_prop->totalGlobalMem = totalMem;
+       cuDeviceGetAttribute(&p_prop->major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, cuDev);
+       cuDeviceGetAttribute(&p_prop->minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, cuDev);
+       cuDeviceGetAttribute(&p_prop->multiProcessorCount, CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT, cuDev);
+       cuDeviceGetAttribute(&p_prop->maxThreadsPerBlock, CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK, cuDev);
+       int smem = 0;
+       cuDeviceGetAttribute(&smem, CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK, cuDev);
+       p_prop->sharedMemPerBlock = smem;
+       cuDeviceGetAttribute(&p_prop->warpSize, CU_DEVICE_ATTRIBUTE_WARP_SIZE, cuDev);
+       cuDeviceGetAttribute(&p_prop->regsPerBlock, CU_DEVICE_ATTRIBUTE_MAX_REGISTERS_PER_BLOCK, cuDev);
+       cuDeviceGetAttribute(&p_prop->clockRate, CU_DEVICE_ATTRIBUTE_CLOCK_RATE, cuDev);
+       cuDeviceGetAttribute(&p_prop->maxThreadsDim[0], CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X, cuDev);
+       cuDeviceGetAttribute(&p_prop->maxThreadsDim[1], CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Y, cuDev);
+       cuDeviceGetAttribute(&p_prop->maxThreadsDim[2], CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Z, cuDev);
+       cuDeviceGetAttribute(&p_prop->maxGridSize[0], CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_X, cuDev);
+       cuDeviceGetAttribute(&p_prop->maxGridSize[1], CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Y, cuDev);
+       cuDeviceGetAttribute(&p_prop->maxGridSize[2], CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Z, cuDev);
+       int memBusWidth = 0;
+       cuDeviceGetAttribute(&memBusWidth, CU_DEVICE_ATTRIBUTE_GLOBAL_MEMORY_BUS_WIDTH, cuDev);
+       p_prop->memoryBusWidth = memBusWidth;
+       int l2Size = 0;
+       cuDeviceGetAttribute(&l2Size, CU_DEVICE_ATTRIBUTE_L2_CACHE_SIZE, cuDev);
+       p_prop->l2CacheSize = l2Size;
+       int memClockRate = 0;
+       cuDeviceGetAttribute(&memClockRate, CU_DEVICE_ATTRIBUTE_MEMORY_CLOCK_RATE, cuDev);
+       p_prop->memoryClockRate = memClockRate;
+       // gcnArchName is AMD-only, leave zeroed for NVIDIA
+       // Set arch.hasGlobalInt32Atomics etc. based on compute capability
+       p_prop->arch.hasGlobalInt32Atomics = (p_prop->major >= 1) ? 1 : 0;
+       p_prop->arch.hasGlobalInt64Atomics = (p_prop->major >= 1) ? 1 : 0;
+       p_prop->arch.hasSharedInt32Atomics = (p_prop->major >= 1) ? 1 : 0;
+       p_prop->arch.hasSharedInt64Atomics = (p_prop->major >= 1) ? 1 : 0;
+       return hipSuccess;
+    }
+
     struct cudaDeviceProp cdprop;
     hipError_t error = hipCUDAErrorTohipError(cudaGetDeviceProperties(&cdprop, device));
 

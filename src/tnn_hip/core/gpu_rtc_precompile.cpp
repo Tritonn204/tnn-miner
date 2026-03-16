@@ -146,7 +146,7 @@ extern "C" bool precompile_all_kernels()
         (void)oroGetDeviceProperties(&di.props, tnn_get_device(d));
         di.use = shouldUseDevice(d);
 
-        if (tnn_is_nvidia_device()) {
+        if (tnn_is_nvidia_device(d)) {
             char buf[32];
             std::snprintf(buf, sizeof(buf), "sm_%d%d", di.props.major, di.props.minor);
             di.arch = buf;
@@ -157,14 +157,6 @@ extern "C" bool precompile_all_kernels()
         TNN_LOG_DEBUG("[PRECOMPILE]   Device %d: %s (arch=%s)%s\n",
                d, di.props.name, di.arch.c_str(),
                di.use ? "" : " (skipped)");
-    }
-
-    // Precreate GPU contexts on main thread (required before worker threads can use them)
-    for (int d = 0; d < deviceCount; ++d) {
-        if (!devices[d].use) continue;
-        (void)oroSetDevice(d);
-        void* p = nullptr;
-        if (oroMalloc((oroDeviceptr*)&p, 256) == oroSuccess) (void)oroFree((oroDeviceptr)p);
     }
 
     const int algo = miningProfile.coin.miningAlgo;
@@ -205,10 +197,6 @@ extern "C" bool precompile_all_kernels()
                      num_unique, max_workers);
 
         // Capture config values needed by workers
-        const BlockSizeLimits& limits = tnn_is_amd_device()
-            ? cfg.amd_blocks : cfg.nvidia_blocks;
-        const int min_wg = limits.block_min;
-        const int max_wg = limits.block_max;
         const std::string source_str(cfg.source);
         const std::string source_path = cfg.source_path;
         const std::string primary_kernel = cfg.get_primary_kernel();
@@ -227,32 +215,26 @@ extern "C" bool precompile_all_kernels()
                     TNN_LOG_INFO_COLOR(BRIGHT_YELLOW, "[PRECOMPILE] Device %d: %s (arch=%s) — compiling kernels...\n",
                                  d, di.props.name, arch.c_str());
 
-                    oroError_t setErr = oroSetDevice(d);
-                    if (setErr != oroSuccess) {
-                        TNN_LOG_ERROR("[PRECOMPILE] oroSetDevice(%d) failed: %s\n",
-                                      d, tnn_error_string(setErr));
+                    // Create a per-thread GPU context — this sets the thread-local
+                    // s_api so all oro* calls dispatch to the correct backend.
+                    oroCtx ctx;
+                    oroError_t ctxErr = oroCtxCreate(&ctx, 0, tnn_get_device(d));
+                    if (ctxErr != oroSuccess) {
+                        TNN_LOG_ERROR("[PRECOMPILE] oroCtxCreate(%d) failed: %s\n",
+                                      d, tnn_error_string(ctxErr));
                         ok.store(false);
                         return;
                     }
 
-                    // Force GPU context init on this worker thread
-                    {
-                        void* p = nullptr;
-                        oroError_t ce = oroMalloc((oroDeviceptr*)&p, 256);
-                        if (ce == oroSuccess) (void)oroFree((oroDeviceptr)p);
-                        else {
-                            TNN_LOG_ERROR("[PRECOMPILE] Context init failed on device %d: %s\n",
-                                          d, tnn_error_string(ce));
-                            ok.store(false);
-                            return;
-                        }
-                    }
+                    // Per-device block size limits and compile options
+                    const BlockSizeLimits& limits = tnn_is_amd_device(d)
+                        ? cfg.amd_blocks : cfg.nvidia_blocks;
+                    const int min_wg = limits.block_min;
+                    const int max_wg = limits.block_max;
 
-                    // Build per-device options, including arch so we don't
-                    // mutate the shared RTCCompiler::gpu_arch_ from workers
                     std::vector<std::string> opts;
 
-                    if (tnn_is_amd_device()) {
+                    if (tnn_is_amd_device(d)) {
                         opts = {"-O3", "-mno-cumode", "-ffast-math"};
                         opts.push_back("--gpu-architecture=" + arch);
                         opts.push_back("-DXELIS_MIN_WG=" + std::to_string(min_wg));
@@ -279,7 +261,8 @@ extern "C" bool precompile_all_kernels()
                             source_str,
                             source_path,
                             primary_kernel,
-                            opts
+                            opts,
+                            d
                         );
 
                         TNN_LOG_DEBUG("[PRECOMPILE] Device %d: module=%p\n",

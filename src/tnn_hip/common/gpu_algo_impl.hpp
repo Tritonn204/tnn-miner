@@ -108,7 +108,7 @@ class GPUAlgorithm : public IGPUAlgorithm
 {
 public:
     explicit GPUAlgorithm(const AlgoConfig &config)
-        : config_(config), initialized_(false) {}
+        : config_(config), initialized_(false), ctx_(nullptr) {}
 
     ~GPUAlgorithm() override
     {
@@ -118,12 +118,11 @@ public:
     TuningResult get_tuning_result() const override {
         return tuning_result_;
     }
+
+    oroCtx get_ctx() const override { return ctx_; }
     
     bool set_batch_size_override(uint32_t batch_size) override {
         if (!initialized_) return false;
-
-        // Ensure correct device context
-        (void)oro_safe_set_device(device_id_);
 
         batch_size = (batch_size / block_size_) * block_size_;
         if (batch_size == 0) batch_size = block_size_;
@@ -154,25 +153,15 @@ public:
         TNN_LOG_TRACE("[TRACE] GPUAlgorithm::initialize: Entry for device %d\n", device_id);
 
         device_id_ = device_id;
-        
-        oroError_t err = oro_safe_set_device(device_id);
+
+        // Create the GPU context for this device.  This sets the thread-local
+        // s_api and binds the context.  Stored in ctx_ so mine_loop() can
+        // reuse it on its worker thread via oroCtxSetCurrent.
+        oroError_t err = oroCtxCreate(&ctx_, 0, tnn_get_device(device_id));
         if (err != oroSuccess)
         {
-            TNN_LOG_ERROR("[ERROR] oroSetDevice(%d) failed: %s\n", device_id, tnn_error_string(err));
+            TNN_LOG_ERROR("[ERROR] oroCtxCreate(%d) failed: %s\n", device_id, tnn_error_string(err));
             return false;
-        }
-
-        // Force GPU context initialization on this thread (required by
-        // Orochi on all backends, and by CUDA's per-thread context model)
-        {
-            void *dummy = nullptr;
-            err = oro_safe_malloc((oroDeviceptr*)&dummy, 256);
-            if (err == oroSuccess) {
-                (void)oro_safe_free((oroDeviceptr)dummy);
-            } else {
-                TNN_LOG_ERROR("[ERROR] Failed to initialize GPU context: %s\n", tnn_error_string(err));
-                return false;
-            }
         }
 
         (void)oroGetDeviceProperties(&device_props_, tnn_get_device(device_id));
@@ -205,8 +194,8 @@ public:
 
     void cleanup() override
     {
-        // Ensure correct device context for cleanup
-        if (device_id_ >= 0) (void)oro_safe_set_device(device_id_);
+        // Rebind context for cleanup (runs on destructor thread, not mine_loop)
+        if (ctx_) (void)oroCtxSetCurrent(ctx_);
 
         cleanup_batch_buffers();
         if (start_event_) { (void)oroEventDestroy(start_event_); start_event_ = nullptr; }
@@ -216,12 +205,6 @@ public:
 
     void set_work(const uint8_t *work_template, uint64_t difficulty) override
     {
-        // Ensure correct device context
-        oroError_t serr = oro_safe_set_device(device_id_);
-        if (serr != oroSuccess)
-            TNN_LOG_ERROR("[ERROR] GPU %d: set_work oroSetDevice failed: %s\n",
-                          device_id_, tnn_error_string(serr));
-
         // Save host-side copy for solution verification (prevents race with job updates)
         h_work_template_.resize(config_.template_size);
         memcpy(h_work_template_.data(), work_template, config_.template_size);
@@ -245,12 +228,6 @@ public:
 
     BatchResult mine_batch(uint64_t nonce_start, uint32_t count = 0) override
     {
-        // Ensure correct device context for mining
-        oroError_t serr = oro_safe_set_device(device_id_);
-        if (serr != oroSuccess)
-            TNN_LOG_ERROR("[ERROR] GPU %d: mine_batch oroSetDevice failed: %s\n",
-                          device_id_, tnn_error_string(serr));
-
         if (count == 0) count = batch_size_;
 
         oroError_t merr = oro_safe_memset(d_solutions_, 0, 24);
@@ -378,7 +355,7 @@ private:
 
             std::vector<std::string> options;
 
-            if (tnn_is_amd_device()) {
+            if (tnn_is_amd_device(device_id_)) {
                 options = {"-O3", "-mno-cumode", "-ffast-math"};
 
                 options.push_back("-DXELIS_MIN_WG=" + std::to_string(config_.amd_blocks.block_min));
@@ -387,7 +364,7 @@ private:
                 if (device_props_.gcnArchName[0] != '\0') {
                     options.push_back(std::string("--gpu-architecture=") + device_props_.gcnArchName);
                 }
-            } else if (tnn_is_nvidia_device()) {
+            } else if (tnn_is_nvidia_device(device_id_)) {
                 options = {"--dopt=on", "--use_fast_math"};
 #ifdef __linux__
                 options.push_back("--device-int128");
@@ -416,12 +393,14 @@ private:
                     std::string(config_.source),
                     config_.source_path,
                     primary_kernel,
-                    options);
+                    options,
+                    device_id_);
             } else {
                 compiled = compiler.compile(
                     config_.source_path,
                     primary_kernel,
-                    options);
+                    options,
+                    device_id_);
             }
             
             module_ = compiled.module;
@@ -468,14 +447,6 @@ private:
     // ========================================================================
     
     bool allocate_batch_buffers() {
-        // Ensure correct device context for allocation
-        oroError_t set_err = oro_safe_set_device(device_id_);
-        if (set_err != oroSuccess) {
-            TNN_LOG_ERROR("[ERROR] GPU %d: oroSetDevice failed before allocation: %s\n",
-                    device_id_, tnn_error_string(set_err));
-            return false;
-        }
-
         oroError_t err;
 
         size_t scratch_size = batch_size_ * config_.scratch_per_hash;
@@ -527,9 +498,6 @@ private:
     }
     
     void cleanup_batch_buffers() {
-        // Ensure correct device context for deallocation
-        if (device_id_ >= 0) (void)oro_safe_set_device(device_id_);
-
         if (d_input_) { (void)oro_safe_free((oroDeviceptr)d_input_); d_input_ = nullptr; }
         if (d_outputs_) { (void)oro_safe_free((oroDeviceptr)d_outputs_); d_outputs_ = nullptr; }
         if (d_scratch_) { (void)oro_safe_free((oroDeviceptr)d_scratch_); d_scratch_ = nullptr; }
@@ -569,9 +537,6 @@ private:
     }
     
     bool calculate_static_batch() {
-        // Ensure correct device context for memory queries
-        (void)oro_safe_set_device(device_id_);
-
         block_size_ = config_.preferred_block_size;
 
         size_t free_mem, total_mem;
@@ -582,7 +547,7 @@ private:
 
         uint32_t max_by_mem = available / config_.scratch_per_hash;
 
-        const int occupancy_factor = tnn_is_amd_device() ? 4 : 2;
+        const int occupancy_factor = tnn_is_amd_device(device_id_) ? 4 : 2;
 
         uint32_t max_concurrent = compute_units_ * occupancy_factor * block_size_;
 
@@ -651,7 +616,7 @@ private:
         std::string vendor;
         std::string arch;
         
-        if (tnn_is_amd_device()) {
+        if (tnn_is_amd_device(device_id_)) {
             vendor = "amd";
             arch = device_props_.gcnArchName;
         } else {
@@ -682,9 +647,6 @@ private:
     }
 
     bool load_cached_tune() {
-        // Ensure correct device context for memory validation
-        (void)oro_safe_set_device(device_id_);
-
         std::string path = get_tune_cache_path();
         std::ifstream f(path);
         if (!f.is_open()) return false;
@@ -815,13 +777,6 @@ private:
         uint8_t test_strategy = 0
     ) {
         TuneTestResult result;
-
-        // CRITICAL: Ensure device context is correct for this test
-        // Events and kernel launches must happen on the same device
-        oroError_t dev_err = oro_safe_set_device(device_id_);
-        if (dev_err != oroSuccess) {
-            return result;  // Invalid result
-        }
 
         // Build context
         KernelLaunchContext ctx;
@@ -970,17 +925,8 @@ private:
     }
 
     bool run_autotune() {
-        // CRITICAL: Ensure we're on the correct device for all tuning operations
-        // In multi-GPU setups, device context can switch between threads
-        oroError_t err = oro_safe_set_device(device_id_);
-        if (err != oroSuccess) {
-            TNN_LOG_ERROR("[ERROR] run_autotune: oroSetDevice(%d) failed: %s\n",
-                    device_id_, tnn_error_string(err));
-            return calculate_static_batch();
-        }
-
         // Generate tune key for this config
-        std::string tune_key = TuneCoordinator::make_tune_key(device_props_, config_.name);
+        std::string tune_key = TuneCoordinator::make_tune_key(device_props_, config_.name, device_id_);
 
         // Try to claim tuning rights
         auto status = TuneCoordinator::instance().begin_tune(tune_key, device_id_);
@@ -1058,8 +1004,8 @@ private:
             out.separator('=');
         }
         
-        const auto& limits = tnn_is_amd_device() ? config_.amd_blocks : config_.nvidia_blocks;
-        const int occupancy_factor = tnn_is_amd_device() ? 4 : 2;
+        const auto& limits = tnn_is_amd_device(device_id_) ? config_.amd_blocks : config_.nvidia_blocks;
+        const int occupancy_factor = tnn_is_amd_device(device_id_) ? 4 : 2;
         
         size_t free_mem, total_mem;
         (void)oroMemGetInfo(&free_mem, &total_mem);
@@ -1392,6 +1338,7 @@ private:
     AlgoConfig config_;
     bool initialized_ = false;
     int device_id_ = 0;
+    oroCtx ctx_ = nullptr;
     oroDeviceProp_t device_props_{};
 
     KernelMap kernels_;

@@ -34,13 +34,13 @@ int getGPUCount() {
 }
 
 std::string getDeviceName(int device) {
-    oroDeviceProp_t p;
-    oroError_t e = oroGetDeviceProperties(&p, tnn_get_device(device));
+    char name[256] = {0};
+    oroError_t e = oroDeviceGetName(name, sizeof(name), tnn_get_device(device));
     if (e != oroSuccess) {
-        TNN_LOG_ERROR("GPU: oroGetDeviceProperties(%d) failed: %s\n", device, tnn_error_string(e));
+        TNN_LOG_ERROR("GPU: oroDeviceGetName(%d) failed: %s\n", device, tnn_error_string(e));
         return "";
     }
-    return std::string(p.name);
+    return std::string(name);
 }
 
 std::string getPCIBusId(int device) {

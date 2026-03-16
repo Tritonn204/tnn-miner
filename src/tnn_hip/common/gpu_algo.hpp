@@ -135,12 +135,13 @@ public:
         return inst;
     }
     
-    static std::string make_tune_key(const oroDeviceProp_t& props, 
-                                      const std::string& algo_name) {
+    static std::string make_tune_key(const oroDeviceProp_t& props,
+                                      const std::string& algo_name,
+                                      int device_id = 0) {
         std::string vendor;
         std::string arch;
-        
-        if (tnn_is_amd_device()) {
+
+        if (tnn_is_amd_device(device_id)) {
             vendor = "amd";
             arch = props.gcnArchName;
         } else {
@@ -370,9 +371,12 @@ struct BatchResult {
 class IGPUAlgorithm {
 public:
     virtual ~IGPUAlgorithm() = default;
-    
+
     virtual bool initialize(int device_id = 0) = 0;
     virtual void cleanup() = 0;
+
+    // GPU context created during initialize(), needed by worker threads
+    virtual oroCtx get_ctx() const = 0;
 
     virtual void set_work(const uint8_t* work_template, uint64_t difficulty) = 0;
     virtual const uint8_t* get_current_work_template() const = 0;
@@ -428,9 +432,10 @@ extern std::atomic<bool> g_mining_started;
 
 inline std::optional<int> choose_maxregcount(
     const AlgoConfig& cfg,
-    const oroDeviceProp_t& props)
+    const oroDeviceProp_t& props,
+    int device_id = 0)
 {
-    if (!tnn_is_nvidia_device() || !cfg.enable_reg_tuning)
+    if (!tnn_is_nvidia_device(device_id) || !cfg.enable_reg_tuning)
         return std::nullopt;
 
     const int major = props.major;

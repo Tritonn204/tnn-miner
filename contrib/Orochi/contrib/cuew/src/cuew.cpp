@@ -952,14 +952,14 @@ static int cuewCudaInit(const char** customPaths_Cuda, const char** customPaths_
 #ifdef _WIN32
   // Expected in c:/windows/system or similar, no path needed.
   const char *cuda_paths[] = {"nvcuda.dll", NULL};
-  const char *cudart_paths[] = {"cudart64_12.dll", NULL};
+  const char *cudart_paths[] = {"cudart64_13.dll", "cudart64_12.dll", "cudart64_110.dll", "cudart64_11.dll", NULL};
 #elif defined(__APPLE__)
   // Default installation path.
   const char *cuda_paths[] = {"/usr/local/cuda/lib/libcuda.dylib", NULL};
   const char *cudart_paths[] = { NULL}; // TODO
 #else
   const char *cuda_paths[] = {"libcuda.so", "libcuda.so.1", NULL};
-  const char *cudart_paths[] = { "libcudart.so", NULL }; 
+  const char *cudart_paths[] = { "libcudart.so", "libcudart.so.13", "libcudart.so.12", "libcudart.so.11", NULL };
 #endif
   static int initialized = 0;
   static int result = 0;
