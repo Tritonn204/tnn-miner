@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <atomic>
+#include "terminal.hpp"
 
 // ============================================================================
 // TNN Log Levels
@@ -53,3 +54,38 @@ inline bool tnn_log_enabled(TnnLogLevel lvl) {
 
 #define TNN_LOG_TRACE(fmt, ...) \
     do { if (tnn_log_enabled(TnnLogLevel::Trace)) printf(fmt, ##__VA_ARGS__); } while(0)
+
+// ============================================================================
+// Colored Log Macros
+// ============================================================================
+// Saves current color -> sets color -> prints -> flushes -> restores.
+// Thread-local color tracking (default = BRIGHT_WHITE).
+
+inline int& tnn_current_color_ref() {
+    static thread_local int color = BRIGHT_WHITE;
+    return color;
+}
+
+inline void tnn_setcolor(int c) {
+    tnn_current_color_ref() = c;
+    setcolor(c);
+}
+
+#define TNN_LOG_COLOR(color, fmt, ...) \
+    do { \
+        int _prev = tnn_current_color_ref(); \
+        tnn_setcolor(color); \
+        printf(fmt, ##__VA_ARGS__); \
+        fflush(stdout); \
+        tnn_setcolor(_prev); \
+    } while(0)
+
+#define TNN_LOG_INFO_COLOR(color, fmt, ...) \
+    do { if (tnn_log_enabled(TnnLogLevel::Info)) TNN_LOG_COLOR(color, fmt, ##__VA_ARGS__); } while(0)
+
+#define TNN_LOG_DEBUG_COLOR(color, fmt, ...) \
+    do { if (tnn_log_enabled(TnnLogLevel::Debug)) TNN_LOG_COLOR(color, fmt, ##__VA_ARGS__); } while(0)
+
+#define TNN_LOG_TRACE_COLOR(color, fmt, ...) \
+    do { if (tnn_log_enabled(TnnLogLevel::Trace)) TNN_LOG_COLOR(color, fmt, ##__VA_ARGS__); } while(0)
+

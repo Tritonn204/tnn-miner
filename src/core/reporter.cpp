@@ -147,11 +147,13 @@ int update_handler(const boost::system::error_code& error)
             g_mining_started.store(true);
             
             // Print a separator to visually mark end of tuning output
+            setcolor(BRIGHT_YELLOW);
             printf("\n");
             printf("============================================================\n");
             printf("[MINER] Mining started, hashrate reporting enabled\n");
             printf("============================================================\n");
             fflush(stdout);
+            setcolor(BRIGHT_WHITE);
         } else {
             // Mining hasn't started yet - don't print status, just accumulate stats
             return 0;

@@ -1,6 +1,7 @@
 #pragma once
 #include "gpu_algo.hpp"
 #include "gpu_rtc.hpp"
+#include "oro_seh_wrappers.hpp"
 #include "tnn_log.hpp"
 #include <coins/miners.hpp>
 #include <chrono>
@@ -122,14 +123,14 @@ public:
         if (!initialized_) return false;
 
         // Ensure correct device context
-        (void)hipSetDevice(device_id_);
+        (void)oro_safe_set_device(device_id_);
 
         batch_size = (batch_size / block_size_) * block_size_;
         if (batch_size == 0) batch_size = block_size_;
 
         size_t required = batch_size * config_.scratch_per_hash;
         size_t free_mem, total_mem;
-        (void)hipMemGetInfo(&free_mem, &total_mem);
+        (void)oroMemGetInfo(&free_mem, &total_mem);
         
         if (required > free_mem * config_.memory_usage_factor) {
             return false;
@@ -154,27 +155,27 @@ public:
 
         device_id_ = device_id;
         
-        hipError_t err = hipSetDevice(device_id);
-        if (err != hipSuccess)
+        oroError_t err = oro_safe_set_device(device_id);
+        if (err != oroSuccess)
         {
-            TNN_LOG_ERROR("[ERROR] hipSetDevice(%d) failed: %s\n", device_id, hipGetErrorString(err));
+            TNN_LOG_ERROR("[ERROR] oroSetDevice(%d) failed: %s\n", device_id, tnn_error_string(err));
             return false;
         }
 
-#if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
+        // Force GPU context initialization on this thread (required by
+        // Orochi on all backends, and by CUDA's per-thread context model)
         {
             void *dummy = nullptr;
-            err = hipMalloc(&dummy, 256);
-            if (err == hipSuccess) {
-                (void)hipFree(dummy);
+            err = oro_safe_malloc((oroDeviceptr*)&dummy, 256);
+            if (err == oroSuccess) {
+                (void)oro_safe_free((oroDeviceptr)dummy);
             } else {
-                TNN_LOG_ERROR("[ERROR] Failed to initialize CUDA context: %s\n", hipGetErrorString(err));
+                TNN_LOG_ERROR("[ERROR] Failed to initialize GPU context: %s\n", tnn_error_string(err));
                 return false;
             }
         }
-#endif
 
-        (void)hipGetDeviceProperties(&device_props_, device_id);
+        (void)oroGetDeviceProperties(&device_props_, tnn_get_device(device_id));
         compute_units_ = device_props_.multiProcessorCount;
         
         TNN_LOG_INFO("[INFO] GPU %d: %s (%d CUs)\n", device_id, device_props_.name, compute_units_);
@@ -191,12 +192,12 @@ public:
             return false;
         }
 
-        (void)hipEventCreate(&start_event_);
-        (void)hipEventCreate(&stop_event_);
+        (void)oroEventCreate(&start_event_);
+        (void)oroEventCreate(&stop_event_);
 
         initialized_ = true;
         
-        TNN_LOG_INFO("[INFO] GPU %d initialized: %s\n", device_id, tuning_result_.describe().c_str());
+        TNN_LOG_DEBUG("[DEBUG] GPU %d initialized: %s\n", device_id, tuning_result_.describe().c_str());
         fflush(stdout);
 
         return true;
@@ -205,27 +206,36 @@ public:
     void cleanup() override
     {
         // Ensure correct device context for cleanup
-        if (device_id_ >= 0) (void)hipSetDevice(device_id_);
+        if (device_id_ >= 0) (void)oro_safe_set_device(device_id_);
 
         cleanup_batch_buffers();
-        if (start_event_) { (void)hipEventDestroy(start_event_); start_event_ = nullptr; }
-        if (stop_event_) { (void)hipEventDestroy(stop_event_); stop_event_ = nullptr; }
+        if (start_event_) { (void)oroEventDestroy(start_event_); start_event_ = nullptr; }
+        if (stop_event_) { (void)oroEventDestroy(stop_event_); stop_event_ = nullptr; }
         initialized_ = false;
     }
 
     void set_work(const uint8_t *work_template, uint64_t difficulty) override
     {
         // Ensure correct device context
-        (void)hipSetDevice(device_id_);
+        oroError_t serr = oro_safe_set_device(device_id_);
+        if (serr != oroSuccess)
+            TNN_LOG_ERROR("[ERROR] GPU %d: set_work oroSetDevice failed: %s\n",
+                          device_id_, tnn_error_string(serr));
 
         // Save host-side copy for solution verification (prevents race with job updates)
         h_work_template_.resize(config_.template_size);
         memcpy(h_work_template_.data(), work_template, config_.template_size);
 
-        (void)hipMemcpy(d_input_, work_template, config_.template_size, hipMemcpyHostToDevice);
+        oroError_t e1 = oro_safe_memcpy(d_input_, work_template, config_.template_size, oroMemcpyHostToDevice);
+        if (e1 != oroSuccess)
+            TNN_LOG_ERROR("[ERROR] GPU %d: set_work memcpy(d_input_) failed: %s\n",
+                          device_id_, tnn_error_string(e1));
         uint64_t target[4];
         compute_target(difficulty, target);
-        (void)hipMemcpy(d_difficulty_target_, target, 32, hipMemcpyHostToDevice);
+        oroError_t e2 = oro_safe_memcpy(d_difficulty_target_, target, 32, oroMemcpyHostToDevice);
+        if (e2 != oroSuccess)
+            TNN_LOG_ERROR("[ERROR] GPU %d: set_work memcpy(d_difficulty_target_) failed: %s\n",
+                          device_id_, tnn_error_string(e2));
     }
 
     // Get the currently-active work template for this miner (for solution verification)
@@ -236,11 +246,17 @@ public:
     BatchResult mine_batch(uint64_t nonce_start, uint32_t count = 0) override
     {
         // Ensure correct device context for mining
-        (void)hipSetDevice(device_id_);
+        oroError_t serr = oro_safe_set_device(device_id_);
+        if (serr != oroSuccess)
+            TNN_LOG_ERROR("[ERROR] GPU %d: mine_batch oroSetDevice failed: %s\n",
+                          device_id_, tnn_error_string(serr));
 
         if (count == 0) count = batch_size_;
 
-        (void)hipMemset(d_solutions_, 0, 24);
+        oroError_t merr = oro_safe_memset(d_solutions_, 0, 24);
+        if (merr != oroSuccess)
+            TNN_LOG_ERROR("[ERROR] GPU %d: mine_batch oroMemset(d_solutions_) failed: %s\n",
+                          device_id_, tnn_error_string(merr));
 
         // Build launch context
         KernelLaunchContext ctx;
@@ -257,7 +273,7 @@ public:
         ctx.config = &config_;
         ctx.stream = nullptr;  // Default stream
 
-        (void)hipEventRecord(start_event_);
+        (void)oro_safe_event_record(start_event_, 0);
 
         // Execute using strategy (custom or default)
         bool success;
@@ -267,26 +283,26 @@ public:
             success = default_monolithic_execute(kernels_, ctx);
         }
 
-        (void)hipEventRecord(stop_event_);
-        hipError_t sync_err = hipEventSynchronize(stop_event_);
+        (void)oro_safe_event_record(stop_event_, 0);
+        oroError_t sync_err = oro_safe_event_sync(stop_event_);
 
         // Check for async kernel errors (illegal memory access, stack overflow, etc.)
-        hipError_t last_err = hipGetLastError();
+        oroError_t last_err = oro_safe_get_last_error();
 
         if (!success) {
             TNN_LOG_ERROR("[ERROR] GPU %d: Kernel launch reported failure\n", device_id_);
         }
-        if (sync_err != hipSuccess) {
-            TNN_LOG_ERROR("[ERROR] GPU %d: hipEventSynchronize failed: %s\n",
-                    device_id_, hipGetErrorString(sync_err));
+        if (sync_err != oroSuccess) {
+            TNN_LOG_ERROR("[ERROR] GPU %d: oroEventSynchronize failed: %s\n",
+                    device_id_, tnn_error_string(sync_err));
         }
-        if (last_err != hipSuccess) {
+        if (last_err != oroSuccess) {
             TNN_LOG_ERROR("[ERROR] GPU %d: Async kernel error: %s\n",
-                    device_id_, hipGetErrorString(last_err));
+                    device_id_, tnn_error_string(last_err));
         }
 
         float ms;
-        (void)hipEventElapsedTime(&ms, start_event_, stop_event_);
+        (void)oro_safe_event_elapsed(&ms, start_event_, stop_event_);
         last_hashrate_ = (count * 1000.0) / ms;
 
         // Rest unchanged - extract solutions
@@ -295,7 +311,7 @@ public:
         result.count = count;
 
         uint64_t solution_count = 0;
-        (void)hipMemcpy(&solution_count, d_solutions_, sizeof(uint64_t), hipMemcpyDeviceToHost);
+        (void)oro_safe_memcpy(&solution_count, d_solutions_, sizeof(uint64_t), oroMemcpyDeviceToHost);
 
         if (solution_count > count) solution_count = 0;
         if (solution_count > 1024) solution_count = 1024;
@@ -306,7 +322,7 @@ public:
             size_t solution_bytes = solution_count * 40;
             std::vector<uint64_t> raw_solutions(solution_count * 5);
 
-            (void)hipMemcpy(raw_solutions.data(), d_solutions_ + 1, solution_bytes, hipMemcpyDeviceToHost);
+            (void)oro_safe_memcpy(raw_solutions.data(), d_solutions_ + 1, solution_bytes, oroMemcpyDeviceToHost);
 
             result.valid_nonces.reserve(solution_count);
             result.valid_hashes.resize(solution_count * config_.hash_size);
@@ -362,34 +378,34 @@ private:
 
             std::vector<std::string> options;
 
-    #if defined(__HIP_PLATFORM_AMD__)
-          options = {"-O3", "-mno-cumode", "-ffast-math"};
+            if (tnn_is_amd_device()) {
+                options = {"-O3", "-mno-cumode", "-ffast-math"};
 
-          options.push_back("-DXELIS_MIN_WG=" + std::to_string(config_.amd_blocks.block_min));
-          options.push_back("-DXELIS_MAX_WG=" + std::to_string(config_.amd_blocks.block_max));
+                options.push_back("-DXELIS_MIN_WG=" + std::to_string(config_.amd_blocks.block_min));
+                options.push_back("-DXELIS_MAX_WG=" + std::to_string(config_.amd_blocks.block_max));
 
-          if (device_props_.gcnArchName[0] != '\0') {
-              options.push_back(std::string("--gpu-architecture=") + device_props_.gcnArchName);
-          }
-    #elif defined(__HIP_PLATFORM_NVIDIA__)
-            options = {"--dopt=on", "--use_fast_math"};
-          #ifdef __linux__
-            options.push_back("--device-int128");
-          #endif
+                if (device_props_.gcnArchName[0] != '\0') {
+                    options.push_back(std::string("--gpu-architecture=") + device_props_.gcnArchName);
+                }
+            } else if (tnn_is_nvidia_device()) {
+                options = {"--dopt=on", "--use_fast_math"};
+#ifdef __linux__
+                options.push_back("--device-int128");
+#endif
 
-            options.push_back("-DXELIS_MIN_WG=" + std::to_string(config_.nvidia_blocks.block_min));
-            options.push_back("-DXELIS_MAX_WG=" + std::to_string(config_.nvidia_blocks.block_max));
+                options.push_back("-DXELIS_MIN_WG=" + std::to_string(config_.nvidia_blocks.block_min));
+                options.push_back("-DXELIS_MAX_WG=" + std::to_string(config_.nvidia_blocks.block_max));
 
-            // Per-kernel register limits via -D defines (arch-dependent)
-            {
-                const int major = device_props_.major;
-                int s3_nreg = 40; // (major <= 7) ? 56 : 40;  // Turing/Volta and older: 56, Ampere+: 40
-                options.push_back("-DXELIS_S3_NREG=" + std::to_string(s3_nreg));
+                // Per-kernel register limits via -D defines (arch-dependent)
+                {
+                    const int major = device_props_.major;
+                    int s3_nreg = 40;
+                    options.push_back("-DXELIS_S3_NREG=" + std::to_string(s3_nreg));
+                }
+
+                // Per-device module key (NVIDIA modules are bound to a CUDA context)
+                options.push_back("-DDEVICE_ID=" + std::to_string(device_id_));
             }
-
-            // Per-device module key (NVIDIA modules are bound to a CUDA context)
-            options.push_back("-DDEVICE_ID=" + std::to_string(device_id_));
-    #endif
 
             // Compile module once
             RTCCompiler::CompiledKernel compiled;
@@ -412,15 +428,15 @@ private:
             
             // Load all kernels from the module
             for (const auto& kernel_name : config_.get_kernel_names()) {
-                hipFunction_t func = nullptr;
-                hipError_t err = hipModuleGetFunction(&func, module_, kernel_name.c_str());
+                oroFunction_t func = nullptr;
+                oroError_t err = oroModuleGetFunction(&func, module_, kernel_name.c_str());
                 
-                if (err == hipSuccess && func != nullptr) {
+                if (err == oroSuccess && func != nullptr) {
                     kernels_[kernel_name] = func;
-                    TNN_LOG_INFO("[INFO] GPU %d: Loaded kernel '%s'\n", device_id_, kernel_name.c_str());
+                    TNN_LOG_TRACE("[TRACE] GPU %d: Loaded kernel '%s'\n", device_id_, kernel_name.c_str());
                 } else {
                     TNN_LOG_DEBUG("[WARN] GPU %d: Could not load kernel '%s': %s\n",
-                           device_id_, kernel_name.c_str(), hipGetErrorString(err));
+                           device_id_, kernel_name.c_str(), tnn_error_string(err));
                 }
             }
             
@@ -453,55 +469,55 @@ private:
     
     bool allocate_batch_buffers() {
         // Ensure correct device context for allocation
-        hipError_t set_err = hipSetDevice(device_id_);
-        if (set_err != hipSuccess) {
-            TNN_LOG_ERROR("[ERROR] GPU %d: hipSetDevice failed before allocation: %s\n",
-                    device_id_, hipGetErrorString(set_err));
+        oroError_t set_err = oro_safe_set_device(device_id_);
+        if (set_err != oroSuccess) {
+            TNN_LOG_ERROR("[ERROR] GPU %d: oroSetDevice failed before allocation: %s\n",
+                    device_id_, tnn_error_string(set_err));
             return false;
         }
 
-        hipError_t err;
+        oroError_t err;
 
         size_t scratch_size = batch_size_ * config_.scratch_per_hash;
         TNN_LOG_DEBUG("[DEBUG] GPU %d: Allocating buffers (batch=%u, scratch=%zu MB)\n",
                device_id_, batch_size_, scratch_size / (1024*1024));
 
-        err = hipMalloc(&d_input_, config_.template_size);
-        if (err != hipSuccess) {
-            TNN_LOG_ERROR("[ERROR] GPU %d: hipMalloc d_input_ (%zu bytes) failed: %s\n",
-                    device_id_, config_.template_size, hipGetErrorString(err));
+        err = oro_safe_malloc((oroDeviceptr*)&d_input_, config_.template_size);
+        if (err != oroSuccess) {
+            TNN_LOG_ERROR("[ERROR] GPU %d: oroMalloc d_input_ (%zu bytes) failed: %s\n",
+                    device_id_, config_.template_size, tnn_error_string(err));
             return false;
         }
 
-        err = hipMalloc(&d_outputs_, batch_size_ * config_.hash_size);
-        if (err != hipSuccess) {
-            TNN_LOG_ERROR("[ERROR] GPU %d: hipMalloc d_outputs_ (%zu bytes) failed: %s\n",
-                    device_id_, batch_size_ * config_.hash_size, hipGetErrorString(err));
+        err = oro_safe_malloc((oroDeviceptr*)&d_outputs_, batch_size_ * config_.hash_size);
+        if (err != oroSuccess) {
+            TNN_LOG_ERROR("[ERROR] GPU %d: oroMalloc d_outputs_ (%zu bytes) failed: %s\n",
+                    device_id_, batch_size_ * config_.hash_size, tnn_error_string(err));
             cleanup_batch_buffers();
             return false;
         }
 
-        err = hipMalloc(&d_scratch_, scratch_size);
-        if (err != hipSuccess) {
-            TNN_LOG_ERROR("[ERROR] GPU %d: hipMalloc d_scratch_ (%zu MB) failed: %s\n",
-                    device_id_, scratch_size / (1024*1024), hipGetErrorString(err));
+        err = oro_safe_malloc((oroDeviceptr*)&d_scratch_, scratch_size);
+        if (err != oroSuccess) {
+            TNN_LOG_ERROR("[ERROR] GPU %d: oroMalloc d_scratch_ (%zu MB) failed: %s\n",
+                    device_id_, scratch_size / (1024*1024), tnn_error_string(err));
             cleanup_batch_buffers();
             return false;
         }
 
-        err = hipMalloc(&d_difficulty_target_, 32);
-        if (err != hipSuccess) {
-            TNN_LOG_ERROR("[ERROR] GPU %d: hipMalloc d_difficulty_target_ failed: %s\n",
-                    device_id_, hipGetErrorString(err));
+        err = oro_safe_malloc((oroDeviceptr*)&d_difficulty_target_, 32);
+        if (err != oroSuccess) {
+            TNN_LOG_ERROR("[ERROR] GPU %d: oroMalloc d_difficulty_target_ failed: %s\n",
+                    device_id_, tnn_error_string(err));
             cleanup_batch_buffers();
             return false;
         }
 
         size_t solutions_size = 8 + 1024 * 40 + 16;
-        err = hipMalloc(&d_solutions_, solutions_size);
-        if (err != hipSuccess) {
-            TNN_LOG_ERROR("[ERROR] GPU %d: hipMalloc d_solutions_ failed: %s\n",
-                    device_id_, hipGetErrorString(err));
+        err = oro_safe_malloc((oroDeviceptr*)&d_solutions_, solutions_size);
+        if (err != oroSuccess) {
+            TNN_LOG_ERROR("[ERROR] GPU %d: oroMalloc d_solutions_ failed: %s\n",
+                    device_id_, tnn_error_string(err));
             cleanup_batch_buffers();
             return false;
         }
@@ -512,13 +528,13 @@ private:
     
     void cleanup_batch_buffers() {
         // Ensure correct device context for deallocation
-        if (device_id_ >= 0) (void)hipSetDevice(device_id_);
+        if (device_id_ >= 0) (void)oro_safe_set_device(device_id_);
 
-        if (d_input_) { (void)hipFree(d_input_); d_input_ = nullptr; }
-        if (d_outputs_) { (void)hipFree(d_outputs_); d_outputs_ = nullptr; }
-        if (d_scratch_) { (void)hipFree(d_scratch_); d_scratch_ = nullptr; }
-        if (d_difficulty_target_) { (void)hipFree(d_difficulty_target_); d_difficulty_target_ = nullptr; }
-        if (d_solutions_) { (void)hipFree(d_solutions_); d_solutions_ = nullptr; }
+        if (d_input_) { (void)oro_safe_free((oroDeviceptr)d_input_); d_input_ = nullptr; }
+        if (d_outputs_) { (void)oro_safe_free((oroDeviceptr)d_outputs_); d_outputs_ = nullptr; }
+        if (d_scratch_) { (void)oro_safe_free((oroDeviceptr)d_scratch_); d_scratch_ = nullptr; }
+        if (d_difficulty_target_) { (void)oro_safe_free((oroDeviceptr)d_difficulty_target_); d_difficulty_target_ = nullptr; }
+        if (d_solutions_) { (void)oro_safe_free((oroDeviceptr)d_solutions_); d_solutions_ = nullptr; }
     }
 
     // ========================================================================
@@ -554,23 +570,19 @@ private:
     
     bool calculate_static_batch() {
         // Ensure correct device context for memory queries
-        (void)hipSetDevice(device_id_);
+        (void)oro_safe_set_device(device_id_);
 
         block_size_ = config_.preferred_block_size;
 
         size_t free_mem, total_mem;
-        (void)hipMemGetInfo(&free_mem, &total_mem);
+        (void)oroMemGetInfo(&free_mem, &total_mem);
 
         size_t reserved = (size_t)(config_.memory_reserve_mb * 1024 * 1024);
         size_t available = (size_t)((free_mem - reserved) * config_.memory_usage_factor);
 
         uint32_t max_by_mem = available / config_.scratch_per_hash;
 
-#ifdef __HIP_PLATFORM_AMD__
-        const int occupancy_factor = 4;
-#else
-        const int occupancy_factor = 2;
-#endif
+        const int occupancy_factor = tnn_is_amd_device() ? 4 : 2;
 
         uint32_t max_concurrent = compute_units_ * occupancy_factor * block_size_;
 
@@ -639,15 +651,15 @@ private:
         std::string vendor;
         std::string arch;
         
-#ifdef __HIP_PLATFORM_AMD__
-        vendor = "amd";
-        arch = device_props_.gcnArchName;
-#else
-        vendor = "nvidia";
-        char buf[32];
-        snprintf(buf, sizeof(buf), "sm_%d%d", device_props_.major, device_props_.minor);
-        arch = buf;
-#endif
+        if (tnn_is_amd_device()) {
+            vendor = "amd";
+            arch = device_props_.gcnArchName;
+        } else {
+            vendor = "nvidia";
+            char buf[32];
+            snprintf(buf, sizeof(buf), "sm_%d%d", device_props_.major, device_props_.minor);
+            arch = buf;
+        }
         
         // Round VRAM to nearest GB
         size_t vram_gb = (device_props_.totalGlobalMem + 512ULL * 1024 * 1024) / (1024ULL * 1024 * 1024);
@@ -671,7 +683,7 @@ private:
 
     bool load_cached_tune() {
         // Ensure correct device context for memory validation
-        (void)hipSetDevice(device_id_);
+        (void)oro_safe_set_device(device_id_);
 
         std::string path = get_tune_cache_path();
         std::ifstream f(path);
@@ -711,7 +723,7 @@ private:
             if (cached.block_size > 0 && cached.batch_size > 0) {
                 size_t required = cached.batch_size * config_.scratch_per_hash;
                 size_t free_mem, total_mem;
-                (void)hipMemGetInfo(&free_mem, &total_mem);
+                (void)oroMemGetInfo(&free_mem, &total_mem);
 
                 size_t usable = (size_t)(free_mem * 0.95);
                 if (required > usable && config_.scratch_per_hash > 0) {
@@ -798,7 +810,7 @@ private:
         uint64_t* test_scratch,
         uint64_t* test_target,
         uint64_t* test_solutions,
-        hipStream_t stream,
+        oroStream_t stream,
         double timeout_ms,
         uint8_t test_strategy = 0
     ) {
@@ -806,8 +818,8 @@ private:
 
         // CRITICAL: Ensure device context is correct for this test
         // Events and kernel launches must happen on the same device
-        hipError_t dev_err = hipSetDevice(device_id_);
-        if (dev_err != hipSuccess) {
+        oroError_t dev_err = oro_safe_set_device(device_id_);
+        if (dev_err != oroSuccess) {
             return result;  // Invalid result
         }
 
@@ -826,19 +838,19 @@ private:
         ctx.config = &config_;
         ctx.stream = stream;
         
-        (void)hipMemsetAsync(test_solutions, 0, 8, stream);
+        (void)oroMemsetAsync(test_solutions, 0, 8, stream);
 
-        hipEvent_t start_ev, stop_ev;
-        (void)hipEventCreate(&start_ev);
-        (void)hipEventCreate(&stop_ev);
+        oroEvent_t start_ev, stop_ev;
+        (void)oroEventCreate(&start_ev);
+        (void)oroEventCreate(&stop_ev);
 
-        (void)hipEventRecord(start_ev, stream);
+        (void)oro_safe_event_record(start_ev, stream);
 
         // Check if kernels are loaded
         if (kernels_.empty()) {
             TNN_LOG_DEBUG("[TUNE DEBUG] GPU %d: No kernels loaded!\n", device_id_);
-            (void)hipEventDestroy(start_ev);
-            (void)hipEventDestroy(stop_ev);
+            (void)oroEventDestroy(start_ev);
+            (void)oroEventDestroy(stop_ev);
             return result;
         }
 
@@ -852,79 +864,93 @@ private:
 
         if (!success) {
             TNN_LOG_DEBUG("[TUNE DEBUG] GPU %d: Kernel launch returned failure\n", device_id_);
-            (void)hipEventDestroy(start_ev);
-            (void)hipEventDestroy(stop_ev);
+            (void)oroEventDestroy(start_ev);
+            (void)oroEventDestroy(stop_ev);
             return result;
         }
 
         // Check for kernel launch errors (asynchronous errors)
-        hipError_t launch_err = hipGetLastError();
-        if (launch_err != hipSuccess) {
+        TNN_LOG_TRACE("[TUNE] GPU %d: checking launch errors...\n", device_id_);
+        fflush(stdout);
+        oroError_t launch_err = oro_safe_get_last_error();
+        if (launch_err != oroSuccess) {
             TNN_LOG_DEBUG("[TUNE DEBUG] GPU %d: Kernel launch error: %s\n",
-                    device_id_, hipGetErrorString(launch_err));
-            (void)hipEventDestroy(start_ev);
-            (void)hipEventDestroy(stop_ev);
+                    device_id_, tnn_error_string(launch_err));
+            (void)oroEventDestroy(start_ev);
+            (void)oroEventDestroy(stop_ev);
             return result;
         }
 
-        (void)hipEventRecord(stop_ev, stream);
-        
+        TNN_LOG_TRACE("[TUNE] GPU %d: recording stop event...\n", device_id_);
+        fflush(stdout);
+        (void)oro_safe_event_record(stop_ev, stream);
+
         // Poll for completion with timeout
+        TNN_LOG_TRACE("[TUNE] GPU %d: polling for completion...\n", device_id_);
+        fflush(stdout);
         auto wall_start = std::chrono::steady_clock::now();
         const int poll_interval_ms = 10;
-        
+
         while (true) {
-            hipError_t query = hipEventQuery(stop_ev);
-            if (query == hipSuccess) {
+            oroError_t query = oro_safe_event_query(stop_ev);
+            if (query == oroSuccess) {
                 break;
             }
-            
-            if (query != hipErrorNotReady) {
-                (void)hipEventDestroy(start_ev);
-                (void)hipEventDestroy(stop_ev);
+
+            if (query != oroErrorNotReady) {
+                TNN_LOG_TRACE("[TUNE] GPU %d: event query returned unexpected %d (%s)\n",
+                        device_id_, (int)query, tnn_error_string(query));
+                fflush(stdout);
+                (void)oroEventDestroy(start_ev);
+                (void)oroEventDestroy(stop_ev);
                 return result;
             }
-            
+
             auto elapsed = std::chrono::steady_clock::now() - wall_start;
             double elapsed_ms = std::chrono::duration<double, std::milli>(elapsed).count();
-            
+
             if (elapsed_ms > timeout_ms) {
                 result.timed_out = true;
-                (void)hipStreamSynchronize(stream);
+                TNN_LOG_TRACE("[TUNE] GPU %d: timed out, syncing stream...\n", device_id_);
+                fflush(stdout);
+                (void)oro_safe_stream_sync(stream);
 
                 float actual_ms;
-                (void)hipEventElapsedTime(&actual_ms, start_ev, stop_ev);
-                
+                (void)oro_safe_event_elapsed(&actual_ms, start_ev, stop_ev);
+
                 result.valid = true;
                 result.time_ms = actual_ms;
                 result.hashrate = (test_batch * 1000.0) / actual_ms;
 
-                (void)hipEventDestroy(start_ev);
-                (void)hipEventDestroy(stop_ev);
+                (void)oroEventDestroy(start_ev);
+                (void)oroEventDestroy(stop_ev);
                 return result;
             }
-            
+
             std::this_thread::sleep_for(std::chrono::milliseconds(poll_interval_ms));
         }
-        
+
+        TNN_LOG_TRACE("[TUNE] GPU %d: kernel complete, checking post errors...\n", device_id_);
+        fflush(stdout);
+
         // Check for async kernel errors after completion
-        hipError_t post_err = hipGetLastError();
-        if (post_err != hipSuccess) {
+        oroError_t post_err = oro_safe_get_last_error();
+        if (post_err != oroSuccess) {
             TNN_LOG_ERROR("[AUTOTUNE] GPU %d: Kernel execution error: %s (batch=%u, block=%d, strategy=%u)\n",
-                    device_id_, hipGetErrorString(post_err), test_batch, test_block_size, test_strategy);
-            (void)hipEventDestroy(start_ev);
-            (void)hipEventDestroy(stop_ev);
+                    device_id_, tnn_error_string(post_err), test_batch, test_block_size, test_strategy);
+            (void)oroEventDestroy(start_ev);
+            (void)oroEventDestroy(stop_ev);
             return result;
         }
 
         float ms;
-        hipError_t time_err = hipEventElapsedTime(&ms, start_ev, stop_ev);
+        oroError_t time_err = oro_safe_event_elapsed(&ms, start_ev, stop_ev);
 
-        if (time_err != hipSuccess) {
-            TNN_LOG_ERROR("[AUTOTUNE] GPU %d: hipEventElapsedTime failed: %s\n",
-                    device_id_, hipGetErrorString(time_err));
-            (void)hipEventDestroy(start_ev);
-            (void)hipEventDestroy(stop_ev);
+        if (time_err != oroSuccess) {
+            TNN_LOG_ERROR("[AUTOTUNE] GPU %d: oroEventElapsedTime failed: %s\n",
+                    device_id_, tnn_error_string(time_err));
+            (void)oroEventDestroy(start_ev);
+            (void)oroEventDestroy(stop_ev);
             return result;
         }
 
@@ -938,18 +964,18 @@ private:
         result.time_ms = ms;
         result.hashrate = (test_batch * 1000.0) / ms;
 
-        (void)hipEventDestroy(start_ev);
-        (void)hipEventDestroy(stop_ev);
+        (void)oroEventDestroy(start_ev);
+        (void)oroEventDestroy(stop_ev);
         return result;
     }
 
     bool run_autotune() {
         // CRITICAL: Ensure we're on the correct device for all tuning operations
         // In multi-GPU setups, device context can switch between threads
-        hipError_t err = hipSetDevice(device_id_);
-        if (err != hipSuccess) {
-            TNN_LOG_ERROR("[ERROR] run_autotune: hipSetDevice(%d) failed: %s\n",
-                    device_id_, hipGetErrorString(err));
+        oroError_t err = oro_safe_set_device(device_id_);
+        if (err != oroSuccess) {
+            TNN_LOG_ERROR("[ERROR] run_autotune: oroSetDevice(%d) failed: %s\n",
+                    device_id_, tnn_error_string(err));
             return calculate_static_batch();
         }
 
@@ -1032,16 +1058,11 @@ private:
             out.separator('=');
         }
         
-#ifdef __HIP_PLATFORM_AMD__
-        const auto& limits = config_.amd_blocks;
-        const int occupancy_factor = 4;
-#else
-        const auto& limits = config_.nvidia_blocks;
-        const int occupancy_factor = 2;
-#endif
+        const auto& limits = tnn_is_amd_device() ? config_.amd_blocks : config_.nvidia_blocks;
+        const int occupancy_factor = tnn_is_amd_device() ? 4 : 2;
         
         size_t free_mem, total_mem;
-        (void)hipMemGetInfo(&free_mem, &total_mem);
+        (void)oroMemGetInfo(&free_mem, &total_mem);
         size_t reserved = (size_t)(config_.memory_reserve_mb * 1024 * 1024);
         size_t max_usable = (size_t)((free_mem - reserved) * config_.memory_usage_factor);
         
@@ -1069,8 +1090,8 @@ private:
             out.newline();
         }
         
-        hipStream_t tune_stream;
-        (void)hipStreamCreate(&tune_stream);
+        oroStream_t tune_stream;
+        (void)oroStreamCreate(&tune_stream);
 
         TuningResult best;
         best.hashrate = 0;
@@ -1180,21 +1201,21 @@ private:
                 uint64_t* test_target = nullptr;
                 uint64_t* test_solutions = nullptr;
 
-                hipError_t err = hipMalloc(&test_scratch, probe_mem);
-                if (err != hipSuccess) {
+                oroError_t err = oro_safe_malloc((oroDeviceptr*)&test_scratch, probe_mem);
+                if (err != oroSuccess) {
                     block_out.printf("[AUTOTUNE] GPU %d:   %.1fx: Alloc failed (%.1f MB), stopping probe\n",
                                      device_id_, mult_display, probe_mem / (1024.0 * 1024.0));
                     break;
                 }
 
                 // Allocate auxiliary buffers
-                (void)hipMalloc(&test_input, config_.template_size);
-                (void)hipMalloc(&test_outputs, probe_batch * config_.hash_size);
-                (void)hipMalloc(&test_target, 32);
-                (void)hipMalloc(&test_solutions, 8 + 1024 * 40 + 16);
+                (void)oro_safe_malloc((oroDeviceptr*)&test_input, config_.template_size);
+                (void)oro_safe_malloc((oroDeviceptr*)&test_outputs, probe_batch * config_.hash_size);
+                (void)oro_safe_malloc((oroDeviceptr*)&test_target, 32);
+                (void)oro_safe_malloc((oroDeviceptr*)&test_solutions, 8 + 1024 * 40 + 16);
 
-                (void)hipMemset(test_input, 0, config_.template_size);
-                (void)hipMemset(test_target, 0xFF, 32);
+                (void)oroMemset(test_input, 0, config_.template_size);
+                (void)oroMemset(test_target, 0xFF, 32);
 
                 int test_num_blocks = probe_batch / test_block_size;
 
@@ -1214,11 +1235,11 @@ private:
                 if (!warmup.valid) {
                     block_out.printf("[AUTOTUNE] GPU %d:   %.1fx (batch=%6u): WARMUP FAILED\n",
                                      device_id_, mult_display, probe_batch);
-                    (void)hipFree(test_scratch);
-                    (void)hipFree(test_input);
-                    (void)hipFree(test_outputs);
-                    (void)hipFree(test_target);
-                    (void)hipFree(test_solutions);
+                    (void)oro_safe_free((oroDeviceptr)test_scratch);
+                    (void)oro_safe_free((oroDeviceptr)test_input);
+                    (void)oro_safe_free((oroDeviceptr)test_outputs);
+                    (void)oro_safe_free((oroDeviceptr)test_target);
+                    (void)oro_safe_free((oroDeviceptr)test_solutions);
                     break;
                 }
 
@@ -1259,11 +1280,11 @@ private:
                 }
 
                 // Cleanup
-                (void)hipFree(test_scratch);
-                (void)hipFree(test_input);
-                (void)hipFree(test_outputs);
-                (void)hipFree(test_target);
-                (void)hipFree(test_solutions);
+                (void)oro_safe_free((oroDeviceptr)test_scratch);
+                (void)oro_safe_free((oroDeviceptr)test_input);
+                (void)oro_safe_free((oroDeviceptr)test_outputs);
+                (void)oro_safe_free((oroDeviceptr)test_target);
+                (void)oro_safe_free((oroDeviceptr)test_solutions);
 
                 if (valid_runs == 0) {
                     block_out.printf("[AUTOTUNE] GPU %d:   %.1fx (batch=%6u): NO VALID RUNS\n",
@@ -1327,7 +1348,7 @@ private:
 
         } // end strategy loop
 
-        (void)hipStreamDestroy(tune_stream);
+        (void)oroStreamDestroy(tune_stream);
         
         // Results block
         bool tune_success = false;
@@ -1371,10 +1392,10 @@ private:
     AlgoConfig config_;
     bool initialized_ = false;
     int device_id_ = 0;
-    hipDeviceProp_t device_props_{};
+    oroDeviceProp_t device_props_{};
 
     KernelMap kernels_;
-    hipModule_t module_ = nullptr;
+    oroModule_t module_ = nullptr;
 
     uint8_t *d_input_ = nullptr;
     uint8_t *d_outputs_ = nullptr;
@@ -1385,8 +1406,8 @@ private:
     // Host-side copy of work template (for solution verification)
     std::vector<uint8_t> h_work_template_;
 
-    hipEvent_t start_event_ = nullptr;
-    hipEvent_t stop_event_ = nullptr;
+    oroEvent_t start_event_ = nullptr;
+    oroEvent_t stop_event_ = nullptr;
 
     int compute_units_ = 0;
     int block_size_ = 64;

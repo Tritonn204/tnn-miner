@@ -4,13 +4,14 @@
 #include <stratum/stratum.h>
 #include <base64.hpp>
 
+#include "../../common/gpu_compat.hpp"
 #include "../../common/gpu_miner.hpp"
 #include "../../common/hip_algo_registry.hpp"
 #include "../../common/gpu_submit_queue.hpp"
+#include <job_safe.hpp>
 #include "../../common/tnn_log.hpp"
 #include <algo_definitions.h>
 
-#include "mine_xelis.hip.h"
 #include <crypto/xelis-hash/xelis-hash.hpp>
 
 // ============================================================================
@@ -116,12 +117,27 @@ void mineXelis_hip(int tid)
 {
   TNN_LOG_TRACE("[TRACE] mineXelis_hip: Entry, tid=%d\n", tid);
 
-  // Bind CUDA context to this thread before any other HIP calls
-  (void)hipSetDevice(0);
+  // Bind GPU context to this thread before any other calls
+  (void)oro_safe_set_device(0);
+
+  // Force GPU context initialization on this worker thread.
+  // Orochi dispatches via dlopen — the context from the main thread
+  // (where precompile ran) is not inherited by this thread.
+  {
+    void* dummy = nullptr;
+    oroError_t ce = oro_safe_malloc((oroDeviceptr*)&dummy, 256);
+    if (ce == oroSuccess) {
+      (void)oro_safe_free((oroDeviceptr)dummy);
+      TNN_LOG_TRACE("[TRACE] mineXelis_hip: GPU context initialized on worker thread\n");
+    } else {
+      TNN_LOG_ERROR("[ERROR] mineXelis_hip: context init failed: %s\n", tnn_error_string(ce));
+      return;
+    }
+  }
 
   std::vector<std::unique_ptr<GPUMiner>> miners;
   int gpuCount;
-  (void)hipGetDeviceCount(&gpuCount);
+  (void)oroGetDeviceCount(&gpuCount);
 
   TNN_LOG_TRACE("[TRACE] mineXelis_hip: Found %d GPU(s)\n", gpuCount);
 
@@ -173,7 +189,7 @@ void mineXelis_hip(int tid)
     return;
   }
 
-  TNN_LOG_INFO("[INFO] All GPUs initialized, ready to start mining\n");
+  TNN_LOG_INFO_COLOR(BRIGHT_YELLOW, "[INFO] All GPUs initialized, ready to start mining\n");
 
   int64_t localOurHeight = 0;
   int64_t localDevHeight = 0;
@@ -225,8 +241,7 @@ waitForJob:
       boost::json::value myJob;
       boost::json::value myJobDev;
 
-      myJob = job;
-      myJobDev = devJob;
+      TNN_SNAPSHOT_JOBS(myJob, myJobDev);
 
       if (!myJob.is_object() || !myJob.as_object().contains("miner_work") || !myJob.at("miner_work").is_string())
       {
@@ -274,7 +289,6 @@ waitForJob:
         }
         for (auto &miner : miners)
         {
-          TNN_LOG_TRACE("[TRACE] Calling set_work on miner device %d\n", miner->get_device_id());
           miner->set_work(work, difficulty);
           miner->set_job_id(ourHeight, stratum_job_id);
         }
@@ -306,7 +320,7 @@ waitForJob:
           }
 
           miners_started = true;
-          TNN_LOG_INFO("[INFO] All GPU miners started successfully\n");
+          TNN_LOG_INFO_COLOR(BRIGHT_YELLOW, "[INFO] All GPU miners started successfully\n");
         }
 
         TNN_LOG_TRACE("[TRACE] All miners updated, continuing\n");
