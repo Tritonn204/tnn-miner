@@ -3,6 +3,11 @@ if (WITH_OROCHI)
     add_definitions(-DWITH_OROCHI)
     message(STATUS "Building with Orochi (unified AMD+NVIDIA GPU support)")
 
+    # Legacy HIP algos not yet ported to Orochi RTC
+    set(WITH_ASTRIXHASH OFF CACHE BOOL "" FORCE)
+    set(WITH_NXLHASH OFF CACHE BOOL "" FORCE)
+    set(WITH_WALAHASH OFF CACHE BOOL "" FORCE)
+
     # ---- Orochi core sources ----
     set(OROCHI_DIR "${PROJECT_SOURCE_DIR}/contrib/Orochi")
     set(OROCHI_SOURCES
