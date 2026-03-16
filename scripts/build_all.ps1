@@ -248,10 +248,6 @@ function Build-Orochi {
         "-DWITH_HIP=OFF",
         "-DWITH_OROCHI=ON",
         "-DUSE_CLANG_CL=OFF",
-        "-DUSE_ASTRO_SPSA=OFF",
-        "-DWITH_ASTRIXHASH=OFF",
-        "-DWITH_NXLHASH=OFF",
-        "-DWITH_WALAHASH=OFF",
         "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=""$buildDir""",
         "-DTNN_VERSION=$TNN_VERSION",
         "--fresh"
