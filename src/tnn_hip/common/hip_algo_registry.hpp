@@ -342,8 +342,8 @@ inline AlgoConfig XELIS_V3_CONFIG = {
     .category = AlgoCategory::MemoryHard,
     .enable_reg_tuning = true,
 
-    .amd_blocks = {32, 512, 32},
-    .nvidia_blocks = {32, 512, 32},
+    .amd_blocks = {32, 1024, 32},
+    .nvidia_blocks = {32, 1024, 32},
     .target_batch_time_ms = 1250.0,
     .max_batch_time_ms = 3125.0,
     .min_batch_time_ms = 100.0,
@@ -363,6 +363,17 @@ inline AlgoConfig XELIS_V3_CONFIG = {
         (uint8_t)XelisStrategy::Neo
     },
     .strategy_names = {"Mono", "Baseline", "Sep", "Neo"},
+
+    // Bottleneck kernel per strategy (for occupancy queries)
+    // Mono: monolithic kernel, Baseline: fused s13, Sep: s3 hybrid, Neo: s3b3 fused
+    .strategy_bottleneck_kernels = {
+        "xelis_hash_v3_kernel",
+        "xelis_s13_noblake_kernel",
+        "xelis_s3_hybrid_v2_noblake_kernel",
+        "xelis_s3b3_hybrid_v2_kernel"
+    },
+
+    .occupancy_threshold = 0.66,
 };
 
 // ============================================================================

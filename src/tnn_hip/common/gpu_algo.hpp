@@ -12,6 +12,9 @@
 #include <unordered_map>
 #include <condition_variable>
 #include <tnn_log.hpp>
+#include <atomic>
+
+inline std::atomic<bool> g_autotune_stop{false};
 
 enum class AlgoCategory {
     Simple,      // small state, mostly compute
@@ -308,6 +311,15 @@ struct AlgoConfig {
 
     // Human-readable names for each strategy (for logging). Same order as strategy_variants.
     std::vector<std::string> strategy_names;
+
+    // Bottleneck kernel name per strategy for occupancy queries.
+    // Maps strategy index (same order as strategy_variants) to kernel name.
+    // If empty or missing entry, falls back to primary kernel.
+    std::vector<std::string> strategy_bottleneck_kernels;
+
+    // Minimum fraction of peak occupancy for a block size to be tested (0.0–1.0).
+    // Higher = fewer candidates, faster tune. Lower = broader search.
+    double occupancy_threshold = 0.66;
     
     // Helper to get all kernel names (handles legacy single name)
     std::vector<std::string> get_kernel_names() const {

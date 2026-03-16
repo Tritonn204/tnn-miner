@@ -11,6 +11,7 @@
 #include <thread>
 #include <ctime>
 #include <vector>
+#include <set>
 
 #ifdef _WIN32
     #include <windows.h>
@@ -25,7 +26,8 @@ inline std::mutex g_tune_output_mutex;
 
 class TuneOutputBuffer {
 public:
-    explicit TuneOutputBuffer(int device_id = -1) : device_id_(device_id) {}
+    explicit TuneOutputBuffer(int device_id = -1, bool debug_only = false)
+        : device_id_(device_id), debug_only_(debug_only) {}
     
     // Printf-style append to buffer
     template<typename... Args>
@@ -65,7 +67,11 @@ public:
     // Flush buffer to stdout under lock
     void flush() {
         if (buffer_.empty()) return;
-        
+        if (debug_only_ && !tnn_log_enabled(TnnLogLevel::Debug)) {
+            buffer_.clear();
+            return;
+        }
+
         std::lock_guard<std::mutex> lock(g_tune_output_mutex);
         ::printf("%s", buffer_.c_str());
         ::fflush(stdout);
@@ -82,26 +88,28 @@ public:
     TuneOutputBuffer& operator=(const TuneOutputBuffer&) = delete;
     
     // Allow moving
-    TuneOutputBuffer(TuneOutputBuffer&& other) noexcept 
-        : buffer_(std::move(other.buffer_)), device_id_(other.device_id_) {
+    TuneOutputBuffer(TuneOutputBuffer&& other) noexcept
+        : buffer_(std::move(other.buffer_)), device_id_(other.device_id_), debug_only_(other.debug_only_) {
         other.buffer_.clear();
     }
-    
+
     TuneOutputBuffer& operator=(TuneOutputBuffer&& other) noexcept {
         if (this != &other) {
             flush();  // Flush our current content first
             buffer_ = std::move(other.buffer_);
             device_id_ = other.device_id_;
+            debug_only_ = other.debug_only_;
             other.buffer_.clear();
         }
         return *this;
     }
-    
+
     bool empty() const { return buffer_.empty(); }
-    
+
 private:
     std::string buffer_;
     int device_id_;
+    bool debug_only_ = false;
 };
 
 class GPUAlgorithm : public IGPUAlgorithm
@@ -864,18 +872,9 @@ private:
             auto elapsed = std::chrono::steady_clock::now() - wall_start;
             double elapsed_ms = std::chrono::duration<double, std::milli>(elapsed).count();
 
-            if (elapsed_ms > timeout_ms) {
+            if (elapsed_ms > timeout_ms || g_autotune_stop.load(std::memory_order_relaxed)) {
                 result.timed_out = true;
-                TNN_LOG_TRACE("[TUNE] GPU %d: timed out, syncing stream...\n", device_id_);
-                fflush(stdout);
-                (void)oro_safe_stream_sync(stream);
-
-                float actual_ms;
-                (void)oro_safe_event_elapsed(&actual_ms, start_ev, stop_ev);
-
-                result.valid = true;
-                result.time_ms = actual_ms;
-                result.hashrate = (test_batch * 1000.0) / actual_ms;
+                result.valid = false;
 
                 (void)oroEventDestroy(start_ev);
                 (void)oroEventDestroy(stop_ev);
@@ -996,12 +995,8 @@ private:
         {
             TuneOutputBuffer out(device_id_);
             out.newline();
-            out.separator('=');
-            out.printf("[AUTOTUNE] GPU %d: Auto-tuning %s\n", device_id_, config_.name.c_str());
-            out.printf("[AUTOTUNE] GPU %d: Device: %s (%d CUs)\n", 
-                       device_id_, device_props_.name, compute_units_);
-            out.printf("[AUTOTUNE] GPU %d: Tune key: %s\n", device_id_, tune_key.c_str());
-            out.separator('=');
+            out.printf("[AUTOTUNE] GPU %d: Auto-tuning %s — %s (%d CUs)\n",
+                       device_id_, config_.name.c_str(), device_props_.name, compute_units_);
         }
         
         const auto& limits = tnn_is_amd_device(device_id_) ? config_.amd_blocks : config_.nvidia_blocks;
@@ -1012,18 +1007,18 @@ private:
         size_t reserved = (size_t)(config_.memory_reserve_mb * 1024 * 1024);
         size_t max_usable = (size_t)((free_mem - reserved) * config_.memory_usage_factor);
         
-        // Config info block
+        // Config info block (debug)
         {
-            TuneOutputBuffer out(device_id_);
+            TuneOutputBuffer out(device_id_, true);
             out.printf("[AUTOTUNE] GPU %d: Memory: %.1f MB free, %.1f MB max usable\n",
                        device_id_, free_mem / (1024.0 * 1024.0), max_usable / (1024.0 * 1024.0));
-            out.printf("[AUTOTUNE] GPU %d: Scratch per hash: %.2f KB\n", 
+            out.printf("[AUTOTUNE] GPU %d: Scratch per hash: %.2f KB\n",
                        device_id_, config_.scratch_per_hash / 1024.0);
-            out.printf("[AUTOTUNE] GPU %d: Block sizes: %d-%d (step %d)\n", 
+            out.printf("[AUTOTUNE] GPU %d: Block sizes: %d-%d (step %d)\n",
                        device_id_, limits.block_min, limits.block_max, limits.step);
             out.printf("[AUTOTUNE] GPU %d: Target time: %.0fms, Max: %.0fms\n",
                        device_id_, config_.target_batch_time_ms, config_.max_batch_time_ms);
-            
+
             // Show if other GPUs are waiting
             auto waiters = TuneCoordinator::instance().get_waiters(tune_key);
             if (!waiters.empty()) {
@@ -1053,57 +1048,165 @@ private:
             strategies_to_test = {0};
         }
 
-        // Occupancy-based tuning: For each strategy × block size, probe for max batch
+        // === Occupancy-informed sweep ===
+        // Query the runtime for each strategy's optimal block size and occupancy,
+        // then sweep a focused range around the peaks instead of the full range.
+
+        // Per-strategy occupancy info
+        struct StrategyOccupancy {
+            int optimal_block_size = 0;       // From oroModuleOccupancyMaxPotentialBlockSize
+            int optimal_grid_size = 0;
+            std::vector<int> block_sizes;     // Focused list to sweep
+            std::vector<int> max_blocks_per_cu; // Per block_size: max active blocks per CU
+            bool has_occupancy = false;
+        };
+        std::unordered_map<uint8_t, StrategyOccupancy> strategy_occupancy;
+
         {
-            TuneOutputBuffer out(device_id_);
-            out.printf("[AUTOTUNE] GPU %d: Using occupancy-based tuning (faster than memory percentage sweep)\n", device_id_);
-            if (strategies_to_test.size() > 1) {
-                out.printf("[AUTOTUNE] GPU %d: Sweeping %zu strategies", device_id_, strategies_to_test.size());
-                for (size_t si = 0; si < strategies_to_test.size(); si++) {
-                    const char* sname = (si < config_.strategy_names.size())
-                        ? config_.strategy_names[si].c_str()
-                        : "?";
-                    out.printf("%s %s(%u)", si == 0 ? ":" : ",", sname, strategies_to_test[si]);
+            TuneOutputBuffer out(device_id_, true);
+            out.printf("[AUTOTUNE] GPU %d: Querying kernel occupancy for %zu strategy(ies)...\n",
+                       device_id_, strategies_to_test.size());
+
+            for (size_t si = 0; si < strategies_to_test.size(); si++) {
+                uint8_t strat = strategies_to_test[si];
+                const char* sname = (si < config_.strategy_names.size())
+                    ? config_.strategy_names[si].c_str() : "?";
+
+                // Find the bottleneck kernel for this strategy
+                std::string kernel_name;
+                if (si < config_.strategy_bottleneck_kernels.size()) {
+                    kernel_name = config_.strategy_bottleneck_kernels[si];
+                } else {
+                    kernel_name = config_.get_primary_kernel();
                 }
-                out.printf("%s", "\n");
+
+                auto kit = kernels_.find(kernel_name);
+                if (kit == kernels_.end()) {
+                    out.printf("[AUTOTUNE] GPU %d:   %s: kernel '%s' not found, using full sweep\n",
+                               device_id_, sname, kernel_name.c_str());
+                    continue;
+                }
+
+                StrategyOccupancy occ;
+                size_t shared_mem = config_.calc_shared_mem ? config_.calc_shared_mem(limits.block_min) : 0;
+
+                // Query optimal block size
+                oroError_t err = oroModuleOccupancyMaxPotentialBlockSize(
+                    &occ.optimal_grid_size, &occ.optimal_block_size,
+                    kit->second, shared_mem, limits.block_max);
+
+                if (err != oroSuccess || occ.optimal_block_size <= 0) {
+                    out.printf("[AUTOTUNE] GPU %d:   %s: occupancy query failed, using full sweep\n",
+                               device_id_, sname);
+                    continue;
+                }
+
+                // Align optimal to step
+                occ.optimal_block_size = ((occ.optimal_block_size + limits.step - 1) / limits.step) * limits.step;
+                if (occ.optimal_block_size > limits.block_max) occ.optimal_block_size = limits.block_max;
+                if (occ.optimal_block_size < limits.block_min) occ.optimal_block_size = limits.block_min;
+
+                // Query occupancy for ALL block sizes, then select those with
+                // meaningful occupancy (>=50% of peak active blocks per CU).
+                int peak_blocks_per_cu = 0;
+                std::vector<std::pair<int,int>> all_occ; // (block_size, max_blocks_per_cu)
+
+                for (int bs = limits.block_min; bs <= limits.block_max; bs += limits.step) {
+                    int max_blocks = 0;
+                    size_t bs_shared = config_.calc_shared_mem ? config_.calc_shared_mem(bs) : 0;
+                    oroError_t oerr = oroModuleOccupancyMaxActiveBlocksPerMultiprocessor(
+                        &max_blocks, kit->second, bs, bs_shared);
+                    if (oerr != oroSuccess) max_blocks = 0;
+                    all_occ.push_back({bs, max_blocks});
+                    if (max_blocks > peak_blocks_per_cu) peak_blocks_per_cu = max_blocks;
+                }
+
+                // Include block sizes above the configured occupancy threshold
+                int threshold = (int)std::ceil(peak_blocks_per_cu * config_.occupancy_threshold);
+                std::set<int> bs_set;
+                for (auto& [bs, blks] : all_occ) {
+                    if (blks >= threshold)
+                        bs_set.insert(bs);
+                }
+                // Always include min, optimal, and max
+                bs_set.insert(limits.block_min);
+                bs_set.insert(occ.optimal_block_size);
+                bs_set.insert(limits.block_max);
+                occ.block_sizes.assign(bs_set.begin(), bs_set.end());
+
+                // Store per-block occupancy for the selected sizes
+                for (int bs : occ.block_sizes) {
+                    int max_blocks = 0;
+                    for (auto& [abs, ablks] : all_occ) {
+                        if (abs == bs) { max_blocks = ablks; break; }
+                    }
+                    occ.max_blocks_per_cu.push_back(max_blocks);
+                }
+
+                occ.has_occupancy = true;
+                strategy_occupancy[strat] = occ;
+
+                out.printf("[AUTOTUNE] GPU %d:   %s: optimal block=%d, testing %zu sizes [",
+                           device_id_, sname, occ.optimal_block_size, occ.block_sizes.size());
+                for (size_t bi = 0; bi < occ.block_sizes.size(); bi++) {
+                    out.printf("%s%d", bi > 0 ? "," : "", occ.block_sizes[bi]);
+                }
+                out.printf("]\n");
             }
             out.newline();
         }
 
         for (uint8_t test_strategy : strategies_to_test) {
+        if (g_autotune_stop.load(std::memory_order_relaxed)) break;
 
-        const char* strategy_label = "";
+        size_t si_idx = 0;
+        for (size_t k = 0; k < config_.strategy_variants.size(); k++) {
+            if (config_.strategy_variants[k] == test_strategy) { si_idx = k; break; }
+        }
+        const char* strategy_label = (si_idx < config_.strategy_names.size())
+            ? config_.strategy_names[si_idx].c_str() : "?";
+
         if (strategies_to_test.size() > 1) {
-            size_t si = 0;
-            for (size_t k = 0; k < config_.strategy_variants.size(); k++) {
-                if (config_.strategy_variants[k] == test_strategy) { si = k; break; }
-            }
-            strategy_label = (si < config_.strategy_names.size())
-                ? config_.strategy_names[si].c_str()
-                : "?";
             TuneOutputBuffer out(device_id_);
             out.printf("[AUTOTUNE] GPU %d: === Strategy: %s (%u) ===\n", device_id_, strategy_label, test_strategy);
             out.flush();
         }
 
-        // Batch probing uses a fixed base unit independent of block_size so that
-        // larger block dims still explore the same batch-size range as smaller ones.
-        // Half-step multipliers (1x, 1.5x, 2x, 2.5x, ..., 8x) give finer granularity.
-        const uint32_t base_batch = compute_units_ * occupancy_factor * limits.block_min;
+        // Use occupancy data if available, otherwise fall back to full sweep
+        auto occ_it = strategy_occupancy.find(test_strategy);
+        bool has_occ = (occ_it != strategy_occupancy.end() && occ_it->second.has_occupancy);
+
+        // Block sizes to test
+        std::vector<int> block_sizes_to_test;
+        if (has_occ) {
+            block_sizes_to_test = occ_it->second.block_sizes;
+        } else {
+            for (int bs = limits.block_min; bs <= limits.block_max; bs += limits.step)
+                block_sizes_to_test.push_back(bs);
+        }
+
         const uint32_t max_half_mult = 16;  // 8x in half-steps (2=1x, 3=1.5x, ..., 16=8x)
 
-        // Track the best batch size for each half-multiplier step
-        std::vector<uint32_t> best_batch_per_step(max_half_mult + 1, 0);
+        for (size_t bsi = 0; bsi < block_sizes_to_test.size() && !g_autotune_stop.load(std::memory_order_relaxed); bsi++) {
+            int test_block_size = block_sizes_to_test[bsi];
 
-        for (int test_block_size = limits.block_min;
-             test_block_size <= limits.block_max;
-             test_block_size += limits.step)
-        {
+            // Conservative base batch independent of block size (old sweep formula).
+            // Occupancy data selects *which* block sizes to test, not the batch range.
+            const uint32_t base_batch = compute_units_ * occupancy_factor * limits.block_min;
+
+            int blocks_per_cu = occupancy_factor;
+            if (has_occ) {
+                blocks_per_cu = occ_it->second.max_blocks_per_cu[bsi];
+                if (blocks_per_cu < 1) blocks_per_cu = occupancy_factor;
+            }
+
             TuneOutputBuffer block_out(device_id_);
             if (strategies_to_test.size() > 1) {
-                block_out.printf("[AUTOTUNE] GPU %d: --- Block size %d [%s] ---\n", device_id_, test_block_size, strategy_label);
+                block_out.printf("[AUTOTUNE] GPU %d: --- Block size %d [%s] (occ: %d blk/CU) ---\n",
+                                 device_id_, test_block_size, strategy_label, blocks_per_cu);
             } else {
-                block_out.printf("[AUTOTUNE] GPU %d: --- Block size %d ---\n", device_id_, test_block_size);
+                block_out.printf("[AUTOTUNE] GPU %d: --- Block size %d (occ: %d blk/CU) ---\n",
+                                 device_id_, test_block_size, blocks_per_cu);
             }
 
             // Probe increasing batch sizes using half-step multipliers
@@ -1223,6 +1326,12 @@ private:
                     if (result.time_ms > config_.max_batch_time_ms * 1.2) {
                         break;
                     }
+                }
+
+                // Sync stream before freeing buffers (kernel may still be in-flight after timeout).
+                // Skip sync if shutting down — exit() will clean up.
+                if (!g_autotune_stop.load(std::memory_order_relaxed)) {
+                    (void)oro_safe_stream_sync(tune_stream);
                 }
 
                 // Cleanup

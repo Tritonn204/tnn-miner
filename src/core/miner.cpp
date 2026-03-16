@@ -356,12 +356,18 @@ void onExit()
 
 void sigterm(int signum)
 {
+#ifdef TNN_HIP
+  g_autotune_stop.store(true, std::memory_order_relaxed);
+#endif
   std::cout << "\n\nTerminate signal (" << signum << ") received." << std::flush;
   exit(signum);
 }
 
 void sigint(int signum)
 {
+#ifdef TNN_HIP
+  g_autotune_stop.store(true, std::memory_order_relaxed);
+#endif
   std::cout << "\n\nInterrupt signal (" << signum << ") received." << std::flush;
   exit(signum);
 }
