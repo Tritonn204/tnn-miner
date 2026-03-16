@@ -16,6 +16,9 @@ echo "args: $CUSTOM_USER_CONFIG"
 
 MINER=$MINER_NAME
 
+# Add bundled HIP runtime to library path for AMD GPU support
+export LD_LIBRARY_PATH="/hive/miners/custom/$MINER:${LD_LIBRARY_PATH}"
+
 # Remove the -arch argument and its value
 CLEAN=$(echo "$CUSTOM_USER_CONFIG" | sed -E 's/-arch [^ ]+ //')
 echo "args are now: $CLEAN"
