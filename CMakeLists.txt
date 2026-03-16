@@ -1,5 +1,5 @@
 # HIP support was added in CMake 3.21
-cmake_minimum_required(VERSION 3.30)
+cmake_minimum_required(VERSION 3.25)
 
 #cmake_policy(SET CMP0156 NEW)
 
