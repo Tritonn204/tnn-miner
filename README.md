@@ -79,6 +79,8 @@ General:
   --no-msr                  Disable MSR optimization
   --ignore-wallet           Disables wallet validation, for specific uses with
                             pool mining
+  --no-cpu                  Disable CPU mining (GPU only)
+  --no-gpu                  Disable GPU mining (CPU only)
 
 Stratum:
   --stratum                 Required for Stratum pools if not using
@@ -148,8 +150,12 @@ Advanced:
   --no-tune arg             <branch|lookup|avx2|wolf|aarch64> Use the specified
                             AstroBWTv3 algorithm and skip tuning
   --mine-time arg (=0)      Mine for a given number of seconds and then exit
-  --gpu-retune              Delete GPU autotune cache and re-run tuning from
-                            scratch
+  --gpu-retune arg          Re-run GPU autotune (optional: comma-separated
+                            device indices, e.g. 0,2)
+  --devices arg             Comma-separated list of GPU indices to mine on
+                            (e.g. 0,1,3)
+  --gpu-disable arg         Comma-separated list of GPU indices to exclude
+                            (e.g. 2,5)
 
 DEBUG:
   --op arg                  Sets which branch op to benchmark (0-255),
