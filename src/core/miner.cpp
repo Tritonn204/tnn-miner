@@ -230,8 +230,6 @@ std::mutex devMutex;
 std::mutex userMutex;
 std::mutex reportMutex;
 
-uint16_t *lookup2D_global; // Storage for computed values of 2-byte chunks
-byte *lookup3D_global;     // Storage for deterministically computed values of 1-byte chunks
 
 using byte = unsigned char;
 int bench_duration = -1;
@@ -467,9 +465,6 @@ int tnn_main(int argc, char **argv)
   // printf("post wolf\n");
 
   // Check command line arguments.
-  lookup2D_global = (uint16_t *)malloc_huge_pages(regOps_size * (256 * 256) * sizeof(uint16_t));
-  lookup3D_global = (byte *)malloc_huge_pages(branchedOps_size * (256 * 256) * sizeof(byte));
-
   if (!NUMAOptimizer::initialize())
   {
     std::cerr << "NUMA optimization unavailable, falling back to default" << std::endl;

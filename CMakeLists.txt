@@ -237,7 +237,9 @@ if (NOT WITH_HIP AND NOT WITH_OROCHI)
   endif()
 
 else()
-  set(USE_ASTRO_SPSA OFF)
+  if (NOT WITH_OROCHI)
+    set(USE_ASTRO_SPSA OFF)
+  endif()
 
   # ----- HIP on Windows: use clang-cl / MSVC-style toolchain -----
   if (WIN32)
@@ -357,8 +359,8 @@ if(NOT USE_GCC)
     endif()
   endif()
 
-  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -Wno-deprecated -Wno-nan-infinity-disabled ${CMAKE_DO_OPAQUE}")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-deprecated -Wno-nan-infinity-disabled ${CMAKE_DO_OPAQUE}")
+  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -Wno-deprecated -Wno-nan-infinity-disabled -Wno-macro-redefined ${CMAKE_DO_OPAQUE}")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-deprecated -Wno-nan-infinity-disabled -Wno-macro-redefined ${CMAKE_DO_OPAQUE}")
 else()
   set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -Wno-deprecated-declarations")
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-deprecated-declarations")
@@ -411,7 +413,7 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "a
 else()
   set(TARGET_ARCH "amd64")
   if (WITH_HIP OR WITH_OROCHI)
-    set(CPU_ARCHTARGET "x86-64")
+    set(CPU_ARCHTARGET "x86-64-v2")
     set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -mtune=generic")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -mtune=generic")
   endif()
@@ -474,9 +476,6 @@ if(WIN32)
       "C:/mingw64/lib"
       "C:/mingw64/x86_64-w64-mingw32/lib"
     )
-    if (WITH_OROCHI)
-      add_compile_definitions(BOOST_HAS_THREADS=1)
-    endif()
   elseif(USE_CLANG_CL AND NOT WITH_HIP)
     if (WITH_OROCHI)
       # Orochi (clang-cl) — dynamic OpenSSL to avoid CRT mismatch (same as NVIDIA HIP)
@@ -1195,7 +1194,6 @@ if (WITH_HIP)
 elseif (WITH_OROCHI)
   # ---- Orochi unified GPU build (plain C++, no hipcc) ----
   set(TNN_OUTPUT_NAME "tnn-miner")
-  set(USE_ASTRO_SPSA OFF)
 
   # .hip files compile as plain C++ under Orochi (no HIP language needed)
   set_source_files_properties(${TNN_HIP_SOURCES} PROPERTIES LANGUAGE CXX)

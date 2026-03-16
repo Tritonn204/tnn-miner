@@ -634,7 +634,7 @@ namespace ShaiHive
     }
 
     size_t gridSize = getGridSize(HASH);
-    printf("gridSize = %ld\n", gridSize);
+    printf("gridSize = %zu\n", gridSize);
     alignas(64) HamiltonGraph::ShaiGraph graph;
     uint16_t path[GRAPH_SIZE];
     generateGraph_packed(HASH, gridSize, graph);
