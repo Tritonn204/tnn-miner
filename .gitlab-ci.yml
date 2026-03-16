@@ -246,7 +246,7 @@ build-windows:
     - .\scripts\prereqs.bat ci
     - .\scripts\build_all.ps1 $PACKAGE_VERSION orochi
     - dir .\hip-build\win32\orochi\
-    - move hip-build\win32\orochi\tnn-miner.exe .\
+    - move hip-build\win32\orochi\bin\tnn-miner.exe .\
     - if (Test-Path .\hip-build\win32\orochi\tunes) { Copy-Item -Recurse .\hip-build\win32\orochi\tunes .\tunes }
     - Compress-Archive -Path tnn-miner.exe,tunes -DestinationPath ${WIN_AMD64_ZIP}
     #- 7z.exe a ${WIN_AMD64_ZIP} tnn-miner-cpu.exe
