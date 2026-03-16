@@ -433,7 +433,9 @@ test-wrappers:
       fail=0
       for variant in \
         "hiveos+mmpos:tnn-miner:tnn-miner"; do
-        IFS=: read -r dir sub miner <<< "$variant"
+        dir=$(echo "$variant" | cut -d: -f1)
+        sub=$(echo "$variant" | cut -d: -f2)
+        miner=$(echo "$variant" | cut -d: -f3)
         base="wrappers/$dir/$sub"
         echo "--- Checking $base ---"
         for f in h-run.sh h-config.sh h-stats.sh h-manifest.conf mmp-launch.sh mmp-stats.sh mmp-external.conf; do
@@ -442,17 +444,14 @@ test-wrappers:
             fail=1
           fi
         done
-        # mmp-launch.sh must reference the correct binary
         if ! grep -q "$miner" "$base/mmp-launch.sh"; then
           echo "FAIL: mmp-launch.sh does not reference $miner"
           fail=1
         fi
-        # h-manifest.conf must set MINER_NAME
         if ! grep -q "^MINER_NAME=" "$base/h-manifest.conf"; then
           echo "FAIL: h-manifest.conf missing MINER_NAME"
           fail=1
         fi
-        # mmp-external.conf must have EXTERNAL_NAME and EXTERNAL_VERSION
         if ! grep -q "^EXTERNAL_NAME=" "$base/mmp-external.conf"; then
           echo "FAIL: mmp-external.conf missing EXTERNAL_NAME"
           fail=1
