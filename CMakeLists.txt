@@ -383,8 +383,10 @@ if (NOT CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
            OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
                AND CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")))
     if (WITH_OROCHI)
-      # Orochi needs dlopen for runtime GPU lib loading — can't use -static
+      # Orochi needs dlopen for runtime GPU lib loading — can't use -static.
+      # Statically link C++ runtime via linker flags for cross-distro portability.
       set(DO_STATIC " ")
+      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++")
     else()
       set(DO_STATIC " -static ")
     endif()
