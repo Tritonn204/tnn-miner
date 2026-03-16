@@ -1,6 +1,5 @@
 #pragma once
-#include <hip/hiprtc.h>
-#include <hip/hip_runtime.h>
+#include <tnn_hip/common/gpu_compat.hpp>
 
 #include <string>
 #include <vector>
@@ -25,8 +24,8 @@
 class RTCCompiler {
 public:
     struct CompiledKernel {
-        hipModule_t module = nullptr;
-        hipFunction_t function = nullptr;
+        oroModule_t module = nullptr;
+        oroFunction_t function = nullptr;
         std::string kernel_name;
     };
 
@@ -108,17 +107,8 @@ public:
         {
             std::lock_guard<std::mutex> lock(cache_mutex_);
 
-#if !defined(__HIP_PLATFORM_NVIDIA__) && !defined(__CUDACC_RTC__)
-            // AMD modules are context-independent — module cache is safe
-            auto module_it = module_cache_.find(module_key);
-            if (module_it != module_cache_.end()) {
-                TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_from_source: Found in module cache\n");
-                fflush(stdout);
-                return module_it->second;
-            }
-#endif
-
-            // Code cache (compiled PTX/binary) — reload module into current thread's context
+            // Always reload module from code cache — oroModuleLoadData binds
+            // the module to the calling thread's GPU context.
             auto code_it = code_cache_.find(code_key);
             if (code_it != code_cache_.end()) {
                 TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_from_source: Found in code cache, loading module\n");
@@ -131,12 +121,11 @@ public:
         }
 
         // AMD disk cache: check before expensive compilation
-#if !defined(__HIP_PLATFORM_NVIDIA__) && !defined(__CUDACC_RTC__)
-        {
+        if (tnn_is_amd_device()) {
             std::string disk_hash = make_disk_cache_hash(source, kernel_name, code_options);
             auto disk_code = load_from_disk_cache(disk_hash, kernel_name);
             if (disk_code.has_value()) {
-                TNN_LOG_INFO("[PRECOMPILE] Disk cache hit: %s\n", kernel_name.c_str());
+                TNN_LOG_INFO_COLOR(BRIGHT_YELLOW, "[PRECOMPILE] Disk cache hit: %s\n", kernel_name.c_str());
                 fflush(stdout);
                 try {
                     CompiledKernel kernel = load_module_from_code(disk_code.value());
@@ -150,7 +139,6 @@ public:
                 }
             }
         }
-#endif
 
         TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_from_source: Not in cache, calling compile_internal\n");
         fflush(stdout);
@@ -178,13 +166,6 @@ public:
         {
             std::lock_guard<std::mutex> lock(cache_mutex_);
 
-#if !defined(__HIP_PLATFORM_NVIDIA__) && !defined(__CUDACC_RTC__)
-            auto module_it = module_cache_.find(module_key);
-            if (module_it != module_cache_.end()) {
-                return module_it->second;
-            }
-#endif
-
             auto code_it = code_cache_.find(code_key);
             if (code_it != code_cache_.end()) {
                 CompiledKernel kernel = load_module_from_code(code_it->second);
@@ -207,7 +188,7 @@ public:
         std::lock_guard<std::mutex> lock(cache_mutex_);
         for (auto& kv : module_cache_) {
             if (kv.second.module) {
-                (void)hipModuleUnload(kv.second.module);
+                (void)oroModuleUnload(kv.second.module);
             }
         }
         module_cache_.clear();
@@ -332,9 +313,9 @@ private:
     // ----------------------------
 
     RTCCompiler() {
-        hipDeviceProp_t props{};
-        hipError_t err = hipGetDeviceProperties(&props, 0);
-        if (err != hipSuccess) {
+        oroDeviceProp_t props{};
+        oroError_t err = oroGetDeviceProperties(&props, tnn_get_device(0));
+        if (err != oroSuccess) {
             backend_ = Backend::UNKNOWN;
             gpu_arch_.clear();
             TNN_LOG_TRACE("[TRACE] RTCCompiler: Failed to get device properties\n");
@@ -342,21 +323,21 @@ private:
             return;
         }
 
-#ifdef __HIP_PLATFORM_NVIDIA__
-        backend_ = Backend::NVIDIA;
-        if (props.major != 0 || props.minor != 0) {
-            char buf[32];
-            std::snprintf(buf, sizeof(buf), "sm_%d%d", props.major, props.minor);
-            gpu_arch_ = buf; // e.g. "sm_86"
-            TNN_LOG_TRACE("[TRACE] RTCCompiler: Detected NVIDIA GPU, arch=%s\n", gpu_arch_.c_str());
+        if (tnn_is_nvidia_device()) {
+            backend_ = Backend::NVIDIA;
+            if (props.major != 0 || props.minor != 0) {
+                char buf[32];
+                std::snprintf(buf, sizeof(buf), "sm_%d%d", props.major, props.minor);
+                gpu_arch_ = buf; // e.g. "sm_86"
+                TNN_LOG_TRACE_COLOR(BRIGHT_GREEN, "[TRACE] RTCCompiler: Detected NVIDIA GPU, arch=%s\n", gpu_arch_.c_str());
+                fflush(stdout);
+            }
+        } else {
+            backend_  = Backend::AMD;
+            gpu_arch_ = props.gcnArchName; // e.g. "gfx1100"
+            TNN_LOG_TRACE_COLOR(RED, "[TRACE] RTCCompiler: Detected AMD GPU, arch=%s\n", gpu_arch_.c_str());
             fflush(stdout);
         }
-#else
-        backend_  = Backend::AMD;
-        gpu_arch_ = props.gcnArchName; // e.g. "gfx1100"
-        TNN_LOG_TRACE("[TRACE] RTCCompiler: Detected AMD GPU, arch=%s\n", gpu_arch_.c_str());
-        fflush(stdout);
-#endif
 
         init_disk_cache_dir();
     }
@@ -391,9 +372,9 @@ private:
         std::vector<std::string> d;
 
         // Common
-#if defined(__HIP_PLATFORM_AMD__)
-        d.emplace_back("-O3");
-#endif
+        if (tnn_is_amd_device()) {
+            d.emplace_back("-O3");
+        }
         d.emplace_back("-std=c++20");
 
         // Arch
@@ -447,16 +428,16 @@ private:
         CompiledKernel kernel;
         kernel.kernel_name = cached_code.kernel_name;
 
-        hipError_t err = hipModuleLoadData(&kernel.module, cached_code.code.data());
-        if (err != hipSuccess) {
-            printf("[ERROR] hipModuleLoadData failed: %d (%s)\n", err, hipGetErrorString(err));
+        oroError_t err = oroModuleLoadData(&kernel.module, cached_code.code.data());
+        if (err != oroSuccess) {
+            printf("[ERROR] oroModuleLoadData failed: %d (%s)\n", err, tnn_error_string(err));
             fflush(stdout);
-            throw std::runtime_error("hipModuleLoadData failed: " + std::string(hipGetErrorString(err)));
+            throw std::runtime_error("oroModuleLoadData failed: " + std::string(tnn_error_string(err)));
         }
 
-        err = hipModuleGetFunction(&kernel.function, kernel.module, kernel.kernel_name.c_str());
-        if (err != hipSuccess) {
-            (void)hipModuleUnload(kernel.module);
+        err = oroModuleGetFunction(&kernel.function, kernel.module, kernel.kernel_name.c_str());
+        if (err != oroSuccess) {
+            (void)oroModuleUnload(kernel.module);
             throw std::runtime_error("Failed to get kernel function: " + kernel.kernel_name);
         }
 
@@ -640,7 +621,7 @@ private:
         TNN_LOG_TRACE("[TRACE]   module_key: %s\n", module_key.c_str());
         fflush(stdout);
 
-        // Build header arrays for hiprtcCreateProgram
+        // Build header arrays for orortcCreateProgram
         std::vector<const char*> header_sources;
         std::vector<const char*> header_names;
         header_sources.reserve(headers_.size());
@@ -656,19 +637,19 @@ private:
             header_names.push_back(h.name.c_str());
         }
 
-        TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_internal: Calling hiprtcCreateProgram\n");
+        TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_internal: Calling orortcCreateProgram\n");
         TNN_LOG_TRACE("[TRACE]   Passing %d headers to HIPRTC\n", (int)header_sources.size());
         fflush(stdout);
 
-        hiprtcProgram prog{};
-        hiprtcResult rc{};
+        orortcProgram prog{};
+        orortcResult rc{};
 
-#ifdef _WIN32
+#if defined(_MSC_VER)
         __try {
-            TNN_LOG_TRACE("[TRACE] About to call hiprtcCreateProgram...\n");
+            TNN_LOG_TRACE("[TRACE] About to call orortcCreateProgram...\n");
             fflush(stdout);
 
-            rc = hiprtcCreateProgram(
+            rc = orortcCreateProgram(
                 &prog,
                 source.c_str(),
                 source_name.c_str(),
@@ -677,16 +658,16 @@ private:
                 header_names.empty() ? nullptr : header_names.data()
             );
 
-            TNN_LOG_TRACE("[TRACE] hiprtcCreateProgram call returned successfully\n");
+            TNN_LOG_TRACE("[TRACE] orortcCreateProgram call returned successfully\n");
             fflush(stdout);
         }
         __except(EXCEPTION_EXECUTE_HANDLER) {
-            printf("[ERROR] RTCCompiler: hiprtcCreateProgram crashed! Exception code: 0x%08X\n", (unsigned int)GetExceptionCode());
+            printf("[ERROR] RTCCompiler: orortcCreateProgram crashed! Exception code: 0x%08X\n", (unsigned int)GetExceptionCode());
             fflush(stdout);
-            throw std::runtime_error("hiprtcCreateProgram crashed with SEH exception");
+            throw std::runtime_error("orortcCreateProgram crashed with SEH exception");
         }
 #else
-        rc = hiprtcCreateProgram(
+        rc = orortcCreateProgram(
             &prog,
             source.c_str(),
             source_name.c_str(),
@@ -696,10 +677,10 @@ private:
         );
 #endif
 
-        TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_internal: hiprtcCreateProgram returned %d\n", rc);
+        TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_internal: orortcCreateProgram returned %d\n", rc);
         fflush(stdout);
 
-        if (rc != HIPRTC_SUCCESS) {
+        if (rc != ORORTC_SUCCESS) {
             throw std::runtime_error("Failed to create HIPRTC program");
         }
 
@@ -717,46 +698,46 @@ private:
             options.push_back(s.c_str());
         }
 
-        TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_internal: Calling hiprtcCompileProgram with %d options\n",
+        TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_internal: Calling orortcCompileProgram with %d options\n",
                (int)options.size());
         for (size_t i = 0; i < options.size(); i++) {
             TNN_LOG_TRACE("[TRACE]   Option %zu: %s\n", i, options[i]);
         }
         fflush(stdout);
 
-#ifdef _WIN32
+#if defined(_MSC_VER)
         __try {
-            rc = hiprtcCompileProgram(
+            rc = orortcCompileProgram(
                 prog,
                 static_cast<int>(options.size()),
                 options.empty() ? nullptr : options.data()
             );
         }
         __except(EXCEPTION_EXECUTE_HANDLER) {
-            printf("[ERROR] RTCCompiler: hiprtcCompileProgram crashed! Exception code: 0x%08X\n", (unsigned int)GetExceptionCode());
+            printf("[ERROR] RTCCompiler: orortcCompileProgram crashed! Exception code: 0x%08X\n", (unsigned int)GetExceptionCode());
             fflush(stdout);
-            hiprtcDestroyProgram(&prog);
-            throw std::runtime_error("hiprtcCompileProgram crashed with SEH exception");
+            orortcDestroyProgram(&prog);
+            throw std::runtime_error("orortcCompileProgram crashed with SEH exception");
         }
 #else
-        rc = hiprtcCompileProgram(
+        rc = orortcCompileProgram(
             prog,
             static_cast<int>(options.size()),
             options.empty() ? nullptr : options.data()
         );
 #endif
 
-        TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_internal: hiprtcCompileProgram returned %d\n", rc);
+        TNN_LOG_TRACE("[TRACE] RTCCompiler::compile_internal: orortcCompileProgram returned %d\n", rc);
         fflush(stdout);
 
-        if (rc != HIPRTC_SUCCESS) {
+        if (rc != ORORTC_SUCCESS) {
             size_t log_size = 0;
-            hiprtcGetProgramLogSize(prog, &log_size);
+            orortcGetProgramLogSize(prog, &log_size);
             std::vector<char> log(log_size ? log_size : 1, '\0');
             if (log_size > 0) {
-                hiprtcGetProgramLog(prog, log.data());
+                orortcGetProgramLog(prog, log.data());
             }
-            hiprtcDestroyProgram(&prog);
+            orortcDestroyProgram(&prog);
             throw std::runtime_error(
                 "HIPRTC compilation failed for " + source_name + ":\n" +
                 std::string(log.data())
@@ -764,20 +745,18 @@ private:
         }
 
         size_t code_size = 0;
-        hiprtcGetCodeSize(prog, &code_size);
+        orortcGetCodeSize(prog, &code_size);
         std::vector<char> code(code_size);
-        hiprtcGetCode(prog, code.data());
+        orortcGetCode(prog, code.data());
 
-        hiprtcDestroyProgram(&prog);
+        orortcDestroyProgram(&prog);
 
         // Save to AMD disk cache
-#if !defined(__HIP_PLATFORM_NVIDIA__) && !defined(__CUDACC_RTC__)
-        {
+        if (tnn_is_amd_device()) {
             auto code_options = filter_device_specific_options(norm.sorted);
             std::string disk_hash = make_disk_cache_hash(source, kernel_name, code_options);
             save_to_disk_cache(disk_hash, code);
         }
-#endif
 
         CompiledKernel kernel;
         kernel.kernel_name = kernel_name;
@@ -785,24 +764,24 @@ private:
         TNN_LOG_TRACE("[TRACE] About to load module (%zu bytes code)\n", code_size);
 
         size_t free_mem = 0, total_mem = 0;
-        (void)hipMemGetInfo(&free_mem, &total_mem);
+        (void)oroMemGetInfo(&free_mem, &total_mem);
         TNN_LOG_TRACE("[TRACE] GPU memory: %zu MB free / %zu MB total\n",
                free_mem / (1024 * 1024), total_mem / (1024 * 1024));
         fflush(stdout);
 
-        hipError_t err = hipModuleLoadData(&kernel.module, code.data());
-        if (err != hipSuccess) {
-            printf("[ERROR] hipModuleLoadData failed: %d (%s)\n", (int)err, hipGetErrorString(err));
-            (void)hipMemGetInfo(&free_mem, &total_mem);
+        oroError_t err = oroModuleLoadData(&kernel.module, code.data());
+        if (err != oroSuccess) {
+            printf("[ERROR] oroModuleLoadData failed: %d (%s)\n", (int)err, tnn_error_string(err));
+            (void)oroMemGetInfo(&free_mem, &total_mem);
             printf("[ERROR] GPU memory after failure: %zu MB free / %zu MB total\n",
                    free_mem / (1024 * 1024), total_mem / (1024 * 1024));
             fflush(stdout);
-            throw std::runtime_error("hipModuleLoadData failed");
+            throw std::runtime_error("oroModuleLoadData failed");
         }
 
-        err = hipModuleGetFunction(&kernel.function, kernel.module, kernel.kernel_name.c_str());
-        if (err != hipSuccess) {
-            (void)hipModuleUnload(kernel.module);
+        err = oroModuleGetFunction(&kernel.function, kernel.module, kernel.kernel_name.c_str());
+        if (err != oroSuccess) {
+            (void)oroModuleUnload(kernel.module);
             throw std::runtime_error("Failed to get kernel function: " + kernel_name);
         }
 
@@ -835,7 +814,7 @@ private:
     mutable std::mutex cache_mutex_;
     // Two-tier cache system:
     // 1. code_cache_: Stores compiled PTX/binary (slow compilation, shared across identical GPUs)
-    // 2. module_cache_: Stores loaded hipModule_t (fast load, per-device context)
+    // 2. module_cache_: Stores loaded oroModule_t (fast load, per-device context)
     std::unordered_map<std::string, CompiledCode> code_cache_;
     std::unordered_map<std::string, CompiledKernel> module_cache_;
 

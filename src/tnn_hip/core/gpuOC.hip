@@ -4,7 +4,7 @@
 #include <tnn_log.hpp>
 #include <adl_defines.h>
 
-#include <hip/hip_runtime.h>
+#include <tnn_hip/common/gpu_compat.hpp>
 #include <vector>
 #include <cstring>
 #include <cstdio>
@@ -655,7 +655,7 @@ static bool resetRsmi(int dev)
 
 extern void* adlGetContext();
 extern void* adlGetLibHandle();
-extern int   adlGetAdapterIndex(int hipDev);
+extern int   adlGetAdapterIndex(int oroDev);
 
 typedef void* ADL_CONTEXT_HANDLE;
 

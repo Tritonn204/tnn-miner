@@ -20,7 +20,7 @@
 
 #ifdef TNN_HIP
 
-#include <hip/hip_runtime.h>
+#include <tnn_hip/common/gpu_compat.hpp>
 
 // Algo system (manifests + AlgoConfig)
 #include "../common/gpu_algo.hpp"
@@ -36,20 +36,21 @@
 
 #endif // TNN_HIP
 
-// Simple thread pool with bounded worker count
+// Simple thread pool with bounded worker count.
+// Workers are joinable — the destructor signals shutdown and joins all
+// threads so that no thread touches destroyed mutexes/condvars.
 class CompilePool {
 public:
     explicit CompilePool(unsigned max_workers)
         : max_workers_(max_workers > 0 ? max_workers : 1) {}
 
-    ~CompilePool() { wait(); }
+    ~CompilePool() { shutdown(); }
 
     void submit(std::function<void()> task) {
         std::lock_guard<std::mutex> lock(mu_);
         tasks_.push(std::move(task));
-        if (workers_ < max_workers_ && workers_ < tasks_.size() + active_) {
-            ++workers_;
-            std::thread([this]() { worker_loop(); }).detach();
+        if (threads_.size() < max_workers_ && threads_.size() < tasks_.size() + active_) {
+            threads_.emplace_back([this]() { worker_loop(); });
         }
         cv_.notify_one();
     }
@@ -61,6 +62,18 @@ public:
         });
     }
 
+    void shutdown() {
+        {
+            std::lock_guard<std::mutex> lock(mu_);
+            stop_ = true;
+        }
+        cv_.notify_all();
+        for (auto& t : threads_) {
+            if (t.joinable()) t.join();
+        }
+        threads_.clear();
+    }
+
 private:
     void worker_loop() {
         while (true) {
@@ -68,12 +81,11 @@ private:
             {
                 std::unique_lock<std::mutex> lock(mu_);
                 cv_.wait_for(lock, std::chrono::milliseconds(50), [&] {
-                    return !tasks_.empty();
+                    return !tasks_.empty() || stop_;
                 });
                 if (tasks_.empty()) {
-                    --workers_;
                     done_cv_.notify_all();
-                    return;
+                    return;  // idle timeout or stop_ signalled
                 }
                 task = std::move(tasks_.front());
                 tasks_.pop();
@@ -89,12 +101,13 @@ private:
     }
 
     unsigned max_workers_;
-    unsigned workers_ = 0;
     unsigned active_ = 0;
+    bool stop_ = false;
     std::mutex mu_;
     std::condition_variable cv_;
     std::condition_variable done_cv_;
     std::queue<std::function<void()>> tasks_;
+    std::vector<std::thread> threads_;
 };
 
 extern "C" bool precompile_all_kernels()
@@ -104,24 +117,24 @@ extern "C" bool precompile_all_kernels()
     return false;
 #else
 
-    TNN_LOG_DEBUG("[PRECOMPILE] GPU kernel precompile (main thread)\n");
+    TNN_LOG_DEBUG_COLOR(BRIGHT_YELLOW, "[PRECOMPILE] GPU kernel precompile (main thread)\n");
 #ifdef _WIN32
     TNN_LOG_DEBUG("[PRECOMPILE] Thread ID: %lu\n", (unsigned long)GetCurrentThreadId());
 #endif
 
     int deviceCount = 0;
-    hipError_t err = hipGetDeviceCount(&deviceCount);
-    if (err != hipSuccess || deviceCount == 0) {
-        TNN_LOG_ERROR("[PRECOMPILE] No HIP devices found (err=%d)\n", err);
+    oroError_t err = oroGetDeviceCount(&deviceCount);
+    if (err != oroSuccess || deviceCount == 0) {
+        TNN_LOG_ERROR("[PRECOMPILE] No GPU devices found (err=%d)\n", err);
         return false;
     }
 
-    TNN_LOG_DEBUG("[PRECOMPILE] Found %d HIP device(s)\n", deviceCount);
+    TNN_LOG_DEBUG_COLOR(BRIGHT_YELLOW, "[PRECOMPILE] Found %d GPU device(s)\n", deviceCount);
 
     // Collect device info (must happen on main thread before spawning workers)
     struct DeviceInfo {
         int id;
-        hipDeviceProp_t props;
+        oroDeviceProp_t props;
         std::string arch;
         bool use;
     };
@@ -130,31 +143,29 @@ extern "C" bool precompile_all_kernels()
     for (int d = 0; d < deviceCount; ++d) {
         auto& di = devices[d];
         di.id = d;
-        (void)hipGetDeviceProperties(&di.props, d);
+        (void)oroGetDeviceProperties(&di.props, tnn_get_device(d));
         di.use = shouldUseDevice(d);
 
-#if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
-        char buf[32];
-        std::snprintf(buf, sizeof(buf), "sm_%d%d", di.props.major, di.props.minor);
-        di.arch = buf;
-#else
-        di.arch = di.props.gcnArchName;
-#endif
+        if (tnn_is_nvidia_device()) {
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "sm_%d%d", di.props.major, di.props.minor);
+            di.arch = buf;
+        } else {
+            di.arch = di.props.gcnArchName;
+        }
 
         TNN_LOG_DEBUG("[PRECOMPILE]   Device %d: %s (arch=%s)%s\n",
                d, di.props.name, di.arch.c_str(),
                di.use ? "" : " (skipped)");
     }
 
-    // Precreate CUDA contexts on main thread (required before worker threads can use them)
-#if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
+    // Precreate GPU contexts on main thread (required before worker threads can use them)
     for (int d = 0; d < deviceCount; ++d) {
         if (!devices[d].use) continue;
-        (void)hipSetDevice(d);
+        (void)oroSetDevice(d);
         void* p = nullptr;
-        if (hipMalloc(&p, 256) == hipSuccess) (void)hipFree(p);
+        if (oroMalloc((oroDeviceptr*)&p, 256) == oroSuccess) (void)oroFree((oroDeviceptr)p);
     }
-#endif
 
     const int algo = miningProfile.coin.miningAlgo;
     TNN_LOG_DEBUG("[PRECOMPILE] miningAlgo = %d\n", algo);
@@ -190,15 +201,12 @@ extern "C" bool precompile_all_kernels()
         unsigned max_workers = std::min(num_unique,
             std::max(1u, std::thread::hardware_concurrency()));
 
-        TNN_LOG_INFO("[PRECOMPILE] %u unique arch(es), using up to %u compile worker(s)\n",
+        TNN_LOG_INFO_COLOR(BRIGHT_YELLOW, "[PRECOMPILE] %u unique arch(es), using up to %u compile worker(s)\n",
                      num_unique, max_workers);
 
         // Capture config values needed by workers
-#if defined(__HIP_PLATFORM_AMD__)
-        const BlockSizeLimits& limits = cfg.amd_blocks;
-#else
-        const BlockSizeLimits& limits = cfg.nvidia_blocks;
-#endif
+        const BlockSizeLimits& limits = tnn_is_amd_device()
+            ? cfg.amd_blocks : cfg.nvidia_blocks;
         const int min_wg = limits.block_min;
         const int max_wg = limits.block_max;
         const std::string source_str(cfg.source);
@@ -216,56 +224,55 @@ extern "C" bool precompile_all_kernels()
                 pool.submit([&, d, arch]() {
                     auto& di = devices[d];
 
-                    TNN_LOG_INFO("[PRECOMPILE] Device %d: %s (arch=%s) — compiling kernels...\n",
+                    TNN_LOG_INFO_COLOR(BRIGHT_YELLOW, "[PRECOMPILE] Device %d: %s (arch=%s) — compiling kernels...\n",
                                  d, di.props.name, arch.c_str());
 
-                    hipError_t setErr = hipSetDevice(d);
-                    if (setErr != hipSuccess) {
-                        TNN_LOG_ERROR("[PRECOMPILE] hipSetDevice(%d) failed: %s\n",
-                                      d, hipGetErrorString(setErr));
+                    oroError_t setErr = oroSetDevice(d);
+                    if (setErr != oroSuccess) {
+                        TNN_LOG_ERROR("[PRECOMPILE] oroSetDevice(%d) failed: %s\n",
+                                      d, tnn_error_string(setErr));
                         ok.store(false);
                         return;
                     }
 
-#if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
+                    // Force GPU context init on this worker thread
                     {
                         void* p = nullptr;
-                        hipError_t ce = hipMalloc(&p, 256);
-                        if (ce == hipSuccess) (void)hipFree(p);
+                        oroError_t ce = oroMalloc((oroDeviceptr*)&p, 256);
+                        if (ce == oroSuccess) (void)oroFree((oroDeviceptr)p);
                         else {
                             TNN_LOG_ERROR("[PRECOMPILE] Context init failed on device %d: %s\n",
-                                          d, hipGetErrorString(ce));
+                                          d, tnn_error_string(ce));
                             ok.store(false);
                             return;
                         }
                     }
-#endif
 
                     // Build per-device options, including arch so we don't
                     // mutate the shared RTCCompiler::gpu_arch_ from workers
                     std::vector<std::string> opts;
 
-#if defined(__HIP_PLATFORM_AMD__)
-                    opts = {"-O3", "-mno-cumode", "-ffast-math"};
-                    opts.push_back("--gpu-architecture=" + arch);
-                    opts.push_back("-DXELIS_MIN_WG=" + std::to_string(min_wg));
-                    opts.push_back("-DXELIS_MAX_WG=" + std::to_string(max_wg));
-#else
-                    opts = {"--dopt=on", "--use_fast_math"};
-                    opts.push_back("--gpu-architecture=" + arch);
+                    if (tnn_is_amd_device()) {
+                        opts = {"-O3", "-mno-cumode", "-ffast-math"};
+                        opts.push_back("--gpu-architecture=" + arch);
+                        opts.push_back("-DXELIS_MIN_WG=" + std::to_string(min_wg));
+                        opts.push_back("-DXELIS_MAX_WG=" + std::to_string(max_wg));
+                    } else {
+                        opts = {"--dopt=on", "--use_fast_math"};
+                        opts.push_back("--gpu-architecture=" + arch);
 #ifdef __linux__
-                    opts.push_back("--device-int128");
+                        opts.push_back("--device-int128");
 #endif
-                    opts.push_back("-DXELIS_MIN_WG=" + std::to_string(min_wg));
-                    opts.push_back("-DXELIS_MAX_WG=" + std::to_string(max_wg));
+                        opts.push_back("-DXELIS_MIN_WG=" + std::to_string(min_wg));
+                        opts.push_back("-DXELIS_MAX_WG=" + std::to_string(max_wg));
 
-                    {
-                        int s3_nreg = (di.props.major <= 7) ? 56 : 40;
-                        opts.push_back("-DXELIS_S3_NREG=" + std::to_string(s3_nreg));
+                        {
+                            int s3_nreg = (di.props.major <= 7) ? 56 : 40;
+                            opts.push_back("-DXELIS_S3_NREG=" + std::to_string(s3_nreg));
+                        }
+
+                        opts.push_back("-DDEVICE_ID=" + std::to_string(d));
                     }
-
-                    opts.push_back("-DDEVICE_ID=" + std::to_string(d));
-#endif
 
                     try {
                         auto compiled = rtc.compile_from_source(
@@ -280,16 +287,16 @@ extern "C" bool precompile_all_kernels()
 
                         int loaded_count = 0;
                         for (const auto& kname : kernel_names) {
-                            hipFunction_t func = nullptr;
-                            hipError_t herr = hipModuleGetFunction(
+                            oroFunction_t func = nullptr;
+                            oroError_t herr = oroModuleGetFunction(
                                 &func, compiled.module, kname.c_str());
-                            if (herr == hipSuccess && func) {
+                            if (herr == oroSuccess && func) {
                                 TNN_LOG_DEBUG("[PRECOMPILE]   Device %d OK: '%s'\n",
                                               d, kname.c_str());
                                 ++loaded_count;
                             } else {
                                 TNN_LOG_ERROR("[PRECOMPILE]   Device %d MISSING: '%s' : %s\n",
-                                              d, kname.c_str(), hipGetErrorString(herr));
+                                              d, kname.c_str(), tnn_error_string(herr));
                                 ok.store(false);
                             }
                         }
@@ -298,7 +305,7 @@ extern "C" bool precompile_all_kernels()
                             TNN_LOG_ERROR("[PRECOMPILE] No kernels loaded on device %d\n", d);
                             ok.store(false);
                         } else {
-                            TNN_LOG_INFO("[PRECOMPILE] Device %d: %d kernel(s) loaded\n",
+                            TNN_LOG_INFO_COLOR(BRIGHT_YELLOW, "[PRECOMPILE] Device %d: %d kernel(s) loaded\n",
                                          d, loaded_count);
                         }
                     }
@@ -320,7 +327,7 @@ extern "C" bool precompile_all_kernels()
         break;
     }
 
-    TNN_LOG_INFO("[PRECOMPILE] %s\n", ok.load() ? "All kernels compiled" : "FAILED");
+    TNN_LOG_INFO_COLOR(BRIGHT_YELLOW, "[PRECOMPILE] %s\n", ok.load() ? "All kernels compiled" : "FAILED");
 
     return ok.load();
 

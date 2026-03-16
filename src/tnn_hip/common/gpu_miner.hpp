@@ -148,12 +148,26 @@ private:
         // The context was created on the parent thread (which may be a
         // boost::thread); CUDA primary contexts are per-thread on Windows
         // and may not be inherited across thread boundaries.
-        hipError_t ctx_err = hipSetDevice(device_id_);
-        if (ctx_err != hipSuccess) {
-            fprintf(stderr, "[ERROR] GPU %d: mine_loop hipSetDevice failed: %s\n",
-                    device_id_, hipGetErrorString(ctx_err));
-            fflush(stderr);
+        oroError_t ctx_err = oro_safe_set_device(device_id_);
+        if (ctx_err != oroSuccess) {
+            TNN_LOG_ERROR("[ERROR] GPU %d: mine_loop oroSetDevice failed: %s\n",
+                    device_id_, tnn_error_string(ctx_err));
             return;
+        }
+
+        // Force GPU context initialization on this worker thread.
+        // Required by Orochi on all backends and by CUDA's per-thread
+        // context model — the parent thread's context is not inherited.
+        {
+            void* dummy = nullptr;
+            oroError_t ce = oro_safe_malloc((oroDeviceptr*)&dummy, 256);
+            if (ce == oroSuccess) {
+                (void)oro_safe_free((oroDeviceptr)dummy);
+            } else {
+                TNN_LOG_ERROR("[ERROR] GPU %d: mine_loop context init failed: %s\n",
+                              device_id_, tnn_error_string(ce));
+                return;
+            }
         }
 
         // Nonce segmentation:
@@ -253,13 +267,8 @@ private:
                         if (entry.has_value()) {
                             GPUSubmitQueue::instance().push(std::move(entry.value()));
                         }
-                        // No need to check work_updated_ here — push is non-blocking
-                    } else {
-                        TNN_LOG_TRACE("[TRACE] GPU%d solution_builder was null\n", device_id_);
                     }
                 }
-
-                TNN_LOG_TRACE("[TRACE] GPU%d batch had %u solution(s)\n", device_id_, result.num_valid);
 
                 total_hashes_ += result.count;
                 uint64_t counter_loc = nonce & 0xFFFFFFFFFFFFULL;

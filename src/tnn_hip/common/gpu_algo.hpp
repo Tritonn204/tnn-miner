@@ -1,5 +1,6 @@
 #pragma once
-#include <hip/hip_runtime.h>
+#include <tnn_hip/common/gpu_compat.hpp>
+#include "oro_seh_wrappers.hpp"
 #include <string>
 #include <string_view>
 #include <vector>
@@ -10,6 +11,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <condition_variable>
+#include <tnn_log.hpp>
 
 enum class AlgoCategory {
     Simple,      // small state, mostly compute
@@ -105,7 +107,7 @@ struct KernelLaunchContext {
     const struct AlgoConfig* config;
 
     // Stream (nullptr = default stream)
-    hipStream_t stream = nullptr;
+    oroStream_t stream = nullptr;
 };
 
 // Forward declaration
@@ -114,7 +116,7 @@ struct AlgoConfig;
 // ============================================================================
 // Kernel Execution Strategy
 // ============================================================================
-using KernelMap = std::unordered_map<std::string, hipFunction_t>;
+using KernelMap = std::unordered_map<std::string, oroFunction_t>;
 
 // Execution function signature
 // Returns true on success
@@ -133,20 +135,20 @@ public:
         return inst;
     }
     
-    static std::string make_tune_key(const hipDeviceProp_t& props, 
+    static std::string make_tune_key(const oroDeviceProp_t& props, 
                                       const std::string& algo_name) {
         std::string vendor;
         std::string arch;
         
-#ifdef __HIP_PLATFORM_AMD__
-        vendor = "amd";
-        arch = props.gcnArchName;
-#else
-        vendor = "nvidia";
-        char buf[32];
-        snprintf(buf, sizeof(buf), "compute_%d%d", props.major, props.minor);
-        arch = buf;
-#endif
+        if (tnn_is_amd_device()) {
+            vendor = "amd";
+            arch = props.gcnArchName;
+        } else {
+            vendor = "nvidia";
+            char buf[32];
+            snprintf(buf, sizeof(buf), "compute_%d%d", props.major, props.minor);
+            arch = buf;
+        }
         
         size_t vram_gb = (props.totalGlobalMem + 512ULL * 1024 * 1024) / (1024ULL * 1024 * 1024);
         
@@ -426,12 +428,9 @@ extern std::atomic<bool> g_mining_started;
 
 inline std::optional<int> choose_maxregcount(
     const AlgoConfig& cfg,
-    const hipDeviceProp_t& props)
+    const oroDeviceProp_t& props)
 {
-#ifndef __HIP_PLATFORM_NVIDIA__
-    return std::nullopt;
-#else
-    if (!cfg.enable_reg_tuning)
+    if (!tnn_is_nvidia_device() || !cfg.enable_reg_tuning)
         return std::nullopt;
 
     const int major = props.major;
@@ -451,7 +450,6 @@ inline std::optional<int> choose_maxregcount(
         default:
             return std::nullopt;
     }
-#endif
 }
 
 // ============================================================================
@@ -474,10 +472,10 @@ inline bool default_monolithic_execute(
         it = kernels.begin();
     }
 
-    hipFunction_t kernel = it->second;
-    
+    oroFunction_t kernel = it->second;
+
     size_t shared_mem = ctx.config->calc_shared_mem(ctx.block_size);
-    
+
     void* args[] = {
         (void*)&ctx.d_input,
         (void*)&ctx.d_outputs,
@@ -487,8 +485,17 @@ inline bool default_monolithic_execute(
         (void*)&ctx.d_difficulty_target,
         (void*)&ctx.d_solutions
     };
-    
-    hipError_t err = hipModuleLaunchKernel(
+
+    TNN_LOG_TRACE("[LAUNCH] kernel=%p, grid=%d, block=%d, shared=%zu, stream=%p\n",
+                  (void*)kernel, ctx.num_blocks, ctx.block_size, shared_mem, (void*)ctx.stream);
+    TNN_LOG_TRACE("[LAUNCH] d_input=%p, d_outputs=%p, d_scratch=%p, d_target=%p, d_solutions=%p\n",
+                  (void*)ctx.d_input, (void*)ctx.d_outputs, (void*)ctx.d_scratch,
+                  (void*)ctx.d_difficulty_target, (void*)ctx.d_solutions);
+    TNN_LOG_TRACE("[LAUNCH] nonce_start=%llu, batch_size=%u\n",
+                  (unsigned long long)ctx.nonce_start, ctx.batch_size);
+    fflush(stdout);
+
+    oroError_t err = oro_safe_launch(
         kernel,
         ctx.num_blocks, 1, 1,
         ctx.block_size, 1, 1,
@@ -496,10 +503,14 @@ inline bool default_monolithic_execute(
         args, nullptr
     );
 
-    if (err != hipSuccess) {
-        fprintf(stderr, "[KERNEL LAUNCH] hipModuleLaunchKernel failed: %s (blocks=%d, threads=%d, shared=%zu)\n",
-                hipGetErrorString(err), ctx.num_blocks, ctx.block_size, shared_mem);
+    TNN_LOG_TRACE("[LAUNCH] oroModuleLaunchKernel returned %d (%s)\n",
+                  (int)err, tnn_error_string(err));
+    fflush(stdout);
+
+    if (err != oroSuccess) {
+        TNN_LOG_ERROR("[KERNEL LAUNCH] oroModuleLaunchKernel failed: %s (blocks=%d, threads=%d, shared=%zu)\n",
+                tnn_error_string(err), ctx.num_blocks, ctx.block_size, shared_mem);
     }
 
-    return err == hipSuccess;
+    return err == oroSuccess;
 }

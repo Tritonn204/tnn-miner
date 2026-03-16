@@ -1,15 +1,15 @@
 #pragma once
 
-#include <hip/hip_runtime.h>
+#include <tnn_hip/common/gpu_compat.hpp>
 #include <cstdint>
 
 #define CHECK_HIP(call)                                                                         \
   do                                                                                            \
   {                                                                                             \
-    hipError_t err = call;                                                                      \
-    if (err != hipSuccess)                                                                      \
+    oroError_t err = call;                                                                      \
+    if (err != oroSuccess)                                                                      \
     {                                                                                           \
-      fprintf(stderr, "HIP Error at %s:%d - %s\n", __FILE__, __LINE__, hipGetErrorString(err)); \
+      fprintf(stderr, "GPU Error at %s:%d - %s\n", __FILE__, __LINE__, tnn_error_string(err));  \
       exit(1);                                                                                  \
     }                                                                                           \
   } while (0)
@@ -35,14 +35,14 @@ struct DeviceInfo
 DeviceInfo get_device_info(int device = 0)
 {
   DeviceInfo info;
-  hipDeviceProp_t props;
-  CHECK_HIP(hipGetDeviceProperties(&props, device));
+  oroDeviceProp_t props;
+  CHECK_HIP(oroGetDeviceProperties(&props, tnn_get_device(device)));
   strncpy(info.name, props.name, 255);
   info.total_memory = props.totalGlobalMem;
   info.compute_units = props.multiProcessorCount;
   info.warp_size = props.warpSize;
   info.shared_mem_per_block = props.sharedMemPerBlock;
-  CHECK_HIP(hipMemGetInfo(&info.free_memory, &info.total_memory));
+  CHECK_HIP(oroMemGetInfo(&info.free_memory, &info.total_memory));
   return info;
 }
 

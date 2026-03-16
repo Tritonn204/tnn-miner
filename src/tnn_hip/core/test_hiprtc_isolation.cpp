@@ -8,8 +8,7 @@
 #endif
 
 #ifdef TNN_HIP
-#include <hip/hiprtc.h>
-#include <hip/hip_runtime.h>
+#include <tnn_hip/common/gpu_compat.hpp>
 
 // Embedded sources / manifests
 #include "tnn_hip_common_embedded.hpp"
@@ -118,9 +117,9 @@ extern "C" void test_hiprtc_isolation() {
     fflush(stdout);
 
     int deviceCount = 0;
-    hipError_t hip_err = hipGetDeviceCount(&deviceCount);
-    printf("[ISOLATION TEST] hipGetDeviceCount returned: %d (error code: %d)\n", deviceCount, hip_err);
-    if (hip_err != hipSuccess) {
+    oroError_t gpu_err = oroGetDeviceCount(&deviceCount);
+    printf("[ISOLATION TEST] oroGetDeviceCount returned: %d (error code: %d)\n", deviceCount, gpu_err);
+    if (gpu_err != oroSuccess) {
         printf("[ISOLATION TEST] WARNING: HIP runtime not initialized properly\n");
         fflush(stdout);
         return;
@@ -128,9 +127,9 @@ extern "C" void test_hiprtc_isolation() {
     printf("[ISOLATION TEST] Found %d HIP device(s)\n", deviceCount);
     fflush(stdout);
 
-    hipDeviceProp_t props{};
-    hip_err = hipGetDeviceProperties(&props, 0);
-    if (hip_err != hipSuccess) {
+    oroDeviceProp_t props{};
+    gpu_err = oroGetDeviceProperties(&props, tnn_get_device(0));
+    if (gpu_err != oroSuccess) {
         printf("[ISOLATION TEST] WARNING: Could not get device properties\n");
         fflush(stdout);
         return;
@@ -142,17 +141,15 @@ extern "C" void test_hiprtc_isolation() {
 
     // Architecture option (for TEST 1 only)
     std::string arch_option;
-    #if defined(__HIP_PLATFORM_NVIDIA__)
-        {
-            char buf[64];
-            snprintf(buf, sizeof(buf), "--gpu-architecture=sm_%d%d", props.major, props.minor);
-            arch_option = buf;
-            printf("[ISOLATION TEST] Platform: NVIDIA (%s)\n", buf);
-        }
-    #else
+    if (tnn_is_nvidia_device()) {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "--gpu-architecture=sm_%d%d", props.major, props.minor);
+        arch_option = buf;
+        printf("[ISOLATION TEST] Platform: NVIDIA (%s)\n", buf);
+    } else {
         arch_option = std::string("--gpu-architecture=") + props.gcnArchName;
         printf("[ISOLATION TEST] Platform: AMD (%s)\n", props.gcnArchName);
-    #endif
+    }
     fflush(stdout);
 
 #ifdef TNN_XELISHASH
@@ -174,40 +171,40 @@ extern "C" void test_hiprtc_isolation() {
     )";
 
     {
-        hiprtcProgram prog;
-        hiprtcResult rtc_result;
+        orortcProgram prog;
+        orortcResult rtc_result;
 
         printf("[ISOLATION TEST] Creating minimal program...\n");
         fflush(stdout);
 
-        rtc_result = hiprtcCreateProgram(&prog, minimal_kernel, "minimal.hip", 0, nullptr, nullptr);
-        if (rtc_result != HIPRTC_SUCCESS) {
-            printf("[ISOLATION TEST] ERROR: Minimal hiprtcCreateProgram failed: %d\n", rtc_result);
+        rtc_result = orortcCreateProgram(&prog, minimal_kernel, "minimal.hip", 0, nullptr, nullptr);
+        if (rtc_result != ORORTC_SUCCESS) {
+            printf("[ISOLATION TEST] ERROR: Minimal orortcCreateProgram failed: %d\n", rtc_result);
             fflush(stdout);
             return;
         }
 
         const char* opts[] = { arch_option.c_str() };
-        rtc_result = hiprtcCompileProgram(prog, 1, opts);
+        rtc_result = orortcCompileProgram(prog, 1, opts);
 
-        if (rtc_result != HIPRTC_SUCCESS) {
+        if (rtc_result != ORORTC_SUCCESS) {
             size_t log_size = 0;
-            hiprtcGetProgramLogSize(prog, &log_size);
+            orortcGetProgramLogSize(prog, &log_size);
             if (log_size > 0) {
                 std::vector<char> log(log_size);
-                hiprtcGetProgramLog(prog, log.data());
+                orortcGetProgramLog(prog, log.data());
                 printf("[ISOLATION TEST] Minimal compile log:\n%s\n", log.data());
             }
-            hiprtcDestroyProgram(&prog);
+            orortcDestroyProgram(&prog);
             printf("[ISOLATION TEST] ERROR: Minimal compilation failed: %d\n", rtc_result);
             fflush(stdout);
             return;
         }
 
         size_t code_size = 0;
-        hiprtcGetCodeSize(prog, &code_size);
+        orortcGetCodeSize(prog, &code_size);
         printf("[ISOLATION TEST] Minimal kernel compiled OK (%zu bytes)\n", code_size);
-        hiprtcDestroyProgram(&prog);
+        orortcDestroyProgram(&prog);
         fflush(stdout);
     }
 

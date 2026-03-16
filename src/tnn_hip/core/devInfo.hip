@@ -1,7 +1,7 @@
 #include "devInfo.hip.h"
 #include "tnn_log.hpp"
 
-#include <hip/hip_runtime.h>
+#include <tnn_hip/common/gpu_compat.hpp>
 #include <vector>
 #include <cstring>
 #include <cstdio>
@@ -25,19 +25,19 @@
 
 int getGPUCount() {
     int n;
-    hipError_t e = hipGetDeviceCount(&n);
-    if (e != hipSuccess) {
-        TNN_LOG_ERROR("HIP: hipGetDeviceCount failed: %s\n", hipGetErrorString(e));
+    oroError_t e = oroGetDeviceCount(&n);
+    if (e != oroSuccess) {
+        TNN_LOG_ERROR("GPU: oroGetDeviceCount failed: %s\n", tnn_error_string(e));
         return 0;
     }
     return n;
 }
 
 std::string getDeviceName(int device) {
-    hipDeviceProp_t p;
-    hipError_t e = hipGetDeviceProperties(&p, device);
-    if (e != hipSuccess) {
-        TNN_LOG_ERROR("HIP: hipGetDeviceProperties(%d) failed: %s\n", device, hipGetErrorString(e));
+    oroDeviceProp_t p;
+    oroError_t e = oroGetDeviceProperties(&p, tnn_get_device(device));
+    if (e != oroSuccess) {
+        TNN_LOG_ERROR("GPU: oroGetDeviceProperties(%d) failed: %s\n", device, tnn_error_string(e));
         return "";
     }
     return std::string(p.name);
@@ -45,9 +45,9 @@ std::string getDeviceName(int device) {
 
 std::string getPCIBusId(int device) {
     char buf[64];
-    hipError_t e = hipDeviceGetPCIBusId(buf, sizeof(buf), device);
-    if (e != hipSuccess) {
-        TNN_LOG_ERROR("HIP: hipDeviceGetPCIBusId(%d) failed: %s\n", device, hipGetErrorString(e));
+    oroError_t e = oroDeviceGetPCIBusId(buf, sizeof(buf), device);
+    if (e != oroSuccess) {
+        TNN_LOG_ERROR("GPU: oroDeviceGetPCIBusId(%d) failed: %s\n", device, tnn_error_string(e));
         return "";
     }
     return std::string(buf);
@@ -170,7 +170,7 @@ static ADL2_Device_PMLog_Device_Destroy_fn  p_ADL2_Device_PMLog_Device_Destroy  
 
 static bool               g_adlLegacyInit = false;
 static ADL_CONTEXT_HANDLE g_adl2Context   = nullptr;
-static std::vector<int>   g_hipToAdlIndex;
+static std::vector<int>   g_oroToAdlIndex;
 
 struct PMLogState {
     ADL_D3DKMT_HANDLE hDevice     = 0;
@@ -203,19 +203,19 @@ static const char* pmlogEnumName(int e) {
     }
 }
 
-static bool startPMLog(int hipIdx) {
-    int adlIdx = g_hipToAdlIndex[hipIdx];
-    PMLogState& st = g_pmlog[hipIdx];
+static bool startPMLog(int oroIdx) {
+    int adlIdx = g_oroToAdlIndex[oroIdx];
+    PMLogState& st = g_pmlog[oroIdx];
     if (st.running) return true;
 
     if (p_ADL2_Device_PMLog_Device_Create(g_adl2Context, adlIdx, &st.hDevice) != ADL_OK) {
-        TNN_LOG_ERROR("ADL: PMLog device create failed (HIP %d, ADL %d)\n", hipIdx, adlIdx);
+        TNN_LOG_ERROR("ADL: PMLog device create failed (HIP %d, ADL %d)\n", oroIdx, adlIdx);
         return false;
     }
 
     ADLPMLogSupportInfo support{};
     if (p_ADL2_Adapter_PMLog_Support_Get(g_adl2Context, adlIdx, &support) != ADL_OK) {
-        TNN_LOG_ERROR("ADL: PMLog support query failed (HIP %d)\n", hipIdx);
+        TNN_LOG_ERROR("ADL: PMLog support query failed (HIP %d)\n", oroIdx);
         p_ADL2_Device_PMLog_Device_Destroy(g_adl2Context, st.hDevice);
         st.hDevice = 0;
         return false;
@@ -235,7 +235,7 @@ static bool startPMLog(int hipIdx) {
         }
     }
     if (n == 0) {
-        TNN_LOG_ERROR("ADL: adapter advertises no power sensors (HIP %d)\n", hipIdx);
+        TNN_LOG_ERROR("ADL: adapter advertises no power sensors (HIP %d)\n", oroIdx);
         p_ADL2_Device_PMLog_Device_Destroy(g_adl2Context, st.hDevice);
         st.hDevice = 0;
         return false;
@@ -244,7 +244,7 @@ static bool startPMLog(int hipIdx) {
 
     ADLPMLogStartOutput output{};
     if (p_ADL2_Adapter_PMLog_Start(g_adl2Context, adlIdx, &input, &output, st.hDevice) != ADL_OK) {
-        TNN_LOG_ERROR("ADL: PMLog_Start failed (HIP %d)\n", hipIdx);
+        TNN_LOG_ERROR("ADL: PMLog_Start failed (HIP %d)\n", oroIdx);
         p_ADL2_Device_PMLog_Device_Destroy(g_adl2Context, st.hDevice);
         st.hDevice = 0;
         return false;
@@ -269,19 +269,19 @@ static bool startPMLog(int hipIdx) {
     }
 found:
     if (st.powerRow < 0) {
-        TNN_LOG_ERROR("ADL: PMLog started but no power row appeared (HIP %d)\n", hipIdx);
+        TNN_LOG_ERROR("ADL: PMLog started but no power row appeared (HIP %d)\n", oroIdx);
         return false;
     }
 
     TNN_LOG_TRACE("ADL: HIP[%d] power = %s (enum %d, row %d)\n",
-                 hipIdx, pmlogEnumName(st.powerEnum), st.powerEnum, st.powerRow);
+                 oroIdx, pmlogEnumName(st.powerEnum), st.powerEnum, st.powerRow);
     return true;
 }
 
-static void stopPMLog(int hipIdx) {
-    PMLogState& st = g_pmlog[hipIdx];
+static void stopPMLog(int oroIdx) {
+    PMLogState& st = g_pmlog[oroIdx];
     if (!st.running) return;
-    int adlIdx = g_hipToAdlIndex[hipIdx];
+    int adlIdx = g_oroToAdlIndex[oroIdx];
     if (p_ADL2_Adapter_PMLog_Stop)          p_ADL2_Adapter_PMLog_Stop(g_adl2Context, adlIdx, st.hDevice);
     if (p_ADL2_Device_PMLog_Device_Destroy) p_ADL2_Device_PMLog_Device_Destroy(g_adl2Context, st.hDevice);
     st = PMLogState{};
@@ -342,11 +342,11 @@ static bool initADL() {
     memset(info.data(), 0, sizeof(AdapterInfo) * numAdapters);
     p_ADL_Adapter_AdapterInfo_Get(info.data(), (int)(sizeof(AdapterInfo) * numAdapters));
 
-    int hipCount = getGPUCount();
-    g_hipToAdlIndex.assign(hipCount, -1);
-    g_pmlog.assign(hipCount, PMLogState{});
+    int oroCount = getGPUCount();
+    g_oroToAdlIndex.assign(oroCount, -1);
+    g_pmlog.assign(oroCount, PMLogState{});
 
-    for (int h = 0; h < hipCount; ++h) {
+    for (int h = 0; h < oroCount; ++h) {
         std::string pci = getPCIBusId(h);
         int hb, hd, hf;
         if (!parsePCI(pci, hb, hd, hf)) {
@@ -356,26 +356,26 @@ static bool initADL() {
         for (int a = 0; a < numAdapters; ++a) {
             if (info[a].iVendorID != 1002) continue;                // AMD vendor ID (decimal)
             if (info[a].iBusNumber != hb || info[a].iDeviceNumber != hd) continue;
-            g_hipToAdlIndex[h] = info[a].iAdapterIndex;
+            g_oroToAdlIndex[h] = info[a].iAdapterIndex;
             TNN_LOG_DEBUG("ADL: HIP[%d] \"%s\" -> ADL idx %d (bus %d dev %d)\n",
                           h, info[a].strAdapterName, info[a].iAdapterIndex, hb, hd);
             break;
         }
-        if (g_hipToAdlIndex[h] < 0)
+        if (g_oroToAdlIndex[h] < 0)
             TNN_LOG_DEBUG("ADL: HIP[%d] (%s) has no matching ADL adapter\n", h, pci.c_str());
     }
 
     bool any = false;
-    for (int h = 0; h < hipCount; ++h)
-        if (g_hipToAdlIndex[h] >= 0 && startPMLog(h))
+    for (int h = 0; h < oroCount; ++h)
+        if (g_oroToAdlIndex[h] >= 0 && startPMLog(h))
             any = true;
 
     return any;
 }
 
-static double getADLPowerWatts(int hipDev) {
-    if (hipDev < 0 || hipDev >= (int)g_pmlog.size()) return 0.0;
-    const PMLogState& st = g_pmlog[hipDev];
+static double getADLPowerWatts(int oroDev) {
+    if (oroDev < 0 || oroDev >= (int)g_pmlog.size()) return 0.0;
+    const PMLogState& st = g_pmlog[oroDev];
     if (!st.running || !st.pData || st.powerRow < 0) return 0.0;
     // Driver writes into pData continuously; just read the latest sample.
     return (double)st.pData->ulValues[st.powerRow][1];
@@ -384,7 +384,7 @@ static double getADLPowerWatts(int hipDev) {
 static void shutdownADL() {
     for (int h = 0; h < (int)g_pmlog.size(); ++h) stopPMLog(h);
     g_pmlog.clear();
-    g_hipToAdlIndex.clear();
+    g_oroToAdlIndex.clear();
     if (g_adl2Context && p_ADL2_Main_Control_Destroy) {
         p_ADL2_Main_Control_Destroy(g_adl2Context);
         g_adl2Context = nullptr;
@@ -398,8 +398,8 @@ static void shutdownADL() {
 void* adlGetContext()              { return g_adl2Context; }
 void* adlGetLibHandle()            { return (void*)g_powerLib; }
 int   adlGetAdapterIndex(int hip)  {
-    return (hip >= 0 && hip < (int)g_hipToAdlIndex.size())
-           ? g_hipToAdlIndex[hip] : -1;
+    return (hip >= 0 && hip < (int)g_oroToAdlIndex.size())
+           ? g_oroToAdlIndex[hip] : -1;
 }
 
 #endif // _WIN32

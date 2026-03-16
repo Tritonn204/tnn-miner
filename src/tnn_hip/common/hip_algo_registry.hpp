@@ -1,5 +1,6 @@
 #pragma once
 #include "gpu_algo_impl.hpp"
+#include "oro_seh_wrappers.hpp"
 #include <memory>
 #include <functional>
 
@@ -31,27 +32,18 @@ static inline int parse_gfx_number(const char* gcnArchName) {
 }
 
 static inline bool is_amd_rdna_plus(int device_id) {
-#if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
-    (void)device_id;
-    return false;
-#else
-    hipDeviceProp_t props{};
-    if (hipGetDeviceProperties(&props, device_id) != hipSuccess) return false;
-
+    if (!tnn_is_amd_device()) return false;
+    oroDeviceProp_t props{};
+    if (oroGetDeviceProperties(&props, tnn_get_device(device_id)) != oroSuccess) return false;
     const int gfx = parse_gfx_number(props.gcnArchName);
     return gfx >= 1010;
-#endif
 }
 
 static inline bool is_nvidia_ampere_plus(int device_id) {
-#if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
-    hipDeviceProp_t props{};
-    if (hipGetDeviceProperties(&props, device_id) != hipSuccess) return false;
+    if (!tnn_is_nvidia_device()) return false;
+    oroDeviceProp_t props{};
+    if (oroGetDeviceProperties(&props, tnn_get_device(device_id)) != oroSuccess) return false;
     return (props.major >= 8);
-#else
-    (void)device_id;
-    return false;
-#endif
 }
 
 // ============================================================================
@@ -73,21 +65,21 @@ enum class XelisStrategy : uint8_t {
 // Helper: choose which stage1 kernel to use based on GPU capabilities
 static inline const char* xelis_pick_stage1(int dev) {
     bool cooperative = false;
-#if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
-    cooperative = is_nvidia_ampere_plus(dev);
-#else
-    if (is_amd_rdna_plus(dev)) {
-        cooperative = true;
+    if (tnn_is_nvidia_device()) {
+        cooperative = is_nvidia_ampere_plus(dev);
     } else {
-        hipDeviceProp_t props{};
-        if (hipGetDeviceProperties(&props, dev) == hipSuccess) {
-            const int gfx = parse_gfx_number(props.gcnArchName);
-            // Vega (900), RVII (906), MI200 (90, from gfx90a), MI300 (940-942)
-            cooperative = (gfx == 900 || gfx == 906 || gfx == 90 ||
-                           (gfx >= 940 && gfx <= 942));
+        if (is_amd_rdna_plus(dev)) {
+            cooperative = true;
+        } else {
+            oroDeviceProp_t props{};
+            if (oroGetDeviceProperties(&props, tnn_get_device(dev)) == oroSuccess) {
+                const int gfx = parse_gfx_number(props.gcnArchName);
+                // Vega (900), RVII (906), MI200 (90, from gfx90a), MI300 (940-942)
+                cooperative = (gfx == 900 || gfx == 906 || gfx == 90 ||
+                               (gfx >= 940 && gfx <= 942));
+            }
         }
     }
-#endif
     return cooperative ? "xelis_stage1_cooperative" : "xelis_stage1_kernel";
 }
 
@@ -116,16 +108,31 @@ static inline bool xelis_launch_stage1(
         (void*)&scratch_offset
     };
 
-    hipError_t err = hipModuleLaunchKernel(
+    TNN_LOG_TRACE("[LAUNCH] Stage1(%s): kernel=%p, grid=%d, block=%d, shared=%zu\n",
+                  stage1_name, (void*)it->second, stage1_num_blocks, stage1_block_size, shared_mem);
+#ifdef WITH_OROCHI
+    // Check hipew function pointer — _LIBRARY_FIND silently leaves it null
+    {
+        extern thipModuleLaunchKernel *hipModuleLaunchKernel;
+        TNN_LOG_TRACE("[LAUNCH] hipModuleLaunchKernel fptr = %p\n", (void*)hipModuleLaunchKernel);
+    }
+#endif
+    fflush(stdout);
+
+    oroError_t err = oro_safe_launch(
         it->second,
         stage1_num_blocks, 1, 1,
         stage1_block_size, 1, 1,
         shared_mem, ctx.stream,
         args, nullptr
     );
-    if (err != hipSuccess) {
-        fprintf(stderr, "[XELIS] Stage1 (%s) launch failed: %s\n",
-                stage1_name, hipGetErrorString(err));
+
+    TNN_LOG_TRACE("[LAUNCH] Stage1 returned %d (%s)\n", (int)err, tnn_error_string(err));
+    fflush(stdout);
+
+    if (err != oroSuccess) {
+        TNN_LOG_ERROR("[XELIS] Stage1 (%s) launch failed: %s\n",
+                stage1_name, tnn_error_string(err));
         return false;
     }
     return true;
@@ -153,15 +160,23 @@ static inline bool xelis_launch_blake3(
         (void*)&ctx.nonce_start
     };
 
-    hipError_t err = hipModuleLaunchKernel(
+    TNN_LOG_TRACE("[LAUNCH] Blake3: kernel=%p, grid=%d, block=%d\n",
+                  (void*)it->second, blake3_num_blocks, blake3_block_size);
+    fflush(stdout);
+
+    oroError_t err = oro_safe_launch(
         it->second,
         blake3_num_blocks, 1, 1,
         blake3_block_size, 1, 1,
         0, ctx.stream,
         args, nullptr
     );
-    if (err != hipSuccess) {
-        fprintf(stderr, "[XELIS] Blake3 launch failed: %s\n", hipGetErrorString(err));
+
+    TNN_LOG_TRACE("[LAUNCH] Blake3 returned %d (%s)\n", (int)err, tnn_error_string(err));
+    fflush(stdout);
+
+    if (err != oroSuccess) {
+        TNN_LOG_ERROR("[XELIS] Blake3 launch failed: %s\n", tnn_error_string(err));
         return false;
     }
     return true;
@@ -172,7 +187,7 @@ inline bool xelis_v3_execute(
     const KernelLaunchContext& ctx
 ) {
     int dev = 0;
-    (void)hipGetDevice(&dev);
+    (void)oroGetDevice(&dev);
 
     const auto strategy = static_cast<XelisStrategy>(ctx.strategy);
     uint32_t scratch_offset = 0;
@@ -195,15 +210,15 @@ inline bool xelis_v3_execute(
             (void*)&scratch_offset
         };
 
-        hipError_t err = hipModuleLaunchKernel(
+        oroError_t err = oro_safe_launch(
             it->second,
             ctx.num_blocks, 1, 1,
             ctx.block_size, 1, 1,
             0, ctx.stream,
             args, nullptr
         );
-        if (err != hipSuccess) {
-            fprintf(stderr, "[XELIS] s13_noblake launch failed: %s\n", hipGetErrorString(err));
+        if (err != oroSuccess) {
+            TNN_LOG_ERROR("[XELIS] s13_noblake launch failed: %s\n", tnn_error_string(err));
             return false;
         }
         return xelis_launch_blake3(kernels, ctx);
@@ -225,15 +240,15 @@ inline bool xelis_v3_execute(
             (void*)&ctx.nonce_start
         };
 
-        hipError_t err = hipModuleLaunchKernel(
+        oroError_t err = oro_safe_launch(
             it->second,
             ctx.num_blocks, 1, 1,
             ctx.block_size, 1, 1,
             0, ctx.stream,
             args, nullptr
         );
-        if (err != hipSuccess) {
-            fprintf(stderr, "[XELIS] s3_hybrid_v2_noblake launch failed: %s\n", hipGetErrorString(err));
+        if (err != oroSuccess) {
+            TNN_LOG_ERROR("[XELIS] s3_hybrid_v2_noblake launch failed: %s\n", tnn_error_string(err));
             return false;
         }
         return xelis_launch_blake3(kernels, ctx);
@@ -256,15 +271,23 @@ inline bool xelis_v3_execute(
             (void*)&ctx.nonce_start
         };
 
-        hipError_t err = hipModuleLaunchKernel(
+        TNN_LOG_TRACE("[LAUNCH] Neo s3b3: kernel=%p, grid=%d, block=%d\n",
+                      (void*)it->second, ctx.num_blocks, ctx.block_size);
+        fflush(stdout);
+
+        oroError_t err = oro_safe_launch(
             it->second,
             ctx.num_blocks, 1, 1,
             ctx.block_size, 1, 1,
             0, ctx.stream,
             args, nullptr
         );
-        if (err != hipSuccess) {
-            fprintf(stderr, "[XELIS] s3b3_hybrid_v2 launch failed: %s\n", hipGetErrorString(err));
+
+        TNN_LOG_TRACE("[LAUNCH] Neo s3b3 returned %d (%s)\n", (int)err, tnn_error_string(err));
+        fflush(stdout);
+
+        if (err != oroSuccess) {
+            TNN_LOG_ERROR("[XELIS] s3b3_hybrid_v2 launch failed: %s\n", tnn_error_string(err));
             return false;
         }
         return true;

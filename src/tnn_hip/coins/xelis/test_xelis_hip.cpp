@@ -10,7 +10,7 @@
 #include <condition_variable>
 #include <functional>
 #include <chrono>
-#include <hip/hip_runtime.h>
+#include <tnn_hip/common/gpu_compat.hpp>
 
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
@@ -48,10 +48,10 @@ static const uint8_t TEST_WORK[XELIS_TEMPLATE_SIZE] = {
 };
 
 #define HIP_CHECK(call) do { \
-    hipError_t err = call; \
-    if (err != hipSuccess) { \
-        fprintf(stderr, "[ERROR] HIP call failed: %s (error %d) at %s:%d\n", \
-                hipGetErrorString(err), err, __FILE__, __LINE__); \
+    oroError_t err = call; \
+    if (err != oroSuccess) { \
+        fprintf(stderr, "[ERROR] GPU call failed: %s (error %d) at %s:%d\n", \
+                tnn_error_string(err), err, __FILE__, __LINE__); \
         return 1; \
     } \
 } while(0)
@@ -67,9 +67,9 @@ static uint64_t compute_checksum(const uint64_t *data, size_t count) {
 // Run a single test case (shared by all test configurations)
 static int run_test_case(
     const char *test_name,
-    hipFunction_t stage1_func,
-    hipFunction_t stage3_func,
-    hipFunction_t blake3_func,
+    oroFunction_t stage1_func,
+    oroFunction_t stage3_func,
+    oroFunction_t blake3_func,
     uint64_t nonce_start,
     uint32_t batch_size,
     uint32_t grid_x,
@@ -105,13 +105,13 @@ static int run_test_case(
     uint64_t *d_difficulty = nullptr;
     uint64_t *d_solutions = nullptr;
 
-    HIP_CHECK(hipMalloc(&d_input, XELIS_TEMPLATE_SIZE));
-    HIP_CHECK(hipMalloc(&d_scratch, XELIS_MEMORY_SIZE_V3 * sizeof(uint64_t) * hashes_per_launch));
-    HIP_CHECK(hipMalloc(&d_output, 32 * hashes_per_launch));
-    HIP_CHECK(hipMalloc(&d_difficulty, 32));
-    HIP_CHECK(hipMalloc(&d_solutions, 64));
+    HIP_CHECK(oroMalloc((oroDeviceptr*)&d_input, XELIS_TEMPLATE_SIZE));
+    HIP_CHECK(oroMalloc((oroDeviceptr*)&d_scratch, XELIS_MEMORY_SIZE_V3 * sizeof(uint64_t) * hashes_per_launch));
+    HIP_CHECK(oroMalloc((oroDeviceptr*)&d_output, 32 * hashes_per_launch));
+    HIP_CHECK(oroMalloc((oroDeviceptr*)&d_difficulty, 32));
+    HIP_CHECK(oroMalloc((oroDeviceptr*)&d_solutions, 64));
 
-    HIP_CHECK(hipMemcpy(d_input, TEST_WORK, XELIS_TEMPLATE_SIZE, hipMemcpyHostToDevice));
+    HIP_CHECK(oroMemcpy(d_input, TEST_WORK, XELIS_TEMPLATE_SIZE, oroMemcpyHostToDevice));
 
     // Run Stage 1 - single block only (grid_x should always be 1)
     if (grid_x != 1) {
@@ -159,29 +159,29 @@ static int run_test_case(
         }
 
         // 2. Run GPU kernels
-        HIP_CHECK(hipMemset(d_scratch, 0, XELIS_MEMORY_SIZE_V3 * sizeof(uint64_t) * hashes_per_launch));
+        HIP_CHECK(oroMemset(d_scratch, 0, XELIS_MEMORY_SIZE_V3 * sizeof(uint64_t) * hashes_per_launch));
 
         printf("[TEST]   Running GPU Stage 1...\n");
         fflush(stdout);
         void *stage1_args[] = {&d_input, &d_scratch, (void*)&launch_nonce_start, (void*)&launch_batch_size, (void*)&launch_scratch_offset};
-        HIP_CHECK(hipModuleLaunchKernel(stage1_func, 1, 1, 1, block_x, 1, 1, 0, nullptr, stage1_args, nullptr));
-        HIP_CHECK(hipDeviceSynchronize());
+        HIP_CHECK(oroModuleLaunchKernel(stage1_func, 1, 1, 1, block_x, 1, 1, 0, nullptr, stage1_args, nullptr));
+        HIP_CHECK(oroDeviceSynchronize());
 
         printf("[TEST]   Running GPU Stage 3...\n");
         fflush(stdout);
         void *stage3_args[] = {&d_scratch, (void*)&launch_batch_size, (void*)&launch_scratch_offset, &d_difficulty, &d_solutions, (void*)&launch_nonce_start};
-        HIP_CHECK(hipModuleLaunchKernel(stage3_func, 1, 1, 1, block_x, 1, 1, 0, nullptr, stage3_args, nullptr));
-        HIP_CHECK(hipDeviceSynchronize());
+        HIP_CHECK(oroModuleLaunchKernel(stage3_func, 1, 1, 1, block_x, 1, 1, 0, nullptr, stage3_args, nullptr));
+        HIP_CHECK(oroDeviceSynchronize());
 
         printf("[TEST]   Running GPU Blake3...\n");
         fflush(stdout);
         void *blake3_args[] = {&d_scratch, &d_output, (void*)&launch_batch_size, (void*)&launch_scratch_offset, &d_difficulty, &d_solutions, (void*)&launch_nonce_start};
-        HIP_CHECK(hipModuleLaunchKernel(blake3_func, 1, 1, 1, 256, 1, 1, 0, nullptr, blake3_args, nullptr));
-        HIP_CHECK(hipDeviceSynchronize());
+        HIP_CHECK(oroModuleLaunchKernel(blake3_func, 1, 1, 1, 256, 1, 1, 0, nullptr, blake3_args, nullptr));
+        HIP_CHECK(oroDeviceSynchronize());
 
         // 3. Download and validate
         uint8_t *gpu_hashes = new uint8_t[32 * hashes_per_launch];
-        HIP_CHECK(hipMemcpy(gpu_hashes, d_output, 32 * hashes_per_launch, hipMemcpyDeviceToHost));
+        HIP_CHECK(oroMemcpy(gpu_hashes, d_output, 32 * hashes_per_launch, oroMemcpyDeviceToHost));
 
         printf("[TEST]   Validating hashes...\n");
         fflush(stdout);
@@ -217,11 +217,11 @@ static int run_test_case(
     delete[] cpu_scratch_s1;
     delete[] cpu_scratch_s3;
     delete[] cpu_hashes;
-    (void)hipFree(d_input);
-    (void)hipFree(d_scratch);
-    (void)hipFree(d_output);
-    (void)hipFree(d_difficulty);
-    (void)hipFree(d_solutions);
+    (void)oroFree((oroDeviceptr)d_input);
+    (void)oroFree((oroDeviceptr)d_scratch);
+    (void)oroFree((oroDeviceptr)d_output);
+    (void)oroFree((oroDeviceptr)d_difficulty);
+    (void)oroFree((oroDeviceptr)d_solutions);
 
     return all_pass ? 0 : 1;
 }
@@ -230,29 +230,23 @@ static int test_xelis_hip_impl() {
 
     // 1. Initialize HIP device
     int deviceCount = 0;
-    HIP_CHECK(hipGetDeviceCount(&deviceCount));
+    HIP_CHECK(oroGetDeviceCount(&deviceCount));
 
     if (deviceCount == 0) {
-        fprintf(stderr, "[ERROR] No HIP devices found\n");
+        fprintf(stderr, "[ERROR] No GPU devices found\n");
         return 1;
     }
 
-    printf("[TEST] Found %d HIP device(s)\n", deviceCount);
+    printf("[TEST] Found %d GPU device(s)\n", deviceCount);
 
-    hipDeviceProp_t props;
-    HIP_CHECK(hipGetDeviceProperties(&props, 0));
-    HIP_CHECK(hipSetDevice(0));
+    oroDeviceProp_t props;
+    HIP_CHECK(oroGetDeviceProperties(&props, tnn_get_device(0)));
+    HIP_CHECK(oroSetDevice(0));
 
     printf("[TEST] Using device 0: %s\n", props.name);
     printf("[TEST] Compute capability: %d.%d\n", props.major, props.minor);
 
-    // Detect platform at runtime based on gcnArchName
-    // AMD uses "gfxXXXX", NVIDIA uses empty string (gcnArchName not available)
-    #if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
-    bool is_amd = false;
-    #else
-    bool is_amd = true;
-    #endif
+    bool is_amd = tnn_is_amd_device();
 
     // Set GPU architecture for RTCCompiler (same as precompile does)
     if (is_amd) {
@@ -299,8 +293,8 @@ static int test_xelis_hip_impl() {
         compile_opts.push_back("-DXELIS_MAX_WG=128");
 
         // Arch-dependent stage3 register cap
-        hipDeviceProp_t props;
-        (void)hipGetDeviceProperties(&props, 0);
+        oroDeviceProp_t props;
+        (void)oroGetDeviceProperties(&props, tnn_get_device(0));
         int s3_nreg = (props.major >= 9) ? 40 : (props.major >= 8) ? 64 : 80;
         compile_opts.push_back("-DXELIS_S3_NREG=" + std::to_string(s3_nreg));
     }
@@ -319,21 +313,21 @@ static int test_xelis_hip_impl() {
     fflush(stdout);
 
     // Load all kernel functions from the module
-    hipFunction_t stage1_func = module_kernel.function;
-    hipFunction_t stage3_func = nullptr;
-    hipFunction_t blake3_func = nullptr;
+    oroFunction_t stage1_func = module_kernel.function;
+    oroFunction_t stage3_func = nullptr;
+    oroFunction_t blake3_func = nullptr;
 
-    hipError_t err = hipModuleGetFunction(&stage3_func, module_kernel.module, "xelis_s3_hybrid_v2_noblake_kernel");
-    if (err != hipSuccess) {
-        fprintf(stderr, "[ERROR] Failed to get stage3 kernel: %s\n", hipGetErrorString(err));
+    oroError_t err = oroModuleGetFunction(&stage3_func, module_kernel.module, "xelis_s3_hybrid_v2_noblake_kernel");
+    if (err != oroSuccess) {
+        fprintf(stderr, "[ERROR] Failed to get stage3 kernel: %s\n", tnn_error_string(err));
         return 1;
     }
     printf("[TEST]   ✓ Loaded xelis_s3_hybrid_v2_noblake_kernel\n");
     fflush(stdout);
 
-    err = hipModuleGetFunction(&blake3_func, module_kernel.module, "xelis_blake3_batch");
-    if (err != hipSuccess) {
-        fprintf(stderr, "[ERROR] Failed to get blake3 kernel: %s\n", hipGetErrorString(err));
+    err = oroModuleGetFunction(&blake3_func, module_kernel.module, "xelis_blake3_batch");
+    if (err != oroSuccess) {
+        fprintf(stderr, "[ERROR] Failed to get blake3 kernel: %s\n", tnn_error_string(err));
         return 1;
     }
     printf("[TEST]   ✓ Loaded xelis_blake3_batch\n\n");
@@ -408,16 +402,16 @@ static int test_xelis_hip_impl() {
 
 // Level 1: GPU work runs on a spawned std::thread (not main thread)
 static int test_threaded_level1(
-    hipFunction_t stage1_func,
-    hipFunction_t stage3_func,
-    hipFunction_t blake3_func)
+    oroFunction_t stage1_func,
+    oroFunction_t stage3_func,
+    oroFunction_t blake3_func)
 {
     printf("\n[THREAD-TEST] Level 1: GPU kernels on std::thread\n");
     fflush(stdout);
 
     std::atomic<int> result{-1};
     std::thread gpu_thread([&]() {
-        (void)hipSetDevice(0);
+        (void)oroSetDevice(0);
         result = run_test_case(
             "Threaded: std::thread GPU",
             stage1_func, stage3_func, blake3_func,
@@ -431,9 +425,9 @@ static int test_threaded_level1(
 
 // Level 2: boost::asio::io_context running on another thread alongside GPU
 static int test_threaded_level2(
-    hipFunction_t stage1_func,
-    hipFunction_t stage3_func,
-    hipFunction_t blake3_func)
+    oroFunction_t stage1_func,
+    oroFunction_t stage3_func,
+    oroFunction_t blake3_func)
 {
     printf("\n[THREAD-TEST] Level 2: GPU + boost::asio io_context on separate threads\n");
     fflush(stdout);
@@ -463,7 +457,7 @@ static int test_threaded_level2(
 
     std::atomic<int> result{-1};
     std::thread gpu_thread([&]() {
-        (void)hipSetDevice(0);
+        (void)oroSetDevice(0);
         result = run_test_case(
             "Threaded: GPU + asio io_context",
             stage1_func, stage3_func, blake3_func,
@@ -483,9 +477,9 @@ static int test_threaded_level2(
 
 // Level 3: boost::asio::spawn (Boost.Context coroutines) running alongside GPU
 static int test_threaded_level3(
-    hipFunction_t stage1_func,
-    hipFunction_t stage3_func,
-    hipFunction_t blake3_func)
+    oroFunction_t stage1_func,
+    oroFunction_t stage3_func,
+    oroFunction_t blake3_func)
 {
     printf("\n[THREAD-TEST] Level 3: GPU + boost::asio::spawn coroutine on separate threads\n");
     fflush(stdout);
@@ -519,7 +513,7 @@ static int test_threaded_level3(
 
     std::atomic<int> result{-1};
     std::thread gpu_thread([&]() {
-        (void)hipSetDevice(0);
+        (void)oroSetDevice(0);
         result = run_test_case(
             "Threaded: GPU + boost::asio::spawn",
             stage1_func, stage3_func, blake3_func,
@@ -538,9 +532,9 @@ static int test_threaded_level3(
 
 // Level 4: SSL context + load_root_certificates alongside GPU
 static int test_threaded_level4(
-    hipFunction_t stage1_func,
-    hipFunction_t stage3_func,
-    hipFunction_t blake3_func)
+    oroFunction_t stage1_func,
+    oroFunction_t stage3_func,
+    oroFunction_t blake3_func)
 {
     printf("\n[THREAD-TEST] Level 4: GPU + SSL context + load_root_certificates\n");
     fflush(stdout);
@@ -568,7 +562,7 @@ static int test_threaded_level4(
 
     std::atomic<int> result{-1};
     std::thread gpu_thread([&]() {
-        (void)hipSetDevice(0);
+        (void)oroSetDevice(0);
         result = run_test_case(
             "Threaded: GPU + SSL ctx",
             stage1_func, stage3_func, blake3_func,
@@ -587,9 +581,9 @@ static int test_threaded_level4(
 
 // Level 5: SSL + TCP resolver inside spawn coroutine (like do_session_v2)
 static int test_threaded_level5(
-    hipFunction_t stage1_func,
-    hipFunction_t stage3_func,
-    hipFunction_t blake3_func)
+    oroFunction_t stage1_func,
+    oroFunction_t stage3_func,
+    oroFunction_t blake3_func)
 {
     printf("\n[THREAD-TEST] Level 5: GPU + SSL + TCP resolve inside spawn\n");
     fflush(stdout);
@@ -624,7 +618,7 @@ static int test_threaded_level5(
 
     std::atomic<int> result{-1};
     std::thread gpu_thread([&]() {
-        (void)hipSetDevice(0);
+        (void)oroSetDevice(0);
         result = run_test_case(
             "Threaded: GPU + SSL + resolve",
             stage1_func, stage3_func, blake3_func,
@@ -643,9 +637,9 @@ static int test_threaded_level5(
 
 // Level 6: Full miner sim - 2x getWork_v2-like threads + mutex/cv + SSL
 static int test_threaded_level6(
-    hipFunction_t stage1_func,
-    hipFunction_t stage3_func,
-    hipFunction_t blake3_func)
+    oroFunction_t stage1_func,
+    oroFunction_t stage3_func,
+    oroFunction_t blake3_func)
 {
     printf("\n[THREAD-TEST] Level 6: GPU + 2x SSL/spawn/resolve threads + mutex/cv\n");
     fflush(stdout);
@@ -697,7 +691,7 @@ static int test_threaded_level6(
 
     std::atomic<int> result{-1};
     std::thread gpu_thread([&]() {
-        (void)hipSetDevice(0);
+        (void)oroSetDevice(0);
         result = run_test_case(
             "Threaded: full getWork sim",
             stage1_func, stage3_func, blake3_func,
@@ -742,14 +736,10 @@ int test_xelis_hip() {
         const std::string xelis_source =
             std::string(hip_xelis_v3_source::SRC_TNN_HIP_CRYPTO_XELIS_HASH_XELIS_HASH_V3_HIP_SOURCE);
 
-        hipDeviceProp_t props;
-        (void)hipGetDeviceProperties(&props, 0);
+        oroDeviceProp_t props;
+        (void)oroGetDeviceProperties(&props, tnn_get_device(0));
 
-        #if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
-        bool is_amd = false;
-        #else
-        bool is_amd = true;
-        #endif
+        bool is_amd = tnn_is_amd_device();
 
         std::vector<std::string> compile_opts;
         if (is_amd) {
@@ -770,10 +760,10 @@ int test_xelis_hip() {
         auto module_kernel = compiler.compile_from_source(
             xelis_source, "xelis-hash-v3.hip", "xelis_stage1_kernel", compile_opts);
 
-        hipFunction_t stage1_func = module_kernel.function;
-        hipFunction_t stage3_func = nullptr, blake3_func = nullptr;
-        (void)hipModuleGetFunction(&stage3_func, module_kernel.module, "xelis_s3_hybrid_v2_noblake_kernel");
-        (void)hipModuleGetFunction(&blake3_func, module_kernel.module, "xelis_blake3_batch");
+        oroFunction_t stage1_func = module_kernel.function;
+        oroFunction_t stage3_func = nullptr, blake3_func = nullptr;
+        (void)oroModuleGetFunction(&stage3_func, module_kernel.module, "xelis_s3_hybrid_v2_noblake_kernel");
+        (void)oroModuleGetFunction(&blake3_func, module_kernel.module, "xelis_blake3_batch");
 
         int failures = 0;
         failures += test_threaded_level1(stage1_func, stage3_func, blake3_func);
