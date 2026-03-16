@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# shellcheck source=h-manifest.conf
+# shellcheck disable=SC1091 # h-manifest.conf is provided at runtime by HiveOS
 source h-manifest.conf
 
 CUSTOM_LOG_BASEDIR=$(dirname "$CUSTOM_LOG_BASENAME")

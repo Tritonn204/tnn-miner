@@ -6,7 +6,7 @@ uptime=$(get_miner_uptime)
 # shellcheck disable=SC2154 # log_name and log_head_name are set by HiveOS
 [[ $uptime -lt 60 ]] && head -n 50 "$log_name" > "$log_head_name"
 
-DATA=$(curl -s http://localhost:8990/stats)
+DATA=$(curl -s http://localhost:8989/stats)
 [[ -z "$DATA" ]] && echo "No stats from miner API" && return
 
 gpu_count=$(jq '.gpus | length // 0' <<< "$DATA")
