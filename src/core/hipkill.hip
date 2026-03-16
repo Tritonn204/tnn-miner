@@ -1,6 +1,6 @@
 #include "hipkill.h"
-#include <hip/hip_runtime.h>
+#include <tnn_hip/common/gpu_compat.hpp>
 
 void hipDeviceReset_wrapper() {
-  hipDeviceReset();
+  oroDeviceReset();
 }

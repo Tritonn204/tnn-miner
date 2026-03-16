@@ -1,6 +1,6 @@
 #include "../coins/miners.hpp"
 
-#if defined(TNN_XELISHASH) && !defined(TNN_HIP)
+#if defined(TNN_XELISHASH) && (!defined(TNN_HIP) || defined(WITH_OROCHI))
 #include "common/mine_cpu_unified.hpp"
 #include "algos/xelis_cpu.hpp"
 

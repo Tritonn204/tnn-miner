@@ -60,7 +60,7 @@ static inline void unsupportedGpu(int tid) {
 
 void mineDero(int tid);
 
-#if defined(TNN_XELISHASH) && !defined(TNN_HIP)
+#if defined(TNN_XELISHASH) && (!defined(TNN_HIP) || defined(WITH_OROCHI))
 void mineXelis_unified(int tid);
 #endif
 
@@ -75,19 +75,19 @@ void mineRx0(int tid);
 
 void mineVerus(int tid);
 
-#if defined(TNN_ASTRIXHASH) && !defined(TNN_HIP)
+#if defined(TNN_ASTRIXHASH) && (!defined(TNN_HIP) || defined(WITH_OROCHI))
 void mineAstrix_unified(int tid);
 #endif
 
-#if defined(TNN_NXLHASH) && !defined(TNN_HIP)
+#if defined(TNN_NXLHASH) && (!defined(TNN_HIP) || defined(WITH_OROCHI))
 void mineNexellia_unified(int tid);
 #endif
 
-#if defined(TNN_HOOHASH) && !defined(TNN_HIP)
+#if defined(TNN_HOOHASH) && (!defined(TNN_HIP) || defined(WITH_OROCHI))
 void mineHoosat_unified(int tid);
 #endif
 
-#if defined(TNN_WALAHASH) && !defined(TNN_HIP)
+#if defined(TNN_WALAHASH) && (!defined(TNN_HIP) || defined(WITH_OROCHI))
 void mineWaglayla_unified(int tid);
 #endif
 
@@ -108,19 +108,27 @@ inline mineFunc getMiningFunc(int algoNum, bool gpu) {
   #ifdef TNN_HIP
   if(gpu) {
     switch(algoNum) {
+#ifdef TNN_XELISHASH
       case ALGO_XELISV2:
       case ALGO_XELISV3:
         return mineXelis_hip;
         break;
+#endif
+#ifdef TNN_ASTRIXHASH
       case ALGO_ASTRIX_HASH:
         return mineAstrix_hip;
         break;
+#endif
+#ifdef TNN_NXLHASH
       case ALGO_NXL_HASH:
         return mineNexellia_hip;
         break;
+#endif
+#ifdef TNN_WALAHASH
       case ALGO_WALA_HASH:
         return mineWaglayla_hip;
         break;
+#endif
       default:
         return unsupportedGpu;
         break;
@@ -134,7 +142,7 @@ inline mineFunc getMiningFunc(int algoNum, bool gpu) {
       break;
     // case ALGO_XELISV1:
     //   return mineXelis_v1;
-#if defined(TNN_XELISHASH) && !defined(TNN_HIP)
+#if defined(TNN_XELISHASH) && (!defined(TNN_HIP) || defined(WITH_OROCHI))
     case ALGO_XELISV2:
     case ALGO_XELISV3:
       return mineXelis_unified;
@@ -149,22 +157,22 @@ inline mineFunc getMiningFunc(int algoNum, bool gpu) {
     case ALGO_VERUS:
       return mineVerus;
       break;
-#if defined(TNN_ASTRIXHASH) && !defined(TNN_HIP)
+#if defined(TNN_ASTRIXHASH) && (!defined(TNN_HIP) || defined(WITH_OROCHI))
     case ALGO_ASTRIX_HASH:
       return mineAstrix_unified;
       break;
 #endif
-#if defined(TNN_NXLHASH) && !defined(TNN_HIP)
+#if defined(TNN_NXLHASH) && (!defined(TNN_HIP) || defined(WITH_OROCHI))
     case ALGO_NXL_HASH:
       return mineNexellia_unified;
       break;
 #endif
-#if defined(TNN_HOOHASH) && !defined(TNN_HIP)
+#if defined(TNN_HOOHASH) && (!defined(TNN_HIP) || defined(WITH_OROCHI))
     case ALGO_HOOHASH:
       return mineHoosat_unified;
       break;
 #endif
-#if defined(TNN_WALAHASH) && !defined(TNN_HIP)
+#if defined(TNN_WALAHASH) && (!defined(TNN_HIP) || defined(WITH_OROCHI))
     case ALGO_WALA_HASH:
       return mineWaglayla_unified;
       break;

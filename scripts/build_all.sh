@@ -2,7 +2,7 @@
 
 # Usage check
 if [ -z "$1" ]; then
-    echo "Usage: $0 <TNN_VERSION> [amd|nvidia|cpu|all]"
+    echo "Usage: $0 <TNN_VERSION> [amd|nvidia|cpu|orochi|all]"
     exit 1
 fi
 
@@ -12,8 +12,9 @@ TARGET="${2:-all}"   # default to "all" if not provided
 # Function to run cmake and build only if cmake succeeds
 build_target() {
     local target_dir=$1
-    local hip_flag=$2
-    local hip_platform=$3
+    shift
+    # remaining args are cmake flags
+    local cmake_flags=("$@")
 
     local build_dir="./hip-build/linux/${target_dir}"
 
@@ -24,11 +25,9 @@ build_target() {
     rm -f "${build_dir}/CMakeCache.txt"
 
     # Run cmake command
-    HIP_PLATFORM=$hip_platform cmake -S . -B "$build_dir" \
-        -DCMAKE_PREFIX_PATH="$HIP_PATH" \
-        -DWITH_HIP=$hip_flag \
-        -DHIP_PLATFORM=$hip_platform \
-        -DTNN_VERSION=$TNN_VERSION
+    cmake -S . -B "$build_dir" \
+        -DTNN_VERSION=$TNN_VERSION \
+        "${cmake_flags[@]}"
 
     if [ $? -ne 0 ]; then
         echo "CMake failed for target '${target_dir}', skipping build."
@@ -53,29 +52,56 @@ export ROCM_PATH="$(hipconfig --rocmpath 2>/dev/null)"
 case "$TARGET" in
     (amd)
         echo "Building for AMD (ROCm)..."
-        build_target "amd" ON amd || echo "Failed to build for AMD."
+        build_target "amd" \
+            -DCMAKE_PREFIX_PATH="$HIP_PATH" \
+            -DWITH_HIP=ON \
+            -DHIP_PLATFORM=amd \
+            || echo "Failed to build for AMD."
         ;;
     (nvidia)
         echo "Building for NVIDIA (HIP on CUDA)..."
-        build_target "nvidia" ON nvidia || echo "Failed to build for NVIDIA."
+        build_target "nvidia" \
+            -DCMAKE_PREFIX_PATH="$HIP_PATH" \
+            -DWITH_HIP=ON \
+            -DHIP_PLATFORM=nvidia \
+            || echo "Failed to build for NVIDIA."
         ;;
     (cpu)
         echo "Building CPU-only..."
-        build_target "cpu" OFF "" || echo "Failed to build for CPU-only."
+        build_target "cpu" \
+            -DWITH_HIP=OFF \
+            || echo "Failed to build for CPU-only."
+        ;;
+    (orochi)
+        echo "Building Orochi (unified GPU via runtime dispatch)..."
+        build_target "orochi" \
+            -DWITH_OROCHI=ON \
+            -DWITH_HIP=OFF \
+            || echo "Failed to build for Orochi."
         ;;
     (all)
         echo "Building for AMD (ROCm)..."
-        build_target "amd" ON amd || echo "Failed to build for AMD."
+        build_target "amd" \
+            -DCMAKE_PREFIX_PATH="$HIP_PATH" \
+            -DWITH_HIP=ON \
+            -DHIP_PLATFORM=amd \
+            || echo "Failed to build for AMD."
 
         echo "Building for NVIDIA (HIP on CUDA)..."
-        build_target "nvidia" ON nvidia || echo "Failed to build for NVIDIA."
+        build_target "nvidia" \
+            -DCMAKE_PREFIX_PATH="$HIP_PATH" \
+            -DWITH_HIP=ON \
+            -DHIP_PLATFORM=nvidia \
+            || echo "Failed to build for NVIDIA."
 
         echo "Building CPU-only..."
-        build_target "cpu" OFF "" || echo "Failed to build for CPU-only."
+        build_target "cpu" \
+            -DWITH_HIP=OFF \
+            || echo "Failed to build for CPU-only."
         ;;
     (*)
         echo "Invalid target: '$TARGET'"
-        echo "Usage: $0 <TNN_VERSION> [amd|nvidia|cpu|all]"
+        echo "Usage: $0 <TNN_VERSION> [amd|nvidia|cpu|orochi|all]"
         exit 1
         ;;
 esac

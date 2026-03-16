@@ -58,8 +58,12 @@ blankfunc(mineYespower);
 blankfunc(mineRinhash);
 #endif
 
-#ifndef TNN_HIP
+#if !defined(TNN_HIP) || !defined(TNN_ASTRIXHASH)
 blankfunc(mineAstrix_hip);
+#endif
+#if !defined(TNN_HIP) || !defined(TNN_NXLHASH)
 blankfunc(mineNexellia_hip);
+#endif
+#if !defined(TNN_HIP) || !defined(TNN_WALAHASH)
 blankfunc(mineWaglayla_hip);
 #endif

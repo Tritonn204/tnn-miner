@@ -190,6 +190,106 @@ function Import-MsvcEnvironment {
     return $true
 }
 
+function Find-ClangCl {
+    # 1) LLVM installation
+    $llvmPaths = @(
+        "$env:ProgramFiles\LLVM\bin\clang-cl.exe",
+        "${env:ProgramFiles(x86)}\LLVM\bin\clang-cl.exe"
+    )
+    foreach ($p in $llvmPaths) {
+        if (Test-Path $p) { return $p }
+    }
+
+    # 2) Visual Studio bundled clang-cl
+    $vswhereExe = Join-Path "${env:ProgramFiles(x86)}" "Microsoft Visual Studio\Installer\vswhere.exe"
+    if (Test-Path $vswhereExe) {
+        $vsPath = & $vswhereExe -latest -property installationPath -nologo
+        if ($vsPath) {
+            $candidates = Get-ChildItem "$vsPath\VC\Tools\Llvm\x64\bin\clang-cl.exe" -ErrorAction SilentlyContinue
+            if ($candidates) { return $candidates[0].FullName }
+        }
+    }
+
+    # 3) PATH
+    $cmd = Get-Command clang-cl.exe -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+
+    return $null
+}
+
+function Build-Orochi {
+    Write-Host "==============================================="
+    Write-Host "Building Orochi unified GPU target (MinGW)"
+    Write-Host "==============================================="
+
+    # Clean MSVC env to prevent header conflicts with MinGW
+    Remove-Item Env:INCLUDE -ErrorAction SilentlyContinue
+    Remove-Item Env:LIB -ErrorAction SilentlyContinue
+    Remove-Item Env:HIP_PLATFORM -ErrorAction SilentlyContinue
+
+    $buildDir = Join-Path $RepoRoot "hip-build\win32\orochi"
+    if (-not (Test-Path $buildDir)) {
+        New-Item -ItemType Directory -Path $buildDir -Force | Out-Null
+    }
+
+    $CacheFile = Join-Path $buildDir "CMakeCache.txt"
+    if (Test-Path $CacheFile) {
+        Remove-Item $CacheFile -Force
+    }
+
+    $cmakeCommand = "cmake"
+
+    # ---- Configure ----
+    $configureLog = Join-Path $LogRoot "cmake_configure_orochi.log"
+    $cmakeArgs = @(
+        "-S", $RepoRoot,
+        "-B", $buildDir,
+        "-G", "Ninja",
+        "-DWITH_HIP=OFF",
+        "-DWITH_OROCHI=ON",
+        "-DUSE_CLANG_CL=OFF",
+        "-DUSE_ASTRO_SPSA=OFF",
+        "-DWITH_ASTRIXHASH=OFF",
+        "-DWITH_NXLHASH=OFF",
+        "-DWITH_WALAHASH=OFF",
+        "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=""$buildDir""",
+        "-DTNN_VERSION=$TNN_VERSION",
+        "--fresh"
+    )
+
+    Write-Host ""
+    Write-Host "---- CMake configure (Orochi) ----"
+    $configureExitCode = Invoke-LoggedCommand -FilePath $cmakeCommand -Arguments $cmakeArgs -LogFile $configureLog
+
+    if ($configureExitCode -ne 0) {
+        Write-Host "CMake configure FAILED for Orochi."
+        Write-Host "See log: $configureLog"
+        return $false
+    }
+
+    # ---- Build ----
+    $procCount = Get-ProcessorCount
+    $buildLog  = Join-Path $LogRoot "cmake_build_orochi.log"
+    $buildArgs = @(
+        "--build", $buildDir,
+        "--target", "all",
+        "--parallel", $procCount
+    )
+
+    Write-Host ""
+    Write-Host "---- CMake build (Orochi) ----"
+    $buildExitCode = Invoke-LoggedCommand -FilePath $cmakeCommand -Arguments $buildArgs -LogFile $buildLog
+
+    if ($buildExitCode -ne 0) {
+        Write-Host "Build FAILED for Orochi."
+        Write-Host "See log: $buildLog"
+        return $false
+    }
+
+    Write-Host "Build SUCCEEDED for Orochi."
+    return $true
+}
+
 function Build-Target {
     param (
         [string]$TargetDir,
@@ -338,15 +438,6 @@ function Build-Target {
 $originalPath = $env:PATH
 
 try {
-    # Temporarily remove any mingw64 paths from PATH
-    $env:PATH = ($env:PATH -split ';' |
-        Where-Object {
-            $_ -and ($_ -notmatch '(?i)\\mingw64(\\|$)') -and ($_ -notmatch '(?i)/mingw64(/|$)')
-        }
-    ) -join ';'
-
-    Write-Host "PATH filtered to exclude mingw64 for this build."
-
     # Get HIP path and handle spaces in the path
     $env:HIP_PATH = (& hipconfig --path).Trim()
     Write-Host "HIP_PATH (raw): $env:HIP_PATH"
@@ -357,6 +448,12 @@ try {
 
     # Build for AMD using ROCm
     if ($targetToBuild -eq "" -or $targetToBuild -eq "amd") {
+        # Strip MinGW from PATH to avoid toolchain conflicts with HIP
+        $env:PATH = ($env:PATH -split ';' |
+            Where-Object {
+                $_ -and ($_ -notmatch '(?i)\\mingw64(\\|$)') -and ($_ -notmatch '(?i)/mingw64(/|$)')
+            }
+        ) -join ';'
         if (-not (Import-MsvcEnvironment -Architecture "x64")) {
             Write-Host "WARNING: Could not import MSVC environment. AMD HIP build may fail if mt.exe / SDK libs are not in PATH."
         }
@@ -368,6 +465,12 @@ try {
 
     # Build for NVIDIA using HIP (HIP_PLATFORM=nvidia)
     if ($targetToBuild -eq "" -or $targetToBuild -eq "nvidia") {
+        # Strip MinGW from PATH to avoid toolchain conflicts with HIP
+        $env:PATH = ($env:PATH -split ';' |
+            Where-Object {
+                $_ -and ($_ -notmatch '(?i)\\mingw64(\\|$)') -and ($_ -notmatch '(?i)/mingw64(/|$)')
+            }
+        ) -join ';'
         # Make sure MSVC env (cl.exe etc.) is available just for this build
         if (-not (Import-MsvcEnvironment -Architecture "x64")) {
             Write-Host "WARNING: Could not import MSVC environment. NVIDIA HIP build may fail if cl.exe is not in PATH."
@@ -382,6 +485,13 @@ try {
     if ($targetToBuild -eq "" -or $targetToBuild -eq "cpu") {
         if (-not (Build-Target "cpu" "OFF" "")) {
             Write-Host "Failed to build for CPU-only."
+        }
+    }
+
+    # Build Orochi (unified AMD+NVIDIA, runtime dispatch)
+    if ($targetToBuild -eq "orochi") {
+        if (-not (Build-Orochi)) {
+            Write-Host "Failed to build for Orochi."
         }
     }
 }

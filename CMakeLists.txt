@@ -15,10 +15,19 @@ set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 set(TARGET_ARCH "amd64")
 set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   -Ofast -DNDEBUG")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Ofast -Wuninitialized -DNDEBUG")
+if (USE_CLANG_CL)
+  # clang-cl must target MSVC ABI explicitly to produce COFF .obj files
+  set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   --target=x86_64-pc-windows-msvc")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --target=x86_64-pc-windows-msvc")
+  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   /O2 -DNDEBUG")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O2 -DNDEBUG")
+else()
+  set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   -Ofast -DNDEBUG")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Ofast -Wuninitialized -DNDEBUG")
+endif()
 
 option(USE_GCC        "Use GCC instead of Clang" OFF)
+option(USE_CLANG_CL   "Use clang-cl (MSVC ABI) for CPU build on Windows" OFF)
 option(USE_ASTRO_SPSA "Use Astro Stamped Permutation Suffix Array library" ON)
 option(WIN_CROSS      "Whether we are cross-compiling on Linux for Windows" OFF)
 
@@ -79,7 +88,43 @@ if (WIN32)
   else()
     message(STATUS "Target system is Windows (CPU-only build)")
 
-    if (USE_GCC)
+    if (USE_CLANG_CL)
+      # clang-cl (MSVC ABI) — for future unified GPU+CPU plugin builds
+      find_program(_CLANG_CL_CPU clang-cl)
+      if (NOT _CLANG_CL_CPU)
+        message(FATAL_ERROR "USE_CLANG_CL=ON but clang-cl not found in PATH")
+      endif()
+      set(CMAKE_C_COMPILER   "${_CLANG_CL_CPU}" CACHE FILEPATH "" FORCE)
+      set(CMAKE_CXX_COMPILER "${_CLANG_CL_CPU}" CACHE FILEPATH "" FORCE)
+      set(CMAKE_ASM_COMPILER "${_CLANG_CL_CPU}" CACHE FILEPATH "" FORCE)
+      message(STATUS "CPU build using clang-cl at ${_CLANG_CL_CPU}")
+
+      # clang-cl needs compiler-rt builtins for __uint128_t ops, FMV, etc.
+      execute_process(
+        COMMAND "${_CLANG_CL_CPU}" --print-libgcc-file-name --target=x86_64-pc-windows-msvc
+        OUTPUT_VARIABLE _clang_rt_path
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+      )
+      if (_clang_rt_path AND EXISTS "${_clang_rt_path}")
+        link_libraries("${_clang_rt_path}")
+        message(STATUS "Linking clang_rt builtins: ${_clang_rt_path}")
+      else()
+        # Fallback: search for it
+        file(GLOB _clang_rt_builtins_cpu
+          "C:/Program Files/LLVM/lib/clang/*/lib/windows/clang_rt.builtins-x86_64.lib"
+          "C:/Program Files (x86)/LLVM/lib/clang/*/lib/windows/clang_rt.builtins-x86_64.lib"
+        )
+        if (_clang_rt_builtins_cpu)
+          list(GET _clang_rt_builtins_cpu -1 _clang_rt_builtins_cpu_lib)
+          link_libraries("${_clang_rt_builtins_cpu_lib}")
+          message(STATUS "Linking clang_rt builtins: ${_clang_rt_builtins_cpu_lib}")
+        else()
+          message(WARNING "clang_rt.builtins-x86_64.lib not found — link errors likely")
+        endif()
+      endif()
+
+    elseif (USE_GCC)
       set(CMAKE_C_COMPILER   gcc   CACHE FILEPATH "" FORCE)
       set(CMAKE_CXX_COMPILER g++   CACHE FILEPATH "" FORCE)
       set(CMAKE_ASM_COMPILER gcc   CACHE FILEPATH "" FORCE)
@@ -90,8 +135,8 @@ if (WIN32)
       set(CMAKE_ASM_COMPILER clang   CACHE FILEPATH "" FORCE)
     endif()
 
-    # Use MinGW lld if available
-    if (EXISTS "C:/mingw64/bin/ld.lld.exe")
+    # Use MinGW lld if available (not for clang-cl which uses lld-link)
+    if (NOT USE_CLANG_CL AND EXISTS "C:/mingw64/bin/ld.lld.exe")
       set(CMAKE_LINKER "C:/mingw64/bin/ld.lld.exe" CACHE FILEPATH "" FORCE)
     endif()
   endif()
@@ -151,6 +196,7 @@ option(WITH_RINHASH        "Enable RinHash algorithms family" ON)
 set(WITH_OPENCL_VERSION 200 CACHE STRING "Target OpenCL version")
 set_property(CACHE WITH_OPENCL_VERSION PROPERTY STRINGS 120 200 210 220)
 option(WITH_HIP             "Enable GPU support through the HIP SDK" OFF)
+option(WITH_OROCHI          "Enable unified GPU support via Orochi (runtime HIP/CUDA)" OFF)
 # option(WITH_CUDA            "Enable CUDA backend" ON)
 # option(WITH_NVML            "Enable NVML (NVIDIA Management Library) support (only if CUDA backend enabled)" ON)
 # option(WITH_ADL             "Enable ADL (AMD Display Library) or sysfs support (only if OpenCL backend enabled)" ON)
@@ -170,8 +216,17 @@ option(ARM_V7               "Force ARMv7 (32 bit) architecture, use with caution
 
 option(WITH_LTO "Enable Link-Time Optimization" ON)
 
-if (NOT WITH_HIP)
-  if (WITH_LTO)
+if (WITH_OROCHI AND WITH_HIP)
+  message(FATAL_ERROR "WITH_OROCHI and WITH_HIP are mutually exclusive. Use one or the other.")
+endif()
+
+if (NOT WITH_HIP AND NOT WITH_OROCHI)
+  if (USE_CLANG_CL)
+    # clang-cl: /Oy is MSVC equivalent of -fomit-frame-pointer, LTO via /GL+LTCG
+    message(STATUS "clang-cl build — LTO and frame-pointer flags handled via MSVC-style options")
+    set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} /Oy")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Oy")
+  elseif (WITH_LTO)
     message(STATUS "LTO enabled (WITH_LTO=ON)")
     set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} -flto -fomit-frame-pointer")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flto -fomit-frame-pointer")
@@ -212,6 +267,13 @@ else()
   set(HIP_LANG HIP)
 endif()
 
+# clang-cl CPU path needs the same Boost/Win defines as HIP
+if (USE_CLANG_CL AND NOT WITH_HIP AND WIN32)
+  add_definitions(-DBOOST_ALL_NO_LIB)
+  add_definitions(-D_WIN32_WINNT=0x0A00)
+  add_definitions(-DNOMINMAX)
+endif()
+
 if(APPLE)
   set(_LLVM_BIN "/opt/homebrew/opt/llvm@18/bin")
 
@@ -235,7 +297,7 @@ project(
   DESCRIPTION "Open Source Dero/Spectre/Xelis Miner"
 )
 
-if (WIN32 AND (MSVC OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
+if (WIN32 AND (MSVC OR USE_CLANG_CL OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
              AND WITH_HIP AND HIP_PLATFORM MATCHES "nvidia")))
 
   message(STATUS "MSVC WHY?... ${MSVC}, ${CMAKE_CXX_SIMULATE_ID}, ${HIP_PLATFORM}")
@@ -252,9 +314,11 @@ if (WIN32 AND (MSVC OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
     $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CXX>>:/MTd>
   )
 
-  if (NOT WITH_HIP)
+  if (NOT WITH_HIP AND NOT USE_CLANG_CL)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedStatic$<$<CONFIG:Debug>:Debug>")
   else()
+    # HIP and clang-cl builds: rely on explicit /MT flags above, clear the
+    # CMake property to avoid generator-expression mismatches in subprojects
     unset(CMAKE_MSVC_RUNTIME_LIBRARY CACHE)
     unset(CMAKE_MSVC_RUNTIME_LIBRARY)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "")
@@ -316,7 +380,7 @@ set(DO_STATIC " ")
 # No static linking on macOS, ever
 if (NOT CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
   # If this is NOT an MSVC-style compiler, we can use -static
-  if (NOT (MSVC
+  if (NOT (MSVC OR USE_CLANG_CL
            OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
                AND CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")))
     set(DO_STATIC " -static ")
@@ -392,7 +456,7 @@ set(OPENSSL_USE_STATIC_LIBS TRUE)
 
 if(WIN32)
   message(STATUS "WIN32!")
-  if(NOT WITH_HIP)
+  if(NOT WITH_HIP AND NOT USE_CLANG_CL)
     set(OPENSSL_ROOT_DIR "C:/openssl/clang64")
     set(SODIUM_ROOT_DIR "C:/sodium/clang64")
     include_directories(
@@ -404,6 +468,19 @@ if(WIN32)
       "C:/mingw64/lib"
       "C:/mingw64/x86_64-w64-mingw32/lib"
     )
+    if (WITH_OROCHI)
+      add_compile_definitions(BOOST_HAS_THREADS=1)
+    endif()
+  elseif(USE_CLANG_CL AND NOT WITH_HIP)
+    if (WITH_OROCHI)
+      # Orochi (clang-cl) — dynamic OpenSSL to avoid CRT mismatch (same as NVIDIA HIP)
+      set(TNN_NEED_DYNAMIC_OPENSSL ON)
+      # Orochi uses the same MSVC/clang-cl toolchain as NVIDIA HIP — needs this
+      add_compile_definitions(BOOST_HAS_THREADS=1)
+    else()
+      # clang-cl CPU build — dynamic OpenSSL to match /MD (dynamic CRT)
+      set(TNN_NEED_DYNAMIC_OPENSSL ON)
+    endif()
   else()
     if (HIP_PLATFORM MATCHES "nvidia")
       add_compile_definitions(BOOST_HAS_THREADS=1)
@@ -450,7 +527,7 @@ if(UNIX)
   endif()
 
 else()
-  if (WITH_HIP)
+  if (WITH_HIP OR (WITH_OROCHI AND USE_CLANG_CL))
     set(CPM_SOURCE_CACHE
         "${PROJECT_SOURCE_DIR}/_deps/CPM-hip-${CMAKE_SYSTEM_NAME}-${COMPILER_TAG}")
   else()
@@ -536,7 +613,7 @@ endif()
 
 if (UNIX)
   set(THREAD_LIB pthread)
-elseif(NOT WITH_HIP)
+elseif(NOT WITH_HIP AND NOT USE_CLANG_CL)
   set(THREAD_LIB winpthread)
 endif()
 
@@ -606,9 +683,9 @@ else()
     message(STATUS "Using cached Boost archive at ${BOOST_TARBALL}")
   endif()
 
-  # Only use MSVC compatibility for HIP builds on Windows
-  # CPU builds use GNU/MinGW which is incompatible with -fms-compatibility
-  if(WITH_HIP AND WIN32)
+  # MSVC compatibility needed for clang-cl (HIP or USE_CLANG_CL)
+  # GNU/MinGW is incompatible with -fms-compatibility
+  if(WIN32 AND (WITH_HIP OR USE_CLANG_CL))
     set(BOOST_MS_COMPAT "CMAKE_CXX_FLAGS -fms-compatibility")
   else()
     set(BOOST_MS_COMPAT "")
@@ -682,7 +759,7 @@ if(WIN_CROSS)
 elseif (CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin" OR USE_GCC)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lc++ -fuse-ld=ld")
 elseif (CMAKE_HOST_SYSTEM_NAME MATCHES "Linux")
-  if (NOT WITH_HIP OR HIP_PLATFORM MATCHES "amd")
+  if (WITH_OROCHI OR NOT WITH_HIP OR HIP_PLATFORM MATCHES "amd")
     find_program(LLD_PROG NAMES ld.lld-${CXX_MAJOR_VERSION} ld.lld lld)
     if (LLD_PROG)
       get_filename_component(LLD_DIR "${LLD_PROG}" DIRECTORY)
@@ -697,8 +774,11 @@ elseif (CMAKE_HOST_SYSTEM_NAME MATCHES "Linux")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -v")
   endif()
 elseif (CMAKE_HOST_SYSTEM_NAME MATCHES "Windows")
-  if (NOT WITH_HIP)
-    # CPU builds: use MinGW's linker
+  if (USE_CLANG_CL AND NOT WITH_HIP)
+    # clang-cl CPU build: use lld-link (MSVC-compatible linker)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld-link")
+  elseif (NOT WITH_HIP)
+    # MinGW CPU builds: use MinGW's linker
     set(CMAKE_LINKER "C:/mingw64/bin/ld.lld.exe")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
     if (WITH_LTO)
@@ -764,7 +844,7 @@ file(GLOB_RECURSE SOURCES_CORE
   "${PROJECT_SOURCE_DIR}/src/util/*.cpp"
 )
 
-if (NOT WITH_HIP)
+if (NOT WITH_HIP AND NOT WITH_OROCHI)
   file(GLOB SOURCES_CORE_CRYPTO_SALSA
        "${PROJECT_SOURCE_DIR}/src/crypto/salsa-simd/*.c")
 
@@ -791,7 +871,7 @@ include(cmake/nxl-hash.cmake)
 include(cmake/wala-hash.cmake)
 include(cmake/chacha20.cmake)
 
-if (NOT WITH_HIP)
+if (NOT WITH_HIP AND NOT WITH_OROCHI)
   include(cmake/astrobwtv3.cmake)
   include(cmake/randomx.cmake)
   include(cmake/verus-hash.cmake)
@@ -801,8 +881,9 @@ if (NOT WITH_HIP)
   include(cmake/rinhash.cmake)
 
   include(cmake/blake2.cmake)
+elseif (WITH_OROCHI)
+  include(cmake/orochi.cmake)
 else()
-
   include(cmake/hip-crypto/hip-crypto.cmake)
 endif()
 
@@ -1096,6 +1177,53 @@ if (WITH_HIP)
     endif()
   endif()
 
+elseif (WITH_OROCHI)
+  # ---- Orochi unified GPU build (plain C++, no hipcc) ----
+  set(TNN_OUTPUT_NAME "tnn-miner")
+  set(USE_ASTRO_SPSA OFF)
+
+  # .hip files compile as plain C++ under Orochi (no HIP language needed)
+  set_source_files_properties(${TNN_HIP_SOURCES} PROPERTIES LANGUAGE CXX)
+
+  add_executable(${TNN_OUTPUT_NAME}
+    ${SOURCES_CORE}
+    ${SOURCES_NET}
+    ${SOURCES_CRYPTO}
+    ${HEADERS_CRYPTO}
+    ${TNN_HIP_SOURCES}
+    ${OROCHI_SOURCES}
+  )
+
+  target_include_directories(${TNN_OUTPUT_NAME} PRIVATE
+    ${OROCHI_INCLUDE_DIRS}
+  )
+
+  target_compile_definitions(${TNN_OUTPUT_NAME} PRIVATE TNN_BROADCAST_PORT=8989)
+
+  setup_target_libraries(${TNN_OUTPUT_NAME})
+
+  # On Linux, Orochi needs dl for dlopen/dlsym; on Windows, hipew needs version.lib
+  if (NOT WIN32)
+    target_link_libraries(${TNN_OUTPUT_NAME} dl)
+  else()
+    if (USE_CLANG_CL OR MSVC)
+      target_link_libraries(${TNN_OUTPUT_NAME} version.lib)
+    else()
+      target_link_libraries(${TNN_OUTPUT_NAME} version)
+    endif()
+    if (TNN_NEED_DYNAMIC_OPENSSL)
+      add_custom_command(
+        TARGET ${TNN_OUTPUT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "${_OSSL_ROOT}/bin/libcrypto-3-x64.dll"
+          "${_OSSL_ROOT}/bin/libssl-3-x64.dll"
+          "$<TARGET_FILE_DIR:${TNN_OUTPUT_NAME}>"
+      )
+    endif()
+  endif()
+
+  set_target_properties(${TNN_OUTPUT_NAME} PROPERTIES OUTPUT_NAME ${TNN_OUTPUT_NAME})
+
 else()
   # CPU-only build path
   set(TNN_OUTPUT_NAME "tnn-miner-cpu")
@@ -1110,6 +1238,16 @@ else()
 
   if (WITH_RANDOMX)
     target_link_libraries(${TNN_OUTPUT_NAME} randomx)
+  endif()
+
+  if (WIN32 AND TNN_NEED_DYNAMIC_OPENSSL)
+    add_custom_command(
+      TARGET ${TNN_OUTPUT_NAME} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${_OSSL_ROOT}/bin/libcrypto-3-x64.dll"
+        "${_OSSL_ROOT}/bin/libssl-3-x64.dll"
+        "$<TARGET_FILE_DIR:${TNN_OUTPUT_NAME}>"
+    )
   endif()
 
   # Set output name
