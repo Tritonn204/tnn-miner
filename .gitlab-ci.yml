@@ -160,6 +160,7 @@ build-hiveos-mmpos:
     - tar -xvf ${LINUX_AMD64_TGZ}
     - mv ./tnn-miner ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
     - "[ -d ./tunes ] && cp -r ./tunes ./wrappers/hiveos+mmpos/tnn-miner/tunes || true"
+    - "[ -d ./libs ] && cp -r ./libs ./wrappers/hiveos+mmpos/tnn-miner/libs || true"
     - sed "s/^EXTERNAL_VERSION=custom/EXTERNAL_VERSION=$PACKAGE_VERSION/g" -i ./wrappers/hiveos+mmpos/tnn-miner/mmp-external.conf
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/h-run.sh

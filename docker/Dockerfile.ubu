@@ -14,23 +14,9 @@ WORKDIR /src
 
 FROM base AS build
 
-# Install CUDA 12.9 SDK (headers needed for Orochi cuew compilation) — amd64 only
-ARG TARGETARCH
-RUN if [ "$TARGETARCH" = "amd64" ]; then \
-        apt-get update && \
-        apt-get install -y --no-install-recommends gnupg2 ca-certificates wget && \
-        wget -qO- https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub | apt-key add - && \
-        echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64 /" > /etc/apt/sources.list.d/cuda.list && \
-        apt-get update && \
-        apt-get install -y --no-install-recommends cuda-toolkit-12-9 && \
-        rm -rf /var/lib/apt/lists/*; \
-    fi
-
-# Ensure HIP/ROCm/CUDA env vars are set for GPU builds (no-op for CPU builds)
+# HIP/ROCm/CUDA env vars (set by base image, repeated here for clarity)
 ENV HIP_PATH=/opt/rocm
 ENV ROCM_PATH=/opt/rocm
-ENV CUDA_PATH=/usr/local/cuda-12.9
-ENV PATH="/usr/local/cuda-12.9/bin:${PATH}"
 ARG  CMAKE_ARGS=
 ARG  PACKAGE_VERSION=0.0.1
 ARG  TARGZ_FILE=miner.tar.gz
@@ -50,8 +36,35 @@ RUN ls -la ./build/bin/ ./build/ && mv ./build/bin/tnn-miner* ./ || mv ./build/t
 # Copy tunes directory (created by CMake post-build from default-tunes)
 RUN if [ -d ./build/bin/tunes ]; then cp -r ./build/bin/tunes ./tunes; elif [ -d ./build/tunes ]; then cp -r ./build/tunes ./tunes; fi
 #RUN ./tnn-miner-* --test-spectre
+
+# Collect GPU runtime libs for HiveOS/mmpOS wrapper bundling
+ARG CMAKE_ARGS
+RUN mkdir -p ./libs && \
+    if echo "$CMAKE_ARGS" | grep -q "WITH_OROCHI=ON"; then \
+      echo "Collecting GPU runtime libs for Orochi bundle..." && \
+      # ROCm/HIP runtime chain
+      for lib in libamdhip64.so libhiprtc.so libamd_comgr.so \
+                 libhsa-runtime64.so librocm_smi64.so \
+                 librocprofiler-register.so \
+                 libdrm.so libdrm_amdgpu.so; do \
+        found=$(find /opt/rocm/lib /usr/lib/x86_64-linux-gnu -maxdepth 1 \
+                     -name "${lib}*" 2>/dev/null | head -1); \
+        if [ -n "$found" ]; then \
+          # Copy the actual file, name it as the unversioned soname
+          soname=$(objdump -p "$found" 2>/dev/null | grep SONAME | awk '{print $2}') || true; \
+          if [ -n "$soname" ]; then \
+            cp "$found" "./libs/$soname"; \
+          else \
+            cp "$found" "./libs/$(basename "$found")"; \
+          fi; \
+          echo "  bundled: $(basename "$found") -> libs/"; \
+        fi; \
+      done && \
+      ls -la ./libs/; \
+    fi
+
 RUN ls -la ./
-RUN tar -czvf ${TARGZ_FILE} ./tnn-miner* ./tunes
+RUN tar -czvf ${TARGZ_FILE} ./tnn-miner* ./tunes $([ -d ./libs ] && [ "$(ls -A ./libs 2>/dev/null)" ] && echo "./libs")
 RUN md5sum ./${TARGZ_FILE}
 
 FROM scratch
@@ -60,3 +73,4 @@ ARG  TARGZ_FILE=miner.tar.gz
 COPY --from=build /src/${TARGZ_FILE} /
 COPY --from=build /src/tnn-miner* /
 COPY --from=build /src/tunes/ /tunes/
+COPY --from=build /src/libs/ /libs/

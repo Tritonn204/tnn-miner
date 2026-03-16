@@ -39,5 +39,5 @@ elif [[ "$tgt" == "amd" ]]; then
 elif [[ "$tgt" == "nvidia" ]]; then
   docker buildx build --platform=linux/amd64 --build-arg BUILDER_BASE=rocm --build-arg PACKAGE_VERSION=${PACKAGE_VERSION} --build-arg TARGZ_FILE=${TARGZ_FILE} --build-arg "CMAKE_ARGS=-DWITH_HIP=ON -DHIP_PLATFORM=nvidia -DCMAKE_HIP_PLATFORM=nvidia -DCMAKE_PREFIX_PATH=/opt/rocm" -f docker/Dockerfile.ubu . --output ./
 elif [[ "$tgt" == "orochi" ]]; then
-  docker buildx build --platform=linux/amd64 --build-arg BUILDER_BASE=amd64 --build-arg PACKAGE_VERSION=${PACKAGE_VERSION} --build-arg TARGZ_FILE=${TARGZ_FILE} --build-arg "CMAKE_ARGS=-DWITH_OROCHI=ON -DWITH_HIP=OFF" -f docker/Dockerfile.ubu . --output ./
+  docker buildx build --platform=linux/amd64 --build-arg BUILDER_BASE=rocm --build-arg PACKAGE_VERSION=${PACKAGE_VERSION} --build-arg TARGZ_FILE=${TARGZ_FILE} --build-arg "CMAKE_ARGS=-DWITH_OROCHI=ON -DWITH_HIP=OFF" -f docker/Dockerfile.ubu . --output ./
 fi
