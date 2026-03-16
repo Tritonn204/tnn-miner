@@ -14,7 +14,11 @@ function(setup_target_libraries target_name)
 
   # Link libraries for non-Apple, non-Windows systems (likely Linux)
   if(NOT APPLE AND NOT WIN32 AND NOT WIN_CROSS)
-    target_link_libraries(${target_name} udns numa)
+    if (WITH_OROCHI)
+      target_link_libraries(${target_name} -Wl,-Bstatic udns numa -Wl,-Bdynamic)
+    else()
+      target_link_libraries(${target_name} udns numa)
+    endif()
   endif()
 
   # Link AstroSPSA library if enabled
