@@ -22,7 +22,7 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
         wget -qO- https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub | apt-key add - && \
         echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64 /" > /etc/apt/sources.list.d/cuda.list && \
         apt-get update && \
-        apt-get install -y --no-install-recommends cuda-cudart-dev-12-9 cuda-nvrtc-dev-12-9 && \
+        apt-get install -y --no-install-recommends cuda-toolkit-12-9 && \
         rm -rf /var/lib/apt/lists/*; \
     fi
 
