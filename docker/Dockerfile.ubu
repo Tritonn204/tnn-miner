@@ -37,36 +37,8 @@ RUN ls -la ./build/bin/ ./build/ && mv ./build/bin/tnn-miner* ./ || mv ./build/t
 # Copy tunes directory (created by CMake post-build from default-tunes)
 RUN if [ -d ./build/bin/tunes ]; then cp -r ./build/bin/tunes ./tunes; elif [ -d ./build/tunes ]; then cp -r ./build/tunes ./tunes; fi
 #RUN ./tnn-miner-* --test-spectre
-# Bundle only the relevant GPU runtime libs based on HIP_PLATFORM
-# NVRTC for NVIDIA builds (ensures __maxnreg__ works on older drivers)
-RUN mkdir -p ./nvrtc_libs ./hip_libs && \
-    if echo "$CMAKE_ARGS" | grep -q "HIP_PLATFORM=nvidia"; then \
-      (cp /usr/local/cuda/lib64/libnvrtc.so* ./nvrtc_libs/ 2>/dev/null || true) && \
-      (cp /usr/local/cuda/lib64/libnvrtc-builtins.so* ./nvrtc_libs/ 2>/dev/null || true) && \
-      ls -la ./nvrtc_libs/; \
-    elif echo "$CMAKE_ARGS" | grep -q "HIP_PLATFORM=amd"; then \
-      (cp /opt/rocm/lib/libamdhip64.so* ./hip_libs/ 2>/dev/null || true) && \
-      (cp /opt/rocm/lib/libhiprtc.so* ./hip_libs/ 2>/dev/null || true) && \
-      (cp /opt/rocm/lib/libhiprtc-builtins.so* ./hip_libs/ 2>/dev/null || true) && \
-      (cp /opt/rocm/lib/libhsa-runtime64.so* ./hip_libs/ 2>/dev/null || true) && \
-      (cp /opt/rocm/lib/libamd_comgr.so* ./hip_libs/ 2>/dev/null || true) && \
-      (cp /opt/rocm/lib/librocprofiler-register.so* ./hip_libs/ 2>/dev/null || true) && \
-      echo "=== Resolving transitive deps ===" && \
-      for f in ./hip_libs/*.so; do \
-        ldd "$f" 2>/dev/null | grep '/opt/rocm' | awk '{print $3}' | while read -r dep; do \
-          base=$(basename "$dep"); \
-          if [ ! -f "./hip_libs/$base" ]; then \
-            echo "Adding transitive dep: $base"; \
-            cp "$dep"* ./hip_libs/ 2>/dev/null || true; \
-          fi; \
-        done; \
-      done && \
-      ls -la ./hip_libs/; \
-    fi
 RUN ls -la ./
-RUN tar -czvf ${TARGZ_FILE} ./tnn-miner* ./tunes \
-    $([ -n "$(ls ./nvrtc_libs/ 2>/dev/null)" ] && echo "./nvrtc_libs") \
-    $([ -n "$(ls ./hip_libs/ 2>/dev/null)" ] && echo "./hip_libs")
+RUN tar -czvf ${TARGZ_FILE} ./tnn-miner* ./tunes
 RUN md5sum ./${TARGZ_FILE}
 
 FROM scratch
@@ -75,5 +47,3 @@ ARG  TARGZ_FILE=miner.tar.gz
 COPY --from=build /src/${TARGZ_FILE} /
 COPY --from=build /src/tnn-miner* /
 COPY --from=build /src/tunes/ /tunes/
-COPY --from=build /src/nvrtc_libs/ /nvrtc_libs/
-COPY --from=build /src/hip_libs/ /hip_libs/
