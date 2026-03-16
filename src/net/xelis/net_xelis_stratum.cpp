@@ -1,4 +1,5 @@
 #include "../net.hpp"
+#include <job_safe.hpp>
 #include <hex.h>
 
 #include <boost/beast/core.hpp>
@@ -45,7 +46,8 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
     XelisStratum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
     boost::json::value *JV = isDev ? &devJob : &job;
-    boost::json::object J = (*JV).as_object();
+    boost::json::object J;
+    TNN_READ_JOB_OBJ(J, JV);
 
     int64_t *h = isDev ? &devHeight : &ourHeight;
 
@@ -55,11 +57,11 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
       blobStr = std::string(J["miner_work"].as_string());
     }
     blobStr.resize(XELIS_TEMPLATE_SIZE * 2, '0');
-    
+
     std::string jobIdStr = std::string(packet["params"].as_array()[0].as_string());
     std::string tsStr = std::string(packet["params"].as_array()[1].as_string());
     std::string headerStr = std::string(packet["params"].as_array()[2].as_string());
-    
+
     int tsLen = tsStr.size();
 
     // Safely manipulate the blob string
@@ -116,7 +118,8 @@ int handleXStratumPacket(boost::json::object packet, bool isDev)
   else if (M == XelisStratum::s_setExtraNonce)
   {
     boost::json::value *JV = isDev ? &devJob : &job;
-    boost::json::object J = (*JV).as_object();
+    boost::json::object J;
+    TNN_READ_JOB_OBJ(J, JV);
 
     int64_t *h = isDev ? &devHeight : &ourHeight;
 
@@ -201,8 +204,9 @@ int handleXStratumResponse(boost::json::object packet, bool isDev)
   case XelisStratum::subscribeID:
   {
     boost::json::value *JV = isDev ? &devJob : &job;
-    boost::json::object J = (*JV).as_object();
-    
+    boost::json::object J;
+    TNN_READ_JOB_OBJ(J, JV);
+
     std::string blobStr;
     if (J["miner_work"].is_null())
     {
