@@ -74,7 +74,7 @@ if (WITH_RANDOMX)
       list(APPEND randomx_sources
         src/crypto/randomx/jit_compiler_x86.cpp)
 
-      if(MSVC)
+      if(MSVC AND NOT USE_CLANG_CL)
         enable_language(ASM_MASM)
         list(APPEND randomx_sources src/crypto/randomx/jit_compiler_x86_static.asm)
 

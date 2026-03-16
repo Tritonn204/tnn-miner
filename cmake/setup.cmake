@@ -5,7 +5,7 @@ function(setup_target_libraries target_name)
 
   # Link Windows-specific libraries
   if(WIN32)
-    if (NOT WITH_HIP)
+    if (NOT WITH_HIP AND NOT USE_CLANG_CL)
       target_link_libraries(${target_name} mingw32)
     endif()
     target_link_libraries(${target_name} wsock32 ws2_32 kernel32)

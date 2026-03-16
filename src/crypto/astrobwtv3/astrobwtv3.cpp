@@ -12,6 +12,7 @@
 #include <iostream>
 #include <fstream>
 #include <thread>
+#include <mutex>
 
 #include <fnv1a.h>
 #include <xxhash64.h>
@@ -186,7 +187,7 @@ void astroTune(int num_threads, int tuneWarmupSec, int tuneDurationSec) {
     generateRandomBytesForTune<48>(random_buffer);
     byte res[32];
 
-    std::thread tune_threads[num_threads];
+    std::vector<std::thread> tune_threads(num_threads);
     for (int x = 0; x < numAstroFuncs; x++)
     {
       astroCompFunc = allAstroFuncs[x].funcPtr;

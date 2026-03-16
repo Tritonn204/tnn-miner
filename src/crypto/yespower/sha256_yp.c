@@ -49,6 +49,13 @@
 #define restrict
 #endif
 
+/* clang-cl uses C99 inline semantics (no external linkage for inline).
+ * Stub it out so these functions get emitted as normal external symbols. */
+#if defined(__clang__) && !defined(__GNUC__)
+#undef inline
+#define inline
+#endif
+
 /*
  * Encode a length len*2 vector of (uint32_t) into a length len*8 vector of
  * (uint8_t) in big-endian form.
