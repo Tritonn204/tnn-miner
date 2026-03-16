@@ -122,6 +122,7 @@ static const uint32_t Krnd[64] = {
  * Processes all 64 rounds using hardware acceleration.
  */
 
+__attribute__((target("sha,ssse3,sse4.1")))
 static inline void
 SHA256_Transform_SHANI(uint32_t state[static restrict 8],
     const uint8_t block[static restrict 64])

@@ -82,7 +82,6 @@ int TestAstroBWTv3repeattest(bool quiet);
 void optest_ref(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print=true);
 void optest_branchcpu(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print=true);
 
-void optest_lookup(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print=true);
 void optest_wolf(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print=true);
 
 void optest_avx2(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print=true);

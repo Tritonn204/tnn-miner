@@ -3,8 +3,8 @@
 //@ guard __x86_64__
 
 //@ tier avx2 avx2
-//@ tier avx512 avx512f,avx512bw,avx512vl
-//@ tier avx512bitalg avx512f,avx512bw,avx512vl,avx512bitalg,avx512vbmi
+//@ tier avx512 avx512f,avx512bw,avx512vl,bmi2
+//@ tier avx512bitalg avx512f,avx512bw,avx512vl,avx512bitalg,avx512vbmi,bmi2
 //@ tier fallback default
 
 //@ common
@@ -20,7 +20,7 @@
 #undef  WOLF_POPCNT256_EPI8
 #define WOLF_POPCNT256_EPI8(x) _mm256_popcnt_epi8(x)
 
-__attribute__((target("avx512f,avx512bw,avx512vl,avx512bitalg,avx512vbmi")))
+__attribute__((target("avx512f,avx512bw,avx512vl,avx512bitalg,avx512vbmi,bmi2")))
 void copyChunkData(workerData &worker, int start, int end) {
   for (int i = start; i + 63 < end; i += 64) {
     __m512i prev_data = _mm512_loadu_si512((__m512i*)&worker.prev_chunk[i]);
@@ -28,7 +28,7 @@ void copyChunkData(workerData &worker, int start, int end) {
   }
 }
 
-__attribute__((target("avx512f,avx512bw,avx512vl,avx512bitalg,avx512vbmi")))
+__attribute__((target("avx512f,avx512bw,avx512vl,avx512bitalg,avx512vbmi,bmi2")))
 void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker)
 {
   uint32_t Opcode = CodeLUT_16[op];
@@ -44,7 +44,7 @@ void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t p
   _mm256_storeu_si256((__m256i *)&out[pos1], data);
 }
 
-__attribute__((target("avx512f,avx512bw,avx512vl,avx512bitalg,avx512vbmi")))
+__attribute__((target("avx512f,avx512bw,avx512vl,avx512bitalg,avx512vbmi,bmi2")))
 void wolfCompute(workerData &worker, bool isTest, int wIndex)
 {
   WOLF_COMPUTE_BODY(wolfPermute, copyChunkData)
@@ -61,7 +61,7 @@ void wolfCompute(workerData &worker, bool isTest, int wIndex)
 // =========================================================================
 //@ begin avx512
 
-__attribute__((target("avx512f,avx512bw,avx512vl")))
+__attribute__((target("avx512f,avx512bw,avx512vl,bmi2")))
 void copyChunkData(workerData &worker, int start, int end) {
   for (int i = start; i + 63 < end; i += 64) {
     __m512i prev_data = _mm512_loadu_si512((__m512i*)&worker.prev_chunk[i]);
@@ -69,7 +69,7 @@ void copyChunkData(workerData &worker, int start, int end) {
   }
 }
 
-__attribute__((target("avx512f,avx512bw,avx512vl")))
+__attribute__((target("avx512f,avx512bw,avx512vl,bmi2")))
 void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker)
 {
   uint32_t Opcode = CodeLUT_16[op];
@@ -85,7 +85,7 @@ void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t p
   _mm256_storeu_si256((__m256i *)&out[pos1], data);
 }
 
-__attribute__((target("avx512f,avx512bw,avx512vl")))
+__attribute__((target("avx512f,avx512bw,avx512vl,bmi2")))
 void wolfCompute(workerData &worker, bool isTest, int wIndex)
 {
   WOLF_COMPUTE_BODY(wolfPermute, copyChunkData)

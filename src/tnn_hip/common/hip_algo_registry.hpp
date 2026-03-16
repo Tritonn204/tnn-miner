@@ -342,7 +342,7 @@ inline AlgoConfig XELIS_V3_CONFIG = {
     .category = AlgoCategory::MemoryHard,
     .enable_reg_tuning = true,
 
-    .amd_blocks = {32, 1024, 32},
+    .amd_blocks = {32, 256, 32},
     .nvidia_blocks = {32, 1024, 32},
     .target_batch_time_ms = 1250.0,
     .max_batch_time_ms = 3125.0,
@@ -373,7 +373,7 @@ inline AlgoConfig XELIS_V3_CONFIG = {
         "xelis_s3b3_hybrid_v2_kernel"
     },
 
-    .occupancy_threshold = 0.66,
+    .occupancy_threshold = 1.0,
 };
 
 // ============================================================================

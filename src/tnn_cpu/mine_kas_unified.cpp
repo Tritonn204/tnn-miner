@@ -1,6 +1,6 @@
 #include "../coins/miners.hpp"
 
-#ifndef TNN_HIP
+#if !defined(TNN_HIP) || defined(WITH_OROCHI)
 #include "common/mine_cpu_unified.hpp"
 
 #ifdef TNN_ASTRIXHASH
@@ -47,4 +47,4 @@ void mineHoosat_unified(int tid) {
 }
 #endif
 
-#endif // !TNN_HIP
+#endif // !TNN_HIP || WITH_OROCHI

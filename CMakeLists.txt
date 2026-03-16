@@ -850,13 +850,20 @@ file(GLOB_RECURSE SOURCES_CORE
   "${PROJECT_SOURCE_DIR}/src/util/*.cpp"
 )
 
-if (NOT WITH_HIP AND NOT WITH_OROCHI)
+if (NOT WITH_HIP OR WITH_OROCHI)
   file(GLOB SOURCES_CORE_CRYPTO_SALSA
        "${PROJECT_SOURCE_DIR}/src/crypto/salsa-simd/*.c")
 
   file(GLOB SOURCES_CORE_ARGON2
        "${PROJECT_SOURCE_DIR}/src/crypto/argon2/*.c"
        "${PROJECT_SOURCE_DIR}/src/crypto/argon2/*.cpp")
+
+  # Per-file SIMD flags for argon2 (needed when building with generic -march=x86-64)
+  if (NOT MSVC AND NOT USE_CLANG_CL)
+    set_source_files_properties(src/crypto/argon2/argon2_ssse3.cpp PROPERTIES COMPILE_FLAGS -mssse3)
+    set_source_files_properties(src/crypto/argon2/argon2_avx2.cpp PROPERTIES COMPILE_FLAGS -mavx2)
+    set_source_files_properties(src/crypto/argon2/argon2_avx512.cpp PROPERTIES COMPILE_FLAGS "-mavx512f -mavx512bw")
+  endif()
 
   list(APPEND SOURCES_CORE
        ${SOURCES_CORE_CRYPTO_SALSA}
@@ -1209,6 +1216,10 @@ elseif (WITH_OROCHI)
   target_compile_definitions(${TNN_OUTPUT_NAME} PRIVATE TNN_BROADCAST_PORT=8989)
 
   setup_target_libraries(${TNN_OUTPUT_NAME})
+
+  if (WITH_RANDOMX)
+    target_link_libraries(${TNN_OUTPUT_NAME} randomx)
+  endif()
 
   # On Linux, Orochi needs dl for dlopen/dlsym; on Windows, hipew needs version.lib
   if (NOT WIN32)
