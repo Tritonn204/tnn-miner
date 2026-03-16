@@ -377,13 +377,17 @@ cmake_print_variables(CMAKE_SYSTEM_PROCESSOR)
 # This CMAKE variable isn't defined until 'project' is called.
 set(DO_STATIC " ")
 
-# No static linking on macOS, ever
+# No static linking on macOS (ever) or Orochi (needs dlopen for runtime GPU libs)
 if (NOT CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
-  # If this is NOT an MSVC-style compiler, we can use -static
   if (NOT (MSVC OR USE_CLANG_CL
            OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
                AND CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")))
-    set(DO_STATIC " -static ")
+    if (WITH_OROCHI)
+      # Orochi needs dlopen — can't use -static, but keep libgcc/libstdc++ static
+      set(DO_STATIC " -static-libgcc -static-libstdc++ ")
+    else()
+      set(DO_STATIC " -static ")
+    endif()
   endif()
 endif()
 

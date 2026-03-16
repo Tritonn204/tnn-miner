@@ -920,7 +920,7 @@ int tnn_main(int argc, char **argv)
 
   if (vm.count("test-astrix"))
   {
-#if defined(TNN_RANDOMX)
+#if defined(TNN_ASTRIXHASH)
     return AstrixHash::test();
 #else
     setcolor(RED);
@@ -933,7 +933,7 @@ int tnn_main(int argc, char **argv)
 
   if (vm.count("test-nexellia"))
   {
-#if defined(TNN_RANDOMX)
+#if defined(TNN_NXLHASH)
     return NxlHash::test();
 #else
     setcolor(RED);
@@ -946,7 +946,7 @@ int tnn_main(int argc, char **argv)
 
   if (vm.count("test-hoosat"))
   {
-#if defined(TNN_RANDOMX)
+#if defined(TNN_HOOHASH)
     return HooHash::test();
 #else
     setcolor(RED);
@@ -959,7 +959,7 @@ int tnn_main(int argc, char **argv)
 
   if (vm.count("test-waglayla"))
   {
-#if defined(TNN_RANDOMX)
+#if defined(TNN_WALAHASH)
     return WalaHash::test();
 #else
     setcolor(RED);
