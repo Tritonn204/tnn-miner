@@ -13,11 +13,21 @@ WORKDIR /src
 #RUN chmod +x ./scripts/prereqs.sh && ./scripts/prereqs.sh
 
 FROM base AS build
+
+# Install CUDA 12.9 SDK (headers needed for Orochi cuew compilation)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gnupg2 ca-certificates wget && \
+    wget -qO- https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub | apt-key add - && \
+    echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64 /" > /etc/apt/sources.list.d/cuda.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends cuda-cudart-dev-12-9 cuda-nvrtc-dev-12-9 && \
+    rm -rf /var/lib/apt/lists/*
+
 # Ensure HIP/ROCm/CUDA env vars are set for GPU builds (no-op for CPU builds)
 ENV HIP_PATH=/opt/rocm
 ENV ROCM_PATH=/opt/rocm
-ENV CUDA_PATH=/usr/local/cuda
-ENV PATH="/usr/local/cuda/bin:${PATH}"
+ENV CUDA_PATH=/usr/local/cuda-12.9
+ENV PATH="/usr/local/cuda-12.9/bin:${PATH}"
 ARG  CMAKE_ARGS=
 ARG  PACKAGE_VERSION=0.0.1
 ARG  TARGZ_FILE=miner.tar.gz
