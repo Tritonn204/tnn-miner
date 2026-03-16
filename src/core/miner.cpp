@@ -316,7 +316,8 @@ int enhanceWallet(MiningProfile *currentProfile, bool checkWallet)
 void hipKill()
 {
 #ifdef TNN_HIP
-  hipDeviceReset_wrapper();
+  if (HIP_deviceCount > 0)
+    hipDeviceReset_wrapper();
 #endif
 }
 
