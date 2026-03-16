@@ -859,7 +859,7 @@ if (NOT WITH_HIP OR WITH_OROCHI)
        "${PROJECT_SOURCE_DIR}/src/crypto/argon2/*.cpp")
 
   # Per-file SIMD flags for argon2 (needed when building with generic -march=x86-64)
-  if (NOT MSVC AND NOT USE_CLANG_CL)
+  if (NOT MSVC AND NOT USE_CLANG_CL AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
     set_source_files_properties(src/crypto/argon2/argon2_ssse3.cpp PROPERTIES COMPILE_FLAGS -mssse3)
     set_source_files_properties(src/crypto/argon2/argon2_avx2.cpp PROPERTIES COMPILE_FLAGS -mavx2)
     set_source_files_properties(src/crypto/argon2/argon2_avx512.cpp PROPERTIES COMPILE_FLAGS "-mavx512f -mavx512bw")
