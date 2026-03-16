@@ -438,13 +438,15 @@ function Build-Target {
 $originalPath = $env:PATH
 
 try {
-    # Get HIP path and handle spaces in the path
-    $env:HIP_PATH = (& hipconfig --path).Trim()
-    Write-Host "HIP_PATH (raw): $env:HIP_PATH"
+    # HIP SDK path — only needed for legacy amd/nvidia HIP builds, not Orochi
+    if ($targetToBuild -eq "" -or $targetToBuild -eq "amd" -or $targetToBuild -eq "nvidia") {
+        $env:HIP_PATH = (& hipconfig --path).Trim()
+        Write-Host "HIP_PATH (raw): $env:HIP_PATH"
 
-    # Convert backslashes to forward slashes for CMake
-    $env:HIP_PATH = ($env:HIP_PATH -replace '\\', '/')
-    Write-Host "HIP_PATH (cmake-friendly): $env:HIP_PATH"
+        # Convert backslashes to forward slashes for CMake
+        $env:HIP_PATH = ($env:HIP_PATH -replace '\\', '/')
+        Write-Host "HIP_PATH (cmake-friendly): $env:HIP_PATH"
+    }
 
     # Build for AMD using ROCm
     if ($targetToBuild -eq "" -or $targetToBuild -eq "amd") {
