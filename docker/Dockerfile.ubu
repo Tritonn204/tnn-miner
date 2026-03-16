@@ -14,14 +14,17 @@ WORKDIR /src
 
 FROM base AS build
 
-# Install CUDA 12.9 SDK (headers needed for Orochi cuew compilation)
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends gnupg2 ca-certificates wget && \
-    wget -qO- https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub | apt-key add - && \
-    echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64 /" > /etc/apt/sources.list.d/cuda.list && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends cuda-cudart-dev-12-9 cuda-nvrtc-dev-12-9 && \
-    rm -rf /var/lib/apt/lists/*
+# Install CUDA 12.9 SDK (headers needed for Orochi cuew compilation) — amd64 only
+ARG TARGETARCH
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+        apt-get update && \
+        apt-get install -y --no-install-recommends gnupg2 ca-certificates wget && \
+        wget -qO- https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub | apt-key add - && \
+        echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64 /" > /etc/apt/sources.list.d/cuda.list && \
+        apt-get update && \
+        apt-get install -y --no-install-recommends cuda-cudart-dev-12-9 cuda-nvrtc-dev-12-9 && \
+        rm -rf /var/lib/apt/lists/*; \
+    fi
 
 # Ensure HIP/ROCm/CUDA env vars are set for GPU builds (no-op for CPU builds)
 ENV HIP_PATH=/opt/rocm
