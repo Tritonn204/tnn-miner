@@ -13,6 +13,7 @@
 #include <algo_definitions.h>
 
 #include <crypto/xelis-hash/xelis-hash.hpp>
+#include <thread>
 
 // ============================================================================
 // Xelis solution builder — called from GPU thread, must be non-blocking.
@@ -130,37 +131,50 @@ void mineXelis_hip(int tid)
   std::string algo_name = (miningProfile.coin.miningAlgo == ALGO_XELISV3) ? "xelis_v3" : "xelis_v2";
   TNN_LOG_TRACE("[TRACE] mineXelis_hip: Using algorithm '%s'\n", algo_name.c_str());
 
-  // Initialize one miner per GPU
-  for (int d = 0; d < gpuCount; d++)
+  // Initialize GPUs in parallel (autotune runs during init, TuneCoordinator
+  // handles dedup for identical GPUs)
   {
-    TNN_GPU_GATE(d)
-    TNN_LOG_TRACE("[TRACE] mineXelis_hip: Initializing GPU %d...\n", d);
+    std::vector<std::thread> init_threads;
+    std::vector<std::unique_ptr<GPUMiner>> per_gpu(gpuCount);
+    std::vector<bool> gpu_ok(gpuCount, false);
 
-    try
+    for (int d = 0; d < gpuCount; d++)
     {
-      TNN_LOG_TRACE("[TRACE] mineXelis_hip: Creating GPUMiner for device %d\n", d);
+      if (!shouldUseDevice(d)) continue;
 
-      auto miner = std::make_unique<GPUMiner>(algo_name, d);
-
-      TNN_LOG_TRACE("[TRACE] mineXelis_hip: GPUMiner created, calling initialize()\n");
-
-      if (!miner->initialize())
-      {
-        setcolor(RED);
-        std::cerr << "Failed to initialize GPU " << d << " for Xelis mining\n";
-        setcolor(BRIGHT_WHITE);
-        continue;
-      }
-
-      TNN_LOG_TRACE("[TRACE] mineXelis_hip: GPU %d initialized successfully\n", d);
-
-      miners.push_back(std::move(miner));
+      init_threads.emplace_back([&, d]() {
+        TNN_LOG_TRACE("[TRACE] mineXelis_hip: Initializing GPU %d...\n", d);
+        try
+        {
+          auto miner = std::make_unique<GPUMiner>(algo_name, d);
+          if (miner->initialize())
+          {
+            TNN_LOG_TRACE("[TRACE] mineXelis_hip: GPU %d initialized successfully\n", d);
+            per_gpu[d] = std::move(miner);
+            gpu_ok[d] = true;
+          }
+          else
+          {
+            setcolor(RED);
+            std::cerr << "Failed to initialize GPU " << d << " for Xelis mining\n";
+            setcolor(BRIGHT_WHITE);
+          }
+        }
+        catch (const std::exception &e)
+        {
+          setcolor(RED);
+          std::cerr << "GPU " << d << " init error: " << e.what() << "\n";
+          setcolor(BRIGHT_WHITE);
+        }
+      });
     }
-    catch (const std::exception &e)
+
+    for (auto& t : init_threads) t.join();
+
+    for (int d = 0; d < gpuCount; d++)
     {
-      setcolor(RED);
-      std::cerr << "GPU " << d << " init error: " << e.what() << "\n";
-      setcolor(BRIGHT_WHITE);
+      if (gpu_ok[d])
+        miners.push_back(std::move(per_gpu[d]));
     }
   }
 
