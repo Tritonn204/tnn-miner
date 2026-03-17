@@ -385,10 +385,17 @@ if (NOT CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
            OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
                AND CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")))
     if (WITH_OROCHI)
-      # Orochi needs dlopen for runtime GPU lib loading — can't use -static.
-      # Statically link C++ runtime for portability.
-      set(DO_STATIC " ")
-      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++")
+      if (WIN32)
+        # Windows Orochi: LoadLibraryA is in kernel32, always available.
+        # Use linker flags so -static applies regardless of CMAKE_BUILD_TYPE.
+        set(DO_STATIC "-static")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static")
+      else()
+        # Linux Orochi: dlopen needs dynamic glibc — can't use -static.
+        # Statically link just C/C++ runtimes for portability.
+        set(DO_STATIC " ")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++")
+      endif()
     else()
       set(DO_STATIC " -static ")
     endif()
