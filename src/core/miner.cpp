@@ -459,7 +459,6 @@ int tnn_main(int argc, char **argv)
   srand(time(NULL)); // Placing higher here to ensure the effect cascades through the entire program
 
 #if defined(TNN_ASTROBWTV3)
-  initWolfLUT();
   initializeExterns();
 #endif
   // printf("post wolf\n");
@@ -1286,6 +1285,7 @@ int tnn_main(int argc, char **argv)
     mapZeroes();
     // end of temporary section
 
+    ensureWolfLUT();
 #if defined(USE_ASTRO_SPSA)
     initSPSA();
 #endif
@@ -1504,9 +1504,8 @@ fillBlanks:
         std::atexit(cleanupMSROnExit);
     }
 
-#ifndef TNN_HIP
-    xelis_tune_v3(threads);
-#endif
+    if (cpuMine)
+      xelis_tune_v3(threads);
   }
   fflush(stdout);
   setcolor(BRIGHT_WHITE);

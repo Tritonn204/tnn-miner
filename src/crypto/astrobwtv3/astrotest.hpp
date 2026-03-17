@@ -69,6 +69,7 @@ void runDivsufsortBenchmark();
 
 void mapZeroes();
 
+void ensureWolfLUT();
 int DeroTesting(int testOp, int testLen, bool useLookup);
 int runDeroOpTests(int testOp, int dataLen=15);
 int rakeDeroOpTests(int testOp, int dataLen=15);

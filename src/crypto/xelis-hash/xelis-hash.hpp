@@ -124,6 +124,8 @@ void xelis_hash_v3(byte *input, workerData_xelis_v3 &worker, byte *hashResult);
 void xelis_hash_v3_nt(byte *input, workerData_xelis_v3 &worker, byte *hashResult);
 void xelis_hash_v3_switch(byte *input, workerData_xelis_v3 &worker, byte *hashResult);
 void xelis_hash_v3_switch_nt(byte *input, workerData_xelis_v3 &worker, byte *hashResult);
+void xelis_hash_v3_merged(byte *input, workerData_xelis_v3 &worker, byte *hashResult);
+void xelis_hash_v3_merged_nt(byte *input, workerData_xelis_v3 &worker, byte *hashResult);
 void xelis_benchmark_cpu_hash_v3();
 int xelis_runTests_v3();
 
@@ -132,6 +134,7 @@ int xelis_runTests_v3();
 void xelis_tune_v3(int num_threads);
 extern bool xelis_v3_use_hybrid;
 extern bool xelis_v3_use_switch;
+extern bool xelis_v3_use_merged;
 extern unsigned xelis_v3_ht_threshold;
 
 // Override stage 1 SIMD dispatch level.

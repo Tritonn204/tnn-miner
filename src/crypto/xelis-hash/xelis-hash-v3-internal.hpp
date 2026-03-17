@@ -613,77 +613,76 @@ done:
 }
 
 // ---------- Strategy 3: Merged (goto labels → shared division sites) ----------
+#define COMBINE_UINT64(hi, lo) (((__uint128_t)(hi) << 64) | (uint64_t)(lo))
 
 __attribute__((always_inline, hot, aligned(64)))
-static inline uint64_t execute_operation_merged(
+static inline uint64_t execute_operation_hybrid(
     uint32_t idx, uint64_t a, uint64_t b, uint64_t c,
     int r_next, uint64_t result, int i, int j_off)
 {
     __asm__ volatile ("" ::: "memory");
-    static void *const dispatch_table[] = {
-        &&m_op0,&&m_op1,&&m_op2,&&m_op3,&&m_op4,&&m_op5,&&m_op6,&&m_op7,
-        &&m_op8,&&m_op9,&&m_op10,&&m_op11,&&m_op12,&&m_op13,&&m_op14,&&m_op15};
+    // Ops 3-8 all target &&cheap — single BTB entry for 37.5% of ops
+    static void *const dt[] = {
+        &&op0,&&op1,&&op2,&&cheap,&&cheap,&&cheap,&&cheap,&&cheap,
+        &&cheap,&&op9,&&op10,&&op11,&&op12,&&op13,&&op14,&&op15};
 
     uint64_t v;
-    uint64_t dv_hi, dv_lo, dv_d;
-    bool want_quot;
-    uint64_t t0 = ROTL(result, r_next);  // hoisted — used by 11,13,15
-    uint64_t s2, dividend, divisor;
-    goto *dispatch_table[idx];
+    goto *dt[idx];
 
-    // --- 128-bit group: goto labels set operands, converge to div128 ---
-m_op0:  dv_hi = a+i; dv_lo = isqrt(b+j_off); dv_d = murmurhash3(c^result^i^j_off)|1;
-        want_quot = false; goto div128;
-m_op10: dv_hi = a; dv_lo = b; dv_d = c|1;
-        want_quot = false; goto div128;
-m_op12: dv_hi = c; dv_lo = a; dv_d = b|4;
-        want_quot = true;  goto div128;
+cheap: {
+    // Precompute products (ILP parallel, ~3cy)
+    uint64_t ab = a * b, ac = a * c, bc = b * c;
 
-    // --- 64-bit group: early-out checks in labels, then converge to div64 ---
-m_op1:  { s2 = isqrt(a+j_off);
-          dividend = c+i; divisor = isqrt(b|2); goto div64; }
-m_op2:  v = (isqrt(a+i)*isqrt(c+j_off))^(b+i+j_off); goto m_done;
-m_op11: { uint64_t t2_lo = a|2;
-          if (t0>b||(t0==b&&t2_lo>c)) { v=c; goto m_done; }
-          dividend = b; divisor = t0; goto div64; }
-m_op13: { if (!(t0>a||(t0==a&&b>(c|8)))) { v=a^b; goto m_done; }
-          dividend = t0; divisor = a; goto div64; }
+    // CMOV chains to select x, y, z for: v = x + y - z
+    //   op3: ac+bc    op4: ab-ac     op5: c+b-a
+    //   op6: a+c-b    op7: bc+a      op8: ac+b
+    uint64_t x = ac;                // op3, op8
+    x = (idx == 4) ? ab : x;
+    x = (idx == 5) ? c  : x;
+    x = (idx == 6) ? a  : x;
+    x = (idx == 7) ? bc : x;
 
-    // --- Cheap ops ---
-m_op3:  v = (a+b)*c; goto m_done;
-m_op4:  v = (b-c)*a; goto m_done;
-m_op5:  v = c-a+b;   goto m_done;
-m_op6:  v = a-b+c;   goto m_done;
-m_op7:  v = b*c+a;   goto m_done;
-m_op8:  v = c*a+b;   goto m_done;
-m_op9:  v = a*b*c;   goto m_done;
-m_op14: v = umul64_hi(a,c)+b*c; goto m_done;
-m_op15: { uint64_t rr=ROTR(result,r_next);
-          v=a*b+c*rr+umul64_hi(c,b); goto m_done; }
+    uint64_t y = bc;                // op3
+    y = (idx == 4) ? (uint64_t)0 : y;
+    y = (idx == 5) ? b  : y;
+    y = (idx == 6) ? c  : y;
+    y = (idx == 7) ? a  : y;
+    y = (idx == 8) ? b  : y;
 
-    // --- Shared 128-bit division site ---
-div128: {
-        __uint128_t dd = COMBINE_UINT64(dv_hi, dv_lo);
-        v = want_quot ? (uint64_t)(dd / dv_d) : (uint64_t)(dd % dv_d);
-        goto m_done; }
+    uint64_t z = 0;                 // op3, op7, op8
+    z = (idx == 4) ? ac : z;
+    z = (idx == 5) ? a  : z;
+    z = (idx == 6) ? b  : z;
 
-    // --- Shared 64-bit division site (one divq → q and rem) ---
-div64: {
-        uint64_t q = (divisor != 0) ? dividend / divisor : 0;
-        uint64_t rem = dividend - q * divisor;
-        // Post-processing: 1 uses rem, 11 uses q in U128 subtract, 13 returns q
-        if (idx == 1) { v = ROTL(rem, i+j_off) * s2; }
-        else if (idx == 11) {
-            v = (uint64_t)(COMBINE_UINT64(b,c) - COMBINE_UINT64(t0, a|2) * q);
-        } else {
-            v = q;
-        }
-        goto m_done; }
-
-m_done:
-    return v;
+    v = x + y - z;
+    goto done;
 }
 
+op9:   v = a*b*c; goto done;
+op14:  v = umul64_hi(a,c)+b*c; goto done;
+op15:  { uint64_t rr=ROTR(result,r_next);
+         v=a*b+c*rr+umul64_hi(c,b); goto done; }
+
+op0: { __uint128_t t1 = combine_uint64(a+i, isqrt(b+j_off));
+       uint64_t denom = murmurhash3(c^result^i^j_off)|1;
+       v = (uint64_t)(t1 % denom); goto done; }
+op1: { uint64_t sb = isqrt(b|2), sa = isqrt(a+j_off);
+       v = ROTL((c+i)%sb, i+j_off)*sa; goto done; }
+op2:   v = (isqrt(a+i)*isqrt(c+j_off))^(b+i+j_off); goto done;
+op10:  v = mod128_64_fast(COMBINE_UINT64(a,b), c|1); goto done;
+op11: { uint64_t t2_hi = ROTL(result,r_next), t2_lo = a|2;
+        if (t2_hi>b||(t2_hi==b&&t2_lo>c)) { v=c; }
+        else { __uint128_t dd=COMBINE_UINT64(b,c), ds=COMBINE_UINT64(t2_hi,t2_lo);
+               uint64_t q=(t2_hi!=0)?(b/t2_hi):0;
+               v=(uint64_t)(dd-ds*q); }
+        goto done; }
+op12:  v = udiv(c,a,b|4); goto done;
+op13: { uint64_t rr=ROTL(result,r_next);
+        v=(rr>a||(rr==a&&b>(c|8)))?((a!=0)?(rr/a):0):(a^b); goto done; }
+
+done:
+    return v;
+}
 // ---------- Unified dispatch ----------
 
 template<OpDispatch D = OpDispatch::Goto>
@@ -696,8 +695,8 @@ static inline uint64_t execute_operation(
         uint32_t op_idx = (raw_rotl + 13) & 0xF;
         return execute_operation_switch(op_idx, a, b, c, r_next, result, i, j_off);
     } else if constexpr (D == OpDispatch::Merged) {
-        uint32_t op_idx = (raw_rotl + 13) & 0xF;
-        return execute_operation_merged(op_idx, a, b, c, r_next, result, i, j_off);
+        uint32_t op_idx = raw_rotl & 0xF;
+        return execute_operation_hybrid(op_idx, a, b, c, r_next, result, i, j_off);
     } else {
         uint32_t op_idx = raw_rotl & 0xF;
         return execute_operation_goto(op_idx, a, b, c, r_next, result, i, j_off);

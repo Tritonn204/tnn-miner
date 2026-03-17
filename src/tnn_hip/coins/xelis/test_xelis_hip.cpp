@@ -724,6 +724,156 @@ static int test_threaded_level6(
     return result;
 }
 
+// ============================================================
+// Profile: execute_op cost breakdown (stubbed vs real)
+// ============================================================
+
+static int run_profile_ops() {
+    printf("\n========================================\n");
+    printf("[PROFILE] execute_op cost breakdown\n");
+    printf("========================================\n\n");
+    fflush(stdout);
+
+    oroDeviceProp_t props;
+    HIP_CHECK(oroGetDeviceProperties(&props, tnn_get_device(0)));
+
+    bool is_amd = tnn_is_amd_device(0);
+
+    // Compile with XELIS_PROFILE_OPS enabled
+    auto& compiler = RTCCompiler::instance();
+    const std::string xelis_source =
+        std::string(hip_xelis_v3_source::SRC_TNN_HIP_CRYPTO_XELIS_HASH_XELIS_HASH_V3_HIP_SOURCE);
+
+    auto rtc_headers = build_rtc_headers(
+        hip_embedded::XELIS_SOURCES,
+        hip_embedded::COMMON_HEADERS
+    );
+    for (const auto& h : rtc_headers) {
+        compiler.add_header_source(std::string(h.name), std::string(h.source));
+    }
+
+    std::vector<std::string> compile_opts;
+    if (is_amd) {
+        compile_opts = {"-O3", "-mno-cumode", "-ffast-math"};
+        compile_opts.push_back("-DXELIS_MIN_WG=64");
+        compile_opts.push_back("-DXELIS_MAX_WG=256");
+        if (props.gcnArchName[0] != '\0')
+            compile_opts.push_back(std::string("--gpu-architecture=") + props.gcnArchName);
+    } else {
+        compile_opts = {"--dopt=on", "--use_fast_math"};
+#ifdef __linux__
+        compile_opts.push_back("--device-int128");
+#endif
+        compile_opts.push_back("-DXELIS_MIN_WG=32");
+        compile_opts.push_back("-DXELIS_MAX_WG=128");
+        {
+            char arch_buf[32];
+            std::snprintf(arch_buf, sizeof(arch_buf), "sm_%d%d", props.major, props.minor);
+            compile_opts.push_back(std::string("--gpu-architecture=") + arch_buf);
+        }
+        int s3_nreg = (props.major >= 9) ? 40 : (props.major >= 8) ? 64 : 80;
+        compile_opts.push_back("-DXELIS_S3_NREG=" + std::to_string(s3_nreg));
+    }
+
+    // Enable the profiling kernel
+    compile_opts.push_back("-DXELIS_PROFILE_OPS");
+
+    printf("[PROFILE] Compiling with XELIS_PROFILE_OPS...\n");
+    fflush(stdout);
+
+    auto module_kernel = compiler.compile_from_source(
+        xelis_source, "xelis-hash-v3.hip", "xelis_stage1_kernel", compile_opts);
+
+    oroFunction_t stage1_func = module_kernel.function;
+    oroFunction_t profile_func = nullptr;
+
+    oroError_t err = oroModuleGetFunction(&profile_func, module_kernel.module, "xelis_profile_ops_kernel");
+    if (err != oroSuccess) {
+        fprintf(stderr, "[ERROR] Failed to get xelis_profile_ops_kernel: %s\n", tnn_error_string(err));
+        return 1;
+    }
+    printf("[PROFILE] Kernels loaded\n\n");
+    fflush(stdout);
+
+    // Allocate GPU memory
+    const uint32_t block_x = is_amd ? 64 : 128;
+    const uint32_t batch_size = block_x;  // 1 block
+
+    uint8_t *d_input = nullptr;
+    uint64_t *d_scratch = nullptr;
+    uint64_t *d_profile = nullptr;
+
+    HIP_CHECK(oroMalloc((oroDeviceptr*)&d_input, XELIS_TEMPLATE_SIZE));
+    HIP_CHECK(oroMalloc((oroDeviceptr*)&d_scratch, XELIS_MEMORY_SIZE_V3 * sizeof(uint64_t) * batch_size));
+    HIP_CHECK(oroMalloc((oroDeviceptr*)&d_profile, 4 * sizeof(uint64_t)));
+
+    HIP_CHECK(oroMemcpy(d_input, TEST_WORK, XELIS_TEMPLATE_SIZE, oroMemcpyHostToDevice));
+    HIP_CHECK(oroMemset(d_scratch, 0, XELIS_MEMORY_SIZE_V3 * sizeof(uint64_t) * batch_size));
+    HIP_CHECK(oroMemset(d_profile, 0, 4 * sizeof(uint64_t)));
+
+    // Run stage1 to populate scratchpad
+    printf("[PROFILE] Running Stage 1 (populate scratchpad)...\n");
+    fflush(stdout);
+    uint64_t nonce_start = 0x0000000000000000ULL;
+    uint32_t scratch_offset = 0;
+    void *s1_args[] = {&d_input, &d_scratch, (void*)&nonce_start, (void*)&batch_size, (void*)&scratch_offset};
+    HIP_CHECK(oroModuleLaunchKernel(stage1_func, 1, 1, 1, block_x, 1, 1, 0, nullptr, s1_args, nullptr));
+    HIP_CHECK(oroDeviceSynchronize());
+
+    // Run profile kernel
+    printf("[PROFILE] Running profile kernel (%u threads, 1 block)...\n", block_x);
+    fflush(stdout);
+    void *prof_args[] = {&d_scratch, &d_profile, (void*)&scratch_offset};
+    HIP_CHECK(oroModuleLaunchKernel(profile_func, 1, 1, 1, block_x, 1, 1, 0, nullptr, prof_args, nullptr));
+    HIP_CHECK(oroDeviceSynchronize());
+
+    // Read results
+    uint64_t results[4];
+    HIP_CHECK(oroMemcpy(results, d_profile, 4 * sizeof(uint64_t), oroMemcpyDeviceToHost));
+
+    uint64_t stub_cycles = results[0];
+    uint64_t real_cycles = results[1];
+    uint64_t expensive_count = results[2];
+    uint64_t total_count = results[3];
+
+    uint64_t delta = real_cycles - stub_cycles;
+    double cheap_pct = 100.0 * (total_count - expensive_count) / total_count;
+    double expensive_pct = 100.0 * expensive_count / total_count;
+
+    printf("\n========================================\n");
+    printf("[PROFILE] execute_op cost breakdown (per-thread avg, warp 0)\n");
+    printf("========================================\n");
+    printf("  Total ops:            %llu\n", (unsigned long long)total_count);
+    printf("  Cheap ops:            %llu (%.1f%%)\n",
+           (unsigned long long)(total_count - expensive_count), cheap_pct);
+    printf("  Expensive ops:        %llu (%.1f%%)\n",
+           (unsigned long long)expensive_count, expensive_pct);
+    printf("\n");
+    printf("  Stub cycles (total):  %llu\n", (unsigned long long)stub_cycles);
+    printf("  Real cycles (total):  %llu\n", (unsigned long long)real_cycles);
+    printf("  Delta (expensive):    %llu cycles\n", (unsigned long long)delta);
+    printf("\n");
+    if (expensive_count > 0)
+        printf("  Avg per expensive op: %llu cycles\n", (unsigned long long)(delta / expensive_count));
+    if (total_count > 0) {
+        printf("  Avg per op (stub):    %llu cycles\n", (unsigned long long)(stub_cycles / total_count));
+        printf("  Avg per op (real):    %llu cycles\n", (unsigned long long)(real_cycles / total_count));
+    }
+    printf("\n");
+    printf("  Expensive ops cost:   %.1f%% of total execute_op time\n",
+           100.0 * delta / real_cycles);
+    printf("  Cheap ops cost:       %.1f%% of total execute_op time\n",
+           100.0 * stub_cycles / real_cycles);
+    printf("========================================\n\n");
+    fflush(stdout);
+
+    (void)oroFree((oroDeviceptr)d_input);
+    (void)oroFree((oroDeviceptr)d_scratch);
+    (void)oroFree((oroDeviceptr)d_profile);
+
+    return 0;
+}
+
 int test_xelis_hip() {
     printf("\n");
     printf("========================================\n");
@@ -805,6 +955,10 @@ int test_xelis_hip() {
         printf("\n========================================\n");
         printf("[THREAD-TEST] All 6 levels passed!\n");
         printf("========================================\n");
+
+        // Run execute_op profiling
+        run_profile_ops();
+
         return 0;
 
     } catch (const std::exception& e) {

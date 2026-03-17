@@ -27,6 +27,7 @@ public:
         oroModule_t module = nullptr;
         oroFunction_t function = nullptr;
         std::string kernel_name;
+        bool from_cache = false;
     };
 
     struct CompiledCode {
@@ -116,6 +117,7 @@ public:
                 fflush(stdout);
 
                 CompiledKernel kernel = load_module_from_code(code_it->second);
+                kernel.from_cache = true;
                 module_cache_[module_key] = kernel;
                 return kernel;
             }

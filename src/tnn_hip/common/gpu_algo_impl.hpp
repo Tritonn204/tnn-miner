@@ -349,7 +349,7 @@ private:
     // ========================================================================
     
     bool compile_kernel() {
-        TNN_LOG_INFO("[INFO] GPU %d: Starting kernel compilation\n", device_id_);
+        TNN_LOG_INFO("[INFO] GPU %d: Loading kernel module...\n", device_id_);
         fflush(stdout);
 
         try {
@@ -395,7 +395,7 @@ private:
             // Compile module once
             RTCCompiler::CompiledKernel compiled;
             std::string primary_kernel = config_.get_primary_kernel();
-            
+
             if (!config_.source.empty()) {
                 compiled = compiler.compile_from_source(
                     std::string(config_.source),
@@ -410,7 +410,13 @@ private:
                     options,
                     device_id_);
             }
-            
+
+            if (compiled.from_cache) {
+                TNN_LOG_INFO("[INFO] GPU %d: Kernel loaded from cache\n", device_id_);
+            } else {
+                TNN_LOG_INFO("[INFO] GPU %d: Kernel compiled from source\n", device_id_);
+            }
+
             module_ = compiled.module;
             
             // Load all kernels from the module

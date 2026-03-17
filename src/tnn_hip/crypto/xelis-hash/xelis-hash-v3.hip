@@ -417,14 +417,15 @@ __device__ __forceinline__ void store_glc_slc(uint64_t *ptr, uint64_t val)
 // ============================================================================
 // NVIDIA: A100/CMP170HX (sm_80=40MB), RTX 40xx (sm_89=24-72MB), H100 (sm_90=50MB)
 // AMD:    MI300 (gfx940/941/942)
-#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ == 800 || __CUDA_ARCH__ == 890 || __CUDA_ARCH__ == 900)
-  #define LARGE_L2 1
-#elif defined(__gfx940__) || defined(__gfx941__) || defined(__gfx942__)
-  #define LARGE_L2 1
-#else
-  #define LARGE_L2 0
-#endif
-
+// TODO: test whether LARGE_L2 actually helps — may thrash L2 with random scratch access
+// #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ == 800 || __CUDA_ARCH__ == 890 || __CUDA_ARCH__ == 900)
+//   #define LARGE_L2 1
+// #elif defined(__gfx940__) || defined(__gfx941__) || defined(__gfx942__)
+//   #define LARGE_L2 1
+// #else
+//   #define LARGE_L2 0
+// #endif
+#define LARGE_L2 0
 #if LARGE_L2
   __device__ __forceinline__ uint64_t load_scratch(const uint64_t *p) { return *p; }
   __device__ __forceinline__ void store_scratch(uint64_t *p, uint64_t v) { *p = v; }
@@ -956,97 +957,95 @@ __device__ __forceinline__ uint64_t execute_op_offset(
     uint32_t op, uint64_t a, uint64_t b, uint64_t c,
     uint32_t r, uint64_t result, uint32_t i, uint32_t j)
 {
-  // Raw op index (no +13 offset). Mapping from old case numbers:
-  //   old 0→3, 1→4, 2→5, 3→6, 4→7, 5→8, 6→9,
-  //   old 7→10, 8→11, 9→12, 10→13, 11→14, 12→15, 13→0, 14→1, 15→2
+  // ── Cheap path (56.25%) ──
+  uint64_t m3  = -(uint64_t)(op==3),  m4  = -(uint64_t)(op==4);
+  uint64_t m5  = -(uint64_t)(op==5),  m6  = -(uint64_t)(op==6);
+  uint64_t m7  = -(uint64_t)(op==7),  m8  = -(uint64_t)(op==8);
+  uint64_t m9  = -(uint64_t)(op==9);
+  uint64_t m14 = -(uint64_t)(op==14), m15 = -(uint64_t)(op==15);
 
-  // --- Cheap path: always computed, grouped by shared structure ---
+  // Precompute products (ILP parallel)
   uint64_t ab = a * b, ac = a * c, bc = b * c;
 
-  // Group 3-4 (old 0-1): ac±(second product)
-  uint64_t m3 = -(uint64_t)(op == 3);
-  uint64_t m4 = -(uint64_t)(op == 4);
-  uint64_t g34_a = (ac & m3) | (ab & m4);
-  uint64_t g34_b = (bc & m3) | (ac & m4);
+  // Ops 3-8: unified x + y - z
+  uint64_t cx = (ac & (m3|m8)) | (ab & m4) | (c & m5) | (a & m6) | (bc & m7);
+  uint64_t cy = (bc & m3)      | (b & m5)  | (c & m6) | (a & m7) | (b & m8);
+  uint64_t cz = (ac & m4)      | (a & m5)  | (b & m6);
+  uint64_t cheap = cx + cy - cz;
+  cheap |= (ab * c) & m9;  // op9: triple product
 
-  // Group 5-6 (old 2-3): X - Y + Z with selected operands
-  uint64_t m5 = -(uint64_t)(op == 5);
-  uint64_t m6 = -(uint64_t)(op == 6);
-  uint64_t g56_x = (c & m5) | (a & m6);
-  uint64_t g56_y = (a & m5) | (b & m6);
-  uint64_t g56_z = (b & m5) | (c & m6);
+  // Ops 14,15: unified __umul64hi(p, q) + n
+  uint64_t mhi = m14 | m15;
+  uint64_t hp = (a & m14) | (c & m15);
+  uint64_t hq = (c & m14) | (b & m15);
+  uint64_t hn = (bc & m14) | ((ab + c * ROTR(result, r)) & m15);
+  cheap |= (__umul64hi(hp, hq) + hn) & mhi;
 
-  // Group 7-8 (old 4-5): product + scalar
-  uint64_t m7 = -(uint64_t)(op == 7);
-  uint64_t m8 = -(uint64_t)(op == 8);
-  uint64_t g78_prod = (bc & m7) | (ac & m8);
-  uint64_t g78_add  = (a  & m7) | (b  & m8);
+  // 0x3C07 = bits {0,1,2,10,11,12,13}
+  if (!((1u<<op) & 0x3C07u)) return cheap;
 
-  // Group 14-15 (old 11-12): unified __umul64hi
-  uint64_t m14 = -(uint64_t)(op == 14);
-  uint64_t m15 = -(uint64_t)(op == 15);
-  uint64_t uo1 = (a & m14) | (c & m15);
-  uint64_t uo2 = (c & m14) | (b & m15);
-  uint64_t umhi = __umul64hi(uo1, uo2);
-  uint64_t umlo = (bc & m14) | ((ab + c * ROTR(result, r)) & m15);
+  // ── Flat expensive path (43.75%) ──
+  // Reuse dead cheap masks
+  m3  = -(uint64_t)(op==0);   // m0
+  m4  = -(uint64_t)(op==1);   // m1
+  m5  = -(uint64_t)(op==2);   // m2
+  m6  = -(uint64_t)(op==10);  // m10
+  m7  = -(uint64_t)(op==11);  // m11
+  m8  = -(uint64_t)(op==12);  // m12
+  m9  = -(uint64_t)(op==13);  // m13
+  #define m0  m3
+  #define m1  m4
+  #define m2  m5
+  #define m10 m6
+  #define m11 m7
+  #define m12 m8
+  #define m13 m9
 
-  uint64_t cheap = 0;
-  cheap |= (g34_a + g34_b) & m3;
-  cheap |= (g34_a - g34_b) & m4;
-  cheap |= (g56_x - g56_y + g56_z) & (m5 | m6);
-  cheap |= (g78_prod + g78_add) & (m7 | m8);
-  cheap |= (ab * c) & -(uint64_t)(op == 9);
-  cheap |= (umhi + umlo) & (m14 | m15);
-
-  // Early out: cheap ops are bits 3-9,14,15 = 0xC3F8
-  if (!((1u << op) & 0x3C07u))
-    return cheap;
-
-  // --- 128-bit divmod group: raw 0,10,12 (old 13,7,9) ---
-  if ((1u << op) & 0x1401u) {
-    uint64_t sqrt_bj = isqrt(b + j);
-    uint64_t mur     = murmurhash3(c ^ result ^ i ^ j) | 1;
-
-    uint64_t m_0  = -(uint64_t)(op == 0);
-    uint64_t m10  = -(uint64_t)(op == 10);
-    uint64_t m12  = -(uint64_t)(op == 12);
-
-    uint64_t dv_hi = ((a + i) & m_0) | (a       & m10) | (c       & m12);
-    uint64_t dv_lo = (sqrt_bj & m_0) | (b       & m10) | (a       & m12);
-    uint64_t dv_d  = (mur     & m_0) | ((c|1)   & m10) | ((b|4)   & m12);
-
-    divmod_result dm = divmod128by64_split32(dv_hi, dv_lo, dv_d);
-    return (op == 12) ? dm.q : dm.r;
-  }
-
-  // --- Unified 64-bit divmod group: raw 1,2,11,13 (old 14,15,8,10) ---
-  uint64_t m1  = -(uint64_t)(op == 1);
-  uint64_t m2  = -(uint64_t)(op == 2);
-  uint64_t m11 = -(uint64_t)(op == 11);
-  uint64_t m13 = -(uint64_t)(op == 13);
-
-  // Speculative: ROTL for 11/13(old 8/10), isqrt pair for 1/2(old 14/15)
   uint64_t t0 = ROTL(result, r);
-  uint64_t sa1 = ((b | 2) & m1) | ((a + i) & m2);
-  uint64_t sa2 = ((a + j) & m1) | ((c + j) & m2);
-  uint64_t s1 = isqrt(sa1);
-  uint64_t s2 = isqrt(sa2);
 
-  // Branchless operand selection — one divmod for all 4 cases
-  uint64_t dividend = ((c + i) & m1) | (b      & m11) | (t0    & m13);
-  uint64_t divisor  = (s1      & m1) | (t0     & m11) | (a     & m13) | (1 & m2);
-  divisor |= (uint64_t)(divisor == 0);  // guard div-by-zero for 11/13
+  // 2 grouped isqrts (ops 0,1,2)
+  uint64_t sqrt_in_A = ((b+j) & m0) | ((b|2) & m1) | ((a+i) & m2) | ~(m0|m1|m2);
+  uint64_t sqrt_in_B = ((a+j) & m1) | ((c+j) & m2) | ~(m1|m2);
+  uint64_t sqrt_A = isqrt(sqrt_in_A);
+  uint64_t sqrt_B = isqrt(sqrt_in_B);
 
-  divmod_result dm = divmod64_split32(dividend, divisor);
+  uint64_t mur = murmurhash3(c ^ result ^ i ^ j) | 1;
 
-  // Post-processing: 11/13(old 8/10) use q, 1(old 14) uses r, 2(old 15) ignores division
+  // 128-bit divmod (ops 0,10,12)
+  uint64_t m128 = m0 | m10 | m12;
+  uint64_t dv128_hi = ((a+i) & m0) | (a     & m10) | (c     & m12) | ~m128;
+  uint64_t dv128_lo = (sqrt_A & m0) | (b     & m10) | (a     & m12);
+  uint64_t dv128_d  = (mur    & m0) | ((c|1) & m10) | ((b|4) & m12) | ~m128;
+  divmod_result dm128 = divmod128by64_split32(dv128_hi, dv128_lo, dv128_d);
+  uint64_t res128 = (dm128.r & (m0|m10)) | (dm128.q & m12);
+
+  // 64-bit divmod (ops 1,11,13)
+  uint64_t m64 = m1 | m11 | m13;
+  uint64_t dv64_num = ((c+i) & m1) | (b  & m11) | (t0 & m13) | ~m64;
+  uint64_t dv64_den = (sqrt_A & m1) | (t0 & m11) | (a  & m13) | ~m64;
+  dv64_den |= (uint64_t)(dv64_den == 0);
+  divmod_result dm64 = divmod64_split32(dv64_num, dv64_den);
+
+  uint64_t res1  = ROTL(dm64.r, i+j) * sqrt_B;
   uint64_t t1_11 = a | 2;
-  uint64_t early_11 = U128_LT(b, c, t0, t1_11) ? c : (c - t1_11 * dm.q);
-  uint64_t early_13 = U128_GT(t0, b, a, (c | 8)) ? dm.q : (a ^ b);
-  uint64_t r1 = ROTL(dm.r, i + j) * s2;
-  uint64_t r2 = (s1 * s2) ^ (b + i + j);
+  uint64_t cmp_11 = -(uint64_t)U128_LT(b, c, t0, t1_11);
+  uint64_t res11  = (c & cmp_11) | ((c - t1_11 * dm64.q) & ~cmp_11);
+  uint64_t cmp_13 = -(uint64_t)U128_GT(t0, b, a, (c|8));
+  uint64_t res13  = (dm64.q & cmp_13) | ((a ^ b) & ~cmp_13);
+  uint64_t res64 = (res1 & m1) | (res11 & m11) | (res13 & m13);
 
-  return (early_11 & m11) | (early_13 & m13) | (r1 & m1) | (r2 & m2);
+  // op2: pure isqrt
+  uint64_t res2 = (sqrt_A * sqrt_B) ^ (b + i + j);
+
+  return (res128 & m128) | (res64 & m64) | (res2 & m2);
+
+  #undef m0
+  #undef m1
+  #undef m2
+  #undef m10
+  #undef m11
+  #undef m12
+  #undef m13
 }
 
 #if defined(__CUDA_ARCH__) || defined(__HIP_PLATFORM_NVIDIA__)
@@ -1336,7 +1335,7 @@ __global__ void xelis_s3_hybrid_v2_noblake_kernel(
 #if defined(__HIP_PLATFORM_AMD__)
 extern "C" __attribute__((amdgpu_flat_work_group_size(XELIS_MIN_WG, XELIS_MAX_WG)))
 #elif defined(__CUDA_ARCH__)
-extern "C" __maxnreg__(48)
+extern "C" __maxnreg__(64)
 #else
 extern "C"
 #endif

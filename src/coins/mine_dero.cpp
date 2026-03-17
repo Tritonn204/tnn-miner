@@ -9,8 +9,12 @@
 #include <boost/chrono.hpp>
 #include <cstdint>
 #include <cstring>
+#include <mutex>
 #include <random>
 #include <cstdlib>
+
+static std::once_flag s_wolfLUTOnce;
+void ensureWolfLUT() { std::call_once(s_wolfLUTOnce, initWolfLUT); }
 
 namespace {
 
@@ -53,6 +57,7 @@ void mineDero(int tid)
       return;
     }
 
+    ensureWolfLUT();
     NUMAOptimizer::optimizeMemoryForMining(worker, sizeof(workerData));
     initWorker(*worker);
     lookupGen(*worker, nullptr, nullptr);

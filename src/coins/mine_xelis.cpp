@@ -422,7 +422,12 @@ waitForJob:
         // Call the appropriate hash function based on version
         if (currentUseV3) {
           bool is_ht = xelis_v3_use_hybrid && (unsigned)tid > xelis_v3_ht_threshold;
-          if (xelis_v3_use_switch) {
+          if (xelis_v3_use_merged) {
+            if (is_ht)
+              xelis_hash_v3_merged_nt(FINALWORK, *(workerData_xelis_v3*)worker, powHash);
+            else
+              xelis_hash_v3_merged(FINALWORK, *(workerData_xelis_v3*)worker, powHash);
+          } else if (xelis_v3_use_switch) {
             if (is_ht)
               xelis_hash_v3_switch_nt(FINALWORK, *(workerData_xelis_v3*)worker, powHash);
             else

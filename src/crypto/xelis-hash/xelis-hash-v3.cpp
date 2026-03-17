@@ -309,6 +309,22 @@ TNN_SECTION("xelis_hot") void xelis_hash_v3_switch_nt(byte *input, workerData_xe
     blake3((uint8_t *)worker.scratchPad, XELIS_OUTPUT_SIZE_V3, hashResult);
 }
 
+TNN_SECTION("xelis_hot") void xelis_hash_v3_merged(byte *input, workerData_xelis_v3 &worker, byte *hashResult)
+{
+    auto s1 = g_stage1_override ? g_stage1_override : get_stage_1();
+    s1(input, worker.scratchPad, 112);
+    pick_stage_3_merged()(worker.scratchPad, worker);
+    blake3((uint8_t *)worker.scratchPad, XELIS_OUTPUT_SIZE_V3, hashResult);
+}
+
+TNN_SECTION("xelis_hot") void xelis_hash_v3_merged_nt(byte *input, workerData_xelis_v3 &worker, byte *hashResult)
+{
+    auto s1 = g_stage1_nt_override ? g_stage1_nt_override : get_stage_1_nt();
+    s1(input, worker.scratchPad, 112);
+    pick_stage_3_merged()(worker.scratchPad, worker);
+    blake3((uint8_t *)worker.scratchPad, XELIS_OUTPUT_SIZE_V3, hashResult);
+}
+
 // ============================================================================
 // BENCHMARK
 // ============================================================================
@@ -982,34 +998,54 @@ __attribute__((cold)) static void xelis_benchmark_multithread()
 }
 
 // ============================================================================
-// STARTUP TUNE — baseline vs hybrid (NT stores for HT siblings)
+// STARTUP TUNE — sweeps S1 (pipelined/serial) × S3 (goto/switch/merged) × hybrid
 // ============================================================================
 
 bool xelis_v3_use_hybrid = false;
 bool xelis_v3_use_switch = false;
+bool xelis_v3_use_merged = false;
 unsigned xelis_v3_ht_threshold = UINT_MAX;
-
-using XelisHashFn = void(*)(byte *, workerData_xelis_v3 &, byte *);
 
 struct XelisTuneConfig {
     const char *name;
-    XelisHashFn hash_fn;       // used by physical-core threads
-    XelisHashFn hash_fn_ht;    // used by HT-sibling threads (nullptr = same)
+    Stage1Fn    s1;         // stage1 for physical-core threads
+    Stage1Fn    s1_ht;      // stage1 for HT-sibling threads (nullptr = same as s1)
+    Stage3Fn    s3;
+    bool        is_serial;  // true if s1 is serial variant
+    bool        is_switch;
+    bool        is_merged;
+    bool        is_hybrid;
 };
 
 __attribute__((cold)) void xelis_tune_v3(int num_threads)
 {
-    constexpr double WARMUP_SEC  = 2.0;
-    constexpr double BENCH_SEC   = 10.0;
+    constexpr double WARMUP_SEC  = 1.0;
+    constexpr double BENCH_SEC   = 2.0;
 
     unsigned phys = std::thread::hardware_concurrency();
     unsigned ht_thresh = (std::min)(phys, (unsigned)num_threads);
 
+    Stage1Fn s1_pipe   = g_stage1_override    ? g_stage1_override    : get_stage_1();
+    Stage1Fn s1_nt     = g_stage1_nt_override ? g_stage1_nt_override : get_stage_1_nt();
+    Stage1Fn s1_serial = get_stage_1_serial();
+    Stage3Fn s3_goto   = pick_stage_3();
+    Stage3Fn s3_sw     = pick_stage_3_switch();
+    Stage3Fn s3_merge  = pick_stage_3_merged();
+
+    //                    name                    s1          s1_ht    s3        serial  switch  merged  hybrid
     XelisTuneConfig configs[] = {
-        { "goto",           xelis_hash_v3,        nullptr },
-        { "goto+hybrid",    xelis_hash_v3,        xelis_hash_v3_nt },
-        { "switch",         xelis_hash_v3_switch,  nullptr },
-        { "switch+hybrid",  xelis_hash_v3_switch,  xelis_hash_v3_switch_nt },
+        { "pipe+goto",           s1_pipe,   nullptr,  s3_goto,   false, false, false, false },
+        { "pipe+goto+hyb",      s1_pipe,   s1_nt,    s3_goto,   false, false, false, true  },
+        { "pipe+switch",        s1_pipe,   nullptr,  s3_sw,     false, true,  false, false },
+        { "pipe+switch+hyb",    s1_pipe,   s1_nt,    s3_sw,     false, true,  false, true  },
+        { "pipe+merged",        s1_pipe,   nullptr,  s3_merge,  false, false, true,  false },
+        { "pipe+merged+hyb",    s1_pipe,   s1_nt,    s3_merge,  false, false, true,  true  },
+        { "ser+goto",           s1_serial, nullptr,  s3_goto,   true,  false, false, false },
+        { "ser+goto+hyb",       s1_serial, s1_nt,    s3_goto,   true,  false, false, true  },
+        { "ser+switch",         s1_serial, nullptr,  s3_sw,     true,  true,  false, false },
+        { "ser+switch+hyb",     s1_serial, s1_nt,    s3_sw,     true,  true,  false, true  },
+        { "ser+merged",         s1_serial, nullptr,  s3_merge,  true,  false, true,  false },
+        { "ser+merged+hyb",     s1_serial, s1_nt,    s3_merge,  true,  false, true,  true  },
     };
     constexpr size_t NUM_CONFIGS = sizeof(configs) / sizeof(configs[0]);
 
@@ -1039,20 +1075,26 @@ __attribute__((cold)) void xelis_tune_v3(int num_threads)
                     input[k] = (byte)((k * 17 + 31 + t * 7) & 0xFF);
 
                 bool is_ht = ((unsigned)t >= ht_thresh);
-                XelisHashFn fn = (is_ht && cfg.hash_fn_ht) ? cfg.hash_fn_ht : cfg.hash_fn;
+                Stage1Fn s1_fn = (is_ht && cfg.s1_ht) ? cfg.s1_ht : cfg.s1;
+                Stage3Fn s3_fn = cfg.s3;
 
                 ready_barrier.arrive_and_wait();
 
                 // Warmup
                 auto warmup_end = std::chrono::steady_clock::now()
                     + std::chrono::milliseconds((int)(WARMUP_SEC * 1000));
-                while (std::chrono::steady_clock::now() < warmup_end)
-                    fn(input, *worker, hash);
+                while (std::chrono::steady_clock::now() < warmup_end) {
+                    s1_fn(input, worker->scratchPad, 112);
+                    s3_fn(worker->scratchPad, *worker);
+                    blake3((uint8_t *)worker->scratchPad, XELIS_OUTPUT_SIZE_V3, hash);
+                }
 
                 // Bench
                 uint64_t count = 0;
                 while (!stop_flag.load(std::memory_order_relaxed)) {
-                    fn(input, *worker, hash);
+                    s1_fn(input, worker->scratchPad, 112);
+                    s3_fn(worker->scratchPad, *worker);
+                    blake3((uint8_t *)worker->scratchPad, XELIS_OUTPUT_SIZE_V3, hash);
                     count++;
                 }
                 total_hashes.fetch_add(count, std::memory_order_relaxed);
@@ -1073,7 +1115,7 @@ __attribute__((cold)) void xelis_tune_v3(int num_threads)
         for (auto &th : threads) th.join();
 
         double hs = (double)total_hashes.load() / BENCH_SEC;
-        printf("  %-10s: %.2f H/s\n", cfg.name, hs);
+        printf("  %-20s: %.2f H/s\n", cfg.name, hs);
         fflush(stdout);
 
         if (hs > best_hs) {
@@ -1082,11 +1124,19 @@ __attribute__((cold)) void xelis_tune_v3(int num_threads)
         }
     }
 
-    xelis_v3_use_hybrid  = (best_idx == 1 || best_idx == 3);
-    xelis_v3_use_switch  = (best_idx == 2 || best_idx == 3);
+    auto &winner = configs[best_idx];
+    xelis_v3_use_hybrid   = winner.is_hybrid;
+    xelis_v3_use_switch   = winner.is_switch;
+    xelis_v3_use_merged   = winner.is_merged;
     xelis_v3_ht_threshold = ht_thresh;
 
-    printf("Selected: %s (%.2f H/s)\n\n", configs[best_idx].name, best_hs);
+    // If serial S1 won, override the global stage1 dispatch so all hash functions use it
+    if (winner.is_serial) {
+        g_stage1_override    = get_stage_1_serial();
+        g_stage1_nt_override = get_stage_1_serial();
+    }
+
+    printf("Selected: %s (%.2f H/s)\n\n", winner.name, best_hs);
     fflush(stdout);
 }
 
