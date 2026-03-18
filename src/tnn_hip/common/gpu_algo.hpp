@@ -77,12 +77,27 @@ struct TuningResult {
     uint8_t strategy = 0;      // Algo-defined strategy index (0 = default/first)
     bool valid = false;
 
+    // Algo-specific tune keys (e.g., "s1_knee_batch" for xelis).
+    // Probed after main autotune sweep, cached to disk as "tune.<key>=<value>".
+    std::unordered_map<std::string, int64_t> tune_keys;
+
+    int64_t get_tune_key(const std::string& key, int64_t default_val = 0) const {
+        auto it = tune_keys.find(key);
+        return (it != tune_keys.end()) ? it->second : default_val;
+    }
+
     std::string describe() const {
         char buf[256];
         snprintf(buf, sizeof(buf),
             "strategy=%u, block_size=%d, num_blocks=%d, batch_size=%u, hashrate=%.2f H/s, time=%.2fms",
             strategy, block_size, num_blocks, batch_size, hashrate, batch_time_ms);
-        return buf;
+        std::string s(buf);
+        for (const auto& [k, v] : tune_keys) {
+            char kbuf[128];
+            snprintf(kbuf, sizeof(kbuf), ", %s=%lld", k.c_str(), (long long)v);
+            s += kbuf;
+        }
+        return s;
     }
 };
 
@@ -111,6 +126,15 @@ struct KernelLaunchContext {
 
     // Stream (nullptr = default stream)
     oroStream_t stream = nullptr;
+
+    // Algo-specific tune keys (pointer to TuningResult's map, non-owning)
+    const std::unordered_map<std::string, int64_t>* tune_keys = nullptr;
+
+    int64_t get_tune_key(const std::string& key, int64_t default_val = 0) const {
+        if (!tune_keys) return default_val;
+        auto it = tune_keys->find(key);
+        return (it != tune_keys->end()) ? it->second : default_val;
+    }
 };
 
 // Forward declaration
@@ -251,6 +275,21 @@ private:
 };
 
 // ============================================================================
+// Tune key probe callback — runs after main autotune sweep to discover
+// algo-specific parameters (e.g., bandwidth knee, optimal sub-batch sizes).
+// Writes results into result.tune_keys. Returns true on success.
+// ============================================================================
+using TuneKeyProbeFn = std::function<bool(
+    const KernelMap& kernels,
+    const oroDeviceProp_t& device_props,
+    int compute_units,
+    oroStream_t stream,
+    const struct AlgoConfig& config,
+    TuningResult& result,
+    int device_id
+)>;
+
+// ============================================================================
 // Algorithm configuration
 // ============================================================================
 struct AlgoConfig {
@@ -320,7 +359,10 @@ struct AlgoConfig {
     // Minimum fraction of peak occupancy for a block size to be tested (0.0–1.0).
     // Higher = fewer candidates, faster tune. Lower = broader search.
     double occupancy_threshold = 0.66;
-    
+
+    // Post-sweep tune key probe (nullptr = no extra probing)
+    TuneKeyProbeFn tune_key_probe_fn = nullptr;
+
     // Helper to get all kernel names (handles legacy single name)
     std::vector<std::string> get_kernel_names() const {
         if (!kernel_names.empty()) {

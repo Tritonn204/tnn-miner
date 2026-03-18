@@ -271,6 +271,7 @@ public:
         ctx.block_size = block_size_;
         ctx.num_blocks = num_blocks_;
         ctx.strategy = tuning_result_.strategy;
+        ctx.tune_keys = &tuning_result_.tune_keys;
         ctx.config = &config_;
         ctx.stream = nullptr;  // Default stream
 
@@ -390,6 +391,15 @@ private:
                 }
             } else if (tnn_is_nvidia_device(device_id_)) {
                 options = {"--dopt=on", "--use_fast_math"};
+
+                // GPU architecture (must match precompile so cache key aligns)
+                {
+                    char arch_buf[32];
+                    snprintf(arch_buf, sizeof(arch_buf), "sm_%d%d",
+                             device_props_.major, device_props_.minor);
+                    options.push_back(std::string("--gpu-architecture=") + arch_buf);
+                }
+
 #ifdef __linux__
                 options.push_back("--device-int128");
 #endif
@@ -399,8 +409,7 @@ private:
 
                 // Per-kernel register limits via -D defines (arch-dependent)
                 {
-                    const int major = device_props_.major;
-                    int s3_nreg = 40;
+                    int s3_nreg = (device_props_.major <= 7) ? 56 : 40;
                     options.push_back("-DXELIS_S3_NREG=" + std::to_string(s3_nreg));
                 }
 
@@ -702,6 +711,9 @@ private:
                 else if (key == "batch_time_ms") cached.batch_time_ms = std::stod(val);
                 else if (key == "compute_units") cached_compute_units = std::stoi(val);
                 else if (key == "strategy") cached.strategy = (uint8_t)std::stoi(val);
+                else if (key.size() > 5 && key.substr(0, 5) == "tune.") {
+                    cached.tune_keys[key.substr(5)] = std::stoll(val);
+                }
             }
             
             // Validate
@@ -717,7 +729,8 @@ private:
                 size_t free_mem, total_mem;
                 (void)oroMemGetInfo(&free_mem, &total_mem);
 
-                size_t usable = (size_t)(free_mem * 0.95);
+                size_t vram_reserve = (size_t)(config_.memory_reserve_mb * 1024 * 1024);
+                size_t usable = (free_mem > vram_reserve) ? (free_mem - vram_reserve) : 0;
                 if (required > usable && config_.scratch_per_hash > 0) {
                     // Scale batch down to fit available memory instead of discarding the tune
                     uint32_t max_batch = (uint32_t)(usable / config_.scratch_per_hash);
@@ -776,7 +789,10 @@ private:
         f << "batch_size=" << tuning_result_.batch_size << "\n";
         f << "hashrate=" << tuning_result_.hashrate << "\n";
         f << "batch_time_ms=" << tuning_result_.batch_time_ms << "\n";
-        
+        for (const auto& [key, val] : tuning_result_.tune_keys) {
+            f << "tune." << key << "=" << val << "\n";
+        }
+
         TuneOutputBuffer out(device_id_);
         out.printf("[AUTOTUNE] GPU %d: Saved cache to %s\n", device_id_, path.c_str());
     }
@@ -816,6 +832,7 @@ private:
             ctx.block_size = block_size_;
             ctx.num_blocks = trial_num_blocks;
             ctx.strategy = tuning_result_.strategy;
+            ctx.tune_keys = &tuning_result_.tune_keys;
             ctx.config = &config_;
             ctx.stream = nullptr;
 
@@ -880,6 +897,7 @@ private:
         ctx.block_size = test_block_size;
         ctx.num_blocks = test_num_blocks;
         ctx.strategy = test_strategy;
+        ctx.tune_keys = &tuning_result_.tune_keys;
         ctx.config = &config_;
         ctx.stream = stream;
         
@@ -1512,13 +1530,43 @@ private:
             out.separator('=');
             out.newline();
         }
-        
+
+        // Post-sweep tune key probes (algo-specific, e.g., s1 bandwidth knee)
+        if (tune_success && config_.tune_key_probe_fn) {
+            TuneOutputBuffer out(device_id_);
+            out.printf("[AUTOTUNE] GPU %d: Running tune key probes...\n", device_id_);
+            out.flush();
+
+            oroStream_t probe_stream;
+            (void)oroStreamCreate(&probe_stream);
+
+            bool probe_ok = config_.tune_key_probe_fn(
+                kernels_, device_props_, compute_units_,
+                probe_stream, config_, tuning_result_, device_id_
+            );
+
+            (void)oro_safe_stream_sync(probe_stream);
+            (void)oroStreamDestroy(probe_stream);
+
+            if (probe_ok && !tuning_result_.tune_keys.empty()) {
+                TuneOutputBuffer out2(device_id_);
+                out2.printf("[AUTOTUNE] GPU %d: Tune keys:", device_id_);
+                for (const auto& [k, v] : tuning_result_.tune_keys) {
+                    out2.printf(" %s=%lld", k.c_str(), (long long)v);
+                }
+                out2.printf("\n");
+            } else if (!probe_ok) {
+                TuneOutputBuffer out2(device_id_);
+                out2.printf("[AUTOTUNE] GPU %d: Tune key probe failed, continuing without\n", device_id_);
+            }
+        }
+
         // Save to disk
         save_tune_cache();
-        
+
         // Notify coordinator that we're done
         TuneCoordinator::instance().end_tune(tune_key, tune_success);
-        
+
         return true;
     }
 

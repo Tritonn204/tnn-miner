@@ -149,12 +149,11 @@ __device__ __forceinline__ uint64_t isqrt(uint64_t a)
     // Denormalize
     s = s >> (scal >> 1);
 
-    // Correction
+    // Branchless correction — eliminates warp divergence
     uint64_t sq = (uint64_t)s * s;
-    if (sq > arg) { s--; sq = (uint64_t)s * s; }
-
+    s -= (uint32_t)(sq > arg);
     sq = (uint64_t)(s + 1) * (s + 1);
-    if (sq <= arg) { s++; sq = (uint64_t)(s + 1) * (s + 1); }
+    s += (uint32_t)(sq <= arg);
 
     return s;
 }
@@ -541,17 +540,6 @@ __device__ __forceinline__ void store_glc_slc(uint64_t *ptr, uint64_t val)
   __device__ __forceinline__ void store_scratch(uint64_t *p, uint64_t v) { store_glc_slc(p, v); }
 #endif
 
-// HBM detection — bandwidth-rich GPUs can afford speculative dual-loads
-// NVIDIA: A100/CMP170HX (sm_80), H100 (sm_90) — NOT RTX 40xx (GDDR6X)
-// AMD:    Vega (gfx900), RVII (gfx906), MI200 (gfx90a), MI300 (gfx940/941/942)
-#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ == 800 || __CUDA_ARCH__ == 900)
-  #define HAS_HBM 1
-#elif defined(__gfx900__) || defined(__gfx906__) || defined(__gfx90a__) || \
-      defined(__gfx940__) || defined(__gfx941__) || defined(__gfx942__)
-  #define HAS_HBM 1
-#else
-  #define HAS_HBM 0
-#endif
 
 // ============================================================================
 // ChaCha20 Implementation (Platform-Specific)
@@ -813,75 +801,69 @@ __device__ __forceinline__ void stage_1_cooperative(
     uint8_t (*shared_nonces)[4][12] = (uint8_t (*)[4][12])(shared_nonces_mem + block_size * 4 * 32);
 
     // Phase 1: Each thread computes its own K2 and nonces
-    uint8_t key[128];
-    uint8_t K2[4][32];
-    uint8_t my_nonces[4][12];
-    uint8_t buffer[64];
+    // Scoped so nvcc can reclaim registers for Phase 2.
+    // key[128] eliminated — reads from input[] directly (saves 128B register pressure).
+    {
+        uint8_t K2[4][32];
+        uint8_t my_nonces[4][12];
+        uint8_t buffer[64];
 
-    // Initialize key
-    #pragma unroll
-    for (int i = 0; i < XELIS_TEMPLATE_SIZE; i++) {
-        key[i] = input[i];
-    }
-    #pragma unroll
-    for (int i = XELIS_TEMPLATE_SIZE; i < 128; i++) {
-        key[i] = 0;
-    }
+        // First hash to get nonce[0]
+        blake3_hash_single_chunk(input, XELIS_TEMPLATE_SIZE, buffer);
+        #pragma unroll
+        for (int i = 0; i < 12; i++) {
+            my_nonces[0][i] = buffer[i];
+        }
 
-    // First hash to get nonce[0]
-    blake3_hash_single_chunk(input, XELIS_TEMPLATE_SIZE, buffer);
-    #pragma unroll
-    for (int i = 0; i < 12; i++) {
-        my_nonces[0][i] = buffer[i];
-    }
-
-    // Derive K2[0]
-    #pragma unroll
-    for (int i = 0; i < XELIS_CHUNK_SIZE; i++) {
-        buffer[XELIS_CHUNK_SIZE + i] = key[i];
-    }
-    blake3_hash_single_chunk(buffer, XELIS_CHUNK_SIZE * 2, K2[0]);
-
-    // Derive K2[1..3]
-    #pragma unroll
-    for (int k = 1; k < 4; k++) {
+        // Derive K2[0]: hash(blake3_output[0:32] ++ input[0:32])
         #pragma unroll
         for (int i = 0; i < XELIS_CHUNK_SIZE; i++) {
-            buffer[i] = K2[k-1][i];
-            buffer[XELIS_CHUNK_SIZE + i] = key[k * XELIS_CHUNK_SIZE + i];
+            buffer[XELIS_CHUNK_SIZE + i] = input[i];
         }
-        blake3_hash_single_chunk(buffer, XELIS_CHUNK_SIZE * 2, K2[k]);
-    }
+        blake3_hash_single_chunk(buffer, XELIS_CHUNK_SIZE * 2, K2[0]);
 
-    // Derive nonces[1..3]
-    #pragma unroll
-    for (int k = 0; k < 3; k++) {
-        uint32_t state[16];
-        chacha20_init_state(state, K2[k], my_nonces[k]);
-        state[12] = (XELIS_BYTES_PER_CHUNK_V3 / 64) - 1;
-
-        uint32_t block[16];
-        chacha20_block(block, state);
-
-        uint8_t* block_bytes = (uint8_t*)block;
+        // Derive K2[1..3]: read key bytes from input, zero-pad past TEMPLATE_SIZE
         #pragma unroll
-        for (int i = 0; i < 12; i++) {
-            my_nonces[k + 1][i] = block_bytes[52 + i];
+        for (int k = 1; k < 4; k++) {
+            #pragma unroll
+            for (int i = 0; i < XELIS_CHUNK_SIZE; i++) {
+                buffer[i] = K2[k-1][i];
+                int src_idx = k * XELIS_CHUNK_SIZE + i;
+                buffer[XELIS_CHUNK_SIZE + i] = (src_idx < XELIS_TEMPLATE_SIZE) ? input[src_idx] : 0;
+            }
+            blake3_hash_single_chunk(buffer, XELIS_CHUNK_SIZE * 2, K2[k]);
         }
-    }
 
-    // Store K2 and nonces to shared memory
-    #pragma unroll
-    for (int k = 0; k < 4; k++) {
+        // Derive nonces[1..3]
         #pragma unroll
-        for (int i = 0; i < 32; i++) {
-            shared_K2[tid][k][i] = K2[k][i];
+        for (int k = 0; k < 3; k++) {
+            uint32_t state[16];
+            chacha20_init_state(state, K2[k], my_nonces[k]);
+            state[12] = (XELIS_BYTES_PER_CHUNK_V3 / 64) - 1;
+
+            uint32_t block[16];
+            chacha20_block(block, state);
+
+            uint8_t* block_bytes = (uint8_t*)block;
+            #pragma unroll
+            for (int i = 0; i < 12; i++) {
+                my_nonces[k + 1][i] = block_bytes[52 + i];
+            }
         }
+
+        // Store K2 and nonces to shared memory
         #pragma unroll
-        for (int i = 0; i < 12; i++) {
-            shared_nonces[tid][k][i] = my_nonces[k][i];
+        for (int k = 0; k < 4; k++) {
+            #pragma unroll
+            for (int i = 0; i < 32; i++) {
+                shared_K2[tid][k][i] = K2[k][i];
+            }
+            #pragma unroll
+            for (int i = 0; i < 12; i++) {
+                shared_nonces[tid][k][i] = my_nonces[k][i];
+            }
         }
-    }
+    } // K2, my_nonces, buffer all dead — nvcc can reclaim registers
 
     __syncthreads();
 
@@ -1220,9 +1202,7 @@ XELIS_HOT __device__ void stage_3_hybrid_v2(uint64_t *my_scratch, const uint8_t 
                    ? pending_store_a
                    : a_preloaded;
 
-#if HAS_HBM
       prefetch_l1(&my_scratch[r + 8]);
-#endif
       uint64_t c = my_scratch[r];
       uint64_t rot_res = ~ROTR(result, r);
       r++;
@@ -1240,14 +1220,8 @@ XELIS_HOT __device__ void stage_3_hybrid_v2(uint64_t *my_scratch, const uint8_t 
       a_preloaded = load_scratch(&mem_buffer_a[idx_a_read]);
 
       uint64_t idx_t = map_index(idx_seed);
-#if HAS_HBM
-      uint64_t t_a = load_scratch(&mem_buffer_a[idx_t]);
-      uint64_t t_b = load_scratch(&mem_buffer_b[idx_t]);
-      uint64_t t = (pick_half(v) ? t_b : t_a) ^ result;
-#else
       uint64_t t = (pick_half(v) ? load_scratch(&mem_buffer_b[idx_t])
                                  : load_scratch(&mem_buffer_a[idx_t])) ^ result;
-#endif
 
       uint64_t idx_a_write = map_index(t ^ result ^ XELIS_GOLDEN_RATIO);
       uint64_t idx_b_write = map_index(idx_a_write ^ ~result ^ XELIS_SCATTER_CONST);
@@ -1411,7 +1385,7 @@ __global__ void xelis_s13_noblake_kernel(
 // ============================================================================
 extern "C"
 #if defined(__CUDA_ARCH__) && defined(XELIS_S3_NREG)
-__maxnreg__(XELIS_S3_NREG)
+// __maxnreg__(XELIS_S3_NREG)
 #endif
 __global__ void xelis_s3_hybrid_v2_noblake_kernel(
     uint64_t *__restrict__ scratch_memory,
@@ -1567,11 +1541,19 @@ __global__ void xelis_blake3_opt_batch(
 }
 
 // ============================================================================
-// Warp-cooperative Blake3 batch kernel
-// 32 threads collaborate per hash — level-0 fusion, ILP interleave, tail collapse
-// Launch: <<<batch_size, 32>>> (1 block per hash, no dynamic shared memory)
-// Shared: 266×9×4 = 9,576 bytes static (stride-9 padding, no bank conflicts)
+// Blake3 warp-cooperative — CVs in global memory (L1-cached), no smem
+//
+// Uses global memory for the 266-entry CV merge tree instead of shared memory.
+// 8.5KB of CVs per block fits easily in L1 cache (192KB on NVIDIA, 16KB on AMD).
+// Removes the smem/LDS bottleneck that limited occupancy to ~5 blocks/SM.
+//
+// CV workspace is stored at the end of the scratch allocation:
+//   cv_base = scratch_memory + batch_size * XELIS_MEMORY_SIZE_V3
+// Requires scratch_per_hash to include XELIS_B3_CV_BYTES_PER_HASH extra bytes.
 // ============================================================================
+constexpr size_t XELIS_B3_CV_WORDS_PER_HASH = 266 * 8;  // 266 CVs × 8 uint32_t
+constexpr size_t XELIS_B3_CV_BYTES_PER_HASH = XELIS_B3_CV_WORDS_PER_HASH * sizeof(uint32_t);  // 8512
+
 extern "C"
 __global__ void xelis_blake3_warp_coop_batch(
     uint64_t *__restrict__ scratch_memory,
@@ -1582,18 +1564,20 @@ __global__ void xelis_blake3_warp_coop_batch(
     uint64_t *__restrict__ solutions,
     uint64_t nonce_start)
 {
-  __shared__ uint32_t chunk_cvs[266][9];
-
   uint32_t hash_idx = blockIdx.x;
   if (hash_idx >= batch_size)
     return;
-  uint32_t lane = threadIdx.x;  // 0..31
+  uint32_t lane = threadIdx.x;
 
   uint32_t global_idx = hash_idx + scratch_offset;
   const uint32_t* scratch = (const uint32_t*)(scratch_memory + (size_t)global_idx * XELIS_MEMORY_SIZE_V3);
   uint8_t *my_output = outputs + global_idx * XELIS_HASH_SIZE;
 
-  // Phase 1: Paired chunk hashing with level-0 merge in registers
+  // CV workspace lives after all scratchpad data in the same allocation
+  uint32_t *cv_base = (uint32_t*)(scratch_memory + (size_t)batch_size * XELIS_MEMORY_SIZE_V3);
+  uint32_t *my_cvs = cv_base + (size_t)hash_idx * XELIS_B3_CV_WORDS_PER_HASH;
+
+  // Phase 1: Paired chunk hashing with level-0 merge — same as warp-coop
   for (uint32_t pair = lane; pair < 265; pair += blockDim.x) {
     uint32_t c_L = pair * 2;
     uint32_t c_R = pair * 2 + 1;
@@ -1616,7 +1600,7 @@ __global__ void xelis_blake3_warp_coop_batch(
     uint32_t merged[8];
     blake3_hash_parent_u32(cv_L, cv_R, merged, false);
     #pragma unroll
-    for (int i = 0; i < 8; i++) chunk_cvs[pair][i] = merged[i];
+    for (int i = 0; i < 8; i++) my_cvs[pair * 8 + i] = merged[i];
   }
 
   // Straggler: chunk 530 has no pair
@@ -1629,11 +1613,11 @@ __global__ void xelis_blake3_warp_coop_batch(
       blake3_compress_u32(cv, chunk_ptr + b * 16, BLAKE3_BLOCK_LEN, 530, 0);
     blake3_compress_u32(cv, chunk_ptr + 15 * 16, BLAKE3_BLOCK_LEN, 530, CHUNK_END);
     #pragma unroll
-    for (int i = 0; i < 8; i++) chunk_cvs[265][i] = cv[i];
+    for (int i = 0; i < 8; i++) my_cvs[265 * 8 + i] = cv[i];
   }
   __syncthreads();
 
-  // Phase 2: Parallel merge tree — all levels
+  // Phase 2: Merge tree via global memory (L1-cached within block)
   uint32_t n = 266;
   while (n > 1) {
     uint32_t pairs = n / 2;
@@ -1641,17 +1625,22 @@ __global__ void xelis_blake3_warp_coop_batch(
     bool is_root = (pairs == 1 && odd == 0);
 
     for (uint32_t p = lane; p < pairs; p += blockDim.x) {
-      uint32_t parent[8];
-      blake3_hash_parent_u32(chunk_cvs[p * 2], chunk_cvs[p * 2 + 1], parent, is_root);
+      uint32_t left[8], right[8], result[8];
       #pragma unroll
-      for (int i = 0; i < 8; i++) chunk_cvs[p][i] = parent[i];
+      for (int i = 0; i < 8; i++) {
+        left[i]  = my_cvs[(p * 2) * 8 + i];
+        right[i] = my_cvs[(p * 2 + 1) * 8 + i];
+      }
+      blake3_hash_parent_u32(left, right, result, is_root);
+      #pragma unroll
+      for (int i = 0; i < 8; i++) my_cvs[p * 8 + i] = result[i];
     }
     __syncthreads();
 
     if (odd && lane == 0) {
       #pragma unroll
       for (int j = 0; j < 8; j++)
-        chunk_cvs[pairs][j] = chunk_cvs[n - 1][j];
+        my_cvs[pairs * 8 + j] = my_cvs[(n - 1) * 8 + j];
     }
     if (odd) __syncthreads();
 
@@ -1662,7 +1651,7 @@ __global__ void xelis_blake3_warp_coop_batch(
   if (lane == 0) {
     #pragma unroll
     for (int i = 0; i < 8; i++)
-      blake3_store32(my_output + i * 4, chunk_cvs[0][i]);
+      blake3_store32(my_output + i * 4, my_cvs[i]);
 
     if (difficulty_target && solutions && check_difficulty_gpu(my_output, difficulty_target))
     {
@@ -1674,8 +1663,10 @@ __global__ void xelis_blake3_warp_coop_batch(
       {
         uint64_t *solution_slot = &solutions[1 + idx * 5];
         solution_slot[0] = nonce;
-        uint8_t *hash_dest = (uint8_t *)&solution_slot[1];
-        memcpy(hash_dest, my_output, 32);
+        solution_slot[1] = ((uint64_t *)my_output)[0];
+        solution_slot[2] = ((uint64_t *)my_output)[1];
+        solution_slot[3] = ((uint64_t *)my_output)[2];
+        solution_slot[4] = ((uint64_t *)my_output)[3];
       }
     }
   }
