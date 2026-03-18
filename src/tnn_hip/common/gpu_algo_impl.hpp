@@ -206,7 +206,7 @@ public:
         }
 
         (void)oroEventCreate(&start_event_);
-        (void)oroEventCreate(&stop_event_);
+        (void)oroEventCreateWithFlags(&stop_event_, oroEventBlockingSync);
 
         initialized_ = true;
         

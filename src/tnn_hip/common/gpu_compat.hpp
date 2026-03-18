@@ -34,6 +34,7 @@ constexpr auto oroErrorNoDevice     = hipErrorNoDevice;
 constexpr auto oroMemcpyHostToDevice  = hipMemcpyHostToDevice;
 constexpr auto oroMemcpyDeviceToHost  = hipMemcpyDeviceToHost;
 constexpr auto oroEventDefault      = hipEventDefault;
+constexpr auto oroEventBlockingSync = hipEventBlockingSync;
 constexpr auto ORORTC_SUCCESS       = HIPRTC_SUCCESS;
 
 // ---- Runtime API ----
