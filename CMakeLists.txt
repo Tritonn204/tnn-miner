@@ -442,11 +442,9 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -D\"CPU_ARCHTARGET=${CPU
 #endif()
 #set(CMAKE_LIB_SUFFIX "${CMAKE_LIB_SUFFIX}_${CPU_ARCHTARGET}")
 
-if(TARGET_ARCH MATCHES "amd64")
-  message(STATUS "Target architecture is amd64: enabling -msha")
-  
-  add_compile_options("$<$<COMPILE_LANGUAGE:C>:-msha>")
-  add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:-msha>")
+if(TARGET_ARCH MATCHES "amd64" AND NOT MSVC AND NOT USE_CLANG_CL)
+  # SHA-NI: only on files that need it (not globally — breaks CPUs without SHA-NI)
+  set_source_files_properties(src/crypto/yespower/sha256_yp.c PROPERTIES COMPILE_FLAGS "-msha -mssse3 -msse4.1")
 endif()
 
 set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} ${DO_STATIC} -DTNN_VERSION=${INTERNAL_TNN_VERSION}") # ${WIN_CROSS_OPTS}")

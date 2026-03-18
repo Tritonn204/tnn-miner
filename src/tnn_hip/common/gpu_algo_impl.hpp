@@ -189,6 +189,22 @@ public:
             return false;
         }
 
+        // Validate cached tune with trial launches (catches stale caches after recompile)
+        if (tuning_result_.valid && !validate_cached_tune()) {
+            TNN_LOG_INFO("[AUTOTUNE] GPU %d: Cached tune invalid, triggering retune\n", device_id_);
+            cleanup_batch_buffers();
+
+            // Force retune for this device
+            g_tuning_overrides.force_retune = true;
+            g_tuning_overrides.retune_devices.insert(device_id_);
+            if (!configure_batch()) {
+                return false;
+            }
+            if (!allocate_batch_buffers()) {
+                return false;
+            }
+        }
+
         (void)oroEventCreate(&start_event_);
         (void)oroEventCreate(&stop_event_);
 
@@ -775,6 +791,66 @@ private:
         double time_ms = 0;
         double hashrate = 0;
     };
+
+    // Validate cached tune by running 3 trial launches with allocated buffers.
+    // Returns true if all launches succeed; false means retune is needed.
+    bool validate_cached_tune() {
+        constexpr int NUM_TRIALS = 3;
+
+        // Use a small batch (1 block worth) to keep validation fast
+        uint32_t trial_batch = block_size_;
+        int trial_num_blocks = 1;
+
+        // Zero the solutions buffer
+        (void)oro_safe_memset(d_solutions_, 0, 8);
+
+        for (int i = 0; i < NUM_TRIALS; i++) {
+            KernelLaunchContext ctx;
+            ctx.d_input = d_input_;
+            ctx.d_outputs = d_outputs_;
+            ctx.d_scratch = d_scratch_;
+            ctx.d_difficulty_target = d_difficulty_target_;
+            ctx.d_solutions = d_solutions_;
+            ctx.nonce_start = 0;
+            ctx.batch_size = trial_batch;
+            ctx.block_size = block_size_;
+            ctx.num_blocks = trial_num_blocks;
+            ctx.strategy = tuning_result_.strategy;
+            ctx.config = &config_;
+            ctx.stream = nullptr;
+
+            bool success;
+            if (config_.execute_fn) {
+                success = config_.execute_fn(kernels_, ctx);
+            } else {
+                success = default_monolithic_execute(kernels_, ctx);
+            }
+
+            if (!success) {
+                TNN_LOG_INFO("[AUTOTUNE] GPU %d: Trial launch %d/%d failed (execute returned false), re-tuning\n",
+                             device_id_, i + 1, NUM_TRIALS);
+                return false;
+            }
+
+            oroError_t sync_err = oroDeviceSynchronize();
+            oroError_t last_err = oro_safe_get_last_error();
+
+            if (sync_err != oroSuccess) {
+                TNN_LOG_INFO("[AUTOTUNE] GPU %d: Trial launch %d/%d sync failed: %s, re-tuning\n",
+                             device_id_, i + 1, NUM_TRIALS, tnn_error_string(sync_err));
+                return false;
+            }
+            if (last_err != oroSuccess) {
+                TNN_LOG_INFO("[AUTOTUNE] GPU %d: Trial launch %d/%d async error: %s, re-tuning\n",
+                             device_id_, i + 1, NUM_TRIALS, tnn_error_string(last_err));
+                return false;
+            }
+        }
+
+        TNN_LOG_DEBUG("[DEBUG] GPU %d: Cached tune validated (%d trial launches OK)\n",
+                      device_id_, NUM_TRIALS);
+        return true;
+    }
 
 private:
     TuneTestResult run_timed_kernel_test(

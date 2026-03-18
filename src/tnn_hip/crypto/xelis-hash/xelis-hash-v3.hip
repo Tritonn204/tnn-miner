@@ -40,6 +40,19 @@ __device__ constexpr uint8_t AES_KEY[16] = {'x', 'e', 'l', 'i', 's', 'h', 'a', '
 #define XELIS_MAX_WG 1024
 #endif
 
+// Wavefront/warp size detection — compile-time
+#if defined(__AMDGCN_WAVEFRONT_SIZE__)
+  #define XELIS_WAVE_SIZE __AMDGCN_WAVEFRONT_SIZE__
+#elif defined(__CUDA_ARCH__)
+  #define XELIS_WAVE_SIZE 32
+#else
+  #define XELIS_WAVE_SIZE 32
+#endif
+
+// Cooperative TPB: wave32 → stage1=32, b3=96 | wave64 → stage1=64, b3=64
+#define XELIS_STAGE1_COOP_TPB  XELIS_WAVE_SIZE
+#define XELIS_B3_COOP_TPB      (XELIS_WAVE_SIZE == 32 ? 96 : 64)
+
 // ============================================================================
 // Basic Device Functions
 // ============================================================================
@@ -312,6 +325,100 @@ __device__ __forceinline__ void xelis_blake3_lean(const uint8_t* input, uint8_t*
     }
 }
 
+
+// ============================================================================
+// Optimized Blake3 — Tier 1 (u32 loads, branched merge, shared cv_stack)
+// ============================================================================
+
+// Compress taking uint32_t block words directly (scratchpad is u64-aligned)
+__device__ __forceinline__ void blake3_compress_u32(
+    uint32_t cv[8], const uint32_t block_words[16],
+    uint8_t block_len, uint64_t counter, uint8_t flags)
+{
+    uint32_t state[16];
+    state[0]=cv[0]; state[1]=cv[1]; state[2]=cv[2]; state[3]=cv[3];
+    state[4]=cv[4]; state[5]=cv[5]; state[6]=cv[6]; state[7]=cv[7];
+    state[8]=IV_0; state[9]=IV_1; state[10]=IV_2; state[11]=IV_3;
+    state[12]=(uint32_t)counter; state[13]=(uint32_t)(counter>>32);
+    state[14]=(uint32_t)block_len; state[15]=(uint32_t)flags;
+    BLAKE3_ROUND(0); BLAKE3_ROUND(1); BLAKE3_ROUND(2); BLAKE3_ROUND(3);
+    BLAKE3_ROUND(4); BLAKE3_ROUND(5); BLAKE3_ROUND(6);
+    cv[0]=state[0]^state[8]; cv[1]=state[1]^state[9]; cv[2]=state[2]^state[10]; cv[3]=state[3]^state[11];
+    cv[4]=state[4]^state[12]; cv[5]=state[5]^state[13]; cv[6]=state[6]^state[14]; cv[7]=state[7]^state[15];
+}
+
+// Parent hash working entirely with uint32_t arrays (no byte round-trip)
+__device__ __forceinline__ void blake3_hash_parent_u32(
+    const uint32_t left[8], const uint32_t right[8],
+    uint32_t output[8], bool is_root)
+{
+    uint32_t cv[8] = {IV_0, IV_1, IV_2, IV_3, IV_4, IV_5, IV_6, IV_7};
+    uint32_t block_words[16];
+    #pragma unroll
+    for (int i = 0; i < 8; i++) { block_words[i] = left[i]; block_words[i+8] = right[i]; }
+    uint32_t state[16];
+    state[0]=cv[0]; state[1]=cv[1]; state[2]=cv[2]; state[3]=cv[3];
+    state[4]=cv[4]; state[5]=cv[5]; state[6]=cv[6]; state[7]=cv[7];
+    state[8]=IV_0; state[9]=IV_1; state[10]=IV_2; state[11]=IV_3;
+    state[12]=0; state[13]=0;
+    state[14]=BLAKE3_BLOCK_LEN; state[15]=(uint32_t)(PARENT | (is_root ? ROOT : 0));
+    BLAKE3_ROUND(0); BLAKE3_ROUND(1); BLAKE3_ROUND(2); BLAKE3_ROUND(3);
+    BLAKE3_ROUND(4); BLAKE3_ROUND(5); BLAKE3_ROUND(6);
+    #pragma unroll
+    for (int i = 0; i < 8; i++) output[i] = state[i] ^ state[i+8];
+}
+
+// Optimized lean Blake3: branched merge + shared cv_stack + u32 loads
+// cv_stack: caller provides per-thread shared memory slice [10][8]
+__device__ __forceinline__ void xelis_blake3_opt(
+    const uint8_t* input, uint8_t* output,
+    uint32_t (*cv_stack)[8])
+{
+    constexpr int NUM_CHUNKS = 531;
+    int stack_len = 0;
+
+    for (uint64_t chunk_idx = 0; chunk_idx < (uint64_t)NUM_CHUNKS; chunk_idx++) {
+        const uint32_t* chunk_w = (const uint32_t*)(input + (size_t)chunk_idx * BLAKE3_CHUNK_LEN);
+        uint32_t cv[8] = {IV_0, IV_1, IV_2, IV_3, IV_4, IV_5, IV_6, IV_7};
+
+        blake3_compress_u32(cv, chunk_w, BLAKE3_BLOCK_LEN, chunk_idx, CHUNK_START);
+        #pragma unroll
+        for (int b = 1; b < 15; b++)
+            blake3_compress_u32(cv, chunk_w + b * 16, BLAKE3_BLOCK_LEN, chunk_idx, 0);
+        blake3_compress_u32(cv, chunk_w + 15 * 16, BLAKE3_BLOCK_LEN, chunk_idx, CHUNK_END);
+
+        #pragma unroll
+        for (int i = 0; i < 8; i++) cv_stack[stack_len][i] = cv[i];
+        stack_len++;
+
+        // Branched merge — chunk_idx is warp-uniform, zero divergence cost.
+        // Eliminates ~4800 wasted parent compressions vs branchless loop.
+        int tz = __ffsll(chunk_idx + 1ULL) - 1;
+        while (tz-- > 0 && stack_len >= 2) {
+            uint32_t parent[8];
+            blake3_hash_parent_u32(cv_stack[stack_len-2], cv_stack[stack_len-1], parent, false);
+            stack_len--;
+            #pragma unroll
+            for (int i = 0; i < 8; i++) cv_stack[stack_len-1][i] = parent[i];
+        }
+    }
+
+    while (stack_len > 2) {
+        uint32_t parent[8];
+        blake3_hash_parent_u32(cv_stack[stack_len-2], cv_stack[stack_len-1], parent, false);
+        stack_len--;
+        #pragma unroll
+        for (int i = 0; i < 8; i++) cv_stack[stack_len-1][i] = parent[i];
+    }
+
+    // Root merge — write final hash as bytes
+    uint32_t root[8];
+    blake3_hash_parent_u32(cv_stack[0], cv_stack[1], root, true);
+    #pragma unroll
+    for (int i = 0; i < 8; i++) {
+        blake3_store32(output + i * 4, root[i]);
+    }
+}
 
 // ============================================================================
 // Streaming Store Intrinsics (Platform-Specific)
@@ -689,10 +796,9 @@ __device__ __forceinline__ void stage_1(
 // ============================================================================
 // Cooperative Stage 1 (Bandwidth Optimized)
 // ============================================================================
-// Hard-capped at 32 threads for optimal efficiency
 // Uses shared memory coordination for coalesced writes
-constexpr int STAGE1_COOPERATIVE_BLOCK_SIZE = 32;
-constexpr int STAGE1_SHARED_MEM_SIZE = STAGE1_COOPERATIVE_BLOCK_SIZE * 176; // 32 * (4*32 + 4*12)
+// Block size: XELIS_STAGE1_COOP_TPB (32 for wave32, 64 for wave64)
+constexpr int STAGE1_SHARED_MEM_SIZE = XELIS_STAGE1_COOP_TPB * 176; // TPB * (4*32 + 4*12)
 
 __device__ __forceinline__ void stage_1_cooperative(
     const uint8_t *input,
@@ -805,8 +911,6 @@ __device__ __forceinline__ void stage_1_cooperative(
                 store_streaming_u256(dest + 4, out64[4], out64[5], out64[6], out64[7]);
             }
         }
-
-        __syncthreads();
     }
 }
 
@@ -1231,8 +1335,9 @@ __global__ void xelis_stage1_kernel(
   stage_1(input, my_scratch, blockDim.x);
 }
 
-// Stage 1 Cooperative kernel - bandwidth optimized (hard-capped at 32 threads)
+// Stage 1 Cooperative kernel - bandwidth optimized
 // Uses shared memory coordination for coalesced writes
+// TPB = XELIS_STAGE1_COOP_TPB (32 for wave32, 64 for wave64)
 extern "C"
 #if defined(__CUDA_ARCH__)
 __maxnreg__(96)
@@ -1244,7 +1349,6 @@ __global__ void xelis_stage1_cooperative(
     uint32_t batch_size,
     uint32_t scratch_offset)
 {
-  // Hard-capped at 32 threads per block
   __shared__ uint8_t shared_mem[STAGE1_SHARED_MEM_SIZE];
 
   uint32_t local_tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -1414,6 +1518,165 @@ __global__ void xelis_blake3_batch(
       solution_slot[0] = nonce;
       uint8_t *hash_dest = (uint8_t *)&solution_slot[1];
       memcpy(hash_dest, my_output, 32);
+    }
+  }
+}
+
+// ============================================================================
+// Optimized Blake3 batch kernel (Tier 1: u32 loads, branched merge, shared cv_stack)
+// Uses dynamic shared memory for cv_stack — launch with smem = tpb * 10 * 8 * 4
+// ============================================================================
+extern "C"
+__global__ void xelis_blake3_opt_batch(
+    uint64_t *__restrict__ scratch_memory,
+    uint8_t *__restrict__ outputs,
+    uint32_t batch_size,
+    uint32_t scratch_offset,
+    const uint64_t *__restrict__ difficulty_target,
+    uint64_t *__restrict__ solutions,
+    uint64_t nonce_start)
+{
+  uint32_t local_tid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (local_tid >= batch_size)
+    return;
+
+  // Per-thread cv_stack in dynamic shared memory
+  extern __shared__ uint32_t smem_cv[];
+  uint32_t (*my_cv_stack)[8] = (uint32_t (*)[8])&smem_cv[threadIdx.x * 10 * 8];
+
+  uint32_t global_idx = local_tid + scratch_offset;
+  uint64_t *my_scratch = scratch_memory + (size_t)global_idx * XELIS_MEMORY_SIZE_V3;
+  uint8_t *my_output = outputs + global_idx * XELIS_HASH_SIZE;
+
+  xelis_blake3_opt((uint8_t *)my_scratch, my_output, my_cv_stack);
+
+  if (difficulty_target && solutions && check_difficulty_gpu(my_output, difficulty_target))
+  {
+    uint64_t counter = nonce_start & 0xFFFFFFFFFFFFULL;
+    uint64_t nonce = (nonce_start & 0xFFFF000000000000ULL) | ((counter + global_idx) & 0xFFFFFFFFFFFFULL);
+    unsigned long long idx = atomicAdd((unsigned long long *)&solutions[0], 1ULL);
+
+    if (idx < 1024)
+    {
+      uint64_t *solution_slot = &solutions[1 + idx * 5];
+      solution_slot[0] = nonce;
+      uint8_t *hash_dest = (uint8_t *)&solution_slot[1];
+      memcpy(hash_dest, my_output, 32);
+    }
+  }
+}
+
+// ============================================================================
+// Warp-cooperative Blake3 batch kernel
+// 32 threads collaborate per hash — level-0 fusion, ILP interleave, tail collapse
+// Launch: <<<batch_size, 32>>> (1 block per hash, no dynamic shared memory)
+// Shared: 266×9×4 = 9,576 bytes static (stride-9 padding, no bank conflicts)
+// ============================================================================
+extern "C"
+__global__ void xelis_blake3_warp_coop_batch(
+    uint64_t *__restrict__ scratch_memory,
+    uint8_t *__restrict__ outputs,
+    uint32_t batch_size,
+    uint32_t scratch_offset,
+    const uint64_t *__restrict__ difficulty_target,
+    uint64_t *__restrict__ solutions,
+    uint64_t nonce_start)
+{
+  __shared__ uint32_t chunk_cvs[266][9];
+
+  uint32_t hash_idx = blockIdx.x;
+  if (hash_idx >= batch_size)
+    return;
+  uint32_t lane = threadIdx.x;  // 0..31
+
+  uint32_t global_idx = hash_idx + scratch_offset;
+  const uint32_t* scratch = (const uint32_t*)(scratch_memory + (size_t)global_idx * XELIS_MEMORY_SIZE_V3);
+  uint8_t *my_output = outputs + global_idx * XELIS_HASH_SIZE;
+
+  // Phase 1: Paired chunk hashing with level-0 merge in registers
+  for (uint32_t pair = lane; pair < 265; pair += blockDim.x) {
+    uint32_t c_L = pair * 2;
+    uint32_t c_R = pair * 2 + 1;
+    const uint32_t* chunk_L = scratch + c_L * 256;
+    const uint32_t* chunk_R = scratch + c_R * 256;
+
+    uint32_t cv_L[8] = {IV_0, IV_1, IV_2, IV_3, IV_4, IV_5, IV_6, IV_7};
+    uint32_t cv_R[8] = {IV_0, IV_1, IV_2, IV_3, IV_4, IV_5, IV_6, IV_7};
+
+    blake3_compress_u32(cv_L, chunk_L, BLAKE3_BLOCK_LEN, c_L, CHUNK_START);
+    blake3_compress_u32(cv_R, chunk_R, BLAKE3_BLOCK_LEN, c_R, CHUNK_START);
+    #pragma unroll
+    for (int b = 1; b < 15; b++) {
+      blake3_compress_u32(cv_L, chunk_L + b * 16, BLAKE3_BLOCK_LEN, c_L, 0);
+      blake3_compress_u32(cv_R, chunk_R + b * 16, BLAKE3_BLOCK_LEN, c_R, 0);
+    }
+    blake3_compress_u32(cv_L, chunk_L + 15 * 16, BLAKE3_BLOCK_LEN, c_L, CHUNK_END);
+    blake3_compress_u32(cv_R, chunk_R + 15 * 16, BLAKE3_BLOCK_LEN, c_R, CHUNK_END);
+
+    uint32_t merged[8];
+    blake3_hash_parent_u32(cv_L, cv_R, merged, false);
+    #pragma unroll
+    for (int i = 0; i < 8; i++) chunk_cvs[pair][i] = merged[i];
+  }
+
+  // Straggler: chunk 530 has no pair
+  if (lane == 0) {
+    const uint32_t* chunk_ptr = scratch + 530 * 256;
+    uint32_t cv[8] = {IV_0, IV_1, IV_2, IV_3, IV_4, IV_5, IV_6, IV_7};
+    blake3_compress_u32(cv, chunk_ptr, BLAKE3_BLOCK_LEN, 530, CHUNK_START);
+    #pragma unroll
+    for (int b = 1; b < 15; b++)
+      blake3_compress_u32(cv, chunk_ptr + b * 16, BLAKE3_BLOCK_LEN, 530, 0);
+    blake3_compress_u32(cv, chunk_ptr + 15 * 16, BLAKE3_BLOCK_LEN, 530, CHUNK_END);
+    #pragma unroll
+    for (int i = 0; i < 8; i++) chunk_cvs[265][i] = cv[i];
+  }
+  __syncthreads();
+
+  // Phase 2: Parallel merge tree — all levels
+  uint32_t n = 266;
+  while (n > 1) {
+    uint32_t pairs = n / 2;
+    uint32_t odd = n & 1;
+    bool is_root = (pairs == 1 && odd == 0);
+
+    for (uint32_t p = lane; p < pairs; p += blockDim.x) {
+      uint32_t parent[8];
+      blake3_hash_parent_u32(chunk_cvs[p * 2], chunk_cvs[p * 2 + 1], parent, is_root);
+      #pragma unroll
+      for (int i = 0; i < 8; i++) chunk_cvs[p][i] = parent[i];
+    }
+    __syncthreads();
+
+    if (odd && lane == 0) {
+      #pragma unroll
+      for (int j = 0; j < 8; j++)
+        chunk_cvs[pairs][j] = chunk_cvs[n - 1][j];
+    }
+    if (odd) __syncthreads();
+
+    n = pairs + odd;
+  }
+
+  // Output — thread 0 writes result and checks difficulty
+  if (lane == 0) {
+    #pragma unroll
+    for (int i = 0; i < 8; i++)
+      blake3_store32(my_output + i * 4, chunk_cvs[0][i]);
+
+    if (difficulty_target && solutions && check_difficulty_gpu(my_output, difficulty_target))
+    {
+      uint64_t counter = nonce_start & 0xFFFFFFFFFFFFULL;
+      uint64_t nonce = (nonce_start & 0xFFFF000000000000ULL) | ((counter + global_idx) & 0xFFFFFFFFFFFFULL);
+      unsigned long long idx = atomicAdd((unsigned long long *)&solutions[0], 1ULL);
+
+      if (idx < 1024)
+      {
+        uint64_t *solution_slot = &solutions[1 + idx * 5];
+        solution_slot[0] = nonce;
+        uint8_t *hash_dest = (uint8_t *)&solution_slot[1];
+        memcpy(hash_dest, my_output, 32);
+      }
     }
   }
 }

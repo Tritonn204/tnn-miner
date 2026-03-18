@@ -2,9 +2,9 @@
 //@ section astrobwt
 //@ guard __x86_64__
 
-//@ tier avx2 avx2
-//@ tier avx512 avx512f,avx512bw,avx512vl,bmi2
 //@ tier avx512bitalg avx512f,avx512bw,avx512vl,avx512bitalg,avx512vbmi,bmi2
+//@ tier avx512 avx512f,avx512bw,avx512vl,bmi2
+//@ tier avx2 avx2
 //@ tier fallback default
 
 //@ common

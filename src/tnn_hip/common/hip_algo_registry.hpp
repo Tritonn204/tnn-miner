@@ -47,6 +47,26 @@ static inline bool is_nvidia_ampere_plus(int device_id) {
 }
 
 // ============================================================================
+// Wavefront/warp size detection — used for stage1 and blake3 cooperative TPB
+// ============================================================================
+static inline int xelis_get_warp_size(int device_id) {
+    oroDeviceProp_t props{};
+    if (oroGetDeviceProperties(&props, tnn_get_device(device_id)) == oroSuccess)
+        return props.warpSize;
+    return 32;  // safe default
+}
+
+// Matches compile-time XELIS_STAGE1_COOP_TPB: wave32→32, wave64→64
+static inline int xelis_stage1_coop_tpb(int device_id) {
+    return xelis_get_warp_size(device_id);
+}
+
+// Matches compile-time XELIS_B3_COOP_TPB: wave32→96, wave64→64
+static inline int xelis_b3_coop_tpb(int device_id) {
+    return xelis_get_warp_size(device_id) == 32 ? 96 : 64;
+}
+
+// ============================================================================
 // Xelis V3 Strategy Definitions
 // ============================================================================
 
@@ -64,23 +84,24 @@ enum class XelisStrategy : uint8_t {
 
 // Helper: choose which stage1 kernel to use based on GPU capabilities
 static inline const char* xelis_pick_stage1(int dev) {
-    bool cooperative = false;
-    if (tnn_is_nvidia_device(dev)) {
-        cooperative = is_nvidia_ampere_plus(dev);
-    } else {
-        if (is_amd_rdna_plus(dev)) {
-            cooperative = true;
-        } else {
-            oroDeviceProp_t props{};
-            if (oroGetDeviceProperties(&props, tnn_get_device(dev)) == oroSuccess) {
-                const int gfx = parse_gfx_number(props.gcnArchName);
-                // Vega (900), RVII (906), MI200 (90, from gfx90a), MI300 (940-942)
-                cooperative = (gfx == 900 || gfx == 906 || gfx == 90 ||
-                               (gfx >= 940 && gfx <= 942));
-            }
-        }
-    }
-    return cooperative ? "xelis_stage1_cooperative" : "xelis_stage1_kernel";
+    // bool cooperative = false;
+    // if (tnn_is_nvidia_device(dev)) {
+    //     cooperative = is_nvidia_ampere_plus(dev);
+    // } else {
+    //     if (is_amd_rdna_plus(dev)) {
+    //         cooperative = true;
+    //     } else {
+    //         oroDeviceProp_t props{};
+    //         if (oroGetDeviceProperties(&props, tnn_get_device(dev)) == oroSuccess) {
+    //             const int gfx = parse_gfx_number(props.gcnArchName);
+    //             // Vega (900), RVII (906), MI200 (90, from gfx90a), MI300 (940-942)
+    //             cooperative = (gfx == 900 || gfx == 906 || gfx == 90 ||
+    //                            (gfx >= 940 && gfx <= 942));
+    //         }
+    //     }
+    // }
+    // return cooperative ? "xelis_stage1_cooperative" : "xelis_stage1_kernel";
+    return "xelis_stage1_cooperative";
 }
 
 // Helper: launch stage1 kernel
@@ -95,8 +116,9 @@ static inline bool xelis_launch_stage1(
 
     bool cooperative = (std::strcmp(stage1_name, "xelis_stage1_cooperative") == 0);
 
-    int stage1_block_size = cooperative ? 32 : std::min(ctx.block_size, 32);
-    size_t shared_mem = cooperative ? (32 * 176) : 0;
+    int s1_tpb = xelis_stage1_coop_tpb(dev);
+    int stage1_block_size = cooperative ? s1_tpb : std::min(ctx.block_size, 32);
+    size_t shared_mem = cooperative ? (s1_tpb * 176) : 0;
     uint32_t scratch_offset = 0;
     int stage1_num_blocks = (ctx.batch_size + stage1_block_size - 1) / stage1_block_size;
 
@@ -141,12 +163,84 @@ static inline bool xelis_launch_stage1(
 // Helper: launch blake3 batch kernel
 static inline bool xelis_launch_blake3(
     const KernelMap& kernels,
-    const KernelLaunchContext& ctx)
+    const KernelLaunchContext& ctx,
+    int dev)
 {
+    uint32_t scratch_offset = 0;
+
+    // Try cooperative blake3 first (level-0 fusion, ILP interleave)
+    // Launch: <<<batch_size, XELIS_B3_COOP_TPB>>> — 1 block per hash
+    // Static shared: 266×9×4 = 9,576 bytes (no dynamic shared needed)
+    auto it_wc = kernels.find("xelis_blake3_warp_coop_batch");
+    if (it_wc != kernels.end()) {
+        int blake3_block_size = xelis_b3_coop_tpb(dev);
+        int blake3_num_blocks = ctx.batch_size;  // 1 block per hash
+
+        void* args[] = {
+            (void*)&ctx.d_scratch,
+            (void*)&ctx.d_outputs,
+            (void*)&ctx.batch_size,
+            (void*)&scratch_offset,
+            (void*)&ctx.d_difficulty_target,
+            (void*)&ctx.d_solutions,
+            (void*)&ctx.nonce_start
+        };
+
+        TNN_LOG_TRACE("[LAUNCH] Blake3 warp-coop: kernel=%p, grid=%d, block=%d\n",
+                      (void*)it_wc->second, blake3_num_blocks, blake3_block_size);
+        fflush(stdout);
+
+        oroError_t err = oro_safe_launch(
+            it_wc->second,
+            blake3_num_blocks, 1, 1,
+            blake3_block_size, 1, 1,
+            0, ctx.stream,
+            args, nullptr
+        );
+
+        if (err == oroSuccess) return true;
+        TNN_LOG_ERROR("[XELIS] blake3_warp_coop launch failed (%s), falling back to opt\n",
+                      tnn_error_string(err));
+    }
+
+    // Fallback 1: per-thread optimized blake3 (shared cv_stack)
+    auto it_opt = kernels.find("xelis_blake3_opt_batch");
+    if (it_opt != kernels.end()) {
+        int blake3_block_size = 32;
+        size_t smem = (size_t)blake3_block_size * 10 * 8 * sizeof(uint32_t);
+        int blake3_num_blocks = (ctx.batch_size + blake3_block_size - 1) / blake3_block_size;
+
+        void* args[] = {
+            (void*)&ctx.d_scratch,
+            (void*)&ctx.d_outputs,
+            (void*)&ctx.batch_size,
+            (void*)&scratch_offset,
+            (void*)&ctx.d_difficulty_target,
+            (void*)&ctx.d_solutions,
+            (void*)&ctx.nonce_start
+        };
+
+        TNN_LOG_TRACE("[LAUNCH] Blake3 OPT: kernel=%p, grid=%d, block=%d, smem=%zu\n",
+                      (void*)it_opt->second, blake3_num_blocks, blake3_block_size, smem);
+        fflush(stdout);
+
+        oroError_t err = oro_safe_launch(
+            it_opt->second,
+            blake3_num_blocks, 1, 1,
+            blake3_block_size, 1, 1,
+            smem, ctx.stream,
+            args, nullptr
+        );
+
+        if (err == oroSuccess) return true;
+        TNN_LOG_ERROR("[XELIS] blake3_opt launch failed (%s), falling back to original\n",
+                      tnn_error_string(err));
+    }
+
+    // Fallback: original blake3 batch kernel
     auto it = kernels.find("xelis_blake3_batch");
     if (it == kernels.end()) return false;
 
-    uint32_t scratch_offset = 0;
     int blake3_block_size = 256;
     int blake3_num_blocks = (ctx.batch_size + blake3_block_size - 1) / blake3_block_size;
 
@@ -160,7 +254,7 @@ static inline bool xelis_launch_blake3(
         (void*)&ctx.nonce_start
     };
 
-    TNN_LOG_TRACE("[LAUNCH] Blake3: kernel=%p, grid=%d, block=%d\n",
+    TNN_LOG_TRACE("[LAUNCH] Blake3 fallback: kernel=%p, grid=%d, block=%d\n",
                   (void*)it->second, blake3_num_blocks, blake3_block_size);
     fflush(stdout);
 
@@ -221,7 +315,7 @@ inline bool xelis_v3_execute(
             TNN_LOG_ERROR("[XELIS] s13_noblake launch failed: %s\n", tnn_error_string(err));
             return false;
         }
-        return xelis_launch_blake3(kernels, ctx);
+        return xelis_launch_blake3(kernels, ctx, dev);
     }
 
     case XelisStrategy::Sep: {
@@ -251,7 +345,7 @@ inline bool xelis_v3_execute(
             TNN_LOG_ERROR("[XELIS] s3_hybrid_v2_noblake launch failed: %s\n", tnn_error_string(err));
             return false;
         }
-        return xelis_launch_blake3(kernels, ctx);
+        return xelis_launch_blake3(kernels, ctx, dev);
     }
 
     case XelisStrategy::Neo: {
@@ -318,7 +412,9 @@ inline AlgoConfig XELIS_V3_CONFIG = {
         "xelis_s13_noblake_kernel",          // Baseline (s1+s3 fused)
         "xelis_s3_hybrid_v2_noblake_kernel", // Sep (s3 only)
         "xelis_s3b3_hybrid_v2_kernel",       // Neo (s3+b3 fused)
-        "xelis_blake3_batch"                 // Baseline/Sep blake3
+        "xelis_blake3_batch",                // Baseline/Sep blake3 (original)
+        "xelis_blake3_opt_batch",            // Sep blake3 (optimized: u32 loads, branched merge, shared cv_stack)
+        "xelis_blake3_warp_coop_batch"       // Sep blake3 (warp-cooperative: level-0 fusion, ILP interleave)
     },
 
     .kernel_name = "",
@@ -342,7 +438,7 @@ inline AlgoConfig XELIS_V3_CONFIG = {
     .category = AlgoCategory::MemoryHard,
     .enable_reg_tuning = true,
 
-    .amd_blocks = {32, 256, 32},
+    .amd_blocks = {32, 512, 32},
     .nvidia_blocks = {32, 1024, 32},
     .target_batch_time_ms = 1250.0,
     .max_batch_time_ms = 3125.0,
@@ -355,20 +451,19 @@ inline AlgoConfig XELIS_V3_CONFIG = {
 
     .execute_fn = xelis_v3_execute,
 
-    // 4 strategies for autotune sweep
+    // Sep + Neo — cooperative blake3 makes Mono/Baseline obsolete
     .strategy_variants = {
-        (uint8_t)XelisStrategy::Mono,
-        (uint8_t)XelisStrategy::Baseline,
+        // (uint8_t)XelisStrategy::Mono,
+        // (uint8_t)XelisStrategy::Baseline,
         (uint8_t)XelisStrategy::Sep,
         (uint8_t)XelisStrategy::Neo
     },
-    .strategy_names = {"Mono", "Baseline", "Sep", "Neo"},
+    .strategy_names = {/*"Mono", "Baseline",*/ "Sep", "Neo"},
 
     // Bottleneck kernel per strategy (for occupancy queries)
-    // Mono: monolithic kernel, Baseline: fused s13, Sep: s3 hybrid, Neo: s3b3 fused
     .strategy_bottleneck_kernels = {
-        "xelis_hash_v3_kernel",
-        "xelis_s13_noblake_kernel",
+        // "xelis_hash_v3_kernel",
+        // "xelis_s13_noblake_kernel",
         "xelis_s3_hybrid_v2_noblake_kernel",
         "xelis_s3b3_hybrid_v2_kernel"
     },

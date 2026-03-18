@@ -58,7 +58,7 @@ static inline int has_sha_ni_support(void)
 }
 
 #ifdef __x86_64__
-__attribute__((constructor)) static void sha_probe_child_windows(void)
+__attribute__((constructor, target("sha,sse4.1"))) static void sha_probe_child_windows(void)
 {
   HANDLE hStdout = GetStdHandle(STD_OUTPUT_HANDLE);
   if (hStdout == INVALID_HANDLE_VALUE) return;
@@ -85,6 +85,20 @@ __attribute__((constructor)) static void sha_probe_child_windows(void)
 
 #ifdef __x86_64__
 #include <immintrin.h>
+
+__attribute__((target("sha,sse4.1")))
+static inline void sha_probe_child_unix(int write_fd)
+{
+    __m128i a = _mm_setzero_si128();
+    __m128i b = _mm_setzero_si128();
+    __m128i c = _mm_setzero_si128();
+    __m128i r = _mm_sha256rnds2_epu32(a, b, c);
+    volatile uint32_t dummy = _mm_extract_epi32(r, 0);
+    (void)dummy;
+
+    write(write_fd, "1", 1);
+    _exit(0);
+}
 #endif
 
 static inline int has_sha_ni_support(void)
@@ -98,16 +112,7 @@ static inline int has_sha_ni_support(void)
 
   if (pid == 0) {
     close(pipefd[0]);
-
-    __m128i a = _mm_setzero_si128();
-    __m128i b = _mm_setzero_si128();
-    __m128i c = _mm_setzero_si128();
-    __m128i r = _mm_sha256rnds2_epu32(a, b, c);
-    volatile uint32_t dummy = _mm_extract_epi32(r, 0);
-    (void)dummy;
-
-    write(pipefd[1], "1", 1);
-    _exit(0);
+    sha_probe_child_unix(pipefd[1]);
   } else {
     close(pipefd[1]);
     char result = 0;
