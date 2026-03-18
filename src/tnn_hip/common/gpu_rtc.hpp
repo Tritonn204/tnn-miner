@@ -123,8 +123,13 @@ public:
             }
         }
 
-        // AMD disk cache: check before expensive compilation
+        // Disk cache: check before expensive compilation
+        // Always on Linux (AMD + NVIDIA); Windows AMD only (NVIDIA has driver cache)
+#ifdef _WIN32
         if (tnn_is_amd_device(device_id)) {
+#else
+        {
+#endif
             std::string disk_hash = make_disk_cache_hash(source, kernel_name, code_options);
             auto disk_code = load_from_disk_cache(disk_hash, kernel_name);
             if (disk_code.has_value()) {
@@ -191,6 +196,13 @@ public:
         }
         module_cache_.clear();
         code_cache_.clear();
+    }
+
+    // Clear stale module entries without unloading (caller is destroying their contexts)
+    // Code cache is preserved so workers can reload from it cheaply.
+    void clear_stale_modules() {
+        std::lock_guard<std::mutex> lock(cache_mutex_);
+        module_cache_.clear();
     }
 
 private:
@@ -409,7 +421,7 @@ private:
     }
 
     // ----------------------------
-    // Disk cache (AMD only)
+    // Disk cache (AMD + NVIDIA)
     // ----------------------------
 
     // FNV-1a 64-bit hash — simple, fast, good distribution for cache keys
@@ -713,8 +725,12 @@ private:
 
         orortcDestroyProgram(&prog);
 
-        // Save to AMD disk cache
+        // Save to disk cache (Linux always, Windows AMD only)
+#ifdef _WIN32
         if (tnn_is_amd_device(device_id)) {
+#else
+        {
+#endif
             auto code_options = filter_device_specific_options(norm.sorted);
             std::string disk_hash = make_disk_cache_hash(source, kernel_name, code_options);
             save_to_disk_cache(disk_hash, code);

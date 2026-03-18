@@ -204,6 +204,11 @@ extern "C" bool precompile_all_kernels()
 
         CompilePool pool(max_workers);
 
+        // Collect precompile contexts so we can destroy them after compilation
+        // to reclaim NVRTC/driver VRAM before workers start tuning.
+        std::mutex ctx_mutex;
+        std::vector<oroCtx> precompile_contexts;
+
         for (auto& [arch, dev_ids] : arch_groups) {
             // Submit one task per device. The first device for a given arch
             // does the actual NVRTC compile; subsequent same-arch devices
@@ -224,6 +229,11 @@ extern "C" bool precompile_all_kernels()
                                       d, tnn_error_string(ctxErr));
                         ok.store(false);
                         return;
+                    }
+
+                    {
+                        std::lock_guard<std::mutex> lock(ctx_mutex);
+                        precompile_contexts.push_back(ctx);
                     }
 
                     // Per-device block size limits and compile options
@@ -302,6 +312,18 @@ extern "C" bool precompile_all_kernels()
         }
 
         pool.wait();
+
+        // Reclaim VRAM: clear stale module handles (bound to precompile contexts)
+        // then destroy the precompile contexts. Code cache stays intact on the host
+        // so workers can reload modules cheaply via oroModuleLoadData.
+        rtc.clear_stale_modules();
+
+        for (auto& ctx : precompile_contexts) {
+            (void)oroCtxDestroy(ctx);
+        }
+        TNN_LOG_INFO_COLOR(BRIGHT_YELLOW, "[PRECOMPILE] Destroyed %zu precompile context(s) — VRAM reclaimed\n",
+                     precompile_contexts.size());
+
         break;
     }
 
