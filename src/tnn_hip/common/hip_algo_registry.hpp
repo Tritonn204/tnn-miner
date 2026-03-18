@@ -652,14 +652,14 @@ inline AlgoConfig XELIS_V3_CONFIG = {
     .hash_size = 32,
     .nonce_size = 8,
     .scratch_per_hash = (531 * 128 + 1) * sizeof(uint64_t) + 8512,  // +1 for nonce storage, +8512 for blake3 global-CV workspace
-    .preferred_block_size = 64,
+    .preferred_block_size = 32,
     .algo_id = ALGO_XELISV3,
     .calc_shared_mem = xelis_v3_shared_mem,
 
     .category = AlgoCategory::MemoryHard,
     .enable_reg_tuning = true,
 
-    .amd_blocks = {32, 512, 32},
+    .amd_blocks = {32, 1024, 32},
     .nvidia_blocks = {32, 1024, 32},
     .target_batch_time_ms = 1250.0,
     .max_batch_time_ms = 3125.0,
@@ -667,7 +667,7 @@ inline AlgoConfig XELIS_V3_CONFIG = {
     .enable_autotune = true,
     .autotune_warmup = 1,
     .autotune_iterations = 1,
-    .memory_reserve_mb = 48.0,
+    .memory_reserve_mb = 32.0,
     .memory_usage_factor = 1.0,
 
     .execute_fn = xelis_v3_execute,
