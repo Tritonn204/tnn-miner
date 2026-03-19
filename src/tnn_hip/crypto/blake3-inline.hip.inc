@@ -3,10 +3,6 @@
 // blake3-inline.hip.inc - Optimized for AMD HIP and NVIDIA CUDA
 // Platform-specific rotation optimizations
 
-#if defined(__HIPCC__) || defined(__HIP_PLATFORM_AMD__) || defined(__HIP_PLATFORM_NVIDIA__)
-    #include <hip/hip_runtime.h>
-#endif
-
 #define BLAKE3_KEY_LEN 32
 #define BLAKE3_OUT_LEN 32
 #define BLAKE3_BLOCK_LEN 64

@@ -1,5 +1,5 @@
 #include "gpuOC.hip.h"
-#include "devInfo.hip.h" // getGPUCount()
+#include "devInfo.hpp" // getGPUCount()
 
 #include <tnn_log.hpp>
 #include <adl_defines.h>

@@ -1,4 +1,4 @@
-#include "devInfo.hip.h"
+#include "devInfo.hpp"
 #include "tnn_log.hpp"
 
 #include <tnn_hip/common/gpu_compat.hpp>
@@ -44,7 +44,7 @@ std::string getDeviceName(int device) {
 }
 
 std::string getPCIBusId(int device) {
-    char buf[64];
+    char buf[64] = {0};
     oroError_t e = oroDeviceGetPCIBusId(buf, sizeof(buf), device);
     if (e != oroSuccess) {
         TNN_LOG_ERROR("GPU: oroDeviceGetPCIBusId(%d) failed: %s\n", device, tnn_error_string(e));

@@ -39,182 +39,204 @@
 // Simple thread pool with bounded worker count.
 // Workers are joinable — the destructor signals shutdown and joins all
 // threads so that no thread touches destroyed mutexes/condvars.
-class CompilePool {
+class CompilePool
+{
 public:
-    explicit CompilePool(unsigned max_workers)
-        : max_workers_(max_workers > 0 ? max_workers : 1) {}
+  explicit CompilePool(unsigned max_workers)
+      : max_workers_(max_workers > 0 ? max_workers : 1) {}
 
-    ~CompilePool() { shutdown(); }
+  ~CompilePool() { shutdown(); }
 
-    void submit(std::function<void()> task) {
-        std::lock_guard<std::mutex> lock(mu_);
-        tasks_.push(std::move(task));
-        if (threads_.size() < max_workers_ && threads_.size() < tasks_.size() + active_) {
-            threads_.emplace_back([this]() { worker_loop(); });
-        }
-        cv_.notify_one();
+  void submit(std::function<void()> task)
+  {
+    std::lock_guard<std::mutex> lock(mu_);
+    tasks_.push(std::move(task));
+    if (threads_.size() < max_workers_ && threads_.size() < tasks_.size() + active_)
+    {
+      threads_.emplace_back([this]()
+                            { worker_loop(); });
     }
+    cv_.notify_one();
+  }
 
-    void wait() {
-        std::unique_lock<std::mutex> lock(mu_);
-        done_cv_.wait(lock, [&] {
-            return tasks_.empty() && active_ == 0;
-        });
-    }
+  void wait()
+  {
+    std::unique_lock<std::mutex> lock(mu_);
+    done_cv_.wait(lock, [&]
+                  { return tasks_.empty() && active_ == 0; });
+  }
 
-    void shutdown() {
-        {
-            std::lock_guard<std::mutex> lock(mu_);
-            stop_ = true;
-        }
-        cv_.notify_all();
-        for (auto& t : threads_) {
-            if (t.joinable()) t.join();
-        }
-        threads_.clear();
+  void shutdown()
+  {
+    {
+      std::lock_guard<std::mutex> lock(mu_);
+      stop_ = true;
     }
+    cv_.notify_all();
+    for (auto &t : threads_)
+    {
+      if (t.joinable())
+        t.join();
+    }
+    threads_.clear();
+  }
 
 private:
-    void worker_loop() {
-        while (true) {
-            std::function<void()> task;
-            {
-                std::unique_lock<std::mutex> lock(mu_);
-                cv_.wait_for(lock, std::chrono::milliseconds(50), [&] {
-                    return !tasks_.empty() || stop_;
-                });
-                if (tasks_.empty()) {
-                    done_cv_.notify_all();
-                    return;  // idle timeout or stop_ signalled
-                }
-                task = std::move(tasks_.front());
-                tasks_.pop();
-                ++active_;
-            }
-            task();
-            {
-                std::lock_guard<std::mutex> lock(mu_);
-                --active_;
-            }
-            done_cv_.notify_all();
+  void worker_loop()
+  {
+    while (true)
+    {
+      std::function<void()> task;
+      {
+        std::unique_lock<std::mutex> lock(mu_);
+        cv_.wait(lock, [&]
+                 { return !tasks_.empty() || stop_; });
+        if (stop_ && tasks_.empty())
+        {
+          done_cv_.notify_all();
+          return;
         }
+        task = std::move(tasks_.front());
+        tasks_.pop();
+        ++active_;
+      }
+      task();
+      {
+        std::lock_guard<std::mutex> lock(mu_);
+        --active_;
+      }
+      done_cv_.notify_all();
     }
+  }
 
-    unsigned max_workers_;
-    unsigned active_ = 0;
-    bool stop_ = false;
-    std::mutex mu_;
-    std::condition_variable cv_;
-    std::condition_variable done_cv_;
-    std::queue<std::function<void()>> tasks_;
-    std::vector<std::thread> threads_;
+  unsigned max_workers_;
+  unsigned active_ = 0;
+  bool stop_ = false;
+  std::mutex mu_;
+  std::condition_variable cv_;
+  std::condition_variable done_cv_;
+  std::queue<std::function<void()>> tasks_;
+  std::vector<std::thread> threads_;
 };
 
 extern "C" bool precompile_all_kernels()
 {
 #if !defined(TNN_HIP) || !defined(TNN_XELISHASH)
-    TNN_LOG_DEBUG("[PRECOMPILE] HIP or TNN_XELISHASH not enabled — skipping.\n");
-    return false;
+  TNN_LOG_DEBUG("[PRECOMPILE] HIP or TNN_XELISHASH not enabled — skipping.\n");
+  return false;
 #else
 
-    TNN_LOG_DEBUG_COLOR(BRIGHT_YELLOW, "[PRECOMPILE] GPU kernel precompile (main thread)\n");
+  TNN_LOG_DEBUG_COLOR(BRIGHT_YELLOW, "[PRECOMPILE] GPU kernel precompile (main thread)\n");
 #ifdef _WIN32
-    TNN_LOG_DEBUG("[PRECOMPILE] Thread ID: %lu\n", (unsigned long)GetCurrentThreadId());
+  TNN_LOG_DEBUG("[PRECOMPILE] Thread ID: %lu\n", (unsigned long)GetCurrentThreadId());
 #endif
 
-    int deviceCount = 0;
-    oroError_t err = oroGetDeviceCount(&deviceCount);
-    if (err != oroSuccess || deviceCount == 0) {
-        TNN_LOG_ERROR("[PRECOMPILE] No GPU devices found (err=%d)\n", err);
-        return false;
-    }
+  int deviceCount = 0;
+  oroError_t err = oroGetDeviceCount(&deviceCount);
+  if (err != oroSuccess || deviceCount == 0)
+  {
+    TNN_LOG_ERROR("[PRECOMPILE] No GPU devices found (err=%d)\n", err);
+    return false;
+  }
 
-    TNN_LOG_DEBUG_COLOR(BRIGHT_YELLOW, "[PRECOMPILE] Found %d GPU device(s)\n", deviceCount);
+  TNN_LOG_DEBUG_COLOR(BRIGHT_YELLOW, "[PRECOMPILE] Found %d GPU device(s)\n", deviceCount);
 
-    // Collect device info (must happen on main thread before spawning workers)
-    struct DeviceInfo {
-        int id;
-        oroDeviceProp_t props;
-        std::string arch;
-        bool use;
-    };
-    std::vector<DeviceInfo> devices(deviceCount);
+  // Collect device info (must happen on main thread before spawning workers)
+  struct DeviceInfo
+  {
+    int id;
+    oroDeviceProp_t props;
+    std::string arch;
+    bool use;
+  };
+  std::vector<DeviceInfo> devices(deviceCount);
 
-    for (int d = 0; d < deviceCount; ++d) {
-        auto& di = devices[d];
-        di.id = d;
-        (void)oroGetDeviceProperties(&di.props, tnn_get_device(d));
-        di.use = shouldUseDevice(d);
+  for (int d = 0; d < deviceCount; ++d)
+  {
+    auto &di = devices[d];
+    di.id = d;
+    (void)oroGetDeviceProperties(&di.props, tnn_get_device(d));
+    di.use = shouldUseDevice(d);
 
-        if (tnn_is_nvidia_device(d)) {
-            char buf[32];
-            std::snprintf(buf, sizeof(buf), "sm_%d%d", di.props.major, di.props.minor);
-            di.arch = buf;
-        } else {
-            di.arch = di.props.gcnArchName;
-        }
-
-        TNN_LOG_DEBUG("[PRECOMPILE]   Device %d: %s (arch=%s)%s\n",
-               d, di.props.name, di.arch.c_str(),
-               di.use ? "" : " (skipped)");
-    }
-
-    const int algo = miningProfile.coin.miningAlgo;
-    TNN_LOG_DEBUG("[PRECOMPILE] miningAlgo = %d\n", algo);
-
-    std::atomic<bool> ok{true};
-
-    switch (algo) {
-
-    case ALGO_XELISV2:
-    case ALGO_XELISV3:
+    if (tnn_is_nvidia_device(d))
     {
-        TNN_LOG_DEBUG("[PRECOMPILE] Selected Xelis algorithm\n");
+      char buf[32];
+      std::snprintf(buf, sizeof(buf), "sm_%d%d", di.props.major, di.props.minor);
+      di.arch = buf;
+    }
+    else
+    {
+      di.arch = di.props.gcnArchName;
+    }
 
-        AlgoConfig cfg = XELIS_V3_CONFIG;
+    TNN_LOG_DEBUG("[PRECOMPILE]   Device %d: %s (arch=%s)%s\n",
+                  d, di.props.name, di.arch.c_str(),
+                  di.use ? "" : " (skipped)");
+  }
 
-        TNN_LOG_DEBUG("[PRECOMPILE] Source size = %zu bytes, headers = %zu\n",
-                      cfg.source.size(), cfg.rtc_headers.size());
+  const int algo = miningProfile.coin.miningAlgo;
+  TNN_LOG_DEBUG("[PRECOMPILE] miningAlgo = %d\n", algo);
 
-        RTCCompiler& rtc = RTCCompiler::instance();
-        for (const auto& header : cfg.rtc_headers) {
-            rtc.add_header_source(std::string(header.name), std::string(header.source));
-        }
+  std::atomic<bool> ok{true};
 
-        // Group devices by unique compile key (arch + compile-affecting opts)
-        // so we know how many actual compilations are needed
-        std::map<std::string, std::vector<int>> arch_groups;
-        for (int d = 0; d < deviceCount; ++d) {
-            if (!devices[d].use) continue;
-            arch_groups[devices[d].arch].push_back(d);
-        }
+  switch (algo)
+  {
 
-        unsigned num_unique = (unsigned)arch_groups.size();
-        unsigned max_workers = std::min(num_unique,
-            std::max(1u, std::thread::hardware_concurrency()));
+  case ALGO_XELISV2:
+  case ALGO_XELISV3:
+  {
+    TNN_LOG_DEBUG("[PRECOMPILE] Selected Xelis algorithm\n");
 
-        TNN_LOG_INFO_COLOR(BRIGHT_YELLOW, "[PRECOMPILE] %u unique arch(es), using up to %u compile worker(s)\n",
-                     num_unique, max_workers);
+    AlgoConfig cfg = XELIS_V3_CONFIG;
 
-        // Capture config values needed by workers
-        const std::string source_str(cfg.source);
-        const std::string source_path = cfg.source_path;
-        const std::string primary_kernel = cfg.get_primary_kernel();
-        const auto kernel_names = cfg.get_kernel_names();
+    TNN_LOG_DEBUG("[PRECOMPILE] Source size = %zu bytes, headers = %zu\n",
+                  cfg.source.size(), cfg.rtc_headers.size());
 
-        CompilePool pool(max_workers);
+    RTCCompiler &rtc = RTCCompiler::instance();
+    for (const auto &header : cfg.rtc_headers)
+    {
+      rtc.add_header_source(std::string(header.name), std::string(header.source));
+    }
 
-        // Collect precompile contexts so we can destroy them after compilation
-        // to reclaim NVRTC/driver VRAM before workers start tuning.
-        std::mutex ctx_mutex;
-        std::vector<oroCtx> precompile_contexts;
+    // Group devices by unique compile key (arch + compile-affecting opts)
+    // so we know how many actual compilations are needed
+    std::map<std::string, std::vector<int>> arch_groups;
+    for (int d = 0; d < deviceCount; ++d)
+    {
+      if (!devices[d].use)
+        continue;
+      arch_groups[devices[d].arch].push_back(d);
+    }
 
-        for (auto& [arch, dev_ids] : arch_groups) {
-            // Submit one task per device. The first device for a given arch
-            // does the actual NVRTC compile; subsequent same-arch devices
-            // hit the RTCCompiler code_cache and only do a fast module load.
-            for (int d : dev_ids) {
-                pool.submit([&, d, arch]() {
+    unsigned num_unique = (unsigned)arch_groups.size();
+    unsigned max_workers = std::min(num_unique,
+                                    std::max(1u, std::thread::hardware_concurrency()));
+
+    TNN_LOG_INFO_COLOR(BRIGHT_YELLOW, "[PRECOMPILE] %u unique arch(es), using up to %u compile worker(s)\n",
+                       num_unique, max_workers);
+
+    // Capture config values needed by workers
+    const std::string source_str(cfg.source);
+    const std::string source_path = cfg.source_path;
+    const std::string primary_kernel = cfg.get_primary_kernel();
+    const auto kernel_names = cfg.get_kernel_names();
+
+    CompilePool pool(max_workers);
+
+    // Collect precompile contexts so we can destroy them after compilation
+    // to reclaim NVRTC/driver VRAM before workers start tuning.
+    std::mutex ctx_mutex;
+    std::vector<oroCtx> precompile_contexts;
+
+    for (auto &[arch, dev_ids] : arch_groups)
+    {
+      // Submit one task per device. The first device for a given arch
+      // does the actual NVRTC compile; subsequent same-arch devices
+      // hit the RTCCompiler code_cache and only do a fast module load.
+      for (int d : dev_ids)
+      {
+        pool.submit([&, d, arch]()
+                    {
                     auto& di = devices[d];
 
                     TNN_LOG_INFO_COLOR(BRIGHT_YELLOW, "[PRECOMPILE] Device %d: %s (arch=%s) — compiling kernels...\n",
@@ -228,6 +250,15 @@ extern "C" bool precompile_all_kernels()
                         TNN_LOG_ERROR("[PRECOMPILE] oroCtxCreate(%d) failed: %s\n",
                                       d, tnn_error_string(ctxErr));
                         ok.store(false);
+                        return;
+                    }
+
+                    oroError_t setCurrErr = oroCtxSetCurrent(ctx);
+                    if (setCurrErr != oroSuccess) {
+                        TNN_LOG_ERROR("[PRECOMPILE] oroCtxSetCurrent(%d) failed: %s\n",
+                                      d, tnn_error_string(setCurrErr));
+                        ok.store(false);
+                        oroCtxDestroy(ctx);
                         return;
                     }
 
@@ -245,6 +276,7 @@ extern "C" bool precompile_all_kernels()
                     std::vector<std::string> opts;
 
                     if (tnn_is_amd_device(d)) {
+                        fflush(stdout);
                         opts = {"-O3", "-mno-cumode", "-ffast-math"};
                         opts.push_back("--gpu-architecture=" + arch);
                         opts.push_back("-DXELIS_MIN_WG=" + std::to_string(min_wg));
@@ -306,35 +338,35 @@ extern "C" bool precompile_all_kernels()
                         TNN_LOG_ERROR("[PRECOMPILE] Device %d precompile failed: %s\n",
                                       d, e.what());
                         ok.store(false);
-                    }
-                });
-            }
-        }
-
-        pool.wait();
-
-        // Reclaim VRAM: clear stale module handles (bound to precompile contexts)
-        // then destroy the precompile contexts. Code cache stays intact on the host
-        // so workers can reload modules cheaply via oroModuleLoadData.
-        rtc.clear_stale_modules();
-
-        for (auto& ctx : precompile_contexts) {
-            (void)oroCtxDestroy(ctx);
-        }
-        TNN_LOG_INFO_COLOR(BRIGHT_YELLOW, "[PRECOMPILE] Destroyed %zu precompile context(s) — VRAM reclaimed\n",
-                     precompile_contexts.size());
-
-        break;
+                    } });
+      }
     }
 
-    default:
-        TNN_LOG_DEBUG("[PRECOMPILE] No RTC precompile required for algo %d\n", algo);
-        break;
+    pool.wait();
+
+    // Reclaim VRAM: clear stale module handles (bound to precompile contexts)
+    // then destroy the precompile contexts. Code cache stays intact on the host
+    // so workers can reload modules cheaply via oroModuleLoadData.
+    rtc.clear_stale_modules();
+
+    for (auto &ctx : precompile_contexts)
+    {
+      (void)oroCtxDestroy(ctx);
     }
+    TNN_LOG_INFO_COLOR(BRIGHT_YELLOW, "[PRECOMPILE] Destroyed %zu precompile context(s) — VRAM reclaimed\n",
+                       precompile_contexts.size());
 
-    TNN_LOG_INFO_COLOR(BRIGHT_YELLOW, "[PRECOMPILE] %s\n", ok.load() ? "All kernels compiled" : "FAILED");
+    break;
+  }
 
-    return ok.load();
+  default:
+    TNN_LOG_DEBUG("[PRECOMPILE] No RTC precompile required for algo %d\n", algo);
+    break;
+  }
+
+  TNN_LOG_INFO_COLOR(BRIGHT_YELLOW, "[PRECOMPILE] %s\n", ok.load() ? "All kernels compiled" : "FAILED");
+
+  return ok.load();
 
 #endif // TNN_HIP + TNN_XELISHASH
 }

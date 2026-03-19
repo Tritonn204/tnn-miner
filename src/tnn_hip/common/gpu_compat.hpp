@@ -51,6 +51,7 @@ constexpr auto ORORTC_SUCCESS       = HIPRTC_SUCCESS;
 #define oroGetDevice            hipGetDevice
 #define oroSetDevice            hipSetDevice
 #define oroGetDeviceProperties  hipGetDeviceProperties
+#define oroDeviceGetName        hipDeviceGetName
 #define oroDeviceGetPCIBusId    hipDeviceGetPCIBusId
 #define oroDeviceReset          hipDeviceReset
 #define oroDeviceSynchronize    hipDeviceSynchronize

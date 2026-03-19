@@ -21,7 +21,6 @@
 #include "msr.hpp"
 #include "gpulibs.h"
 #include "hipkill.h"
-#include "orochi_init.hpp"
 
 #ifdef WITH_OROCHI
 #include <tnn_hip/common/gpu_compat.hpp>
@@ -65,7 +64,7 @@
 #include "reporter.hpp"
 
 #include <coins/miners.hpp>
-#include <tnn_hip/core/devInfo.hip.h>
+#include <tnn_hip/core/devInfo.hpp>
 #include <boost/algorithm/string.hpp>
 
 #ifdef TNN_HIP
@@ -85,6 +84,10 @@
 
 #ifdef TNN_XELISHASH
 #include <xelis-hash/xelis-hash.hpp>
+#endif
+
+#ifdef WITH_OROCHI
+#include "orochi_init.hpp"
 #endif
 
 #if defined(USE_ASTRO_SPSA)
@@ -426,7 +429,6 @@ int tnn_main(int argc, char **argv)
   }
   else
   {
-    oroInit(0);
     oroDevice device;
     oroDeviceGet(&device, 0);
     oroCtx ctx;

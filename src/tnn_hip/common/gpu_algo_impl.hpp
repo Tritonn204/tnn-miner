@@ -1100,7 +1100,7 @@ private:
         }
         
         const auto& limits = tnn_is_amd_device(device_id_) ? config_.amd_blocks : config_.nvidia_blocks;
-        const int occupancy_factor = tnn_is_amd_device(device_id_) ? 4 : 2;
+        const int occupancy_factor = tnn_is_amd_device(device_id_) && !is_amd_rdna_plus(device_id_) ? 3 : 1;
         
         size_t free_mem, total_mem;
         (void)oroMemGetInfo(&free_mem, &total_mem);

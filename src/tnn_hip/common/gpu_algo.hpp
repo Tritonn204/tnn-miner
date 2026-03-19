@@ -14,6 +14,39 @@
 #include <tnn_log.hpp>
 #include <atomic>
 
+inline int parse_gfx_number(const char *gcnArchName)
+{
+  if (!gcnArchName)
+    return 0;
+  const char *p = std::strstr(gcnArchName, "gfx");
+  if (!p)
+    return 0;
+  p += 3;
+
+  int n = 0;
+  while (*p >= '0' && *p <= '9')
+  {
+    n = n * 10 + (*p - '0');
+    ++p;
+  }
+  return n;
+}
+
+inline bool is_amd_rdna_plus(int device_id) {
+    if (!tnn_is_amd_device(device_id)) return false;
+    oroDeviceProp_t props{};
+    if (oroGetDeviceProperties(&props, tnn_get_device(device_id)) != oroSuccess) return false;
+    const int gfx = parse_gfx_number(props.gcnArchName);
+    return gfx >= 1010;
+}
+
+inline bool is_nvidia_ampere_plus(int device_id) {
+    if (!tnn_is_nvidia_device(device_id)) return false;
+    oroDeviceProp_t props{};
+    if (oroGetDeviceProperties(&props, tnn_get_device(device_id)) != oroSuccess) return false;
+    return (props.major >= 8);
+}
+
 inline std::atomic<bool> g_autotune_stop{false};
 
 enum class AlgoCategory {

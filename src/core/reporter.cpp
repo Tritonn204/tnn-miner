@@ -9,7 +9,7 @@ extern std::atomic<bool> datasetInitInProgress;
 
 #ifdef TNN_HIP
 extern std::atomic<bool> g_mining_started;
-#include <tnn_hip/core/devInfo.hip.h>
+#include <tnn_hip/core/devInfo.hpp>
 #include <tnn_hip/common/gpu_device_filter.hpp>
 #endif
 

@@ -44,6 +44,9 @@ THE SOFTWARE.
 #define CUDA_12000 12000
 #define CUDA_12020 12020
 #define CUDA_12030 12030
+#define CUDA_13000 13000
+#define CUDA_13020 13020
+#define CUDA_13030 13030
 
 #ifdef __cplusplus
 extern "C" {
@@ -2868,7 +2871,7 @@ inline static hipError_t hipGetDevicePropertiesR0600_cu4oro(hipDeviceProp_t* p_p
        p_prop->arch.hasSharedInt64Atomics = (p_prop->major >= 1) ? 1 : 0;
        return hipSuccess;
     }
-
+    
     struct cudaDeviceProp cdprop;
     hipError_t error = hipCUDAErrorTohipError(cudaGetDeviceProperties(&cdprop, device));
 

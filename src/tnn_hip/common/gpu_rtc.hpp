@@ -662,7 +662,7 @@ private:
         fflush(stdout);
 
         // Normalize options (dedupe + deterministic ordering)
-        const auto defaults = build_default_options();
+        const auto defaults = build_default_options(device_id);
         const auto norm = normalize_options(defaults, extra_options);
 
         // Convert to const char* (lifetime from std::string storage in norm.ordered)
