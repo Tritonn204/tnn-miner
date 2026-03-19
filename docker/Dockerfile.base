@@ -42,7 +42,7 @@ RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-20 100 \
 
 # ---------------- ROCm stage ----------------
 
-FROM rocm/dev-ubuntu-22.04:6.4.4 AS ubuntu24-rocm
+FROM rocm/dev-ubuntu-22.04:6.3.3 AS ubuntu24-rocm
 ARG LLVM_VER=20
 
 # NOTE: add software-properties-common here too

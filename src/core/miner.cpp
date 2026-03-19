@@ -21,6 +21,8 @@
 #include "msr.hpp"
 #include "gpulibs.h"
 #include "hipkill.h"
+#include "orochi_init.hpp"
+
 #ifdef WITH_OROCHI
 #include <tnn_hip/common/gpu_compat.hpp>
 #endif
@@ -410,32 +412,25 @@ int tnn_main(int argc, char **argv)
 // printf("pre test\n");
 #ifdef TNN_HIP
 #ifdef WITH_OROCHI
+  setcolor(BRIGHT_YELLOW);
+  fflush(stdout);
+
+  int oroErr = oro::initialize();
+
+  fflush(stdout);
+  setcolor(BRIGHT_WHITE);
+
+  if (oroErr != 0)
   {
-    // Set bright yellow so the HIP/CUDA runtime "Library Path" messages are colored
-    setcolor(BRIGHT_YELLOW);
-    fflush(stdout);
-
-    // Initialize Orochi runtime — load HIP/CUDA driver libraries
-    int oroErr = oroInitialize((oroApi)(ORO_API_HIP | ORO_API_CUDA), 0);
-    if (oroErr != 0) {
-      oroErr = oroInitialize(ORO_API_HIP, 0);
-      if (oroErr != 0)
-        oroErr = oroInitialize(ORO_API_CUDA, 0);
-    }
-
-    fflush(stdout);
-    setcolor(BRIGHT_WHITE);
-
-    if (oroErr != 0) {
-      TNN_LOG_ERROR("[ERROR] Orochi init failed (err=%d) — no GPU backend available\n", oroErr);
-    } else {
-      // Initialize the driver API and create a context on device 0
-      oroInit(0);
-      oroDevice device;
-      oroDeviceGet(&device, 0);
-      oroCtx ctx;
-      oroCtxCreate(&ctx, 0, device);
-    }
+    TNN_LOG_ERROR("[ERROR] Orochi init failed (err=%d) — no GPU backend available\n", oroErr);
+  }
+  else
+  {
+    oroInit(0);
+    oroDevice device;
+    oroDeviceGet(&device, 0);
+    oroCtx ctx;
+    oroCtxCreate(&ctx, 0, device);
   }
 #endif
   GPUTest();
