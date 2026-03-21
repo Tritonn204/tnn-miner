@@ -389,9 +389,11 @@ struct AlgoConfig {
     // If empty or missing entry, falls back to primary kernel.
     std::vector<std::string> strategy_bottleneck_kernels;
 
-    // Minimum fraction of peak occupancy for a block size to be tested (0.0–1.0).
-    // Higher = fewer candidates, faster tune. Lower = broader search.
-    double occupancy_threshold = 0.66;
+    // Combined occupancy score threshold for block size filtering.
+    // Score = sqrt((threads/peak_achievable) × (threads/hw_max_threads)).
+    // Geometric mean of register-aware and hardware-anchored occupancy.
+    // Portable across kernel complexity without per-algo hand-tuning.
+    double occupancy_threshold = 0.70;
 
     // Post-sweep tune key probe (nullptr = no extra probing)
     TuneKeyProbeFn tune_key_probe_fn = nullptr;

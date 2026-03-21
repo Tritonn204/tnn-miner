@@ -64,7 +64,7 @@ static uint64_t compute_checksum(const uint64_t *data, size_t count) {
     return checksum;
 }
 
-// Run a single test case (shared by all test configurations)
+// Run a single test case: serial stage1, production stage3, serial blake3
 static int run_test_case(
     const char *test_name,
     oroFunction_t stage1_func,
@@ -72,33 +72,29 @@ static int run_test_case(
     oroFunction_t blake3_func,
     uint64_t nonce_start,
     uint32_t batch_size,
-    uint32_t grid_x,
     uint32_t block_x,
-    uint32_t num_launches = 1  // Number of sequential kernel launches
+    uint32_t num_launches = 1
 ) {
+    const uint32_t hashes_per_launch = batch_size / num_launches;
+
     printf("\n[TEST] === %s ===\n", test_name);
-    printf("[TEST] Configuration: batch_size=%u, grid(%u,1,1), block(%u,1,1), launches=%u\n",
-           batch_size, grid_x, block_x, num_launches);
-    printf("[TEST] Total threads per launch: %u\n", grid_x * block_x);
-    printf("[TEST] Total hashes (all launches): %u\n", batch_size);
+    printf("[TEST] Configuration: batch_size=%u, block_x=%u, launches=%u\n",
+           batch_size, block_x, num_launches);
+    printf("[TEST] Hashes per launch: %u\n", hashes_per_launch);
     fflush(stdout);
 
-    const uint32_t scratch_offset = 0;
-    const uint32_t total_threads = grid_x * block_x;
-    const uint32_t hashes_per_launch = total_threads;
-
-    if (batch_size != hashes_per_launch * num_launches) {
-        fprintf(stderr, "[ERROR] batch_size (%u) != hashes_per_launch (%u) * num_launches (%u)\n",
-                batch_size, hashes_per_launch, num_launches);
+    if (hashes_per_launch == 0 || hashes_per_launch * num_launches != batch_size) {
+        fprintf(stderr, "[ERROR] batch_size (%u) not evenly divisible by num_launches (%u)\n",
+                batch_size, num_launches);
         return 1;
     }
 
-    // Allocate CPU scratch buffers per launch (not all batches)
+    // Allocate CPU scratch buffers per launch
     uint64_t *cpu_scratch_s1 = new uint64_t[XELIS_MEMORY_SIZE_V3 * hashes_per_launch];
     uint64_t *cpu_scratch_s3 = new uint64_t[XELIS_MEMORY_SIZE_V3 * hashes_per_launch];
     uint8_t *cpu_hashes = new uint8_t[32 * hashes_per_launch];
 
-    // Allocate GPU memory (per launch, not all batches)
+    // Allocate GPU memory
     uint8_t *d_input = nullptr;
     uint64_t *d_scratch = nullptr;
     uint8_t *d_output = nullptr;
@@ -113,19 +109,13 @@ static int run_test_case(
 
     HIP_CHECK(oroMemcpy(d_input, TEST_WORK, XELIS_TEMPLATE_SIZE, oroMemcpyHostToDevice));
 
-    // Run Stage 1 - single block only (grid_x should always be 1)
-    if (grid_x != 1) {
-        fprintf(stderr, "[ERROR] Multi-block tests not supported (grid_x must be 1)\n");
-        return 1;
-    }
-
     bool all_pass = true;
     printf("[TEST] Processing %u launch(es), %u hashes per launch\n", num_launches, hashes_per_launch);
     fflush(stdout);
 
     for (uint32_t launch_idx = 0; launch_idx < num_launches; launch_idx++) {
         uint64_t launch_nonce_start = nonce_start + (launch_idx * hashes_per_launch);
-        uint32_t launch_scratch_offset = 0;  // Each launch uses scratch from 0 (independent)
+        uint32_t launch_scratch_offset = 0;
         uint32_t launch_batch_size = hashes_per_launch;
 
         printf("\n[TEST] === Launch %u/%u (nonces %llu-%llu) ===\n",
@@ -134,7 +124,7 @@ static int run_test_case(
                (unsigned long long)(launch_nonce_start + hashes_per_launch - 1));
         fflush(stdout);
 
-        // 1. Compute CPU reference for this launch
+        // 1. Compute CPU reference
         printf("[TEST]   Computing CPU reference...\n");
         fflush(stdout);
         for (uint32_t i = 0; i < hashes_per_launch; i++) {
@@ -144,7 +134,6 @@ static int run_test_case(
             uint64_t counter = launch_nonce_start & 0xFFFFFFFFFFFFULL;
             uint64_t nonce = (launch_nonce_start & 0xFFFF000000000000ULL) | ((counter + i) & 0xFFFFFFFFFFFFULL);
 
-            // Insert nonce at bytes 40-47
             for (int j = 0; j < 8; j++) {
                 cpu_input[40 + j] = (nonce >> (j * 8)) & 0xFF;
             }
@@ -161,22 +150,28 @@ static int run_test_case(
         // 2. Run GPU kernels
         HIP_CHECK(oroMemset(d_scratch, 0, XELIS_MEMORY_SIZE_V3 * sizeof(uint64_t) * hashes_per_launch));
 
+        // Stage 1: serial (xelis_stage1_kernel)
         printf("[TEST]   Running GPU Stage 1...\n");
         fflush(stdout);
+        uint32_t s1_grid = (launch_batch_size + block_x - 1) / block_x;
         void *stage1_args[] = {&d_input, &d_scratch, (void*)&launch_nonce_start, (void*)&launch_batch_size, (void*)&launch_scratch_offset};
-        HIP_CHECK(oroModuleLaunchKernel(stage1_func, 1, 1, 1, block_x, 1, 1, 0, nullptr, stage1_args, nullptr));
+        HIP_CHECK(oroModuleLaunchKernel(stage1_func, s1_grid, 1, 1, block_x, 1, 1, 0, nullptr, stage1_args, nullptr));
         HIP_CHECK(oroDeviceSynchronize());
 
+        // Stage 3: production s3_hybrid_v2_noblake
         printf("[TEST]   Running GPU Stage 3...\n");
         fflush(stdout);
+        uint32_t s3_grid = (launch_batch_size + block_x - 1) / block_x;
         void *stage3_args[] = {&d_scratch, (void*)&launch_batch_size, (void*)&launch_scratch_offset, &d_difficulty, &d_solutions, (void*)&launch_nonce_start};
-        HIP_CHECK(oroModuleLaunchKernel(stage3_func, 1, 1, 1, block_x, 1, 1, 0, nullptr, stage3_args, nullptr));
+        HIP_CHECK(oroModuleLaunchKernel(stage3_func, s3_grid, 1, 1, block_x, 1, 1, 0, nullptr, stage3_args, nullptr));
         HIP_CHECK(oroDeviceSynchronize());
 
+        // Blake3: serial (xelis_blake3_batch)
         printf("[TEST]   Running GPU Blake3...\n");
         fflush(stdout);
+        uint32_t b3_grid = (launch_batch_size + 256 - 1) / 256;
         void *blake3_args[] = {&d_scratch, &d_output, (void*)&launch_batch_size, (void*)&launch_scratch_offset, &d_difficulty, &d_solutions, (void*)&launch_nonce_start};
-        HIP_CHECK(oroModuleLaunchKernel(blake3_func, 1, 1, 1, 256, 1, 1, 0, nullptr, blake3_args, nullptr));
+        HIP_CHECK(oroModuleLaunchKernel(blake3_func, b3_grid, 1, 1, 256, 1, 1, 0, nullptr, blake3_args, nullptr));
         HIP_CHECK(oroDeviceSynchronize());
 
         // 3. Download and validate
@@ -320,8 +315,8 @@ static int test_xelis_hip_impl() {
     printf("[TEST]   ✓ Module compiled\n");
     fflush(stdout);
 
-    // Load all kernel functions from the module
-    oroFunction_t stage1_func = module_kernel.function;
+    // Load kernel functions: serial stage1, production stage3, serial blake3
+    oroFunction_t stage1_func = module_kernel.function;  // xelis_stage1_kernel
     oroFunction_t stage3_func = nullptr;
     oroFunction_t blake3_func = nullptr;
 
@@ -349,46 +344,42 @@ static int test_xelis_hip_impl() {
 
     int failures = 0;
 
-    // Test 1: Single batch, single block (baseline)
+    // Test 1: Single hash (baseline)
     failures += run_test_case(
-        "Test 1: Single Batch, Single Block",
+        "Test 1: Single Hash",
         stage1_func, stage3_func, blake3_func,
         0x0000000000000000ULL,  // nonce_start
         1,      // batch_size
-        1,      // grid_x
-        1       // block_x
+        1       // s3_block_x
     );
 
-    // Test 2: Small multi-batch, single block
+    // Test 2: Small batch (32 hashes)
     failures += run_test_case(
-        "Test 2: Multi-Batch (32), Single Block",
+        "Test 2: Small Batch (32)",
         stage1_func, stage3_func, blake3_func,
         0x0000000000000000ULL,  // nonce_start
         32,     // batch_size
-        1,      // grid_x
-        32      // block_x
+        32      // s3_block_x
     );
 
-    // Test 3: Large multi-batch, single block (256*20 = 5120 hashes in 20 launches)
+    // Test 3: Medium batch with multiple launches (256 hashes × 20 launches)
     failures += run_test_case(
-        "Test 3: Large Multi-Batch (5120), Single Block, 20 Launches",
+        "Test 3: Medium Batch (5120), 20 Launches",
         stage1_func, stage3_func, blake3_func,
         0x0000000000000000ULL,  // nonce_start
         5120,   // batch_size
-        1,      // grid_x
-        256,    // block_x
+        256,    // s3_block_x
         20      // num_launches
     );
 
-    // Test 4: Test with non-zero nonce_start (device ID bits set)
+    // Test 4: Non-zero nonce_start (device ID bits set)
     uint64_t device_nonce = (1ULL << 59);  // Device ID = 1
     failures += run_test_case(
         "Test 4: Device ID Segmentation (device=1)",
         stage1_func, stage3_func, blake3_func,
         device_nonce,  // nonce_start with device ID
         32,     // batch_size
-        1,      // grid_x
-        32      // block_x
+        32      // s3_block_x
     );
 
     // Final summary
@@ -424,7 +415,7 @@ static int test_threaded_level1(
         result = run_test_case(
             "Threaded: std::thread GPU",
             stage1_func, stage3_func, blake3_func,
-            0x0000000000000000ULL, 32, 1, 32);
+            0x0000000000000000ULL, 32, 32);
     });
     gpu_thread.join();
     printf("[THREAD-TEST] Level 1: %s\n", result == 0 ? "PASS" : "FAIL");
@@ -471,7 +462,7 @@ static int test_threaded_level2(
         result = run_test_case(
             "Threaded: GPU + asio io_context",
             stage1_func, stage3_func, blake3_func,
-            0x0000000000000000ULL, 32, 1, 32);
+            0x0000000000000000ULL, 32, 32);
     });
     gpu_thread.join();
 
@@ -528,7 +519,7 @@ static int test_threaded_level3(
         result = run_test_case(
             "Threaded: GPU + boost::asio::spawn",
             stage1_func, stage3_func, blake3_func,
-            0x0000000000000000ULL, 32, 1, 32);
+            0x0000000000000000ULL, 32, 32);
     });
     gpu_thread.join();
 
@@ -578,7 +569,7 @@ static int test_threaded_level4(
         result = run_test_case(
             "Threaded: GPU + SSL ctx",
             stage1_func, stage3_func, blake3_func,
-            0x0000000000000000ULL, 32, 1, 32);
+            0x0000000000000000ULL, 32, 32);
     });
     gpu_thread.join();
 
@@ -635,7 +626,7 @@ static int test_threaded_level5(
         result = run_test_case(
             "Threaded: GPU + SSL + resolve",
             stage1_func, stage3_func, blake3_func,
-            0x0000000000000000ULL, 32, 1, 32);
+            0x0000000000000000ULL, 32, 32);
     });
     gpu_thread.join();
 
@@ -709,7 +700,7 @@ static int test_threaded_level6(
         result = run_test_case(
             "Threaded: full getWork sim",
             stage1_func, stage3_func, blake3_func,
-            0x0000000000000000ULL, 32, 1, 32);
+            0x0000000000000000ULL, 32, 32);
     });
     gpu_thread.join();
 
@@ -928,7 +919,7 @@ int test_xelis_hip() {
         oroCtx main_ctx;
         oroCtxGetCurrent(&main_ctx);
 
-        oroFunction_t stage1_func = module_kernel.function;
+        oroFunction_t stage1_func = module_kernel.function;  // xelis_stage1_kernel
         oroFunction_t stage3_func = nullptr, blake3_func = nullptr;
         (void)oroModuleGetFunction(&stage3_func, module_kernel.module, "xelis_s3_hybrid_v2_noblake_kernel");
         (void)oroModuleGetFunction(&blake3_func, module_kernel.module, "xelis_blake3_batch");

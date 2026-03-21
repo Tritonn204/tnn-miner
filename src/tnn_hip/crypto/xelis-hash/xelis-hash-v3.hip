@@ -49,6 +49,21 @@ __device__ constexpr uint8_t AES_KEY[16] = {'x', 'e', 'l', 'i', 's', 'h', 'a', '
   #define XELIS_WAVE_SIZE 32
 #endif
 
+// Use hardware FP64 reciprocal division on architectures with fast FP64 (1:2).
+// NVIDIA: only HPC dies (GP100, V100, A100, H100) — NOT consumer (sm_86, sm_89).
+// AMD: GCN/CDNA (wave64) have 1:2 FP64; RDNA (wave32) have 1:16.
+#if defined(__CUDA_ARCH__)
+  #if (__CUDA_ARCH__ == 600 || __CUDA_ARCH__ == 700 || __CUDA_ARCH__ == 800 || __CUDA_ARCH__ == 900)
+    #define XELIS_USE_HWRECIP 1
+  #endif
+#elif defined(__HIP_PLATFORM_AMD__)
+  // GCN5+ / CDNA (gfx9xx) have 1:2 FP64. Pre-Vega GCN (gfx7/8) is wave64 but 1:16.
+  #if defined(__gfx900__) || defined(__gfx906__) || defined(__gfx908__) || \
+      defined(__gfx90a__) || defined(__gfx940__) || defined(__gfx941__) || defined(__gfx942__)
+    #define XELIS_USE_HWRECIP 1
+  #endif
+#endif
+
 // Cooperative TPB: wave32 → stage1=32, b3=96 | wave64 → stage1=64, b3=64
 #define XELIS_STAGE1_COOP_TPB  XELIS_WAVE_SIZE
 #define XELIS_B3_COOP_TPB      (XELIS_WAVE_SIZE == 32 ? 96 : 64)
@@ -157,6 +172,19 @@ __device__ __forceinline__ uint64_t isqrt(uint64_t a)
 
     return s;
 }
+
+#ifdef XELIS_USE_HWRECIP
+__device__ __forceinline__ uint64_t isqrt_drcp(uint64_t a) {
+    if (a < 2) return a;
+    double d = __dsqrt_rn((double)a);
+    uint64_t s = (uint64_t)d;
+    uint64_t sq = s * s;
+    s -= (uint32_t)(sq > a);
+    sq = (s + 1) * (s + 1);
+    s += (uint32_t)(sq <= a);
+    return s;
+}
+#endif
 
 __device__ __forceinline__ uint64_t barrett_reduce(
     uint64_t x_lo, uint64_t x_hi,
@@ -788,9 +816,10 @@ __device__ __forceinline__ void stage_1(
 // Block size: XELIS_STAGE1_COOP_TPB (32 for wave32, 64 for wave64)
 constexpr int STAGE1_SHARED_MEM_SIZE = XELIS_STAGE1_COOP_TPB * 176; // TPB * (4*32 + 4*12)
 
-__device__ __forceinline__ void stage_1_cooperative(
+// Phase 1: Each thread computes its own K2 and nonces into shared memory.
+// All threads must call this (even invalid ones) to keep __syncthreads well-defined.
+__device__ __forceinline__ void stage_1_cooperative_phase1(
     const uint8_t *input,
-    uint64_t *my_scratch,
     uint8_t *shared_nonces_mem)
 {
     const uint32_t tid = threadIdx.x;
@@ -800,7 +829,6 @@ __device__ __forceinline__ void stage_1_cooperative(
     uint8_t (*shared_K2)[4][32] = (uint8_t (*)[4][32])shared_nonces_mem;
     uint8_t (*shared_nonces)[4][12] = (uint8_t (*)[4][12])(shared_nonces_mem + block_size * 4 * 32);
 
-    // Phase 1: Each thread computes its own K2 and nonces
     // Scoped so nvcc can reclaim registers for Phase 2.
     // key[128] eliminated — reads from input[] directly (saves 128B register pressure).
     {
@@ -864,15 +892,27 @@ __device__ __forceinline__ void stage_1_cooperative(
             }
         }
     } // K2, my_nonces, buffer all dead — nvcc can reclaim registers
+}
 
-    __syncthreads();
+// Phase 2: Cooperative scratchpad generation.
+// All threads collaborate on EACH valid hash's scratchpad.
+// block_base_scratch = scratch pointer for hash_idx 0 in this block.
+// valid_count = number of valid hashes in this block (may be < blockDim.x).
+__device__ __forceinline__ void stage_1_cooperative_phase2(
+    uint64_t *block_base_scratch,
+    uint8_t *shared_nonces_mem,
+    uint32_t valid_count)
+{
+    const uint32_t tid = threadIdx.x;
+    const uint32_t block_size = blockDim.x;
 
-    // Phase 2: Cooperative scratchpad generation
-    // All threads collaborate on EACH hash's scratchpad
+    uint8_t (*shared_K2)[4][32] = (uint8_t (*)[4][32])shared_nonces_mem;
+    uint8_t (*shared_nonces)[4][12] = (uint8_t (*)[4][12])(shared_nonces_mem + block_size * 4 * 32);
+
     const uint32_t blocks_per_chunk = XELIS_BYTES_PER_CHUNK_V3 / 64;
 
-    for (uint32_t hash_idx = 0; hash_idx < block_size; hash_idx++) {
-        uint64_t *target_scratch = my_scratch - tid * XELIS_MEMORY_SIZE_V3 + hash_idx * XELIS_MEMORY_SIZE_V3;
+    for (uint32_t hash_idx = 0; hash_idx < valid_count; hash_idx++) {
+        uint64_t *target_scratch = block_base_scratch + (size_t)hash_idx * XELIS_MEMORY_SIZE_V3;
 
         for (uint32_t chunk = 0; chunk < 4; chunk++) {
             // Strided loop: thread i generates blocks i, i+32, i+64, ...
@@ -894,6 +934,18 @@ __device__ __forceinline__ void stage_1_cooperative(
             }
         }
     }
+}
+
+// Combined stage_1_cooperative — for callers that always launch full blocks.
+// block_base_scratch = scratch pointer for the first hash in this block.
+__device__ __forceinline__ void stage_1_cooperative(
+    const uint8_t *input,
+    uint64_t *block_base_scratch,
+    uint8_t *shared_nonces_mem)
+{
+    stage_1_cooperative_phase1(input, shared_nonces_mem);
+    __syncthreads();
+    stage_1_cooperative_phase2(block_base_scratch, shared_nonces_mem, blockDim.x);
 }
 
 // ============================================================================
@@ -1003,6 +1055,111 @@ __device__ __forceinline__ uint64_t mod128by64_split32(uint64_t hi, uint64_t lo,
     return divmod128by64_split32(hi, lo, d).r;
 }
 
+// ============================================================================
+// Hardware FP64 Reciprocal Division (drcp) — for fast-FP64 architectures only
+// ============================================================================
+#ifdef XELIS_USE_HWRECIP
+
+__device__ __forceinline__ uint64_t div64_hwrecip(uint64_t dividend, uint64_t divisor) {
+    double recip = __drcp_rn((double)divisor);
+    uint64_t q = (uint64_t)((double)dividend * recip);
+    q &= (uint64_t)-(dividend >= divisor);
+    uint64_t prod = q * divisor;
+    uint64_t rem  = dividend - prod;
+    uint64_t over = (uint64_t)(prod > dividend);
+    q -= over;
+    rem += divisor & (uint64_t)-over;
+    uint64_t under = (uint64_t)(rem >= divisor);
+    q += under;
+    return q;
+}
+
+__device__ __forceinline__ uint64_t mod64_hwrecip(uint64_t a, uint64_t d) {
+    double recip = __drcp_rn((double)d);
+    uint64_t q = (uint64_t)((double)a * recip);
+    q &= (uint64_t)-(a >= d);
+    uint64_t r = a - q * d;
+    uint64_t over = (uint64_t)(r > a);
+    q -= over;
+    r += d & (uint64_t)-over;
+    uint64_t under = (uint64_t)(r >= d);
+    r -= d & (uint64_t)-under;
+    return r;
+}
+
+__device__ __forceinline__ divmod_result divmod64_hwrecip(uint64_t a, uint64_t d) {
+    double recip = __drcp_rn((double)d);
+    uint64_t q = (uint64_t)((double)a * recip);
+    q &= (uint64_t)-(a >= d);
+    uint64_t r = a - q * d;
+    uint64_t over = (uint64_t)(r > a);
+    q -= over;
+    r += d & (uint64_t)-over;
+    uint64_t under = (uint64_t)(r >= d);
+    q += under;
+    r -= d & (uint64_t)-under;
+    return {q, r};
+}
+
+__device__ __forceinline__ uint32_t div96by64_q32_hwrecip(
+    uint64_t n_hi, uint32_t n_lo, uint64_t dn, double recip, uint64_t *rem_out) {
+    uint64_t q = (uint64_t)(((double)n_hi * 4294967296.0 + (double)n_lo) * recip);
+    if (q > 0xffffffffull) q = 0xffffffffull;
+    uint64_t full = (n_hi << 32) | (uint64_t)n_lo;
+    uint64_t p_lo = q * dn;
+    int64_t hi = (int64_t)(n_hi >> 32) - (int64_t)__umul64hi(q, dn) - (full < p_lo);
+    uint64_t rem = full - p_lo;
+    // drcp 53-bit precision guarantees ±1 error on 32-bit digit.
+    // After over correction, hi is guaranteed 0 — skip hi fixup.
+    uint64_t over = (uint64_t)(hi < 0);
+    q -= over; rem += dn & -over;
+    uint64_t under = (uint64_t)(rem >= dn);
+    q += under; rem -= dn & -under;
+    *rem_out = rem;
+    return (uint32_t)q;
+}
+
+__device__ __forceinline__ uint64_t div128by64_hwrecip(uint64_t hi, uint64_t lo, uint64_t d) {
+    uint64_t r = mod64_hwrecip(hi, d);
+    int s = __clzll(d);
+    uint64_t dn = d << s;
+    double recip = __drcp_rn((double)dn);
+    uint64_t n_hi = s ? ((r << s) | (lo >> (64 - s))) : r;
+    uint64_t n_lo = lo << s;
+    uint64_t rem;
+    uint32_t q1 = div96by64_q32_hwrecip(n_hi, (uint32_t)(n_lo >> 32), dn, recip, &rem);
+    uint32_t q0 = div96by64_q32_hwrecip(rem, (uint32_t)n_lo, dn, recip, &rem);
+    return ((uint64_t)q1 << 32) | q0;
+}
+
+__device__ __forceinline__ uint64_t mod128by64_hwrecip(uint64_t hi, uint64_t lo, uint64_t d) {
+    uint64_t r = mod64_hwrecip(hi, d);
+    int s = __clzll(d);
+    uint64_t dn = d << s;
+    double recip = __drcp_rn((double)dn);
+    uint64_t n_hi = s ? ((r << s) | (lo >> (64 - s))) : r;
+    uint64_t n_lo = lo << s;
+    uint64_t rem;
+    (void)div96by64_q32_hwrecip(n_hi, (uint32_t)(n_lo >> 32), dn, recip, &rem);
+    (void)div96by64_q32_hwrecip(rem, (uint32_t)n_lo, dn, recip, &rem);
+    return rem >> s;
+}
+
+__device__ __forceinline__ divmod_result divmod128by64_hwrecip(uint64_t hi, uint64_t lo, uint64_t d) {
+    uint64_t r = mod64_hwrecip(hi, d);
+    int s = __clzll(d);
+    uint64_t dn = d << s;
+    double recip = __drcp_rn((double)dn);
+    uint64_t n_hi = s ? ((r << s) | (lo >> (64 - s))) : r;
+    uint64_t n_lo = lo << s;
+    uint64_t rem;
+    uint32_t q1 = div96by64_q32_hwrecip(n_hi, (uint32_t)(n_lo >> 32), dn, recip, &rem);
+    uint32_t q0 = div96by64_q32_hwrecip(rem, (uint32_t)n_lo, dn, recip, &rem);
+    return {((uint64_t)q1 << 32) | q0, rem >> s};
+}
+
+#endif // XELIS_USE_HWRECIP
+
 // Barrett modular exponentiation — precompute mu once
 __device__ __forceinline__ uint64_t modular_power_barrett(uint64_t base, uint64_t exp, uint64_t mod) {
     mod += (mod == 0);
@@ -1035,6 +1192,38 @@ __device__ __forceinline__ uint64_t modular_power_barrett(uint64_t base, uint64_
     }
     return result;
 }
+
+#ifdef XELIS_USE_HWRECIP
+__device__ __forceinline__ uint64_t modular_power_barrett_hwrecip(uint64_t base, uint64_t exp, uint64_t mod) {
+    mod += (mod == 0);
+    if (mod == 1) return 0;
+
+    base %= mod;
+    if (base < 2) return base;
+    if (exp == 0) return 1;
+
+    uint64_t mu_hi = div64_hwrecip(0xFFFFFFFFFFFFFFFFULL, mod);
+    uint64_t rem   = mod64_hwrecip(0xFFFFFFFFFFFFFFFFULL, mod);
+    uint64_t mu_lo = div128by64_hwrecip(rem, 0xFFFFFFFFFFFFFFFFULL, mod);
+
+    uint64_t result = 1;
+    while (exp > 0) {
+        if (exp & 1) {
+            uint64_t lo = result * base;
+            uint64_t hi = __umul64hi(result, base);
+            result = barrett_reduce(lo, hi, mod, mu_lo, mu_hi);
+        }
+        exp >>= 1;
+        if (exp > 0) {
+            uint64_t lo = base * base;
+            uint64_t hi = __umul64hi(base, base);
+            base = barrett_reduce(lo, hi, mod, mu_lo, mu_hi);
+            if (base == 0) return 0;
+        }
+    }
+    return result;
+}
+#endif
 
 #define U128_LT(a_hi,a_lo,b_hi,b_lo) (((a_hi) < (b_hi)) || (((a_hi) == (b_hi)) && ((a_lo) < (b_lo))))
 #define U128_GT(a_hi,a_lo,b_hi,b_lo) (((a_hi) > (b_hi)) || (((a_hi) == (b_hi)) && ((a_lo) > (b_lo))))
@@ -1134,6 +1323,83 @@ __device__ __forceinline__ uint64_t execute_op_offset(
   #undef m13
 }
 
+#ifdef XELIS_USE_HWRECIP
+// execute_op using hwrecip division + isqrt_drcp — 3-way split by divmod type.
+// Each group has independent register lifetimes; compiler reuses regs across
+// serialized branches → peak = max(group_regs) instead of sum(all_regs).
+__device__ __forceinline__ uint64_t execute_op_offset_hwrecip(
+    uint32_t op, uint64_t a, uint64_t b, uint64_t c,
+    uint32_t r, uint64_t result, uint32_t i, uint32_t j)
+{
+  // Cheap path (56.25%) — identical to split32, no division
+  uint64_t m3  = -(uint64_t)(op==3),  m4  = -(uint64_t)(op==4);
+  uint64_t m5  = -(uint64_t)(op==5),  m6  = -(uint64_t)(op==6);
+  uint64_t m7  = -(uint64_t)(op==7),  m8  = -(uint64_t)(op==8);
+  uint64_t m9  = -(uint64_t)(op==9);
+  uint64_t m14 = -(uint64_t)(op==14), m15 = -(uint64_t)(op==15);
+
+  uint64_t ab = a * b, ac = a * c, bc = b * c;
+
+  uint64_t cx = (ac & (m3|m8)) | (ab & m4) | (c & m5) | (a & m6) | (bc & m7);
+  uint64_t cy = (bc & m3)      | (b & m5)  | (c & m6) | (a & m7) | (b & m8);
+  uint64_t cz = (ac & m4)      | (a & m5)  | (b & m6);
+  uint64_t cheap = cx + cy - cz;
+  cheap |= (ab * c) & m9;
+
+  uint64_t mhi = m14 | m15;
+  uint64_t hp = (a & m14) | (c & m15);
+  uint64_t hq = (c & m14) | (b & m15);
+  uint64_t hn = (bc & m14) | ((ab + c * ROTR(result, r)) & m15);
+  cheap |= (__umul64hi(hp, hq) + hn) & mhi;
+
+  // 0x3C07 = bits {0,1,2,10,11,12,13}
+  if (!((1u<<op) & 0x3C07u)) return cheap;
+
+  // 3-way split by divmod type
+  if ((1u<<op) & 0x1401u)
+  {
+    // Group A: 128-bit divmod (ops 0, 10, 12)
+    uint64_t ma = -(uint64_t)(op==0), mb = -(uint64_t)(op==10), mc = -(uint64_t)(op==12);
+    uint64_t s0 = isqrt_drcp(b + j);
+    uint64_t mur = murmurhash3(c ^ result ^ i ^ j) | 1;
+
+    uint64_t mAny = ma | mb | mc;
+    uint64_t hi = ((a+i) & ma) | (a     & mb) | (c     & mc) | ~mAny;
+    uint64_t lo = (s0    & ma) | (b     & mb) | (a     & mc);
+    uint64_t dv = (mur   & ma) | ((c|1) & mb) | ((b|4) & mc) | ~mAny;
+    divmod_result dm = divmod128by64_hwrecip(hi, lo, dv);
+    return (dm.r & (ma|mb)) | (dm.q & mc);
+  }
+  else if ((1u<<op) & 0x2802u)
+  {
+    // Group B: 64-bit divmod (ops 1, 11, 13)
+    uint64_t ma = -(uint64_t)(op==1), mb = -(uint64_t)(op==11), mc = -(uint64_t)(op==13);
+    uint64_t t0 = ROTL(result, r);
+    uint64_t s0 = isqrt_drcp(b | 2);
+    uint64_t s1 = isqrt_drcp(a + j);
+
+    uint64_t mAny = ma | mb | mc;
+    uint64_t num = ((c+i) & ma) | (b  & mb) | (t0 & mc) | ~mAny;
+    uint64_t den = (s0    & ma) | (t0 & mb) | (a  & mc) | ~mAny;
+    den |= (uint64_t)(den == 0);
+    divmod_result dm = divmod64_hwrecip(num, den);
+
+    uint64_t res1  = ROTL(dm.r, i+j) * s1;
+    uint64_t t1 = a | 2;
+    uint64_t cmp_11 = -(uint64_t)U128_LT(b, c, t0, t1);
+    uint64_t res11  = (c & cmp_11) | ((c - t1 * dm.q) & ~cmp_11);
+    uint64_t cmp_13 = -(uint64_t)U128_GT(t0, b, a, (c|8));
+    uint64_t res13  = (dm.q & cmp_13) | ((a ^ b) & ~cmp_13);
+    return (res1 & ma) | (res11 & mb) | (res13 & mc);
+  }
+  else
+  {
+    // Group C: op 2 — pure isqrt, no divmod
+    return (isqrt_drcp(a + i) * isqrt_drcp(c + j)) ^ (b + i + j);
+  }
+}
+#endif // XELIS_USE_HWRECIP
+
 #if defined(__CUDA_ARCH__) || defined(__HIP_PLATFORM_NVIDIA__)
 // NVIDIA: Use PTX inline assembly prefetch - CRITICAL for performance
 __device__ __forceinline__ void prefetch_l1(const void *ptr)
@@ -1210,7 +1476,11 @@ XELIS_HOT __device__ void stage_3_hybrid_v2(uint64_t *my_scratch, const uint8_t 
 
       uint64_t b_val = load_scratch(&mem_buffer_b[map_index(a ^ rot_res)]);
 
+#ifdef XELIS_USE_HWRECIP
+      uint64_t v = execute_op_offset_hwrecip(op_idx, a, b_val, c, r, result, i, j);
+#else
       uint64_t v = execute_op_offset(op_idx, a, b_val, c, r, result, i, j);
+#endif
 
       uint64_t idx_seed = v ^ result;
       result = ROTL(idx_seed, r);
@@ -1242,8 +1512,13 @@ XELIS_HOT __device__ void stage_3_hybrid_v2(uint64_t *my_scratch, const uint8_t 
       store_scratch(&mem_buffer_a[pending_idx_a_write], pending_store_a);
     }
 
+#ifdef XELIS_USE_HWRECIP
+    addr_a = modular_power_barrett_hwrecip(addr_a, addr_b, result);
+    addr_b = isqrt_drcp(result) * (r + 1) * isqrt_drcp(addr_a);
+#else
     addr_a = modular_power_barrett(addr_a, addr_b, result);
     addr_b = isqrt(result) * (r + 1) * isqrt(addr_a);
+#endif
   }
 }
 
@@ -1324,24 +1599,43 @@ __global__ void xelis_stage1_cooperative(
     uint32_t scratch_offset)
 {
   __shared__ uint8_t shared_mem[STAGE1_SHARED_MEM_SIZE];
+  // Number of valid hashes in this block (may be < blockDim.x in last block)
+  __shared__ uint32_t block_valid_count;
 
-  uint32_t local_tid = blockIdx.x * blockDim.x + threadIdx.x;
-  if (local_tid >= batch_size)
-    return;
+  const uint32_t tid = threadIdx.x;
+  uint32_t local_tid = blockIdx.x * blockDim.x + tid;
+  bool valid = (local_tid < batch_size);
 
-  uint64_t global_idx = local_tid + scratch_offset;
-  uint64_t *my_scratch = scratch_memory + (size_t)global_idx * XELIS_MEMORY_SIZE_V3;
+  // First thread computes how many valid hashes this block has
+  if (tid == 0) {
+    uint32_t block_start = blockIdx.x * blockDim.x;
+    uint32_t block_end = block_start + blockDim.x;
+    block_valid_count = (batch_size >= block_end) ? blockDim.x
+                      : (batch_size > block_start) ? (batch_size - block_start) : 0;
+  }
+
+  // Block-base scratch pointer: first hash in this block
+  uint64_t block_base_idx = (uint64_t)(blockIdx.x * blockDim.x) + scratch_offset;
+  uint64_t *block_base_scratch = scratch_memory + (size_t)block_base_idx * XELIS_MEMORY_SIZE_V3;
 
   uint8_t input[XELIS_TEMPLATE_SIZE];
-  memcpy(input, input_template, XELIS_TEMPLATE_SIZE);
+  if (valid) {
+    uint64_t global_idx = (uint64_t)local_tid + scratch_offset;
+    memcpy(input, input_template, XELIS_TEMPLATE_SIZE);
+    uint64_t counter = nonce_start & 0xFFFFFFFFFFFFULL;
+    uint64_t nonce = (nonce_start & 0xFFFF000000000000ULL) | ((counter + global_idx) & 0xFFFFFFFFFFFFULL);
+    ((uint64_t *)(input))[5] = nonce;
+  }
 
-  // Nonce segmentation: bits 59-63=device_id, bits 48-58=random, bits 0-47=counter
-  // Must use global_idx (not local_tid) since scratch memory is indexed by global_idx
-  uint64_t counter = nonce_start & 0xFFFFFFFFFFFFULL;  // Extract counter (bits 0-47)
-  uint64_t nonce = (nonce_start & 0xFFFF000000000000ULL) | ((counter + global_idx) & 0xFFFFFFFFFFFFULL);
-  ((uint64_t *)(input))[5] = nonce;
+  // Phase 1: all threads compute K2/nonces into shared memory.
+  // Invalid threads produce garbage but phase 2 won't iterate to their hash_idx.
+  stage_1_cooperative_phase1(input, shared_mem);
 
-  stage_1_cooperative(input, my_scratch, shared_mem);
+  __syncthreads();
+
+  // Phase 2: cooperative scratchpad generation — only iterate valid hashes
+  uint32_t valid_count = block_valid_count;
+  stage_1_cooperative_phase2(block_base_scratch, shared_mem, valid_count);
 }
 
 // ============================================================================

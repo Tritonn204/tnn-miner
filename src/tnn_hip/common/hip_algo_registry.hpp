@@ -94,7 +94,7 @@ static inline bool xelis_launch_stage1_chunk(
     int stage1_block_size,
     size_t shared_mem)
 {
-  int num_blocks = chunk_batch / stage1_block_size;
+  int num_blocks = (chunk_batch + stage1_block_size - 1) / stage1_block_size;  // round up; serial kernel has batch_size guard
 
   void *args[] = {
       (void *)&ctx.d_input,
@@ -165,10 +165,6 @@ static inline bool xelis_launch_stage1(
     while (done < ctx.batch_size)
     {
       uint32_t chunk = std::min(knee, ctx.batch_size - done);
-      // Align chunk down to block size (last chunk may be smaller)
-      chunk = (chunk / stage1_block_size) * stage1_block_size;
-      if (chunk == 0)
-        break;
 
       if (!xelis_launch_stage1_chunk(
               it->second, stage1_name, ctx,
@@ -686,7 +682,7 @@ inline AlgoConfig XELIS_V3_CONFIG = {
                                     // "xelis_s13_noblake_kernel",
                                     "xelis_s3_hybrid_v2_noblake_kernel", "xelis_s3b3_hybrid_v2_kernel"},
 
-    .occupancy_threshold = 1.0,
+    .occupancy_threshold = 0.70,
 
     .tune_key_probe_fn = xelis_tune_key_probe,
 };

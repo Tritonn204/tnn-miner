@@ -1206,9 +1206,13 @@ private:
                 if (occ.optimal_block_size > limits.block_max) occ.optimal_block_size = limits.block_max;
                 if (occ.optimal_block_size < limits.block_min) occ.optimal_block_size = limits.block_min;
 
-                // Query occupancy for ALL block sizes, then select those with
-                // meaningful occupancy (>=50% of peak active blocks per CU).
-                int peak_blocks_per_cu = 0;
+                // Query occupancy for ALL block sizes, then filter using a
+                // combined score: (threads/peak_threads) × (threads/hw_max).
+                // The relative term is register-aware (via the occupancy API),
+                // the absolute term anchors against hardware capacity.
+                // The product naturally scales across kernel complexity and GPU arch.
+                const int hw_max_threads = device_props_.maxThreadsPerMultiProcessor;
+                int peak_threads = 0;
                 std::vector<std::pair<int,int>> all_occ; // (block_size, max_blocks_per_cu)
 
                 for (int bs = limits.block_min; bs <= limits.block_max; bs += limits.step) {
@@ -1218,14 +1222,19 @@ private:
                         &max_blocks, kit->second, bs, bs_shared);
                     if (oerr != oroSuccess) max_blocks = 0;
                     all_occ.push_back({bs, max_blocks});
-                    if (max_blocks > peak_blocks_per_cu) peak_blocks_per_cu = max_blocks;
+                    int threads = max_blocks * bs;
+                    if (threads > peak_threads) peak_threads = threads;
                 }
 
-                // Include block sizes above the configured occupancy threshold
-                int threshold = (int)std::ceil(peak_blocks_per_cu * config_.occupancy_threshold);
+                // Combined occupancy score: sqrt(relative × absolute)
+                // Geometric mean softens the absolute penalty so register-heavy
+                // kernels aren't structurally capped below the threshold.
                 std::set<int> bs_set;
                 for (auto& [bs, blks] : all_occ) {
-                    if (blks >= threshold)
+                    int threads = blks * bs;
+                    double rel = peak_threads > 0 ? (double)threads / peak_threads : 0.0;
+                    double abs_occ = hw_max_threads > 0 ? (double)threads / hw_max_threads : 0.0;
+                    if (std::sqrt(rel * abs_occ) >= config_.occupancy_threshold)
                         bs_set.insert(bs);
                 }
                 // Always include min, optimal, and max
