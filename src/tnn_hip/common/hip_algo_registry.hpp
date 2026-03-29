@@ -50,8 +50,9 @@ enum class XelisStrategy : uint8_t
 {
   Mono = 0,     // s1+s3_hybrid_v2+b3 monolithic
   Baseline = 1, // s1+s3_hybrid_v2 fused, b3 separate
-  Sep = 2,      // all 3 separate
+  Sep = 2,      // all 3 separate (warp-coop b3)
   Neo = 3,      // s1 separate, s3+b3 fused
+  SepP = 4,     // all 3 separate (smem pipelined b3 @ 512 TPB)
 };
 
 // ============================================================================
@@ -302,6 +303,46 @@ static inline bool xelis_launch_blake3(
     return false;
   }
   return true;
+}
+
+// Helper: launch smem-based pipelined blake3 (512 TPB, 1 block per hash)
+// Falls back to xelis_launch_blake3() if kernel not found or launch fails.
+static inline bool xelis_launch_blake3_smem(
+    const KernelMap &kernels,
+    const KernelLaunchContext &ctx,
+    int dev)
+{
+  auto it = kernels.find("xelis_blake3_smem_batch");
+  if (it != kernels.end())
+  {
+    uint32_t scratch_offset = 0;
+    void *args[] = {
+        (void *)&ctx.d_scratch,
+        (void *)&ctx.d_outputs,
+        (void *)&ctx.batch_size,
+        (void *)&scratch_offset,
+        (void *)&ctx.d_difficulty_target,
+        (void *)&ctx.d_solutions,
+        (void *)&ctx.nonce_start};
+
+    TNN_LOG_TRACE("[LAUNCH] Blake3 smem: kernel=%p, grid=%d, block=512\n",
+                  (void *)it->second, ctx.batch_size);
+    fflush(stdout);
+
+    oroError_t err = oro_safe_launch(
+        it->second,
+        ctx.batch_size, 1, 1,
+        512, 1, 1,
+        0, ctx.stream,
+        args, nullptr);
+
+    if (err == oroSuccess)
+      return true;
+    TNN_LOG_ERROR("[XELIS] blake3_smem launch failed (%s), falling back\n",
+                  tnn_error_string(err));
+  }
+
+  return xelis_launch_blake3(kernels, ctx, dev);
 }
 
 // ============================================================================
@@ -610,6 +651,38 @@ inline bool xelis_v3_execute(
     return true;
   }
 
+  case XelisStrategy::SepP:
+  {
+    // stage1 separate, s3 separate, blake3 smem pipelined (512 TPB)
+    if (!xelis_launch_stage1(kernels, ctx, dev))
+      return false;
+
+    auto it = kernels.find("xelis_s3_hybrid_v2_noblake_kernel");
+    if (it == kernels.end())
+      return false;
+
+    void *args[] = {
+        (void *)&ctx.d_scratch,
+        (void *)&ctx.batch_size,
+        (void *)&scratch_offset,
+        (void *)&ctx.d_difficulty_target,
+        (void *)&ctx.d_solutions,
+        (void *)&ctx.nonce_start};
+
+    oroError_t err = oro_safe_launch(
+        it->second,
+        ctx.num_blocks, 1, 1,
+        ctx.block_size, 1, 1,
+        0, ctx.stream,
+        args, nullptr);
+    if (err != oroSuccess)
+    {
+      TNN_LOG_ERROR("[XELIS] s3_hybrid_v2_noblake launch failed: %s\n", tnn_error_string(err));
+      return false;
+    }
+    return xelis_launch_blake3_smem(kernels, ctx, dev);
+  }
+
   default:
     return default_monolithic_execute(kernels, ctx);
   }
@@ -637,7 +710,8 @@ inline AlgoConfig XELIS_V3_CONFIG = {
         "xelis_s3b3_hybrid_v2_kernel",       // Neo (s3+b3 fused)
         "xelis_blake3_batch",                // Baseline/Sep blake3 (original)
         "xelis_blake3_opt_batch",            // Sep blake3 (optimized: u32 loads, branched merge, shared cv_stack)
-        "xelis_blake3_warp_coop_batch"       // Sep blake3 (warp-cooperative: global-CV, no smem)
+        "xelis_blake3_warp_coop_batch",      // Sep blake3 (warp-cooperative: global-CV, no smem)
+        "xelis_blake3_smem_batch"            // SepP blake3 (smem pipelined: 512 TPB, smem tree)
     },
 
     .kernel_name = "",
@@ -674,8 +748,9 @@ inline AlgoConfig XELIS_V3_CONFIG = {
     // Sep + Neo — cooperative blake3 makes Mono/Baseline obsolete
     .strategy_variants = {// (uint8_t)XelisStrategy::Mono,
                           // (uint8_t)XelisStrategy::Baseline,
-                          (uint8_t)XelisStrategy::Sep, (uint8_t)XelisStrategy::Neo},
-    .strategy_names = {/*"Mono", "Baseline",*/ "Sep", "Neo"},
+                          (uint8_t)XelisStrategy::Sep, (uint8_t)XelisStrategy::Neo,
+                          (uint8_t)XelisStrategy::SepP},
+    .strategy_names = {/*"Mono", "Baseline",*/ "Sep", "Neo", "SepP"},
 
     // Bottleneck kernel per strategy (for occupancy queries)
     .strategy_bottleneck_kernels = {// "xelis_hash_v3_kernel",

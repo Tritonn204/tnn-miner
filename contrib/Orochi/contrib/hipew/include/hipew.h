@@ -303,6 +303,70 @@ struct hipDeviceProp_tR0600
 	int asicRevision;
 };
 typedef struct hipDeviceProp_tR0600 hipDeviceProp_tR0600;
+
+// Pre-6.0 (HIP 5.x) device properties struct for backward compat with older runtimes (e.g. gfx906).
+// Field layout matches amdhip64.so.5 / amdhip64.dll (HIP 5.7 and earlier).
+// On 6.0-6.3.x, the unversioned hipGetDeviceProperties also fills this layout (R0000 bug, ROCm/clr#151).
+struct hipDeviceProp_tR0500
+{
+	char name[256];
+	size_t totalGlobalMem;
+	size_t sharedMemPerBlock;
+	int regsPerBlock;
+	int warpSize;
+	int maxThreadsPerBlock;
+	int maxThreadsDim[3];
+	int maxGridSize[3];
+	int clockRate;
+	int memoryClockRate;
+	int memoryBusWidth;
+	size_t totalConstMem;
+	int major;
+	int minor;
+	int multiProcessorCount;
+	int l2CacheSize;
+	int maxThreadsPerMultiProcessor;
+	int computeMode;
+	int clockInstructionRate;
+	hipDeviceArch_t arch;
+	int concurrentKernels;
+	int pciDomainID;
+	int pciBusID;
+	int pciDeviceID;
+	size_t maxSharedMemoryPerMultiProcessor;
+	int isMultiGpuBoard;
+	int canMapHostMemory;
+	int gcnArch;
+	char gcnArchName[256];
+	int integrated;
+	int cooperativeLaunch;
+	int cooperativeMultiDeviceLaunch;
+	int maxTexture1DLinear;
+	int maxTexture1D;
+	int maxTexture2D[2];
+	int maxTexture3D[3];
+	unsigned int * hdpMemFlushCntl;
+	unsigned int * hdpRegFlushCntl;
+	size_t memPitch;
+	size_t textureAlignment;
+	size_t texturePitchAlignment;
+	int kernelExecTimeoutEnabled;
+	int ECCEnabled;
+	int tccDriver;
+	int cooperativeMultiDeviceUnmatchedFunc;
+	int cooperativeMultiDeviceUnmatchedGridDim;
+	int cooperativeMultiDeviceUnmatchedBlockDim;
+	int cooperativeMultiDeviceUnmatchedSharedMem;
+	int isLargeBar;
+	int asicRevision;
+	int managedMemory;
+	int directManagedMemAccessFromHost;
+	int concurrentManagedAccess;
+	int pageableMemoryAccess;
+	int pageableMemoryAccessUsesHostPageTables;
+};
+typedef struct hipDeviceProp_tR0500 hipDeviceProp_tR0500;
+
 enum hipMemoryType
 {
 	hipMemoryTypeUnregistered = 0,
@@ -407,6 +471,11 @@ enum hipError_t
 	hipErrorTbd = 1054,
 };
 typedef enum hipError_t hipError_t;
+
+// Old-style function signatures for fallback symbol resolution (HIP 5.x unversioned exports)
+typedef hipError_t HIPAPI thipGetDeviceProperties_legacy(hipDeviceProp_tR0500 * prop, int deviceId);
+typedef hipError_t HIPAPI thipChooseDevice_legacy(int * device, const hipDeviceProp_tR0500 * prop);
+
 enum hipDeviceAttribute_t
 {
 	hipDeviceAttributeCudaCompatibleBegin = 0,

@@ -1248,6 +1248,115 @@ _LIBRARY_FIND( hip_lib, hipWaitExternalSemaphoresAsync );
 #pragma endregion
 
 
+// ---- HIP 5.x fallback shim for hipGetDevicePropertiesR0600 / hipChooseDeviceR0600 ----
+// On pre-6.0 runtimes (gfx906 etc.) only the unversioned symbols exist and fill the old struct.
+// We resolve those and install a wrapper that translates old layout -> R0600 layout.
+{
+  static thipGetDeviceProperties_legacy* s_legacyGetDeviceProps = nullptr;
+  static thipChooseDevice_legacy*        s_legacyChooseDevice   = nullptr;
+
+  if (!hipGetDevicePropertiesR0600) {
+    s_legacyGetDeviceProps = (thipGetDeviceProperties_legacy*)dynamic_library_find(hip_lib, "hipGetDeviceProperties");
+    if (s_legacyGetDeviceProps) {
+      hipGetDevicePropertiesR0600 = (thipGetDevicePropertiesR0600*)(void*)
+        +[](hipDeviceProp_tR0600* dst, int deviceId) -> hipError_t {
+          hipDeviceProp_tR0500 old = {};
+          hipError_t err = s_legacyGetDeviceProps(&old, deviceId);
+          if (err != 0) return err;
+
+          memset(dst, 0, sizeof(*dst));
+          memcpy(dst->name, old.name, sizeof(old.name));
+          dst->totalGlobalMem                = old.totalGlobalMem;
+          dst->sharedMemPerBlock             = old.sharedMemPerBlock;
+          dst->regsPerBlock                  = old.regsPerBlock;
+          dst->warpSize                      = old.warpSize;
+          dst->maxThreadsPerBlock            = old.maxThreadsPerBlock;
+          memcpy(dst->maxThreadsDim, old.maxThreadsDim, sizeof(old.maxThreadsDim));
+          memcpy(dst->maxGridSize, old.maxGridSize, sizeof(old.maxGridSize));
+          dst->clockRate                     = old.clockRate;
+          dst->totalConstMem                 = old.totalConstMem;
+          dst->major                         = old.major;
+          dst->minor                         = old.minor;
+          dst->memPitch                      = old.memPitch;
+          dst->textureAlignment              = old.textureAlignment;
+          dst->texturePitchAlignment         = old.texturePitchAlignment;
+          dst->multiProcessorCount           = old.multiProcessorCount;
+          dst->kernelExecTimeoutEnabled      = old.kernelExecTimeoutEnabled;
+          dst->integrated                    = old.integrated;
+          dst->canMapHostMemory              = old.canMapHostMemory;
+          dst->computeMode                   = old.computeMode;
+          dst->maxTexture1D                  = old.maxTexture1D;
+          dst->maxTexture1DLinear            = old.maxTexture1DLinear;
+          memcpy(dst->maxTexture2D, old.maxTexture2D, sizeof(old.maxTexture2D));
+          memcpy(dst->maxTexture3D, old.maxTexture3D, sizeof(old.maxTexture3D));
+          dst->concurrentKernels             = old.concurrentKernels;
+          dst->ECCEnabled                    = old.ECCEnabled;
+          dst->pciBusID                      = old.pciBusID;
+          dst->pciDeviceID                   = old.pciDeviceID;
+          dst->pciDomainID                   = old.pciDomainID;
+          dst->tccDriver                     = old.tccDriver;
+          dst->memoryClockRate               = old.memoryClockRate;
+          dst->memoryBusWidth                = old.memoryBusWidth;
+          dst->l2CacheSize                   = old.l2CacheSize;
+          dst->maxThreadsPerMultiProcessor   = old.maxThreadsPerMultiProcessor;
+          dst->sharedMemPerMultiprocessor    = old.maxSharedMemoryPerMultiProcessor;
+          dst->managedMemory                 = old.managedMemory;
+          dst->isMultiGpuBoard               = old.isMultiGpuBoard;
+          dst->pageableMemoryAccess          = old.pageableMemoryAccess;
+          dst->concurrentManagedAccess       = old.concurrentManagedAccess;
+          dst->pageableMemoryAccessUsesHostPageTables = old.pageableMemoryAccessUsesHostPageTables;
+          dst->directManagedMemAccessFromHost = old.directManagedMemAccessFromHost;
+          dst->cooperativeLaunch             = old.cooperativeLaunch;
+          dst->cooperativeMultiDeviceLaunch  = old.cooperativeMultiDeviceLaunch;
+          memcpy(dst->gcnArchName, old.gcnArchName, sizeof(old.gcnArchName));
+          dst->maxSharedMemoryPerMultiProcessor = old.maxSharedMemoryPerMultiProcessor;
+          dst->clockInstructionRate          = old.clockInstructionRate;
+          dst->arch                          = old.arch;
+          dst->hdpMemFlushCntl               = old.hdpMemFlushCntl;
+          dst->hdpRegFlushCntl               = old.hdpRegFlushCntl;
+          dst->cooperativeMultiDeviceUnmatchedFunc      = old.cooperativeMultiDeviceUnmatchedFunc;
+          dst->cooperativeMultiDeviceUnmatchedGridDim   = old.cooperativeMultiDeviceUnmatchedGridDim;
+          dst->cooperativeMultiDeviceUnmatchedBlockDim  = old.cooperativeMultiDeviceUnmatchedBlockDim;
+          dst->cooperativeMultiDeviceUnmatchedSharedMem = old.cooperativeMultiDeviceUnmatchedSharedMem;
+          dst->isLargeBar                    = old.isLargeBar;
+          dst->asicRevision                  = old.asicRevision;
+          return (hipError_t)0;
+        };
+    }
+  }
+
+  if (!hipChooseDeviceR0600) {
+    s_legacyChooseDevice = (thipChooseDevice_legacy*)dynamic_library_find(hip_lib, "hipChooseDevice");
+    if (s_legacyChooseDevice) {
+      // For hipChooseDevice the caller passes criteria in the prop struct.
+      // The old API only inspects the small set of fields that overlap, so a
+      // direct truncating copy is fine here — we just need the fields the
+      // runtime actually checks (name, major/minor, totalGlobalMem, etc).
+      hipChooseDeviceR0600 = (thipChooseDeviceR0600*)(void*)
+        +[](int* device, const hipDeviceProp_tR0600* prop) -> hipError_t {
+          hipDeviceProp_tR0500 old = {};
+          memcpy(old.name, prop->name, sizeof(old.name));
+          old.totalGlobalMem       = prop->totalGlobalMem;
+          old.sharedMemPerBlock    = prop->sharedMemPerBlock;
+          old.regsPerBlock         = prop->regsPerBlock;
+          old.warpSize             = prop->warpSize;
+          old.maxThreadsPerBlock   = prop->maxThreadsPerBlock;
+          memcpy(old.maxThreadsDim, prop->maxThreadsDim, sizeof(old.maxThreadsDim));
+          memcpy(old.maxGridSize, prop->maxGridSize, sizeof(old.maxGridSize));
+          old.clockRate            = prop->clockRate;
+          old.totalConstMem        = prop->totalConstMem;
+          old.major                = prop->major;
+          old.minor                = prop->minor;
+          old.multiProcessorCount  = prop->multiProcessorCount;
+          old.computeMode          = prop->computeMode;
+          old.integrated           = prop->integrated;
+          return s_legacyChooseDevice(device, &old);
+        };
+    }
+  }
+}
+// ---- end HIP 5.x fallback shim ----
+
 
   s_resultDriver = HIPEW_SUCCESS;
   *resultDriver = s_resultDriver;
