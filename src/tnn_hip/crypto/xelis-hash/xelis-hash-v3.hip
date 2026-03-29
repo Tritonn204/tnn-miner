@@ -75,13 +75,13 @@ __device__ constexpr uint8_t AES_KEY[16] = {'x', 'e', 'l', 'i', 's', 'h', 'a', '
 __device__ __forceinline__ uint64_t ROTL(uint64_t x, uint32_t r)
 {
   r &= 63;
-  return (x << r) | (x >> (64 - r));
+  return (x << r) | (x >> ((-r) & 63));
 }
 
 __device__ __forceinline__ uint64_t ROTR(uint64_t x, uint32_t r)
 {
   r &= 63;
-  return (x >> r) | (x << (64 - r));
+  return (x >> r) | (x << ((-r) & 63));
 }
 
 __device__ __forceinline__ uint32_t rotl32(uint32_t x, uint32_t r)
@@ -171,6 +171,37 @@ __device__ __forceinline__ uint64_t isqrt(uint64_t a)
     s += (uint32_t)(sq <= arg);
 
     return s;
+}
+
+__device__ __forceinline__ void isqrt_pair(uint64_t xa, uint64_t xb,
+    uint64_t *__restrict__ ra, uint64_t *__restrict__ rb)
+{
+    uint64_t xa_arg = xa, xb_arg = xb;
+    xa = xa < 2 ? 4 : xa;
+    xb = xb < 2 ? 4 : xb;
+    uint32_t sa_scal = __clzll(xa) & ~1u, sb_scal = __clzll(xb) & ~1u;
+    uint64_t sa_n = xa << sa_scal, sb_n = xb << sb_scal;
+    uint32_t sa_hi = (uint32_t)(sa_n >> 32), sb_hi = (uint32_t)(sb_n >> 32);
+    float sa_fr = __frsqrt_rn((float)sa_hi), sb_fr = __frsqrt_rn((float)sb_hi);
+    uint32_t sa_r = (uint32_t)fmaf(1.407374884e14f, sa_fr, -438.0f);
+    uint32_t sb_r = (uint32_t)fmaf(1.407374884e14f, sb_fr, -438.0f);
+    uint32_t sa_s = __umulhi(sa_r, sa_hi) * 2, sb_s = __umulhi(sb_r, sb_hi) * 2;
+    uint64_t sa_rem = sa_n - (uint64_t)sa_s * sa_s, sb_rem = sb_n - (uint64_t)sb_s * sb_s;
+    sa_r = __umulhi((uint32_t)(sa_rem >> 32) + 1, sa_r);
+    sb_r = __umulhi((uint32_t)(sb_rem >> 32) + 1, sb_r);
+    sa_s += sa_r; sb_s += sb_r;
+    sa_s >>= (sa_scal >> 1); sb_s >>= (sb_scal >> 1);
+    uint64_t sa_sq = (uint64_t)sa_s * sa_s, sb_sq = (uint64_t)sb_s * sb_s;
+    uint32_t sa_high = (uint32_t)(sa_sq > xa_arg), sb_high = (uint32_t)(sb_sq > xb_arg);
+    sa_s -= sa_high; sb_s -= sb_high;
+    sa_sq -= (2 * (uint64_t)sa_s + 1) & -(uint64_t)sa_high;
+    sb_sq -= (2 * (uint64_t)sb_s + 1) & -(uint64_t)sb_high;
+    uint64_t sa_nxt = sa_sq + 2 * (uint64_t)sa_s + 1;
+    uint64_t sb_nxt = sb_sq + 2 * (uint64_t)sb_s + 1;
+    sa_s += (uint32_t)(sa_nxt <= xa_arg);
+    sb_s += (uint32_t)(sb_nxt <= xb_arg);
+    *ra = (xa_arg < 2) ? xa_arg : (uint64_t)sa_s;
+    *rb = (xb_arg < 2) ? xb_arg : (uint64_t)sb_s;
 }
 
 #ifdef XELIS_USE_HWRECIP
@@ -544,6 +575,12 @@ __device__ __forceinline__ void store_glc_slc(uint64_t *ptr, uint64_t val)
   asm volatile("st.global.cg.u64 [%0], %1;" : : "l"(ptr), "l"(val) : "memory");
 }
 
+// Write-through store (st.global.wt) — writes to DRAM + updates L2
+__device__ __forceinline__ void store_wt(uint64_t *ptr, uint64_t val)
+{
+  asm volatile("st.global.wt.u64 [%0], %1;" : : "l"(ptr), "l"(val) : "memory");
+}
+
 #endif  // Cache control intrinsics
 
 // ============================================================================
@@ -565,7 +602,13 @@ __device__ __forceinline__ void store_glc_slc(uint64_t *ptr, uint64_t val)
   __device__ __forceinline__ void store_scratch(uint64_t *p, uint64_t v) { *p = v; }
 #else
   __device__ __forceinline__ uint64_t load_scratch(const uint64_t *p) { return load_uncached(p); }
-  __device__ __forceinline__ void store_scratch(uint64_t *p, uint64_t v) { store_glc_slc(p, v); }
+  // NVIDIA: st.global.wt (write-through to DRAM+L2) — matches s3opt proven path
+  // AMD: store_glc_slc (GLC+SLC) — already write-through equivalent
+  #if defined(__HIP_PLATFORM_AMD__)
+    __device__ __forceinline__ void store_scratch(uint64_t *p, uint64_t v) { store_glc_slc(p, v); }
+  #else
+    __device__ __forceinline__ void store_scratch(uint64_t *p, uint64_t v) { store_wt(p, v); }
+  #endif
 #endif
 
 
@@ -1400,6 +1443,120 @@ __device__ __forceinline__ uint64_t execute_op_offset_hwrecip(
 }
 #endif // XELIS_USE_HWRECIP
 
+// ============================================================================
+// Branchless exec_op — single divmod128 for all expensive ops, isqrt_pair ILP
+// Self-contained divmod128: float reciprocal + FP64 NR, no __drcp_rn needed
+// ============================================================================
+
+__device__ __forceinline__ uint64_t s3_mod64(uint64_t a, uint64_t d) {
+    if (d <= 0xFFFFFFFFULL) {
+        uint32_t d32 = (uint32_t)d, ah = (uint32_t)(a >> 32);
+        uint32_t rh = ah - (ah / d32) * d32;
+        uint64_t mid = ((uint64_t)rh << 32) | (uint32_t)a;
+        return mid - (uint64_t)((uint32_t)(mid / d32)) * d32;
+    }
+    int s = __clzll(d); uint64_t dn = d << s; uint32_t v = (uint32_t)(dn >> 32);
+    uint64_t ash = (s == 0) ? (a >> 32) : (a >> (32 - s));
+    uint32_t q = (v == 0xFFFFFFFFu) ? (uint32_t)ash : (uint32_t)(ash / ((uint64_t)v + 1));
+    uint64_t rem = a - (uint64_t)q * d;
+    if (rem > a) { rem += d; } else if (rem >= d) { rem -= d; }
+    return rem;
+}
+
+__device__ __forceinline__ double s3_recip_norm(uint64_t dn) {
+    double dd = (double)dn, x = (double)__frcp_rn((float)dn);
+    return x * __fma_rn(-dd, x, 2.0);
+}
+
+__device__ __forceinline__ uint32_t s3_div96by64(uint64_t r, uint32_t x, uint64_t d,
+    double recip, uint64_t *ro) {
+    uint64_t q = (uint64_t)(((double)r * 4294967296.0 + (double)x) * recip);
+    if (q > 0xffffffffull) q = 0xffffffffull;
+    uint64_t rem = (r << 32) | (uint64_t)x, p_lo = q * d;
+    int64_t hi = (int64_t)(r >> 32) - (int64_t)__umul64hi(q, d) - (rem < p_lo); rem -= p_lo;
+    uint64_t ov = (uint64_t)(hi < 0); q -= ov; rem += d & -ov; hi += ov & (rem < d);
+    uint64_t un = (uint64_t)(hi > 0) | (uint64_t)(rem >= d); q += un; rem -= d & -un;
+    *ro = rem; return (uint32_t)q;
+}
+
+__device__ __forceinline__ divmod_result s3_divmod128(uint64_t hi, uint64_t lo, uint64_t d) {
+    uint64_t r = s3_mod64(hi, d);
+    int s = __clzll(d); uint64_t dn = d << s; double recip = s3_recip_norm(dn);
+    uint64_t n_hi = s ? ((r << s) | (lo >> (64 - s))) : r, n_lo = lo << s, rem;
+    uint32_t q1 = s3_div96by64(n_hi, (uint32_t)(n_lo >> 32), dn, recip, &rem);
+    uint32_t q0 = s3_div96by64(rem, (uint32_t)n_lo, dn, recip, &rem);
+    return { ((uint64_t)q1 << 32) | q0, rem >> s };
+}
+
+__device__ __noinline__ uint64_t exec_op_bl_fast(
+    uint32_t op, uint64_t a, uint64_t b, uint64_t c,
+    uint32_t r, uint64_t result, uint32_t i, uint32_t j)
+{
+  // Cheap path (ops 3-9, 14, 15)
+  uint64_t m3  = -(uint64_t)(op==3),  m4  = -(uint64_t)(op==4);
+  uint64_t m5  = -(uint64_t)(op==5),  m6  = -(uint64_t)(op==6);
+  uint64_t m7  = -(uint64_t)(op==7),  m8  = -(uint64_t)(op==8);
+  uint64_t m9  = -(uint64_t)(op==9);
+  uint64_t m14 = -(uint64_t)(op==14), m15 = -(uint64_t)(op==15);
+
+  uint64_t ab = a * b, ac = a * c, bc = b * c;
+  uint64_t cx = (ac & (m3|m8)) | (ab & m4) | (c & m5) | (a & m6) | (bc & m7);
+  uint64_t cy = (bc & m3)      | (b & m5)  | (c & m6) | (a & m7) | (b & m8);
+  uint64_t cz = (ac & m4)      | (a & m5)  | (b & m6);
+  uint64_t cheap = cx + cy - cz;
+  cheap |= (ab * c) & m9;
+
+  uint64_t mhi = m14 | m15;
+  uint64_t hp = (a & m14) | (c & m15);
+  uint64_t hq = (c & m14) | (b & m15);
+  uint64_t hn = (bc & m14) | ((ab + c * ROTR(result, r)) & m15);
+  cheap |= (__umul64hi(hp, hq) + hn) & mhi;
+
+  // Expensive path — fully branchless
+  uint64_t t0 = ROTL(result, r);
+  uint64_t mur = murmurhash3(c ^ result ^ i ^ j) | 1;
+  uint64_t m0  = -(uint64_t)(op==0),  m1  = -(uint64_t)(op==1),  m2  = -(uint64_t)(op==2);
+  uint64_t m10 = -(uint64_t)(op==10), m11 = -(uint64_t)(op==11);
+  uint64_t m12 = -(uint64_t)(op==12), m13 = -(uint64_t)(op==13);
+  uint64_t pA = m0 | m10 | m12, pB = m1 | m11 | m13, pC = m2;
+  uint64_t expensive = pA | pB | pC;
+
+  // Paired isqrt — 2 isqrts in parallel pipeline
+  uint64_t sq0_in = ((b+j) & pA) | ((b|2) & pB) | ((a+i) & pC) | (4 & ~expensive);
+  uint64_t sq1_in = ((a+j) & pB) | ((c+j) & pC) | (4 & ~(pB|pC));
+  uint64_t sq0, sq1;
+  isqrt_pair(sq0_in, sq1_in, &sq0, &sq1);
+
+  // Merged divmod128 — group A uses hi!=0, group B uses hi==0
+  uint64_t hiA  = ((a+i) & m0) | (a     & m10) | (c     & m12) | ~pA;
+  uint64_t loA  = (sq0   & m0) | (b     & m10) | (a     & m12);
+  uint64_t dvA  = (mur   & m0) | ((c|1) & m10) | ((b|4) & m12) | ~pA;
+  uint64_t numB = ((c+i) & m1) | (b  & m11) | (t0 & m13) | ~pB;
+  uint64_t denB = (sq0   & m1) | (t0 & m11) | (a  & m13) | ~pB;
+  denB |= (uint64_t)(denB == 0);
+  uint64_t dm_hi  = hiA & pA;
+  uint64_t dm_lo  = (loA & pA) | (numB & pB) | (1 & ~(pA|pB));
+  uint64_t dm_div = (dvA & pA) | (denB & pB) | (1 & ~(pA|pB));
+  dm_div |= (uint64_t)(dm_div == 0);
+
+  divmod_result dm = s3_divmod128(dm_hi, dm_lo, dm_div);
+
+  uint64_t resA = (dm.r & (m0|m10)) | (dm.q & m12);
+
+  uint64_t res1 = ROTL(dm.r, i+j) * sq1;
+  uint64_t t1 = a | 2;
+  uint64_t c11 = -(uint64_t)U128_LT(b, c, t0, t1);
+  uint64_t r11 = (c & c11) | ((c - t1 * dm.q) & ~c11);
+  uint64_t c13 = -(uint64_t)U128_GT(t0, b, a, (c|8));
+  uint64_t r13 = (dm.q & c13) | ((a ^ b) & ~c13);
+  uint64_t resB = (res1 & m1) | (r11 & m11) | (r13 & m13);
+
+  uint64_t resC = (sq0 * sq1) ^ (b + i + j);
+
+  uint64_t exp_res = (resA & pA) | (resB & pB) | (resC & pC);
+  return (cheap & ~expensive) | (exp_res & expensive);
+}
+
 #if defined(__CUDA_ARCH__) || defined(__HIP_PLATFORM_NVIDIA__)
 // NVIDIA: Use PTX inline assembly prefetch - CRITICAL for performance
 __device__ __forceinline__ void prefetch_l1(const void *ptr)
@@ -1447,78 +1604,94 @@ XELIS_HOT __device__ void stage_3_hybrid_v2(uint64_t *my_scratch, const uint8_t 
 
     uint64_t result = ~(hash1 ^ hash2);
 
-    uint64_t idx_a_read = map_index(result);
+    uint64_t iar = map_index(result);
+    uint64_t apre = load_scratch(&mem_buffer_a[iar]);
 
-    int pending_store = 0;
-    uint64_t pending_idx_a_write = 0, pending_idx_b_write = 0;
-    uint64_t pending_store_a = 0, pending_store_b = 0;
-
-    uint64_t a_preloaded = load_scratch(&mem_buffer_a[idx_a_read]);
+    // DEFER_FIX2: deferred stores with 3 software bypasses (apre, bv, c)
+    uint64_t d_iaw = XELIS_BUFFER_SIZE_V3 + 1;
+    uint64_t d_ibw = XELIS_BUFFER_SIZE_V3 + 1;
+    uint64_t d_t = 0;
+    uint32_t d_ij = 0;
+    int ds = 0;
 
     for (uint32_t j = 0; j < XELIS_BUFFER_SIZE_V3; j++)
     {
-      if (pending_store)
-      {
-        store_scratch(&mem_buffer_b[pending_idx_b_write], pending_store_b);
-        store_scratch(&mem_buffer_a[pending_idx_a_write], pending_store_a);
-      }
+      // Bypass 1: apre RAW — deferred A-store overlaps preloaded slot
+      uint64_t a = (ds && d_iaw == iar) ? d_t : apre;
 
-      // RAW forwarding: if deferred store hit the preloaded slot, use store value
-      uint64_t a = (pending_store && pending_idx_a_write == idx_a_read)
-                   ? pending_store_a
-                   : a_preloaded;
+      uint64_t rot_res = ~ROTR(result, r);
+      uint64_t bv_addr = map_index(a ^ rot_res);
+
+      // Issue bv + deferred oa/ob loads simultaneously for ILP
+      uint64_t bv = load_scratch(&mem_buffer_b[bv_addr]);
+      uint64_t oa = 0, ob = 0, pvb = 0;
+      if (ds)
+      {
+        oa = load_scratch(&mem_buffer_a[d_iaw]);
+        ob = load_scratch(&mem_buffer_b[d_ibw]);
+      }
 
       prefetch_l1(&my_scratch[r + 8]);
       uint64_t c = my_scratch[r];
-      uint64_t rot_res = ~ROTR(result, r);
+
+      // Compute pvb early for c bypass
+      if (ds) pvb = ob ^ oa ^ ROTR(d_t, d_ij);
+
+      // Bypass 3: c RAW — deferred store target overlaps scratchpad read
+      if (ds)
+      {
+        if (d_iaw == (uint64_t)r)
+          c = d_t;
+        else if ((d_ibw + XELIS_BUFFER_SIZE_V3) == (uint64_t)r)
+          c = pvb;
+      }
+
       r++;
       uint32_t op_idx = ROTL(result, (uint32_t)c) & 0xF;
 
-      uint64_t b_val = load_scratch(&mem_buffer_b[map_index(a ^ rot_res)]);
+      // Bypass 2: bv RAW — deferred B-store overlaps bv address
+      if (ds)
+      {
+        if (d_ibw == bv_addr) bv = pvb;
+        store_scratch(&mem_buffer_b[d_ibw], pvb);
+        store_scratch(&mem_buffer_a[d_iaw], d_t);
+      }
 
-#ifdef XELIS_USE_HWRECIP
-      uint64_t v = execute_op_offset_hwrecip(op_idx, a, b_val, c, r, result, i, j);
-#else
-      uint64_t v = execute_op_offset(op_idx, a, b_val, c, r, result, i, j);
-#endif
+      uint64_t v = exec_op_bl_fast(op_idx, a, bv, c, r, result, i, j);
 
       uint64_t idx_seed = v ^ result;
       result = ROTL(idx_seed, r);
 
-      // Early load next A into registers (~800cy flight time before j+1)
-      idx_a_read = map_index(result);
-      a_preloaded = load_scratch(&mem_buffer_a[idx_a_read]);
-
       uint64_t idx_t = map_index(idx_seed);
+      iar = map_index(result);
+      apre = load_scratch(&mem_buffer_a[iar]);
+
       uint64_t t = (pick_half(v) ? load_scratch(&mem_buffer_b[idx_t])
                                  : load_scratch(&mem_buffer_a[idx_t])) ^ result;
 
-      uint64_t idx_a_write = map_index(t ^ result ^ XELIS_GOLDEN_RATIO);
-      uint64_t idx_b_write = map_index(idx_a_write ^ ~result ^ XELIS_SCATTER_CONST);
+      uint64_t iaw = map_index(t ^ result ^ XELIS_GOLDEN_RATIO);
+      uint64_t ibw = map_index(iaw ^ ~result ^ XELIS_SCATTER_CONST);
 
-      uint64_t old_mem_a = load_scratch(&mem_buffer_a[idx_a_write]);
-      uint64_t old_b     = load_scratch(&mem_buffer_b[idx_b_write]);
-
-      pending_idx_a_write = idx_a_write;
-      pending_idx_b_write = idx_b_write;
-      pending_store_a = t;
-      pending_store_b = old_b ^ old_mem_a ^ ROTR(t, i + j);
-      pending_store = 1;
+      d_iaw = iaw;
+      d_ibw = ibw;
+      d_t = t;
+      d_ij = i + j;
+      ds = 1;
     }
 
-    if (pending_store)
+    // Flush final deferred store
+    if (ds)
     {
-      store_scratch(&mem_buffer_b[pending_idx_b_write], pending_store_b);
-      store_scratch(&mem_buffer_a[pending_idx_a_write], pending_store_a);
+      uint64_t oa = load_scratch(&mem_buffer_a[d_iaw]);
+      uint64_t ob = load_scratch(&mem_buffer_b[d_ibw]);
+      store_scratch(&mem_buffer_b[d_ibw], ob ^ oa ^ ROTR(d_t, d_ij));
+      store_scratch(&mem_buffer_a[d_iaw], d_t);
     }
 
-#ifdef XELIS_USE_HWRECIP
-    addr_a = modular_power_barrett_hwrecip(addr_a, addr_b, result);
-    addr_b = isqrt_drcp(result) * (r + 1) * isqrt_drcp(addr_a);
-#else
     addr_a = modular_power_barrett(addr_a, addr_b, result);
-    addr_b = isqrt(result) * (r + 1) * isqrt(addr_a);
-#endif
+    uint64_t sq_r, sq_a;
+    isqrt_pair(result, addr_a, &sq_r, &sq_a);
+    addr_b = sq_r * (r + 1) * sq_a;
   }
 }
 
@@ -1946,6 +2119,160 @@ __global__ void xelis_blake3_warp_coop_batch(
     #pragma unroll
     for (int i = 0; i < 8; i++)
       blake3_store32(my_output + i * 4, my_cvs[i]);
+
+    if (difficulty_target && solutions && check_difficulty_gpu(my_output, difficulty_target))
+    {
+      uint64_t counter = nonce_start & 0xFFFFFFFFFFFFULL;
+      uint64_t nonce = (nonce_start & 0xFFFF000000000000ULL) | ((counter + global_idx) & 0xFFFFFFFFFFFFULL);
+      unsigned long long idx = atomicAdd((unsigned long long *)&solutions[0], 1ULL);
+
+      if (idx < 1024)
+      {
+        uint64_t *solution_slot = &solutions[1 + idx * 5];
+        solution_slot[0] = nonce;
+        solution_slot[1] = ((uint64_t *)my_output)[0];
+        solution_slot[2] = ((uint64_t *)my_output)[1];
+        solution_slot[3] = ((uint64_t *)my_output)[2];
+        solution_slot[4] = ((uint64_t *)my_output)[3];
+      }
+    }
+  }
+}
+
+// ============================================================================
+// Smem-based Blake3: 512 TPB, pipelined chunk hashing, smem tree reduction
+// ============================================================================
+// 1 block per hash, 512 threads. Each thread hashes ~1 chunk (531/512).
+// Double-buffered loads: issue next block's ld.cg before computing current.
+// CVs stored in shared memory (25600B) — no global CV workspace needed.
+// Benchmarked at ~3.8% overhead on CMP 170HX (vs 4.5% for warp-coop).
+
+#define XELIS_B3_SMEM_WORDS (800 * 8)  // 531 CVs + tree reduction temp
+
+__device__ __forceinline__ void blake3_load_block_uncached(
+    uint32_t bw[16], const uint32_t* src)
+{
+  #pragma unroll
+  for (int i = 0; i < 16; i += 2) {
+    uint64_t v = load_uncached((const uint64_t*)(src + i));
+    bw[i] = (uint32_t)v;
+    bw[i+1] = (uint32_t)(v >> 32);
+  }
+}
+
+// Double-buffered chunk hasher: issue next block's loads BEFORE
+// computing current block. GPU scoreboarding lets loads complete in
+// background during the ~700-cycle blake3 compress.
+__device__ __forceinline__ void blake3_hash_chunk_pipelined(
+    uint32_t cv[8], const uint32_t* chunk_data, uint64_t chunk_counter)
+{
+  uint32_t buf[16];
+  blake3_load_block_uncached(buf, chunk_data);
+
+  #pragma unroll 1
+  for (int b = 0; b < 15; b++) {
+    uint32_t next[16];
+    blake3_load_block_uncached(next, chunk_data + (b + 1) * 16);
+    uint8_t flags = (b == 0) ? CHUNK_START : 0;
+    blake3_compress_u32(cv, buf, BLAKE3_BLOCK_LEN, chunk_counter, flags);
+    #pragma unroll
+    for (int i = 0; i < 16; i++) buf[i] = next[i];
+  }
+  blake3_compress_u32(cv, buf, BLAKE3_BLOCK_LEN, chunk_counter, CHUNK_END);
+}
+
+extern "C"
+__global__ __launch_bounds__(512)
+void xelis_blake3_smem_batch(
+    uint64_t *__restrict__ scratch_memory,
+    uint8_t *__restrict__ outputs,
+    uint32_t batch_size,
+    uint32_t scratch_offset,
+    const uint64_t *__restrict__ difficulty_target,
+    uint64_t *__restrict__ solutions,
+    uint64_t nonce_start)
+{
+  uint32_t hash_idx = blockIdx.x;
+  if (hash_idx >= batch_size)
+    return;
+  uint32_t lane = threadIdx.x;
+
+  uint32_t global_idx = hash_idx + scratch_offset;
+  const uint32_t* scratch = (const uint32_t*)(scratch_memory + (size_t)global_idx * XELIS_MEMORY_SIZE_V3);
+  uint8_t *my_output = outputs + global_idx * XELIS_HASH_SIZE;
+
+  __shared__ uint32_t smem[XELIS_B3_SMEM_WORDS];
+
+  // Phase 1: each thread hashes its assigned chunk(s) via pipelined loads
+  for (uint32_t c = lane; c < 531; c += 512) {
+    uint32_t cv[8] = {IV_0, IV_1, IV_2, IV_3, IV_4, IV_5, IV_6, IV_7};
+    blake3_hash_chunk_pipelined(cv, scratch + c * 256, c);
+    #pragma unroll
+    for (int i = 0; i < 8; i++) smem[c * 8 + i] = cv[i];
+  }
+  __syncthreads();
+
+  // Phase 2: tree reduction 531 → 266
+  {
+    for (uint32_t p = lane; p < 265; p += 512) {
+      uint32_t left[8], right[8], result[8];
+      #pragma unroll
+      for (int i = 0; i < 8; i++) {
+        left[i]  = smem[(p * 2) * 8 + i];
+        right[i] = smem[(p * 2 + 1) * 8 + i];
+      }
+      blake3_hash_parent_u32(left, right, result, false);
+      #pragma unroll
+      for (int i = 0; i < 8; i++) smem[(531 + p) * 8 + i] = result[i];
+    }
+    __syncthreads();
+    for (uint32_t p = lane; p < 265; p += 512) {
+      #pragma unroll
+      for (int i = 0; i < 8; i++) smem[p * 8 + i] = smem[(531 + p) * 8 + i];
+    }
+    if (lane == 0) {
+      #pragma unroll
+      for (int j = 0; j < 8; j++) smem[265 * 8 + j] = smem[530 * 8 + j];
+    }
+    __syncthreads();
+  }
+
+  // Phase 3: tree reduction 266 → 1
+  uint32_t n = 266;
+  while (n > 1) {
+    uint32_t pairs = n / 2;
+    uint32_t odd = n & 1;
+    bool is_root = (pairs == 1 && odd == 0);
+    for (uint32_t p = lane; p < pairs; p += 512) {
+      uint32_t left[8], right[8], result[8];
+      #pragma unroll
+      for (int i = 0; i < 8; i++) {
+        left[i]  = smem[(p * 2) * 8 + i];
+        right[i] = smem[(p * 2 + 1) * 8 + i];
+      }
+      blake3_hash_parent_u32(left, right, result, is_root);
+      #pragma unroll
+      for (int i = 0; i < 8; i++) smem[(n + p) * 8 + i] = result[i];
+    }
+    __syncthreads();
+    for (uint32_t p = lane; p < pairs; p += 512) {
+      #pragma unroll
+      for (int i = 0; i < 8; i++) smem[p * 8 + i] = smem[(n + p) * 8 + i];
+    }
+    if (odd && lane == 0) {
+      #pragma unroll
+      for (int j = 0; j < 8; j++)
+        smem[pairs * 8 + j] = smem[(n - 1) * 8 + j];
+    }
+    __syncthreads();
+    n = pairs + odd;
+  }
+
+  // Output — thread 0 writes result and checks difficulty
+  if (lane == 0) {
+    #pragma unroll
+    for (int i = 0; i < 8; i++)
+      blake3_store32(my_output + i * 4, smem[i]);
 
     if (difficulty_target && solutions && check_difficulty_gpu(my_output, difficulty_target))
     {
