@@ -1804,7 +1804,8 @@ static int cuewNvrtcInit(const char** customPaths_NvRTC)
   /* Library paths. */
 #ifdef _WIN32
   /* Expected in c:/windows/system or similar, no path needed. */
-  const char* nvrtc_paths[] = {"nvrtc64_120_0.dll",
+  const char* nvrtc_paths[] = {"nvrtc64_130_0.dll",
+                               "nvrtc64_120_0.dll",
                                "nvrtc64_112_0.dll",
                                "nvrtc64_101_0.dll",
                                "nvrtc64_100_0.dll",
