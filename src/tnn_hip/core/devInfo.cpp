@@ -55,7 +55,7 @@ std::string getPCIBusId(int device) {
 
 // ============== Power Monitoring ==============
 
-enum class PowerBackend { None, RSMI, NVML, ADL };
+enum class PowerBackend { None, RSMI, NVML, ADL, HWMON };
 static PowerBackend g_powerBackend   = PowerBackend::None;
 static LIB_HANDLE   g_powerLib       = nullptr;
 static bool         g_powerAvailable = false;
@@ -404,6 +404,132 @@ int   adlGetAdapterIndex(int hip)  {
 
 #endif // _WIN32
 
+// ============== hwmon sysfs fallback (Linux, vendor-agnostic) ==============
+#ifndef _WIN32
+#include <dirent.h>
+#include <string>
+
+// Per-device sysfs path for power reading.  Populated once at init.
+static std::vector<std::string> g_hwmonPaths;   // empty string = not available
+
+// Parse "0000:03:00.0" → bus, dev (ignoring domain & function for matching)
+static bool parseSlot(const std::string& s, int& bus, int& dev) {
+    unsigned dom, b, d, f;
+    if (sscanf(s.c_str(), "%x:%x:%x.%x", &dom, &b, &d, &f) == 4) {
+        bus = (int)b; dev = (int)d; return true;
+    }
+    if (sscanf(s.c_str(), "%x:%x.%x", &b, &d, &f) == 3) {
+        bus = (int)b; dev = (int)d; return true;
+    }
+    return false;
+}
+
+// Read PCI_SLOT_NAME from /sys/class/drm/cardN/device/uevent
+static std::string readPciSlot(const std::string& cardDir) {
+    std::string path = cardDir + "/device/uevent";
+    FILE* f = fopen(path.c_str(), "r");
+    if (!f) return "";
+    char line[512];
+    std::string slot;
+    while (fgets(line, sizeof(line), f)) {
+        if (strncmp(line, "PCI_SLOT_NAME=", 14) == 0) {
+            slot = line + 14;
+            while (!slot.empty() && (slot.back() == '\n' || slot.back() == '\r'))
+                slot.pop_back();
+            break;
+        }
+    }
+    fclose(f);
+    return slot;
+}
+
+// Find the first hwmon subdirectory that exposes a power file.
+// Prefers power1_average (amdgpu), falls back to power1_input (nvidia/nouveau).
+static std::string findHwmonPowerFile(const std::string& cardDir) {
+    std::string hwmonBase = cardDir + "/device/hwmon";
+    DIR* dir = opendir(hwmonBase.c_str());
+    if (!dir) return "";
+    struct dirent* de;
+    while ((de = readdir(dir)) != nullptr) {
+        if (de->d_name[0] == '.') continue;
+        std::string base = hwmonBase + "/" + de->d_name + "/";
+        // amdgpu always exposes power1_average (microwatts, averaged by firmware)
+        std::string avg = base + "power1_average";
+        if (FILE* t = fopen(avg.c_str(), "r")) { fclose(t); closedir(dir); return avg; }
+        // nvidia proprietary & nouveau sometimes expose power1_input
+        std::string inp = base + "power1_input";
+        if (FILE* t = fopen(inp.c_str(), "r")) { fclose(t); closedir(dir); return inp; }
+    }
+    closedir(dir);
+    return "";
+}
+
+static bool tryHwmon() {
+    int oroCount = getGPUCount();
+    if (oroCount <= 0) return false;
+
+    g_hwmonPaths.assign(oroCount, "");
+
+    // Enumerate /sys/class/drm/cardN entries
+    DIR* drm = opendir("/sys/class/drm");
+    if (!drm) return false;
+
+    struct CardInfo { std::string dir; int bus; int dev; };
+    std::vector<CardInfo> cards;
+
+    struct dirent* de;
+    while ((de = readdir(drm)) != nullptr) {
+        // Match "card0", "card1", ... but not "card0-DP-1" etc.
+        if (strncmp(de->d_name, "card", 4) != 0) continue;
+        const char* rest = de->d_name + 4;
+        if (*rest < '0' || *rest > '9') continue;
+        // Reject render nodes and connector entries (contain '-')
+        if (strchr(de->d_name, '-')) continue;
+
+        std::string cardDir = std::string("/sys/class/drm/") + de->d_name;
+        std::string slot = readPciSlot(cardDir);
+        if (slot.empty()) continue;
+
+        CardInfo ci;
+        ci.dir = cardDir;
+        if (!parseSlot(slot, ci.bus, ci.dev)) continue;
+        cards.push_back(std::move(ci));
+    }
+    closedir(drm);
+
+    bool any = false;
+    for (int h = 0; h < oroCount; ++h) {
+        std::string pci = getPCIBusId(h);
+        int hb, hd;
+        if (!parseSlot(pci, hb, hd)) continue;
+
+        for (auto& c : cards) {
+            if (c.bus != hb || c.dev != hd) continue;
+            std::string pf = findHwmonPowerFile(c.dir);
+            if (!pf.empty()) {
+                g_hwmonPaths[h] = pf;
+                TNN_LOG_DEBUG("hwmon: HIP[%d] -> %s\n", h, pf.c_str());
+                any = true;
+            }
+            break;
+        }
+    }
+    return any;
+}
+
+static double getHwmonPowerWatts(int device) {
+    if (device < 0 || device >= (int)g_hwmonPaths.size()) return 0.0;
+    const std::string& path = g_hwmonPaths[device];
+    if (path.empty()) return 0.0;
+    FILE* f = fopen(path.c_str(), "r");
+    if (!f) return 0.0;
+    long long uw = 0;
+    if (fscanf(f, "%lld", &uw) != 1) uw = 0;
+    fclose(f);
+    return (double)uw / 1e6;  // microwatts → watts
+}
+#endif // !_WIN32
+
 // ============== Public API ==============
 
 static bool tryNVML() {
@@ -460,7 +586,16 @@ bool initPowerMonitoring() {
         LIB_CLOSE(g_powerLib); g_powerLib = nullptr;
     }
 #endif
-    return tryNVML();
+    if (tryNVML()) return true;
+#ifndef _WIN32
+    if (tryHwmon()) {
+        g_powerBackend = PowerBackend::HWMON;
+        g_powerAvailable = true;
+        TNN_LOG_DEBUG("hwmon: sysfs power monitoring initialized\n");
+        return true;
+    }
+#endif
+    return false;
 }
 
 void shutdownPowerMonitoring() {
@@ -469,6 +604,9 @@ void shutdownPowerMonitoring() {
         case PowerBackend::NVML: if (p_nvmlShutdown)   p_nvmlShutdown();   break;
 #ifdef _WIN32
         case PowerBackend::ADL:  shutdownADL(); break;
+#endif
+#ifndef _WIN32
+        case PowerBackend::HWMON: g_hwmonPaths.clear(); break;
 #endif
         default: break;
     }
@@ -495,6 +633,9 @@ double getDevicePowerWatts(int device) {
         }
 #ifdef _WIN32
         case PowerBackend::ADL: return getADLPowerWatts(device);
+#endif
+#ifndef _WIN32
+        case PowerBackend::HWMON: return getHwmonPowerWatts(device);
 #endif
         default: break;
     }
