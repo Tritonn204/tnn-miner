@@ -34,7 +34,12 @@ RUN --mount=type=cache,target=/src/_deps mkdir ./build && cd ./build && cmake $C
 RUN --mount=type=cache,target=/src/_deps cd ./build && make -j$(nproc)
 RUN ls -la ./build/bin/ ./build/ && mv ./build/bin/tnn-miner* ./ || mv ./build/tnn-miner* ./
 # Copy tunes directory (created by CMake post-build from default-tunes)
-RUN if [ -d ./build/bin/tunes ]; then cp -r ./build/bin/tunes ./tunes; elif [ -d ./build/tunes ]; then cp -r ./build/tunes ./tunes; fi
+RUN mkdir -p ./tunes ./libs
+RUN if [ -d ./build/bin/tunes ]; then \
+      cp -r ./build/bin/tunes/. ./tunes/; \
+    elif [ -d ./build/tunes ]; then \
+      cp -r ./build/tunes/. ./tunes/; \
+    fi
 #RUN ./tnn-miner-* --test-spectre
 
 # Collect GPU runtime libs for HiveOS/mmpOS wrapper bundling
@@ -64,7 +69,11 @@ RUN mkdir -p ./libs && \
     fi
 
 RUN ls -la ./
-RUN tar -czvf ${TARGZ_FILE} ./tnn-miner* ./tunes $([ -d ./libs ] && [ "$(ls -A ./libs 2>/dev/null)" ] && echo "./libs")
+RUN set -e; \
+    files="$(find . -maxdepth 1 -type f -name 'tnn-miner*' -print)"; \
+    [ -d ./tunes ] && [ "$(ls -A ./tunes 2>/dev/null)" ] && files="$files ./tunes"; \
+    [ -d ./libs ] && [ "$(ls -A ./libs 2>/dev/null)" ] && files="$files ./libs"; \
+    tar -czvf "${TARGZ_FILE}" $files
 RUN md5sum ./${TARGZ_FILE}
 
 FROM scratch
