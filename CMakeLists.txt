@@ -1277,11 +1277,18 @@ else()
 endif()
 
 # Copy default-tunes → tunes next to the binary
-add_custom_command(
-  TARGET ${TNN_OUTPUT_NAME} POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_directory
-    "${CMAKE_SOURCE_DIR}/default-tunes"
-    "$<TARGET_FILE_DIR:${TNN_OUTPUT_NAME}>/tunes"
-)
+if(EXISTS "${CMAKE_SOURCE_DIR}/default-tunes" AND IS_DIRECTORY "${CMAKE_SOURCE_DIR}/default-tunes")
+  add_custom_command(
+    TARGET ${TNN_OUTPUT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+      "$<TARGET_FILE_DIR:${TNN_OUTPUT_NAME}>/tunes"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+      "${CMAKE_SOURCE_DIR}/default-tunes"
+      "$<TARGET_FILE_DIR:${TNN_OUTPUT_NAME}>/tunes"
+    COMMENT "Copying default tunes"
+  )
+else()
+  message(STATUS "default-tunes missing; skipping tunes copy")
+endif()
 
 unset(HIP_LANG CACHE)
