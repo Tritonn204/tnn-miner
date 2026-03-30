@@ -351,7 +351,7 @@ build-macos-aarch64:
     - cd ..
     - mv ./build/bin/tnn-miner-cpu ./tnn-miner
     - "[ -d ./build/bin/tunes ] && cp -r ./build/bin/tunes ./tunes || true"
-    - tar -czvf ${TARGZ_FILE} ./tnn-miner ./tunes
+    - TAR_ITEMS="./tnn-miner"; [ -d ./tunes ] && TAR_ITEMS="$TAR_ITEMS ./tunes"; tar -czvf ${TARGZ_FILE} $TAR_ITEMS
   after_script:
     - echo "MACOS_BUILD_JOB_ID=$CI_JOB_ID" >> macos-arm64-job.env
   artifacts:
