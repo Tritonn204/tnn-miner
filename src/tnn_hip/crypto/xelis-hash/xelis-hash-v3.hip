@@ -505,7 +505,7 @@ __device__ __forceinline__ void store_streaming_u256(uint64_t* ptr,
 #endif
 }
 #else
-// AMD: Non-temporal stores + memory fence to prevent LLVM reordering
+// AMD: Non-temporal stores (bypass cache)
 __device__ __forceinline__ void store_streaming_u256(uint64_t *ptr,
                                                      uint64_t v0, uint64_t v1,
                                                      uint64_t v2, uint64_t v3)
@@ -514,7 +514,6 @@ __device__ __forceinline__ void store_streaming_u256(uint64_t *ptr,
   __builtin_nontemporal_store(v1, ptr + 1);
   __builtin_nontemporal_store(v2, ptr + 2);
   __builtin_nontemporal_store(v3, ptr + 3);
-  asm volatile("" ::: "memory");
 }
 #endif
 
@@ -538,8 +537,7 @@ __device__ __forceinline__ uint64_t load_uncached(const uint64_t *ptr)
       "global_load_dwordx2 %0, %1, off glc slc\n\t"
       "s_waitcnt vmcnt(0)"
       : "=v"(val)
-      : "v"(ptr)
-      : "memory");
+      : "v"(ptr));
   return val;
 }
 
@@ -549,8 +547,7 @@ __device__ __forceinline__ void store_glc_slc(uint64_t *ptr, uint64_t val)
   asm volatile(
       "global_store_dwordx2 %0, %1, off glc slc"
       :
-      : "v"(ptr), "v"(val)
-      : "memory");
+      : "v"(ptr), "v"(val));
 }
 
 #else  // NVIDIA
@@ -1725,10 +1722,12 @@ XELIS_HOT __device__ void stage_3_hybrid_v2(uint64_t *my_scratch,
 
     uint64_t result = ~(hash1 ^ hash2);
 
+#if defined(__CUDA_ARCH__) || defined(__HIP_PLATFORM_NVIDIA__)
+    // DEFER_FIX2: deferred stores with 3 software bypasses (apre, bv, c)
+    // Maximizes ILP by issuing all loads before flushing deferred stores.
     uint64_t iar = map_index(result);
     uint64_t apre = load_scratch(&mem_buffer_a[iar]);
 
-    // DEFER_FIX2: deferred stores with 3 software bypasses (apre, bv, c)
     uint64_t d_iaw = XELIS_BUFFER_SIZE_V3 + 1;
     uint64_t d_ibw = XELIS_BUFFER_SIZE_V3 + 1;
     uint64_t d_t = 0;
@@ -1737,13 +1736,11 @@ XELIS_HOT __device__ void stage_3_hybrid_v2(uint64_t *my_scratch,
 
     for (uint32_t j = 0; j < XELIS_BUFFER_SIZE_V3; j++)
     {
-      // Bypass 1: apre RAW — deferred A-store overlaps preloaded slot
       uint64_t a = (ds && d_iaw == iar) ? d_t : apre;
 
       uint64_t rot_res = ~ROTR(result, r);
       uint64_t bv_addr = map_index(a ^ rot_res);
 
-      // Issue bv + deferred oa/ob loads simultaneously for ILP
       uint64_t bv = load_scratch(&mem_buffer_b[bv_addr]);
       uint64_t oa = 0, ob = 0, pvb = 0;
       if (ds)
@@ -1754,10 +1751,8 @@ XELIS_HOT __device__ void stage_3_hybrid_v2(uint64_t *my_scratch,
 
       uint64_t c = my_scratch[r];
 
-      // Compute pvb early for c bypass
       if (ds) pvb = ob ^ oa ^ ROTR(d_t, d_ij);
 
-      // Bypass 3: c RAW — deferred store target overlaps scratchpad read
       if (ds)
       {
         if (d_iaw == (uint64_t)r)
@@ -1769,7 +1764,6 @@ XELIS_HOT __device__ void stage_3_hybrid_v2(uint64_t *my_scratch,
       r++;
       uint32_t op_idx = ROTL(result, (uint32_t)c) & 0xF;
 
-      // Bypass 2: bv RAW — deferred B-store overlaps bv address
       if (ds)
       {
         if (d_ibw == bv_addr) bv = pvb;
@@ -1799,7 +1793,6 @@ XELIS_HOT __device__ void stage_3_hybrid_v2(uint64_t *my_scratch,
       ds = 1;
     }
 
-    // Flush final deferred store
     if (ds)
     {
       uint64_t oa = load_scratch(&mem_buffer_a[d_iaw]);
@@ -1807,6 +1800,69 @@ XELIS_HOT __device__ void stage_3_hybrid_v2(uint64_t *my_scratch,
       store_scratch(&mem_buffer_b[d_ibw], ob ^ oa ^ ROTR(d_t, d_ij));
       store_scratch(&mem_buffer_a[d_iaw], d_t);
     }
+
+#else
+    // AMD: 1-bypass deferred store (v0.7.7 pattern).
+    // LLVM's aggressive reordering makes the 3-bypass variant unreliable.
+    uint64_t idx_a_read = map_index(result);
+
+    int pending_store = 0;
+    uint64_t pending_idx_a_write = 0, pending_idx_b_write = 0;
+    uint64_t pending_store_a = 0, pending_store_b = 0;
+
+    uint64_t a_preloaded = load_scratch(&mem_buffer_a[idx_a_read]);
+
+    for (uint32_t j = 0; j < XELIS_BUFFER_SIZE_V3; j++)
+    {
+      if (pending_store)
+      {
+        store_scratch(&mem_buffer_b[pending_idx_b_write], pending_store_b);
+        store_scratch(&mem_buffer_a[pending_idx_a_write], pending_store_a);
+      }
+
+      uint64_t a = (pending_store && pending_idx_a_write == idx_a_read)
+                   ? pending_store_a
+                   : a_preloaded;
+
+      uint64_t c = my_scratch[r];
+      uint64_t rot_res = ~ROTR(result, r);
+      r++;
+      uint32_t op_idx = ROTL(result, (uint32_t)c) & 0xF;
+
+      uint64_t b_val = load_scratch(&mem_buffer_b[map_index(a ^ rot_res)]);
+
+      uint64_t v = exec_op_split_newton(op_idx, a, b_val, c, r, result, i, j, newton_lut);
+
+      uint64_t idx_seed = v ^ result;
+      result = ROTL(idx_seed, r);
+
+      idx_a_read = map_index(result);
+      a_preloaded = load_scratch(&mem_buffer_a[idx_a_read]);
+
+      uint64_t idx_t = map_index(idx_seed);
+      uint64_t t = (pick_half(v) ? load_scratch(&mem_buffer_b[idx_t])
+                                 : load_scratch(&mem_buffer_a[idx_t])) ^ result;
+
+      uint64_t idx_a_write = map_index(t ^ result ^ XELIS_GOLDEN_RATIO);
+      uint64_t idx_b_write = map_index(idx_a_write ^ ~result ^ XELIS_SCATTER_CONST);
+
+      uint64_t old_mem_a = load_scratch(&mem_buffer_a[idx_a_write]);
+      uint64_t old_b     = load_scratch(&mem_buffer_b[idx_b_write]);
+
+      pending_idx_a_write = idx_a_write;
+      pending_idx_b_write = idx_b_write;
+      pending_store_a = t;
+      pending_store_b = old_b ^ old_mem_a ^ ROTR(t, i + j);
+      pending_store = 1;
+    }
+
+    if (pending_store)
+    {
+      store_scratch(&mem_buffer_b[pending_idx_b_write], pending_store_b);
+      store_scratch(&mem_buffer_a[pending_idx_a_write], pending_store_a);
+    }
+
+#endif // DEFER_FIX2 platform gate
 
     addr_a = modular_power_barrett(addr_a, addr_b, result);
     uint64_t sq_r, sq_a;
