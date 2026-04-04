@@ -505,7 +505,7 @@ __device__ __forceinline__ void store_streaming_u256(uint64_t* ptr,
 #endif
 }
 #else
-// AMD: Non-temporal stores (bypass cache)
+// AMD: Non-temporal stores + compiler fence
 __device__ __forceinline__ void store_streaming_u256(uint64_t *ptr,
                                                      uint64_t v0, uint64_t v1,
                                                      uint64_t v2, uint64_t v3)
@@ -514,6 +514,7 @@ __device__ __forceinline__ void store_streaming_u256(uint64_t *ptr,
   __builtin_nontemporal_store(v1, ptr + 1);
   __builtin_nontemporal_store(v2, ptr + 2);
   __builtin_nontemporal_store(v3, ptr + 3);
+  asm volatile("" ::: "memory");
 }
 #endif
 
@@ -537,7 +538,8 @@ __device__ __forceinline__ uint64_t load_uncached(const uint64_t *ptr)
       "global_load_dwordx2 %0, %1, off glc slc\n\t"
       "s_waitcnt vmcnt(0)"
       : "=v"(val)
-      : "v"(ptr));
+      : "v"(ptr)
+      : "memory");
   return val;
 }
 
@@ -547,7 +549,8 @@ __device__ __forceinline__ void store_glc_slc(uint64_t *ptr, uint64_t val)
   asm volatile(
       "global_store_dwordx2 %0, %1, off glc slc"
       :
-      : "v"(ptr), "v"(val));
+      : "v"(ptr), "v"(val)
+      : "memory");
 }
 
 #else  // NVIDIA
