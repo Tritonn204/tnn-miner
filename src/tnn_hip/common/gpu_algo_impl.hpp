@@ -274,6 +274,7 @@ public:
         ctx.tune_keys = &tuning_result_.tune_keys;
         ctx.config = &config_;
         ctx.stream = nullptr;  // Default stream
+        ctx.module = module_;
 
         (void)oro_safe_event_record(start_event_, 0);
 
@@ -445,19 +446,44 @@ private:
             module_ = compiled.module;
             
             // Load all kernels from the module
+            bool missing_kernels = false;
             for (const auto& kernel_name : config_.get_kernel_names()) {
                 oroFunction_t func = nullptr;
                 oroError_t err = oroModuleGetFunction(&func, module_, kernel_name.c_str());
-                
+
                 if (err == oroSuccess && func != nullptr) {
                     kernels_[kernel_name] = func;
                     TNN_LOG_TRACE("[TRACE] GPU %d: Loaded kernel '%s'\n", device_id_, kernel_name.c_str());
                 } else {
-                    TNN_LOG_DEBUG("[WARN] GPU %d: Could not load kernel '%s': %s\n",
+                    TNN_LOG_INFO("[WARN] GPU %d: Could not load kernel '%s': %s\n",
                            device_id_, kernel_name.c_str(), tnn_error_string(err));
+                    missing_kernels = true;
                 }
             }
-            
+
+            // If any kernel is missing and we loaded from cache, invalidate and recompile
+            if (missing_kernels && compiled.from_cache) {
+                TNN_LOG_INFO("[INFO] GPU %d: Stale kernel cache (missing symbols), recompiling from source\n", device_id_);
+                kernels_.clear();
+                if (module_) { (void)oroModuleUnload(module_); module_ = nullptr; }
+                auto& compiler2 = RTCCompiler::instance();
+                compiler2.clear_cache();
+                auto recompiled = compiler2.compile_from_source(
+                    std::string(config_.source), config_.source_path, "",
+                    options, device_id_);
+                module_ = recompiled.module;
+                for (const auto& kernel_name : config_.get_kernel_names()) {
+                    oroFunction_t func = nullptr;
+                    oroError_t err = oroModuleGetFunction(&func, module_, kernel_name.c_str());
+                    if (err == oroSuccess && func != nullptr) {
+                        kernels_[kernel_name] = func;
+                    } else {
+                        TNN_LOG_DEBUG("[WARN] GPU %d: Kernel '%s' still missing after recompile\n",
+                               device_id_, kernel_name.c_str());
+                    }
+                }
+            }
+
             if (kernels_.empty()) {
                 TNN_LOG_ERROR("[ERROR] No kernels loaded!\n");
                 return false;
@@ -820,6 +846,9 @@ private:
         // Zero the solutions buffer
         (void)oro_safe_memset(d_solutions_, 0, 8);
 
+        // Clear any sticky errors from kernel loading (e.g. optional kernels not found)
+        (void)oroGetLastError();
+
         for (int i = 0; i < NUM_TRIALS; i++) {
             KernelLaunchContext ctx;
             ctx.d_input = d_input_;
@@ -835,6 +864,7 @@ private:
             ctx.tune_keys = &tuning_result_.tune_keys;
             ctx.config = &config_;
             ctx.stream = nullptr;
+            ctx.module = module_;
 
             bool success;
             if (config_.execute_fn) {
@@ -900,29 +930,40 @@ private:
         ctx.tune_keys = &tuning_result_.tune_keys;
         ctx.config = &config_;
         ctx.stream = stream;
-        
+        ctx.module = module_;
+
         (void)oroMemsetAsync(test_solutions, 0, 8, stream);
+
+        if (kernels_.empty()) {
+            TNN_LOG_DEBUG("[TUNE DEBUG] GPU %d: No kernels loaded!\n", device_id_);
+            return result;
+        }
+
+        // Pre-timing setup: fill scratchpad etc. (runs before timer starts)
+        if (config_.bottleneck_setup_fn) {
+            if (!config_.bottleneck_setup_fn(kernels_, ctx)) {
+                TNN_LOG_DEBUG("[TUNE DEBUG] GPU %d: Bottleneck setup failed\n", device_id_);
+                return result;
+            }
+        }
 
         oroEvent_t start_ev, stop_ev;
         (void)oroEventCreate(&start_ev);
         (void)oroEventCreate(&stop_ev);
-
         (void)oro_safe_event_record(start_ev, stream);
 
-        // Check if kernels are loaded
-        if (kernels_.empty()) {
-            TNN_LOG_DEBUG("[TUNE DEBUG] GPU %d: No kernels loaded!\n", device_id_);
-            (void)oroEventDestroy(start_ev);
-            (void)oroEventDestroy(stop_ev);
-            return result;
+        // Execute: prefer bottleneck-only for autotune (times only the heavy kernel).
+        // If bottleneck_execute_fn returns false, fall through to full pipeline.
+        bool success = false;
+        if (config_.bottleneck_execute_fn) {
+            success = config_.bottleneck_execute_fn(kernels_, ctx);
         }
-
-        // Execute using strategy
-        bool success;
-        if (config_.execute_fn) {
-            success = config_.execute_fn(kernels_, ctx);
-        } else {
-            success = default_monolithic_execute(kernels_, ctx);
+        if (!success) {
+            if (config_.execute_fn) {
+                success = config_.execute_fn(kernels_, ctx);
+            } else {
+                success = default_monolithic_execute(kernels_, ctx);
+            }
         }
 
         if (!success) {
@@ -1281,6 +1322,18 @@ private:
             out.flush();
         }
 
+        // Print bottleneck header when timing a specific kernel in isolation
+        if (config_.bottleneck_execute_fn) {
+            std::string bk_name;
+            if (si_idx < config_.strategy_bottleneck_kernels.size())
+                bk_name = config_.strategy_bottleneck_kernels[si_idx];
+            else
+                bk_name = config_.get_primary_kernel();
+            TuneOutputBuffer out(device_id_);
+            out.printf("[AUTOTUNE] GPU %d: ── bottleneck-only: %s ──\n", device_id_, bk_name.c_str());
+            out.flush();
+        }
+
         // Use occupancy data if available, otherwise fall back to full sweep
         auto occ_it = strategy_occupancy.find(test_strategy);
         bool has_occ = (occ_it != strategy_occupancy.end() && occ_it->second.has_occupancy);
@@ -1294,7 +1347,7 @@ private:
                 block_sizes_to_test.push_back(bs);
         }
 
-        const uint32_t max_half_mult = 16;  // 8x in half-steps (2=1x, 3=1.5x, ..., 16=8x)
+        const uint32_t max_half_mult = 48;  // 24x in half-steps (2=1x, 3=1.5x, ..., 48=24x)
 
         for (size_t bsi = 0; bsi < block_sizes_to_test.size() && !g_autotune_stop.load(std::memory_order_relaxed); bsi++) {
             int test_block_size = block_sizes_to_test[bsi];
@@ -1556,6 +1609,11 @@ private:
 
             (void)oro_safe_stream_sync(probe_stream);
             (void)oroStreamDestroy(probe_stream);
+
+            // Clear any pending async errors left by failed probe launches
+            // so the mining loop starts with a clean device state.
+            (void)oroGetLastError();
+            (void)oroDeviceSynchronize();
 
             if (probe_ok && !tuning_result_.tune_keys.empty()) {
                 TuneOutputBuffer out2(device_id_);

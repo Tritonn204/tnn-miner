@@ -324,3 +324,85 @@ __device__ __forceinline__ void aes_round_u64_lds(uint64_t *lo, uint64_t *hi, co
         *hi |= ((uint64_t)block[i + 8]) << (i * 8);
     }
 }
+
+// ============================================================================
+// NVIDIA LDG AES Round — sbox + GF tables via read-only cache, no LDS needed
+// ============================================================================
+#if defined(__CUDA_ARCH__) || defined(__HIP_PLATFORM_NVIDIA__)
+
+__device__ __noinline__ void aes_round_u64_ldg(
+    uint64_t *lo, uint64_t *hi, const uint8_t *key) {
+    uint64_t L = *lo, H = *hi;
+    #define _AES_SBG(x,n) __ldg(&AES_SBOX[(uint8_t)((x)>>((n)*8))])
+    uint8_t a0 =_AES_SBG(L,0), a1 =_AES_SBG(L,5), a2 =_AES_SBG(H,2), a3 =_AES_SBG(H,7);
+    uint8_t a4 =_AES_SBG(L,4), a5 =_AES_SBG(H,1), a6 =_AES_SBG(H,6), a7 =_AES_SBG(L,3);
+    uint8_t a8 =_AES_SBG(H,0), a9 =_AES_SBG(H,5), a10=_AES_SBG(L,2), a11=_AES_SBG(L,7);
+    uint8_t a12=_AES_SBG(H,4), a13=_AES_SBG(L,1), a14=_AES_SBG(L,6), a15=_AES_SBG(H,3);
+    #undef _AES_SBG
+    #define _AES_G2(s) __ldg(&GF_MUL2[s])
+    #define _AES_G3(s) __ldg(&GF_MUL3[s])
+    #define _AES_MC(s0,s1,s2,s3,k) \
+        ( (uint32_t)(_AES_G2(s0)^_AES_G3(s1)^s2^s3^key[k+0])       | \
+         ((uint32_t)(s0^_AES_G2(s1)^_AES_G3(s2)^s3^key[k+1]) << 8) | \
+         ((uint32_t)(s0^s1^_AES_G2(s2)^_AES_G3(s3)^key[k+2]) <<16) | \
+         ((uint32_t)(_AES_G3(s0)^s1^s2^_AES_G2(s3)^key[k+3]) <<24) )
+    *lo = (uint64_t)_AES_MC(a0,a1,a2,a3,0)   | ((uint64_t)_AES_MC(a4,a5,a6,a7,4)   <<32);
+    *hi = (uint64_t)_AES_MC(a8,a9,a10,a11,8) | ((uint64_t)_AES_MC(a12,a13,a14,a15,12)<<32);
+    #undef _AES_MC
+    #undef _AES_G2
+    #undef _AES_G3
+}
+
+#endif
+
+// ============================================================================
+// AMD AES Round — texture path (GCN/CDNA with TCP) or plain __constant__ (RDNA)
+// ============================================================================
+#if !defined(__CUDA_ARCH__) && !defined(__HIP_PLATFORM_NVIDIA__)
+
+// TCP detection: GCN/CDNA have a dedicated texture cache path
+#if defined(__gfx900__) || defined(__gfx906__) || defined(__gfx908__) || \
+    defined(__gfx90a__) || defined(__gfx940__) || defined(__gfx941__) || defined(__gfx942__)
+#define _AES_HAS_TCP 1
+#else
+#define _AES_HAS_TCP 0
+#endif
+
+#if _AES_HAS_TCP
+// Texture objects — set from host via oroModuleGetGlobal + oroMemcpyHtoD
+__device__ hipTextureObject_t d_aes_sbox_tex;
+__device__ hipTextureObject_t d_aes_gf2_tex;
+__device__ hipTextureObject_t d_aes_gf3_tex;
+#endif
+
+__device__ __noinline__ void aes_round_u64_tex(
+    uint64_t *lo, uint64_t *hi, const uint8_t *key) {
+    uint64_t L = *lo, H = *hi;
+#if _AES_HAS_TCP
+    #define _AES_SB(x,n) ((uint8_t)tex1Dfetch<unsigned char>(d_aes_sbox_tex, (uint8_t)((x)>>((n)*8))))
+    #define _AES_G2(s) ((uint8_t)tex1Dfetch<unsigned char>(d_aes_gf2_tex, (s)))
+    #define _AES_G3(s) ((uint8_t)tex1Dfetch<unsigned char>(d_aes_gf3_tex, (s)))
+#else
+    // RDNA: no TCP — plain __constant__ reads through L1 vector cache
+    #define _AES_SB(x,n) AES_SBOX[(uint8_t)((x)>>((n)*8))]
+    #define _AES_G2(s) GF_MUL2[s]
+    #define _AES_G3(s) GF_MUL3[s]
+#endif
+    uint8_t a0 =_AES_SB(L,0), a1 =_AES_SB(L,5), a2 =_AES_SB(H,2), a3 =_AES_SB(H,7);
+    uint8_t a4 =_AES_SB(L,4), a5 =_AES_SB(H,1), a6 =_AES_SB(H,6), a7 =_AES_SB(L,3);
+    uint8_t a8 =_AES_SB(H,0), a9 =_AES_SB(H,5), a10=_AES_SB(L,2), a11=_AES_SB(L,7);
+    uint8_t a12=_AES_SB(H,4), a13=_AES_SB(L,1), a14=_AES_SB(L,6), a15=_AES_SB(H,3);
+    #define _AES_MC(s0,s1,s2,s3,k) \
+        ( (uint32_t)(_AES_G2(s0)^_AES_G3(s1)^s2^s3^key[k+0])       | \
+         ((uint32_t)(s0^_AES_G2(s1)^_AES_G3(s2)^s3^key[k+1]) << 8) | \
+         ((uint32_t)(s0^s1^_AES_G2(s2)^_AES_G3(s3)^key[k+2]) <<16) | \
+         ((uint32_t)(_AES_G3(s0)^s1^s2^_AES_G2(s3)^key[k+3]) <<24) )
+    *lo = (uint64_t)_AES_MC(a0,a1,a2,a3,0)   | ((uint64_t)_AES_MC(a4,a5,a6,a7,4)   <<32);
+    *hi = (uint64_t)_AES_MC(a8,a9,a10,a11,8) | ((uint64_t)_AES_MC(a12,a13,a14,a15,12)<<32);
+    #undef _AES_MC
+    #undef _AES_SB
+    #undef _AES_G2
+    #undef _AES_G3
+}
+
+#endif

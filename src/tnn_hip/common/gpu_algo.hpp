@@ -160,6 +160,9 @@ struct KernelLaunchContext {
     // Stream (nullptr = default stream)
     oroStream_t stream = nullptr;
 
+    // Module handle (for oroModuleGetGlobal — e.g., texture object setup)
+    oroModule_t module = nullptr;
+
     // Algo-specific tune keys (pointer to TuningResult's map, non-owning)
     const std::unordered_map<std::string, int64_t>* tune_keys = nullptr;
 
@@ -394,6 +397,17 @@ struct AlgoConfig {
     // Geometric mean of register-aware and hardware-anchored occupancy.
     // Portable across kernel complexity without per-algo hand-tuning.
     double occupancy_threshold = 0.70;
+
+    // Bottleneck-only execution for autotune sweep (nullptr = use execute_fn).
+    // When set, autotune times only the bottleneck kernel (e.g. s3 for Sep)
+    // instead of the full pipeline. Tune probes then handle edge kernels (s1, b3).
+    KernelExecuteFn bottleneck_execute_fn = nullptr;
+
+    // Pre-timing setup for bottleneck autotune (nullptr = no setup needed).
+    // Runs before the timer starts each iteration — e.g. fills scratchpad via s1
+    // so the bottleneck kernel sees realistic data-dependent access patterns.
+    // Must sync the stream before returning.
+    KernelExecuteFn bottleneck_setup_fn = nullptr;
 
     // Post-sweep tune key probe (nullptr = no extra probing)
     TuneKeyProbeFn tune_key_probe_fn = nullptr;

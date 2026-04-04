@@ -7,6 +7,7 @@ if (WITH_XELISHASH)
       SOURCES
           "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/blake3-inline.hip.inc"
           "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/aes-inline.hip.inc"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/xelis-hash/newton-lut-config.hip.inc"
       MANIFEST_NAME XELIS_SOURCES
   )
 

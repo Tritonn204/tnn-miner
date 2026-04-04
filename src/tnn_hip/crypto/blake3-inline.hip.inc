@@ -183,7 +183,7 @@ __device__ __forceinline__ uint32_t blake3_rotr8(uint32_t x) {
 #endif
 }
 
-#if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
+#if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__) || defined(__CUDACC__)
 
 // NVIDIA: Use funnel shifts for 12-bit and 7-bit rotations
 __device__ __forceinline__ uint32_t blake3_rotr12(uint32_t x) {
@@ -468,7 +468,7 @@ __device__ __forceinline__ void blake3_hash_parent(
 // Streaming store helpers for final output (platform-specific)
 // ============================================================================
 
-#if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
+#if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__) || defined(__CUDACC__)
 
 __device__ __forceinline__ void blake3_store_output_streaming(uint8_t* output, uint32_t cv[8]) {
     // NVIDIA: Use cache-streaming stores for final output
@@ -519,7 +519,7 @@ __device__ __forceinline__ void blake3_store_output(uint8_t* output, uint32_t cv
 // Prefetching support for NVIDIA GPUs
 // ============================================================================
 
-#if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
+#if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__) || defined(__CUDACC__)
 
 // Prefetch macros for different cache levels
 #define BLAKE3_PREFETCH_L1(addr) \
@@ -558,7 +558,7 @@ __device__ __forceinline__ void blake3_chunk_cv_prefetch(
     size_t offset = 0;
     
     // Initial prefetch for the first few blocks
-    #if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
+    #if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__) || defined(__CUDACC__)
     if (chunk_len > 0) {
         BLAKE3_PREFETCH_L1(input);
         if (chunk_len > BLAKE3_BLOCK_LEN) {
@@ -575,7 +575,7 @@ __device__ __forceinline__ void blake3_chunk_cv_prefetch(
                       BLAKE3_BLOCK_LEN : (chunk_len - offset);
         
         // Prefetch future blocks while processing current one
-        #if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
+        #if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__) || defined(__CUDACC__)
         size_t prefetch_l1_offset = offset + BLAKE3_PREFETCH_DISTANCE_L1 * BLAKE3_BLOCK_LEN;
         size_t prefetch_l2_offset = offset + BLAKE3_PREFETCH_DISTANCE_L2 * BLAKE3_BLOCK_LEN;
         
@@ -618,7 +618,7 @@ __device__ __forceinline__ void blake3_chunk_cv_prefetch(
 // Vectorized block loading with prefetch for NVIDIA
 // ============================================================================
 
-#if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
+#if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__) || defined(__CUDACC__)
 
 __device__ __forceinline__ void blake3_load_block_vectorized(
     uint8_t block[BLAKE3_BLOCK_LEN],
@@ -689,7 +689,7 @@ __device__ __forceinline__ void blake3_hasher_hash(
     size_t num_chunks = (input_len + BLAKE3_CHUNK_LEN - 1) / BLAKE3_CHUNK_LEN;
     
     // Prefetch the first chunk
-    #if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
+    #if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__) || defined(__CUDACC__)
     BLAKE3_PREFETCH_L2(input);
     if (input_len > BLAKE3_CHUNK_LEN) {
         BLAKE3_PREFETCH_L2(input + BLAKE3_CHUNK_LEN);
@@ -702,7 +702,7 @@ __device__ __forceinline__ void blake3_hasher_hash(
                           BLAKE3_CHUNK_LEN : (input_len - chunk_start);
         
         // Prefetch next chunk while processing current
-        #if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
+        #if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__) || defined(__CUDACC__)
         if (chunk_idx + 1 < num_chunks) {
             size_t next_chunk_start = (chunk_idx + 1) * BLAKE3_CHUNK_LEN;
             BLAKE3_PREFETCH_L2(input + next_chunk_start);

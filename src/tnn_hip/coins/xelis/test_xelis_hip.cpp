@@ -28,6 +28,7 @@
 #include "xelis-hash-v3.hip.hpp"
 #include "xelis_embedded_headers.hpp"
 #include "tnn_hip_common_embedded.hpp"
+#include <tnn_hip/crypto/xelis-hash/newton-lut-config.hip.inc>
 
 // Test vector: Use a simple known input
 static const uint8_t TEST_WORK[XELIS_TEMPLATE_SIZE] = {
@@ -73,7 +74,8 @@ static int run_test_case(
     uint64_t nonce_start,
     uint32_t batch_size,
     uint32_t block_x,
-    uint32_t num_launches = 1
+    uint32_t num_launches = 1,
+    const double *d_newton_lut = nullptr
 ) {
     const uint32_t hashes_per_launch = batch_size / num_launches;
 
@@ -162,7 +164,7 @@ static int run_test_case(
         printf("[TEST]   Running GPU Stage 3...\n");
         fflush(stdout);
         uint32_t s3_grid = (launch_batch_size + block_x - 1) / block_x;
-        void *stage3_args[] = {&d_scratch, (void*)&launch_batch_size, (void*)&launch_scratch_offset, &d_difficulty, &d_solutions, (void*)&launch_nonce_start};
+        void *stage3_args[] = {&d_scratch, (void*)&launch_batch_size, (void*)&launch_scratch_offset, &d_difficulty, &d_solutions, (void*)&launch_nonce_start, (void*)&d_newton_lut};
         HIP_CHECK(oroModuleLaunchKernel(stage3_func, s3_grid, 1, 1, block_x, 1, 1, 0, nullptr, stage3_args, nullptr));
         HIP_CHECK(oroDeviceSynchronize());
 
@@ -336,6 +338,18 @@ static int test_xelis_hip_impl() {
     printf("[TEST]   ✓ Loaded xelis_blake3_batch\n\n");
     fflush(stdout);
 
+    // Allocate and populate Newton LUT on device (config from newton-lut-config.hip.inc)
+    double h_newton_lut[NEWTON_LUT_N];
+    for (int i = 0; i < NEWTON_LUT_N; i++) {
+        double v_center = (double)(NEWTON_LUT_BASE + i + 0.5) * (double)(1 << NEWTON_LUT_SHIFT);
+        h_newton_lut[i] = 1.0 / v_center;
+    }
+    double *d_newton_lut = nullptr;
+    HIP_CHECK(oroMalloc((oroDeviceptr*)&d_newton_lut, sizeof(h_newton_lut)));
+    HIP_CHECK(oroMemcpy(d_newton_lut, h_newton_lut, sizeof(h_newton_lut), oroMemcpyHostToDevice));
+    printf("[TEST]   ✓ Newton LUT uploaded (%d entries)\n\n", NEWTON_LUT_N);
+    fflush(stdout);
+
     // 3. Run multiple test cases (single-block only)
     printf("========================================\n");
     printf("[TEST] Running Single-Block Multi-Batch Validation\n");
@@ -348,39 +362,26 @@ static int test_xelis_hip_impl() {
     failures += run_test_case(
         "Test 1: Single Hash",
         stage1_func, stage3_func, blake3_func,
-        0x0000000000000000ULL,  // nonce_start
-        1,      // batch_size
-        1       // s3_block_x
-    );
+        0x0000000000000000ULL, 1, 1, 1, d_newton_lut);
 
     // Test 2: Small batch (32 hashes)
     failures += run_test_case(
         "Test 2: Small Batch (32)",
         stage1_func, stage3_func, blake3_func,
-        0x0000000000000000ULL,  // nonce_start
-        32,     // batch_size
-        32      // s3_block_x
-    );
+        0x0000000000000000ULL, 32, 32, 1, d_newton_lut);
 
     // Test 3: Medium batch with multiple launches (256 hashes × 20 launches)
     failures += run_test_case(
         "Test 3: Medium Batch (5120), 20 Launches",
         stage1_func, stage3_func, blake3_func,
-        0x0000000000000000ULL,  // nonce_start
-        5120,   // batch_size
-        256,    // s3_block_x
-        20      // num_launches
-    );
+        0x0000000000000000ULL, 5120, 256, 20, d_newton_lut);
 
     // Test 4: Non-zero nonce_start (device ID bits set)
     uint64_t device_nonce = (1ULL << 59);  // Device ID = 1
     failures += run_test_case(
         "Test 4: Device ID Segmentation (device=1)",
         stage1_func, stage3_func, blake3_func,
-        device_nonce,  // nonce_start with device ID
-        32,     // batch_size
-        32      // s3_block_x
-    );
+        device_nonce, 32, 32, 1, d_newton_lut);
 
     // Final summary
     printf("\n========================================\n");
@@ -404,7 +405,8 @@ static int test_threaded_level1(
     oroCtx gpu_ctx,
     oroFunction_t stage1_func,
     oroFunction_t stage3_func,
-    oroFunction_t blake3_func)
+    oroFunction_t blake3_func,
+    const double *d_newton_lut)
 {
     printf("\n[THREAD-TEST] Level 1: GPU kernels on std::thread\n");
     fflush(stdout);
@@ -415,7 +417,7 @@ static int test_threaded_level1(
         result = run_test_case(
             "Threaded: std::thread GPU",
             stage1_func, stage3_func, blake3_func,
-            0x0000000000000000ULL, 32, 32);
+            0x0000000000000000ULL, 32, 32, 1, d_newton_lut);
     });
     gpu_thread.join();
     printf("[THREAD-TEST] Level 1: %s\n", result == 0 ? "PASS" : "FAIL");
@@ -428,7 +430,8 @@ static int test_threaded_level2(
     oroCtx gpu_ctx,
     oroFunction_t stage1_func,
     oroFunction_t stage3_func,
-    oroFunction_t blake3_func)
+    oroFunction_t blake3_func,
+    const double *d_newton_lut)
 {
     printf("\n[THREAD-TEST] Level 2: GPU + boost::asio io_context on separate threads\n");
     fflush(stdout);
@@ -462,7 +465,7 @@ static int test_threaded_level2(
         result = run_test_case(
             "Threaded: GPU + asio io_context",
             stage1_func, stage3_func, blake3_func,
-            0x0000000000000000ULL, 32, 32);
+            0x0000000000000000ULL, 32, 32, 1, d_newton_lut);
     });
     gpu_thread.join();
 
@@ -481,7 +484,8 @@ static int test_threaded_level3(
     oroCtx gpu_ctx,
     oroFunction_t stage1_func,
     oroFunction_t stage3_func,
-    oroFunction_t blake3_func)
+    oroFunction_t blake3_func,
+    const double *d_newton_lut)
 {
     printf("\n[THREAD-TEST] Level 3: GPU + boost::asio::spawn coroutine on separate threads\n");
     fflush(stdout);
@@ -519,7 +523,7 @@ static int test_threaded_level3(
         result = run_test_case(
             "Threaded: GPU + boost::asio::spawn",
             stage1_func, stage3_func, blake3_func,
-            0x0000000000000000ULL, 32, 32);
+            0x0000000000000000ULL, 32, 32, 1, d_newton_lut);
     });
     gpu_thread.join();
 
@@ -537,7 +541,8 @@ static int test_threaded_level4(
     oroCtx gpu_ctx,
     oroFunction_t stage1_func,
     oroFunction_t stage3_func,
-    oroFunction_t blake3_func)
+    oroFunction_t blake3_func,
+    const double *d_newton_lut)
 {
     printf("\n[THREAD-TEST] Level 4: GPU + SSL context + load_root_certificates\n");
     fflush(stdout);
@@ -569,7 +574,7 @@ static int test_threaded_level4(
         result = run_test_case(
             "Threaded: GPU + SSL ctx",
             stage1_func, stage3_func, blake3_func,
-            0x0000000000000000ULL, 32, 32);
+            0x0000000000000000ULL, 32, 32, 1, d_newton_lut);
     });
     gpu_thread.join();
 
@@ -587,7 +592,8 @@ static int test_threaded_level5(
     oroCtx gpu_ctx,
     oroFunction_t stage1_func,
     oroFunction_t stage3_func,
-    oroFunction_t blake3_func)
+    oroFunction_t blake3_func,
+    const double *d_newton_lut)
 {
     printf("\n[THREAD-TEST] Level 5: GPU + SSL + TCP resolve inside spawn\n");
     fflush(stdout);
@@ -626,7 +632,7 @@ static int test_threaded_level5(
         result = run_test_case(
             "Threaded: GPU + SSL + resolve",
             stage1_func, stage3_func, blake3_func,
-            0x0000000000000000ULL, 32, 32);
+            0x0000000000000000ULL, 32, 32, 1, d_newton_lut);
     });
     gpu_thread.join();
 
@@ -644,7 +650,8 @@ static int test_threaded_level6(
     oroCtx gpu_ctx,
     oroFunction_t stage1_func,
     oroFunction_t stage3_func,
-    oroFunction_t blake3_func)
+    oroFunction_t blake3_func,
+    const double *d_newton_lut)
 {
     printf("\n[THREAD-TEST] Level 6: GPU + 2x SSL/spawn/resolve threads + mutex/cv\n");
     fflush(stdout);
@@ -700,7 +707,7 @@ static int test_threaded_level6(
         result = run_test_case(
             "Threaded: full getWork sim",
             stage1_func, stage3_func, blake3_func,
-            0x0000000000000000ULL, 32, 32);
+            0x0000000000000000ULL, 32, 32, 1, d_newton_lut);
     });
     gpu_thread.join();
 
@@ -924,23 +931,33 @@ int test_xelis_hip() {
         (void)oroModuleGetFunction(&stage3_func, module_kernel.module, "xelis_s3_hybrid_v2_noblake_kernel");
         (void)oroModuleGetFunction(&blake3_func, module_kernel.module, "xelis_blake3_batch");
 
+        // Newton LUT for threaded tests (reuse same generation logic)
+        double h_lut[NEWTON_LUT_N];
+        for (int i = 0; i < NEWTON_LUT_N; i++) {
+            double v_center = (double)(NEWTON_LUT_BASE + i + 0.5) * (double)(1 << NEWTON_LUT_SHIFT);
+            h_lut[i] = 1.0 / v_center;
+        }
+        double *d_newton_lut_t = nullptr;
+        (void)oroMalloc((oroDeviceptr*)&d_newton_lut_t, sizeof(h_lut));
+        (void)oroMemcpy(d_newton_lut_t, h_lut, sizeof(h_lut), oroMemcpyHostToDevice);
+
         int failures = 0;
-        failures += test_threaded_level1(main_ctx, stage1_func, stage3_func, blake3_func);
+        failures += test_threaded_level1(main_ctx, stage1_func, stage3_func, blake3_func, d_newton_lut_t);
         if (failures) { printf("\n[THREAD-TEST] STOPPED at Level 1\n"); return 1; }
 
-        failures += test_threaded_level2(main_ctx, stage1_func, stage3_func, blake3_func);
+        failures += test_threaded_level2(main_ctx, stage1_func, stage3_func, blake3_func, d_newton_lut_t);
         if (failures) { printf("\n[THREAD-TEST] STOPPED at Level 2\n"); return 1; }
 
-        failures += test_threaded_level3(main_ctx, stage1_func, stage3_func, blake3_func);
+        failures += test_threaded_level3(main_ctx, stage1_func, stage3_func, blake3_func, d_newton_lut_t);
         if (failures) { printf("\n[THREAD-TEST] STOPPED at Level 3\n"); return 1; }
 
-        failures += test_threaded_level4(main_ctx, stage1_func, stage3_func, blake3_func);
+        failures += test_threaded_level4(main_ctx, stage1_func, stage3_func, blake3_func, d_newton_lut_t);
         if (failures) { printf("\n[THREAD-TEST] STOPPED at Level 4\n"); return 1; }
 
-        failures += test_threaded_level5(main_ctx, stage1_func, stage3_func, blake3_func);
+        failures += test_threaded_level5(main_ctx, stage1_func, stage3_func, blake3_func, d_newton_lut_t);
         if (failures) { printf("\n[THREAD-TEST] STOPPED at Level 5\n"); return 1; }
 
-        failures += test_threaded_level6(main_ctx, stage1_func, stage3_func, blake3_func);
+        failures += test_threaded_level6(main_ctx, stage1_func, stage3_func, blake3_func, d_newton_lut_t);
         if (failures) { printf("\n[THREAD-TEST] STOPPED at Level 6\n"); return 1; }
 
         printf("\n========================================\n");
