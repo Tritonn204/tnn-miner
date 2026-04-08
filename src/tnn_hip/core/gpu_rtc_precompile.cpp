@@ -161,7 +161,13 @@ extern "C" bool precompile_all_kernels()
     if (tnn_is_nvidia_device(d))
     {
       char buf[32];
+#ifdef _WIN32
+      // Windows Orochi: use compute_ (PTX) so any bundled nvrtc version
+      // works with future GPU architectures — the driver JITs to SASS.
+      std::snprintf(buf, sizeof(buf), "compute_%d%d", di.props.major, di.props.minor);
+#else
       std::snprintf(buf, sizeof(buf), "sm_%d%d", di.props.major, di.props.minor);
+#endif
       di.arch = buf;
     }
     else

@@ -1253,6 +1253,15 @@ elseif (WITH_OROCHI)
           "$<TARGET_FILE_DIR:${TNN_OUTPUT_NAME}>"
       )
     endif()
+    # Bundle nvrtc DLLs next to the exe so NVIDIA runtime compilation works without CUDA Toolkit
+    if (EXISTS "${CMAKE_SOURCE_DIR}/lib/nvrtc")
+      add_custom_command(
+        TARGET ${TNN_OUTPUT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+          "${CMAKE_SOURCE_DIR}/lib/nvrtc"
+          "$<TARGET_FILE_DIR:${TNN_OUTPUT_NAME}>"
+      )
+    endif()
     if (TNN_NEED_DYNAMIC_OPENSSL)
       add_custom_command(
         TARGET ${TNN_OUTPUT_NAME} POST_BUILD

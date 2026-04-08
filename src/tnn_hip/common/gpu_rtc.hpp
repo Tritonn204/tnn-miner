@@ -621,12 +621,19 @@ private:
         // calling it would crash (access violation) instead of returning an error.
         {
             oroApi loaded = oroLoadedAPI();
-            if (!(loaded & ORO_API_HIPRTC)) {
-                TNN_LOG_ERROR("[ERROR] HIPRTC is not available — the hiprtc DLL was not found.\n");
-                TNN_LOG_ERROR("[ERROR] On Windows AMD, install the HIP SDK: https://rocm.docs.amd.com\n");
+            bool has_rtc = (loaded & ORO_API_HIPRTC) || (loaded & ORO_API_CUDARTC);
+            if (!has_rtc) {
+                TNN_LOG_ERROR("[ERROR] Runtime compiler is not available — no RTC library was found.\n");
+                if (loaded & ORO_API_CUDADRIVER) {
+                    TNN_LOG_ERROR("[ERROR] NVIDIA detected but nvrtc was not found.\n");
+                    TNN_LOG_ERROR("[ERROR] Install the CUDA Toolkit: https://developer.nvidia.com/cuda-downloads\n");
+                } else {
+                    TNN_LOG_ERROR("[ERROR] AMD detected but hiprtc was not found.\n");
+                    TNN_LOG_ERROR("[ERROR] Install the HIP SDK: https://rocm.docs.amd.com\n");
+                }
                 throw std::runtime_error(
-                    "HIPRTC not available (hiprtc DLL missing). "
-                    "Install the AMD HIP SDK to enable runtime kernel compilation.");
+                    "Runtime compiler not available (RTC library missing). "
+                    "AMD: install the HIP SDK. NVIDIA: install the CUDA Toolkit.");
             }
         }
 #endif

@@ -152,8 +152,16 @@ namespace oro
           TNN_LOG_INFO("  [HIP]  HIPRTC loaded (runtime compilation available)\n");
         } else {
           TNN_LOG_ERROR("  [HIP]  WARNING: HIPRTC not loaded! Runtime compilation will fail.\n");
-          TNN_LOG_ERROR("  [HIP]  This usually means the HIP SDK is not installed or hiprtc DLL is missing.\n");
-          TNN_LOG_ERROR("  [HIP]  On Windows, install AMD HIP SDK from https://rocm.docs.amd.com\n");
+          TNN_LOG_ERROR("  [HIP]  Install the HIP SDK: https://rocm.docs.amd.com\n");
+        }
+      }
+      if (loaded & ORO_API_CUDADRIVER) {
+        TNN_LOG_INFO("  [CUDA] CUDA driver loaded\n");
+        if (loaded & ORO_API_CUDARTC) {
+          TNN_LOG_INFO("  [CUDA] NVRTC loaded (runtime compilation available)\n");
+        } else {
+          TNN_LOG_ERROR("  [CUDA] WARNING: NVRTC not loaded! Runtime compilation will fail.\n");
+          TNN_LOG_ERROR("  [CUDA] Install the CUDA Toolkit: https://developer.nvidia.com/cuda-downloads\n");
         }
       }
       fflush(stdout);

@@ -396,8 +396,13 @@ private:
                 // GPU architecture (must match precompile so cache key aligns)
                 {
                     char arch_buf[32];
+#ifdef _WIN32
+                    snprintf(arch_buf, sizeof(arch_buf), "compute_%d%d",
+                             device_props_.major, device_props_.minor);
+#else
                     snprintf(arch_buf, sizeof(arch_buf), "sm_%d%d",
                              device_props_.major, device_props_.minor);
+#endif
                     options.push_back(std::string("--gpu-architecture=") + arch_buf);
                 }
 
@@ -687,7 +692,11 @@ private:
         } else {
             vendor = "nvidia";
             char buf[32];
+#ifdef _WIN32
+            snprintf(buf, sizeof(buf), "compute_%d%d", device_props_.major, device_props_.minor);
+#else
             snprintf(buf, sizeof(buf), "sm_%d%d", device_props_.major, device_props_.minor);
+#endif
             arch = buf;
         }
         
