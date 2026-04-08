@@ -1244,6 +1244,15 @@ elseif (WITH_OROCHI)
           "$<TARGET_FILE_DIR:${TNN_OUTPUT_NAME}>"
       )
     endif()
+    # Bundle cudart DLL next to the exe so NVIDIA GPUs work without CUDA Toolkit
+    if (EXISTS "${CMAKE_SOURCE_DIR}/lib/cudart")
+      add_custom_command(
+        TARGET ${TNN_OUTPUT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+          "${CMAKE_SOURCE_DIR}/lib/cudart"
+          "$<TARGET_FILE_DIR:${TNN_OUTPUT_NAME}>"
+      )
+    endif()
     if (TNN_NEED_DYNAMIC_OPENSSL)
       add_custom_command(
         TARGET ${TNN_OUTPUT_NAME} POST_BUILD
