@@ -1233,6 +1233,15 @@ elseif (WITH_OROCHI)
     else()
       target_link_libraries(${TNN_OUTPUT_NAME} version)
     endif()
+    # Bundle hiprtc DLLs next to the exe so AMD GPUs work without HIP SDK installed
+    if (EXISTS "${CMAKE_SOURCE_DIR}/lib/hiprtc")
+      add_custom_command(
+        TARGET ${TNN_OUTPUT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+          "${CMAKE_SOURCE_DIR}/lib/hiprtc"
+          "$<TARGET_FILE_DIR:${TNN_OUTPUT_NAME}>"
+      )
+    endif()
     if (TNN_NEED_DYNAMIC_OPENSSL)
       add_custom_command(
         TARGET ${TNN_OUTPUT_NAME} POST_BUILD

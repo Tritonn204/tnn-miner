@@ -250,7 +250,8 @@ build-windows:
     - move hip-build\win32\orochi\bin\tnn-miner.exe .\
     - if (Test-Path .\hip-build\win32\orochi\bin\WinRing0x64.sys) { copy hip-build\win32\orochi\bin\WinRing0x64.sys .\ }
     - if (Test-Path .\hip-build\win32\orochi\bin\tunes) { Copy-Item -Recurse .\hip-build\win32\orochi\bin\tunes .\tunes }
-    - $items = @('tnn-miner.exe'); if (Test-Path WinRing0x64.sys) { $items += 'WinRing0x64.sys' }; if (Test-Path tunes) { $items += 'tunes' }; Compress-Archive -Path $items -DestinationPath ${WIN_AMD64_ZIP}
+    - Get-ChildItem .\hip-build\win32\orochi\bin\*.dll | ForEach-Object { copy $_.FullName .\ }
+    - $items = @('tnn-miner.exe'); Get-ChildItem .\*.dll | ForEach-Object { $items += $_.Name }; if (Test-Path WinRing0x64.sys) { $items += 'WinRing0x64.sys' }; if (Test-Path tunes) { $items += 'tunes' }; Compress-Archive -Path $items -DestinationPath ${WIN_AMD64_ZIP}
     #- 7z.exe a ${WIN_AMD64_ZIP} tnn-miner-cpu.exe
   after_script:
     - echo "WIN_BUILD_JOB_ID=$CI_JOB_ID" >> win-job.env
