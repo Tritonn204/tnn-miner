@@ -14,7 +14,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 set(TARGET_ARCH "amd64")
-set(CMAKE_BUILD_TYPE Release)
+if (NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
 if (USE_CLANG_CL)
   # clang-cl must target MSVC ABI explicitly to produce COFF .obj files
   set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   --target=x86_64-pc-windows-msvc")

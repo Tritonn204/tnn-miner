@@ -1,6 +1,7 @@
 param(
     [string]$TnnVersion,
-    [string]$Target
+    [string]$Target,
+    [switch]$Debug
 )
 
 # If script is called without named params, fall back to $args
@@ -252,6 +253,10 @@ function Build-Orochi {
         "-DTNN_VERSION=$TNN_VERSION",
         "--fresh"
     )
+
+    if ($Debug) {
+        $cmakeArgs += "-DCMAKE_BUILD_TYPE=Debug"
+    }
 
     Write-Host ""
     Write-Host "---- CMake configure (Orochi) ----"

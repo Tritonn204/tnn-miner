@@ -8,6 +8,10 @@ fi
 
 TNN_VERSION=$1
 TARGET="${2:-all}"   # default to "all" if not provided
+DEBUG=0
+if [ "$3" = "--debug" ] || [ "$3" = "-debug" ]; then
+    DEBUG=1
+fi
 
 # Function to run cmake and build only if cmake succeeds
 build_target() {
@@ -23,6 +27,11 @@ build_target() {
 
     # Remove CMakeCache.txt to refresh cache for each target
     rm -f "${build_dir}/CMakeCache.txt"
+
+    # Add debug flags if requested
+    if [ "$DEBUG" -eq 1 ]; then
+        cmake_flags+=("-DCMAKE_BUILD_TYPE=Debug")
+    fi
 
     # Run cmake command
     cmake -S . -B "$build_dir" \

@@ -206,6 +206,12 @@ if (WITH_RANDOMX)
 
     add_library(randomx STATIC ${randomx_sources})
 
+    # Clang 20 crashes on 'Debug Variable Analysis' pass for ifunc resolvers
+    # with debug info enabled. Disable debug info for all randomx sources.
+    if (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo" OR CMAKE_BUILD_TYPE STREQUAL "Debug")
+      target_compile_options(randomx PRIVATE -g0)
+    endif()
+
     if(TARGET generate-asm)
       add_dependencies(randomx generate-asm)
     endif()
