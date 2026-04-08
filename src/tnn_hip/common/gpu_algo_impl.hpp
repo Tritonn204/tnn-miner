@@ -563,6 +563,14 @@ private:
             return false;
         }
 
+        // Zero all buffers to avoid stale data from tune iterations
+        // causing rejects when mining starts immediately after tuning.
+        (void)oroMemset(d_input_, 0, config_.template_size);
+        (void)oroMemset(d_outputs_, 0, batch_size_ * config_.hash_size);
+        (void)oroMemset(d_scratch_, 0, batch_size_ * config_.scratch_per_hash);
+        (void)oroMemset(d_difficulty_target_, 0, 32);
+        (void)oroMemset(d_solutions_, 0, 8 + 1024 * 40 + 16);
+
         TNN_LOG_DEBUG("[DEBUG] GPU %d: Buffer allocation successful\n", device_id_);
         return true;
     }

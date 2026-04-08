@@ -74,7 +74,7 @@ extern "C" {
 #define HIP_VERSION_H 
 #define HIP_VERSION_MAJOR 6
 #define HIP_VERSION_MINOR 0
-#define HIP_VERSION_PATCH 51700
+#define HIP_VERSION_PATCH 33231
 #define USE_PEER_NON_UNIFIED 1
 #define __HIP_HAS_GET_PCH 0
 #define __HIP_NODISCARD 
