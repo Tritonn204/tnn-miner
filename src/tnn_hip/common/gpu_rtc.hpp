@@ -615,6 +615,22 @@ private:
         TNN_LOG_TRACE("[TRACE]   Passing %d headers to HIPRTC\n", (int)header_sources.size());
         fflush(stdout);
 
+#ifdef WITH_OROCHI
+        // Pre-flight: verify HIPRTC was actually loaded by Orochi.
+        // If the hiprtc DLL is missing, the function pointer is null and
+        // calling it would crash (access violation) instead of returning an error.
+        {
+            oroApi loaded = oroLoadedAPI();
+            if (!(loaded & ORO_API_HIPRTC)) {
+                TNN_LOG_ERROR("[ERROR] HIPRTC is not available — the hiprtc DLL was not found.\n");
+                TNN_LOG_ERROR("[ERROR] On Windows AMD, install the HIP SDK: https://rocm.docs.amd.com\n");
+                throw std::runtime_error(
+                    "HIPRTC not available (hiprtc DLL missing). "
+                    "Install the AMD HIP SDK to enable runtime kernel compilation.");
+            }
+        }
+#endif
+
         orortcProgram prog{};
         orortcResult rc{};
 

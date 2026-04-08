@@ -143,6 +143,19 @@ namespace oro
     {
       oroInit(0);
       printLoadedBackends();
+
+      // Check which API components actually loaded
+      oroApi loaded = oroLoadedAPI();
+      if (loaded & ORO_API_HIPDRIVER) {
+        TNN_LOG_INFO("  [HIP]  HIP driver loaded\n");
+        if (loaded & ORO_API_HIPRTC) {
+          TNN_LOG_INFO("  [HIP]  HIPRTC loaded (runtime compilation available)\n");
+        } else {
+          TNN_LOG_ERROR("  [HIP]  WARNING: HIPRTC not loaded! Runtime compilation will fail.\n");
+          TNN_LOG_ERROR("  [HIP]  This usually means the HIP SDK is not installed or hiprtc DLL is missing.\n");
+          TNN_LOG_ERROR("  [HIP]  On Windows, install AMD HIP SDK from https://rocm.docs.amd.com\n");
+        }
+      }
       fflush(stdout);
     }
 
