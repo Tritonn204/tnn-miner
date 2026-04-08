@@ -117,7 +117,9 @@ namespace oro
 
 // Try HIP + CUDA
 #ifdef _WIN32
+    TNN_LOG_DEBUG("  [INIT] Trying HIP + CUDA...\n");
     int err = oroInitialize((oroApi)(ORO_API_HIP | ORO_API_CUDA), 0);
+    TNN_LOG_DEBUG("  [INIT] HIP+CUDA result: %d, loadedAPIs: 0x%x\n", err, (int)oroLoadedAPI());
 #else
     int err = oroInitialize((oroApi)(ORO_API_HIP | ORO_API_CUDA), 0,
                             hipPaths, hiprtcPaths,
@@ -126,15 +128,19 @@ namespace oro
     // Fallback to HIP only
     if (err != 0)
     {
+      TNN_LOG_DEBUG("  [INIT] Trying HIP only...\n");
       err = oroInitialize(ORO_API_HIP, 0,
                           hipPaths, hiprtcPaths);
+      TNN_LOG_DEBUG("  [INIT] HIP-only result: %d, loadedAPIs: 0x%x\n", err, (int)oroLoadedAPI());
     }
 
 
     // Fallback to CUDA only
     if (err != 0)
     {
+      TNN_LOG_DEBUG("  [INIT] Trying CUDA only...\n");
       err = oroInitialize(ORO_API_CUDA, 0);
+      TNN_LOG_DEBUG("  [INIT] CUDA-only result: %d, loadedAPIs: 0x%x\n", err, (int)oroLoadedAPI());
     }
 
     fflush(stdout);
