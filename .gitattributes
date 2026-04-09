@@ -3,3 +3,4 @@
 # Batch scripts require CRLF
 *.bat   text eol=crlf
 *.ps1   text eol=crlf
+lib/hiprtc/amd_comgr0604.dll filter=lfs diff=lfs merge=lfs -text
