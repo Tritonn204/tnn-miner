@@ -124,18 +124,18 @@ waitForJob:
         memcpy(nonceBytes, (byte *)&n, 8);
 
         if (localJobCounter != jobCounter) {
-          if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+          if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
           break;
         }
 
         SpectreX::worker &usedWorker = devMine ? *devWorker : *worker;
         SpectreX::hash(usedWorker, WORK, SpectreX::INPUT_SIZE, powHash);
 
-        if (++localCount >= 512) { counter.fetch_add(localCount); localCount = 0; }
+        if (++localCount >= 512) { cpu_counter.fetch_add(localCount); localCount = 0; }
         submit = (devMine && devConnected) ? !submittingDev : !submitting;
 
         if (localJobCounter != jobCounter || localOurHeight != ourHeight) {
-          if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+          if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
           break;
         }
 
@@ -155,7 +155,7 @@ waitForJob:
           int64_t &rH = devMine ? devHeight : ourHeight;
           int64_t &oH = devMine ? localDevHeight : localOurHeight;
           if (localJobCounter != jobCounter || rH != oH) {
-            if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+            if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
             break;
           }
 
@@ -213,12 +213,12 @@ waitForJob:
         }
 
         if (!isConnected) {
-          if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+          if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
           break;
         }
       }
 
-      if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+      if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
 
       if (!isConnected) {
         break;
@@ -231,7 +231,7 @@ waitForJob:
       std::cerr << e.what() << std::endl;
       setcolor(BRIGHT_WHITE);
 
-      if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+      if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
 
       localJobCounter = -1;
       localOurHeight = -1;

@@ -265,7 +265,6 @@ private:
                 nonce = (nonce & 0xFFFF000000000000ULL) | (counter_loc & 0xFFFFFFFFFFFFULL);
 
                 HIP_counters[device_id_].fetch_add(result.count);
-                counter.fetch_add(result.count);
 
             } catch (const std::exception& e) {
                 TNN_LOG_ERROR("GPU mining error on device %d: %s\n", device_id_, e.what());

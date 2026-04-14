@@ -54,7 +54,6 @@ void jobThread(
         devMine);
 
     HIP_counters[d].fetch_add(ctx.batchSizes[d]);
-    counter.fetch_add(ctx.batchSizes[d]);
     // printf("%d loops\n", kernelIndex);
 
     N++;

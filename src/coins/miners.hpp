@@ -44,6 +44,17 @@ inline bool CheckHash(unsigned char *hash, Num diff, int algo)
   return (cmp);
 }
 
+// Fast LE hash-vs-target comparison (no bignum, no hex conversion)
+// Both hash and target are 32 bytes in little-endian byte order
+static inline bool hashMeetsTarget_le(const uint8_t *hash, const uint8_t *target) {
+    const uint64_t *h = (const uint64_t *)hash;
+    const uint64_t *t = (const uint64_t *)target;
+    if (h[3] != t[3]) return h[3] < t[3];
+    if (h[2] != t[2]) return h[2] < t[2];
+    if (h[1] != t[1]) return h[1] < t[1];
+    return h[0] <= t[0];
+}
+
 inline std::string uint32ToHex(uint32_t value) {
   std::stringstream ss;
   ss << std::hex << std::setw(8) << std::setfill('0') << value;

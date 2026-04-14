@@ -469,6 +469,7 @@ extern std::vector<int64_t> rate1min;
 extern std::vector<int64_t> rate30sec;
 
 extern std::atomic<int64_t> counter;
+extern std::atomic<int64_t> cpu_counter;
 extern std::atomic<int64_t> benchCounter;
 
 extern bool isConnected;

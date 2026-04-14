@@ -75,6 +75,7 @@
 #define ALGO_SHAI_HIVE 100
 #define ALGO_YESPOWER 110
 #define ALGO_RINHASH 120
+#define ALGO_KAWPOW 130
 
 inline const char* algoName(int algo) {
   switch(algo) {
@@ -102,6 +103,8 @@ inline const char* algoName(int algo) {
       return "YesPower";
     case ALGO_RINHASH:
       return "RinHash";
+    case ALGO_KAWPOW:
+      return "KawPow";
     default:
       return "Unknown";
   }

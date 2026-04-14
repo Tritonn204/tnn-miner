@@ -167,7 +167,7 @@ waitForJob:
         //   std::reverse(usedWorker.scratchData, usedWorker.scratchData + 32);
         // }
 
-        counter.fetch_add(1);
+        cpu_counter.fetch_add(1);
         submit = (devMine && devConnected) ? !submittingDev : !submitting;
 
         if (localJobCounter != jobCounter || localOurHeight != ourHeight) {

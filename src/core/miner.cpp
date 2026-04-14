@@ -77,6 +77,10 @@
 #include <tnn_hip/coins/xelis/test_xelis_hip.h>
 #endif
 
+#if defined(TNN_KAWPOW)
+#include <tnn_hip/coins/kawpow/test_kawpow_hip.h>
+#endif
+
 #ifdef TNN_YESPOWER
 #include <crypto/yespower/yespower_algo.h>
 #include <yespower/yespower.h>
@@ -136,6 +140,7 @@ std::atomic<int> deviceAccepted[33] = {};
 std::atomic<int> deviceRejected[33] = {};
 
 std::atomic<int64_t> counter = 0;
+std::atomic<int64_t> cpu_counter = 0;
 std::atomic<int64_t> benchCounter = 0;
 boost::asio::io_context my_context;
 boost::asio::steady_timer update_timer = boost::asio::steady_timer(my_context);
@@ -853,11 +858,7 @@ int tnn_main(int argc, char **argv)
   if (vm.count("test-xelis"))
   {
 #if defined(TNN_XELISHASH)
-#ifdef TNN_HIP
-    int rc = 0;
-#else
     int rc = xelis_runTests_v3();
-#endif
     return rc;
 #else
     setcolor(RED);
@@ -882,6 +883,20 @@ int tnn_main(int argc, char **argv)
 #else
     setcolor(RED);
     printf("%s", unsupported_xelishash);
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+#endif
+  }
+
+  if (vm.count("hip-test-kawpow"))
+  {
+#if defined(TNN_KAWPOW)
+    int rc = test_kawpow_hip();
+    return rc;
+#else
+    setcolor(RED);
+    printf("ERROR: --hip-test-kawpow requires TNN_KAWPOW to be enabled\n");
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;

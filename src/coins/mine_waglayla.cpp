@@ -169,7 +169,7 @@ waitForJob:
 
         // std::cout << "hash: " << hexStr(&usedWorker.scratchData[0], 32) << std::endl;
 
-        counter.fetch_add(1);
+        cpu_counter.fetch_add(1);
         submit = (devMine && devConnected) ? !submittingDev : !submitting;
 
         if (localJobCounter != jobCounter || localOurHeight != ourHeight) {

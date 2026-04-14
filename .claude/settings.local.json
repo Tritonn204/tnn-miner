@@ -12,7 +12,11 @@
       "Bash(ls:*)",
       "Bash(gh api:*)",
       "WebSearch",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(grep:*)",
+      "Read(//tmp/cpp-kawpow/lib/**)",
+      "Read(//tmp/cpp-kawpow/include/**)",
+      "Read(//tmp/**)"
     ],
     "deny": [],
     "ask": []

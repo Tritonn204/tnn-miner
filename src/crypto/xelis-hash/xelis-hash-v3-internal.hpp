@@ -222,17 +222,10 @@ alignas(64) static constexpr uint8_t isqrt_lut[256] = {
     15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15};
 
 // Macro body for tier-dispatched isqrt (used by gen_tiers spec)
+// sqrtsd seed, no correction (replaces 4x divq Newton-Raphson)
 #define XELIS_ISQRT_BODY \
     if (n < 2) return n; \
-    int lz = __builtin_clzll(n); \
-    uint64_t x = 1ULL << ((63 - lz + 1) >> 1); \
-    x = (x + n/x) >> 1; \
-    x = (x + n/x) >> 1; \
-    x = (x + n/x) >> 1; \
-    x = (x + n/x) >> 1; \
-    while (x * x > n) --x; \
-    while ((x + 1) <= n / (x + 1)) ++x; \
-    return x;
+    return (uint64_t)sqrt((double)n);
 
 #ifdef __x86_64__
 static inline uint64_t isqrt(uint64_t n)
@@ -249,10 +242,7 @@ static inline uint64_t isqrt(uint64_t n)
     float64x1_t s = vsqrt_f64(v);
     double droot;
     vst1_f64(&droot, s);
-    uint64_t root = (uint64_t)droot;
-    if ((root + 1) * (root + 1) <= n) ++root;
-    else if (root * root > n)         --root;
-    return root;
+    return (uint64_t)droot;
 }
 #endif
 
@@ -322,27 +312,8 @@ uint64_t static inline le_bytes_to_uint64(const uint8_t *bytes)
 #endif
 #endif
 
-#if defined(__x86_64__)
-void static inline aes_single_round(uint8_t *block, const uint8_t *key)
-{
-    __m128i block_vec = _mm_aesenc_si128(
-        _mm_loadu_si128((const __m128i *)block),
-        _mm_loadu_si128((const __m128i *)key));
-    _mm_storeu_si128((__m128i *)block, block_vec);
-}
-
-static inline uint64_t ROTR(uint64_t x, uint32_t r)
-{
-    asm("rorq %%cl, %0" : "+r"(x) : "c"(r)); return x;
-}
-static inline uint64_t ROTL(uint64_t x, uint32_t r)
-{
-    asm("rolq %%cl, %0" : "+r"(x) : "c"(r)); return x;
-}
-#else
 static inline uint64_t ROTR(uint64_t x, uint32_t r) { return __builtin_rotateright64(x, r); }
 static inline uint64_t ROTL(uint64_t x, uint32_t r) { return __builtin_rotateleft64(x, r);  }
-#endif
 
 static inline uint64_t d128_64(__uint128_t a, uint64_t b)
 {
@@ -410,17 +381,19 @@ static inline uint64_t umul64_hi(uint64_t a, uint64_t b)
 static inline uint64_t mod128_64_fast(__uint128_t t1, uint64_t denom)
 {
 #if defined(__x86_64__)
-    uint64_t hi = t1 >> 64;
+    uint64_t hi = (uint64_t)(t1 >> 64);
     uint64_t lo = (uint64_t)t1;
-    if (hi < denom) {
-        uint64_t remainder;
-        __asm__("divq %[d]"
-                : "=d"(remainder)
-                : [d] "r"(denom), "a"(lo), "d"(hi) : "cc");
-        return remainder;
-    }
+    uint64_t dummy, rhi;
+    /* (0:hi) / denom → rhi = hi mod denom; always < denom afterward */
+    __asm__("divq %[d]" : "=a"(dummy), "=d"(rhi)
+            : [d]"r"(denom), "a"(hi), "d"(0ULL) : "cc");
+    uint64_t rem;
+    __asm__("divq %[d]" : "=a"(dummy), "=d"(rem)
+            : [d]"r"(denom), "a"(lo), "d"(rhi) : "cc");
+    return rem;
+#else
+    return (uint64_t)(t1 % denom);
 #endif
-    return mod128_64(t1, denom);
 }
 
 static inline uint64_t hi(__uint128_t x) { return (uint64_t)(x >> 64); }
@@ -466,22 +439,26 @@ static inline uint64_t barrett_core(
     uint64_t x_lo = (uint64_t)x;
     uint64_t x_hi = (uint64_t)(x >> 64);
 
-    uint64_t p0_hi = umul64_hi(x_lo, mu_lo);
-    __uint128_t p1 = (__uint128_t)x_lo * mu_hi;
-    __uint128_t p2 = (__uint128_t)x_hi * mu_lo;
-    __uint128_t p3 = (__uint128_t)x_hi * mu_hi;
+    /* Need only bits [191:128] of x*mu, since q < mod < 2^64.          *
+     * p3's high half lands above bit 191 and is discarded.             *
+     * p0_hi is dropped (under-estimates carry by ≤1); compensated      *
+     * with a second correction step.                                   */
+    __uint128_t p1 = (__uint128_t)x_lo * mu_hi;      /* mulx */
+    __uint128_t p2 = (__uint128_t)x_hi * mu_lo;      /* mulx */
+    uint64_t   p3l = x_hi * mu_hi;                   /* imul, low only */
 
-    __uint128_t mid = (__uint128_t)p0_hi + (uint64_t)p1 + (uint64_t)p2;
+    uint64_t carry = (uint64_t)(((__uint128_t)(uint64_t)p1
+                               + (uint64_t)p2) >> 64);     /* 0 or 1 */
 
-    __uint128_t q = p3 + (p1 >> 64) + (p2 >> 64) + (uint64_t)(mid >> 64);
+    uint64_t q = p3l
+               + (uint64_t)(p1 >> 64)
+               + (uint64_t)(p2 >> 64)
+               + carry;
 
-    // Use 128-bit subtraction to avoid truncation bug
-    __uint128_t r = x - q * (__uint128_t)mod;
-
-    // r < 2*mod guaranteed, and mod < 2^64, so r < 2^65
-    // After one subtraction, r < mod < 2^64, fits in uint64_t
+    /* q ∈ {⌊x/m⌋−2, ⌊x/m⌋−1, ⌊x/m⌋}  ⇒  r ∈ [0, 3m) ⊂ [0, 2^66)       */
+    __uint128_t r = x - (__uint128_t)q * mod;        /* one mulx */
     if (r >= mod) r -= mod;
-
+    if (r >= mod) r -= mod;
     return (uint64_t)r;
 }
 
@@ -491,26 +468,53 @@ static inline uint64_t modular_power_fast(uint64_t base, uint64_t exp, uint64_t 
     base %= mod;
     if (base < 2) return base;
 
-    // Precompute Barrett constant — one division at setup
-    __uint128_t mu = (~(__uint128_t)0) / mod;
-    uint64_t mu_lo = (uint64_t)mu;
-    uint64_t mu_hi = (uint64_t)(mu >> 64);
+    /* mu = (2^128 - 1) / mod via two divq, no __udivti3 libcall */
+    uint64_t mu_hi, mu_lo;
+#if defined(__x86_64__)
+    {   uint64_t rh;
+        __asm__("divq %[m]" : "=a"(mu_hi), "=d"(rh)
+                : [m]"r"(mod), "a"(~0ULL), "d"(0ULL) : "cc");
+        __asm__("divq %[m]" : "=a"(mu_lo), "=d"(rh)
+                : [m]"r"(mod), "a"(~0ULL), "d"(rh)   : "cc");
+    }
+#else
+    {   __uint128_t mu = (~(__uint128_t)0) / mod;
+        mu_lo = (uint64_t)mu; mu_hi = (uint64_t)(mu >> 64); }
+#endif
 
     uint64_t result = 1;
     while (exp > 0) {
         if (exp & 1) {
-            __uint128_t prod = (__uint128_t)result * base;
-            result = barrett_core(prod, mod, mu_lo, mu_hi);
+            __uint128_t p = (__uint128_t)result * base;
+            result = barrett_core(p, mod, mu_lo, mu_hi);
         }
         exp >>= 1;
         if (exp > 0) {
-            __uint128_t prod = (__uint128_t)base * base;
-            base = barrett_core(prod, mod, mu_lo, mu_hi);
+            __uint128_t p = (__uint128_t)base * base;
+            base = barrett_core(p, mod, mu_lo, mu_hi);
             if (base == 0) return 0;
         }
     }
     return result;
 }
+
+
+static inline void isqrt_pair(uint64_t x0, uint64_t x1,
+                              uint64_t *r0, uint64_t *r1)
+{
+    __m128d v = _mm_set_pd((double)x1, (double)x0);
+    v = _mm_sqrt_pd(v);
+    uint64_t q0 = (uint64_t)_mm_cvtsd_f64(v);
+    uint64_t q1 = (uint64_t)_mm_cvtsd_f64(_mm_unpackhi_pd(v, v));
+    /* one-step integer correction each */
+
+    // q0 -= (q0 * q0 > x0);
+    // q0 += ((q0 + 1) * (q0 + 1) <= x0);
+    // q1 -= (q1 * q1 > x1);
+    // q1 += ((q1 + 1) * (q1 + 1) <= x1);
+    *r0 = q0; *r1 = q1;
+}
+
 
 // Op dispatch strategy selector
 enum class OpDispatch { Switch, Goto, Merged };
@@ -530,8 +534,11 @@ static uint64_t execute_op_heavy_switch(
                    uint64_t q=(t2_hi!=0)?(b/t2_hi):0;
                    return (uint64_t)(dd-ds*q); }
         case 9:  return udiv(c,a,b|4);
-        case 10: { uint64_t rr=ROTL(result,r_next);
-                   return (rr>a||(rr==a&&b>(c|8)))?((a!=0)?(rr/a):0):(a^b); }
+        case 10: { uint64_t rr = ROTL(result, r_next);
+                  if (!(rr > a || (rr == a && b > (c | 8))))
+                      return a ^ b;                         /* cheap path */
+                  return (a != 0) ? (rr / a) : 0;           /* div path   */
+                }
         case 13: { __uint128_t t1 = combine_uint64(a+i, isqrt(b+j_off));
                    uint64_t denom = murmurhash3(c^result^i^j_off)|1;
                    return (uint64_t)(t1 % denom); }
@@ -585,9 +592,12 @@ static inline uint64_t execute_operation_goto(
 op0: { __uint128_t t1 = combine_uint64(a+i, isqrt(b+j_off));
        uint64_t denom = murmurhash3(c^result^i^j_off)|1;
        v = (uint64_t)(t1 % denom); goto done; }
-op1: { uint64_t sb = isqrt(b|2), sa = isqrt(a+j_off);
-       v = ROTL((c+i)%sb, i+j_off)*sa; goto done; }
-op2:   v = (isqrt(a+i)*isqrt(c+j_off))^(b+i+j_off); goto done;
+op1: { uint64_t sb, sa;
+       isqrt_pair(b | 2, a + j_off, &sb, &sa);
+       v = ROTL((c + i) % sb, i + j_off) * sa; goto done; }
+op2: { uint64_t sa, sc;
+       isqrt_pair(a + i, c + j_off, &sa, &sc);
+       v = (sa * sc) ^ (b + i + j_off); goto done; }
 op3:   v = (a+b)*c; goto done;
 op4:   v = (b-c)*a; goto done;
 op5:   v = c-a+b;   goto done;
@@ -596,12 +606,11 @@ op7:   v = b*c+a;   goto done;
 op8:   v = c*a+b;   goto done;
 op9:   v = a*b*c;   goto done;
 op10:  v = mod128_64_fast(COMBINE_UINT64(a,b), c|1); goto done;
-op11: { uint64_t t2_hi = ROTL(result,r_next), t2_lo = a|2;
-        if (t2_hi>b||(t2_hi==b&&t2_lo>c)) { v=c; }
-        else { __uint128_t dd=COMBINE_UINT64(b,c), ds=COMBINE_UINT64(t2_hi,t2_lo);
-               uint64_t q=(t2_hi!=0)?(b/t2_hi):0;
-               v=(uint64_t)(dd-ds*q); }
-        goto done; }
+op11: { uint64_t hi = ROTL(result, r_next), lo = a | 2;
+        if (hi > b || (hi == b && lo > c)) { v = c; goto done; }
+        __uint128_t dd = COMBINE_UINT64(b, c), ds = COMBINE_UINT64(hi, lo);
+        uint64_t q = (hi != 0) ? (b / hi) : 0;
+        v = (uint64_t)(dd - ds * q); goto done; }
 op12:  v = udiv(c,a,b|4); goto done;
 op13: { uint64_t rr=ROTL(result,r_next);
         v=(rr>a||(rr==a&&b>(c|8)))?((a!=0)?(rr/a):0):(a^b); goto done; }
@@ -666,16 +675,18 @@ op15:  { uint64_t rr=ROTR(result,r_next);
 op0: { __uint128_t t1 = combine_uint64(a+i, isqrt(b+j_off));
        uint64_t denom = murmurhash3(c^result^i^j_off)|1;
        v = (uint64_t)(t1 % denom); goto done; }
-op1: { uint64_t sb = isqrt(b|2), sa = isqrt(a+j_off);
-       v = ROTL((c+i)%sb, i+j_off)*sa; goto done; }
-op2:   v = (isqrt(a+i)*isqrt(c+j_off))^(b+i+j_off); goto done;
+op1: { uint64_t sb, sa;
+       isqrt_pair(b | 2, a + j_off, &sb, &sa);
+       v = ROTL((c + i) % sb, i + j_off) * sa; goto done; }
+op2: { uint64_t sa, sc;
+       isqrt_pair(a + i, c + j_off, &sa, &sc);
+       v = (sa * sc) ^ (b + i + j_off); goto done; }
 op10:  v = mod128_64_fast(COMBINE_UINT64(a,b), c|1); goto done;
-op11: { uint64_t t2_hi = ROTL(result,r_next), t2_lo = a|2;
-        if (t2_hi>b||(t2_hi==b&&t2_lo>c)) { v=c; }
-        else { __uint128_t dd=COMBINE_UINT64(b,c), ds=COMBINE_UINT64(t2_hi,t2_lo);
-               uint64_t q=(t2_hi!=0)?(b/t2_hi):0;
-               v=(uint64_t)(dd-ds*q); }
-        goto done; }
+op11: { uint64_t hi = ROTL(result, r_next), lo = a | 2;
+        if (hi > b || (hi == b && lo > c)) { v = c; goto done; }
+        __uint128_t dd = COMBINE_UINT64(b, c), ds = COMBINE_UINT64(hi, lo);
+        uint64_t q = (hi != 0) ? (b / hi) : 0;
+        v = (uint64_t)(dd - ds * q); goto done; }
 op12:  v = udiv(c,a,b|4); goto done;
 op13: { uint64_t rr=ROTL(result,r_next);
         v=(rr>a||(rr==a&&b>(c|8)))?((a!=0)?(rr/a):0):(a^b); goto done; }
@@ -850,9 +861,10 @@ static inline void prefetch_W(const void *p) {
         } \
 \
         uint64_t addr_a_next = modular_power_fast(addr_a, addr_b, result); \
-        uint64_t addr_b_next = isqrt(result) * (r + 1) * isqrt(addr_a_next); \
+        uint64_t sq_r, sq_a; \
+        isqrt_pair(result, addr_a_next, &sq_r, &sq_a); \
+        addr_b = sq_r * (r + 1) * sq_a; \
         addr_a = addr_a_next; \
-        addr_b = addr_b_next; \
     } \
 }
 
@@ -895,16 +907,18 @@ static inline void prefetch_W(const void *p) {
         uint64_t result = ~(hash1 ^ hash2); \
 \
         uint64_t next_a_idx = map_index(result); \
+        uint64_t rot_res    = ~ROTR(result, r);        /* loop-carried */ \
         PF(&mem_buffer_a[next_a_idx]); \
 \
         for (size_t j = 0; j < XELIS_BUFFER_SIZE_V3; ++j) \
         { \
             PF_S(&scratch_pad[r]); \
             prefetch_L2(&scratch_pad[r + 32]); \
-            uint64_t rot_res = ~ROTR(result, r); \
-            uint64_t a       = mem_buffer_a[next_a_idx]; \
-            uint64_t b       = mem_buffer_b[map_index(a ^ rot_res)]; \
-            uint64_t c       = scratch_pad[r]; \
+\
+            /* rot_res carried in; no recompute at top */ \
+            uint64_t a = mem_buffer_a[next_a_idx]; \
+            uint64_t b = mem_buffer_b[map_index(a ^ rot_res)]; \
+            uint64_t c = scratch_pad[r]; \
             r++; \
 \
             uint32_t op_raw = ROTL(result, (uint32_t)c); \
@@ -913,8 +927,11 @@ static inline void prefetch_W(const void *p) {
             uint64_t idx_seed = v ^ result; \
             result            = ROTL(idx_seed, r); \
 \
-            next_a_idx = map_index(result); \
-            PF(&mem_buffer_a[next_a_idx]); \
+            /* ---- all deps for next iter's b-addr known HERE ---- */ \
+            next_a_idx       = map_index(result); \
+            rot_res          = ~ROTR(result, r);                    /* next iter */ \
+            uint64_t a_spec  = mem_buffer_a[next_a_idx];            /* replaces PF on a */ \
+            PF(&mem_buffer_b[map_index(a_spec ^ rot_res)]);         /* next iter's b */ \
 \
             int      use_b = pick_half(v); \
             uint64_t idx_t = map_index(idx_seed); \
@@ -931,9 +948,10 @@ static inline void prefetch_W(const void *p) {
         } \
 \
         uint64_t addr_a_next = modular_power_fast(addr_a, addr_b, result); \
-        uint64_t addr_b_next = isqrt(result) * (r + 1) * isqrt(addr_a_next); \
+        uint64_t sq_r, sq_a; \
+        isqrt_pair(result, addr_a_next, &sq_r, &sq_a); \
+        addr_b = sq_r * (r + 1) * sq_a; \
         addr_a = addr_a_next; \
-        addr_b = addr_b_next; \
     } \
 }
 

@@ -52,18 +52,6 @@ __device__ constexpr uint8_t AES_KEY[16] = {'x', 'e', 'l', 'i', 's', 'h', 'a', '
 // Use hardware FP64 reciprocal division on architectures with fast FP64 (1:2).
 // NVIDIA: only HPC dies (GP100, V100, A100, H100) — NOT consumer (sm_86, sm_89).
 // AMD: GCN/CDNA (wave64) have 1:2 FP64; RDNA (wave32) have 1:16.
-#if defined(__CUDA_ARCH__)
-  #if (__CUDA_ARCH__ == 600 || __CUDA_ARCH__ == 700 || __CUDA_ARCH__ == 800 || __CUDA_ARCH__ == 900)
-    #define XELIS_USE_HWRECIP 1
-  #endif
-#elif defined(__HIP_PLATFORM_AMD__)
-  // GCN5+ / CDNA (gfx9xx) have 1:2 FP64. Pre-Vega GCN (gfx7/8) is wave64 but 1:16.
-  #if defined(__gfx900__) || defined(__gfx906__) || defined(__gfx908__) || \
-      defined(__gfx90a__) || defined(__gfx940__) || defined(__gfx941__) || defined(__gfx942__)
-    #define XELIS_USE_HWRECIP 1
-  #endif
-#endif
-
 // Cooperative TPB: wave32 → stage1=32, b3=96 | wave64 → stage1=64, b3=64
 #define XELIS_STAGE1_COOP_TPB  XELIS_WAVE_SIZE
 #define XELIS_B3_COOP_TPB      (XELIS_WAVE_SIZE == 32 ? 96 : 64)
@@ -203,19 +191,6 @@ __device__ __forceinline__ void isqrt_pair(uint64_t xa, uint64_t xb,
     *ra = (xa_arg < 2) ? xa_arg : (uint64_t)sa_s;
     *rb = (xb_arg < 2) ? xb_arg : (uint64_t)sb_s;
 }
-
-#ifdef XELIS_USE_HWRECIP
-__device__ __forceinline__ uint64_t isqrt_drcp(uint64_t a) {
-    if (a < 2) return a;
-    double d = __dsqrt_rn((double)a);
-    uint64_t s = (uint64_t)d;
-    uint64_t sq = s * s;
-    s -= (uint32_t)(sq > a);
-    sq = (s + 1) * (s + 1);
-    s += (uint32_t)(sq <= a);
-    return s;
-}
-#endif
 
 __device__ __forceinline__ uint64_t barrett_reduce(
     uint64_t x_lo, uint64_t x_hi,
@@ -1098,111 +1073,6 @@ __device__ __forceinline__ uint64_t mod128by64_split32(uint64_t hi, uint64_t lo,
     return divmod128by64_split32(hi, lo, d).r;
 }
 
-// ============================================================================
-// Hardware FP64 Reciprocal Division (drcp) — for fast-FP64 architectures only
-// ============================================================================
-#ifdef XELIS_USE_HWRECIP
-
-__device__ __forceinline__ uint64_t div64_hwrecip(uint64_t dividend, uint64_t divisor) {
-    double recip = __drcp_rn((double)divisor);
-    uint64_t q = (uint64_t)((double)dividend * recip);
-    q &= (uint64_t)-(dividend >= divisor);
-    uint64_t prod = q * divisor;
-    uint64_t rem  = dividend - prod;
-    uint64_t over = (uint64_t)(prod > dividend);
-    q -= over;
-    rem += divisor & (uint64_t)-over;
-    uint64_t under = (uint64_t)(rem >= divisor);
-    q += under;
-    return q;
-}
-
-__device__ __forceinline__ uint64_t mod64_hwrecip(uint64_t a, uint64_t d) {
-    double recip = __drcp_rn((double)d);
-    uint64_t q = (uint64_t)((double)a * recip);
-    q &= (uint64_t)-(a >= d);
-    uint64_t r = a - q * d;
-    uint64_t over = (uint64_t)(r > a);
-    q -= over;
-    r += d & (uint64_t)-over;
-    uint64_t under = (uint64_t)(r >= d);
-    r -= d & (uint64_t)-under;
-    return r;
-}
-
-__device__ __forceinline__ divmod_result divmod64_hwrecip(uint64_t a, uint64_t d) {
-    double recip = __drcp_rn((double)d);
-    uint64_t q = (uint64_t)((double)a * recip);
-    q &= (uint64_t)-(a >= d);
-    uint64_t r = a - q * d;
-    uint64_t over = (uint64_t)(r > a);
-    q -= over;
-    r += d & (uint64_t)-over;
-    uint64_t under = (uint64_t)(r >= d);
-    q += under;
-    r -= d & (uint64_t)-under;
-    return {q, r};
-}
-
-__device__ __forceinline__ uint32_t div96by64_q32_hwrecip(
-    uint64_t n_hi, uint32_t n_lo, uint64_t dn, double recip, uint64_t *rem_out) {
-    uint64_t q = (uint64_t)(((double)n_hi * 4294967296.0 + (double)n_lo) * recip);
-    if (q > 0xffffffffull) q = 0xffffffffull;
-    uint64_t full = (n_hi << 32) | (uint64_t)n_lo;
-    uint64_t p_lo = q * dn;
-    int64_t hi = (int64_t)(n_hi >> 32) - (int64_t)__umul64hi(q, dn) - (full < p_lo);
-    uint64_t rem = full - p_lo;
-    // drcp 53-bit precision guarantees ±1 error on 32-bit digit.
-    // After over correction, hi is guaranteed 0 — skip hi fixup.
-    uint64_t over = (uint64_t)(hi < 0);
-    q -= over; rem += dn & -over;
-    uint64_t under = (uint64_t)(rem >= dn);
-    q += under; rem -= dn & -under;
-    *rem_out = rem;
-    return (uint32_t)q;
-}
-
-__device__ __forceinline__ uint64_t div128by64_hwrecip(uint64_t hi, uint64_t lo, uint64_t d) {
-    uint64_t r = mod64_hwrecip(hi, d);
-    int s = __clzll(d);
-    uint64_t dn = d << s;
-    double recip = __drcp_rn((double)dn);
-    uint64_t n_hi = s ? ((r << s) | (lo >> (64 - s))) : r;
-    uint64_t n_lo = lo << s;
-    uint64_t rem;
-    uint32_t q1 = div96by64_q32_hwrecip(n_hi, (uint32_t)(n_lo >> 32), dn, recip, &rem);
-    uint32_t q0 = div96by64_q32_hwrecip(rem, (uint32_t)n_lo, dn, recip, &rem);
-    return ((uint64_t)q1 << 32) | q0;
-}
-
-__device__ __forceinline__ uint64_t mod128by64_hwrecip(uint64_t hi, uint64_t lo, uint64_t d) {
-    uint64_t r = mod64_hwrecip(hi, d);
-    int s = __clzll(d);
-    uint64_t dn = d << s;
-    double recip = __drcp_rn((double)dn);
-    uint64_t n_hi = s ? ((r << s) | (lo >> (64 - s))) : r;
-    uint64_t n_lo = lo << s;
-    uint64_t rem;
-    (void)div96by64_q32_hwrecip(n_hi, (uint32_t)(n_lo >> 32), dn, recip, &rem);
-    (void)div96by64_q32_hwrecip(rem, (uint32_t)n_lo, dn, recip, &rem);
-    return rem >> s;
-}
-
-__device__ __forceinline__ divmod_result divmod128by64_hwrecip(uint64_t hi, uint64_t lo, uint64_t d) {
-    uint64_t r = mod64_hwrecip(hi, d);
-    int s = __clzll(d);
-    uint64_t dn = d << s;
-    double recip = __drcp_rn((double)dn);
-    uint64_t n_hi = s ? ((r << s) | (lo >> (64 - s))) : r;
-    uint64_t n_lo = lo << s;
-    uint64_t rem;
-    uint32_t q1 = div96by64_q32_hwrecip(n_hi, (uint32_t)(n_lo >> 32), dn, recip, &rem);
-    uint32_t q0 = div96by64_q32_hwrecip(rem, (uint32_t)n_lo, dn, recip, &rem);
-    return {((uint64_t)q1 << 32) | q0, rem >> s};
-}
-
-#endif // XELIS_USE_HWRECIP
-
 // Barrett modular exponentiation — precompute mu once
 __device__ __forceinline__ uint64_t modular_power_barrett(uint64_t base, uint64_t exp, uint64_t mod) {
     mod += (mod == 0);
@@ -1236,212 +1106,8 @@ __device__ __forceinline__ uint64_t modular_power_barrett(uint64_t base, uint64_
     return result;
 }
 
-#ifdef XELIS_USE_HWRECIP
-__device__ __forceinline__ uint64_t modular_power_barrett_hwrecip(uint64_t base, uint64_t exp, uint64_t mod) {
-    mod += (mod == 0);
-    if (mod == 1) return 0;
-
-    base %= mod;
-    if (base < 2) return base;
-    if (exp == 0) return 1;
-
-    uint64_t mu_hi = div64_hwrecip(0xFFFFFFFFFFFFFFFFULL, mod);
-    uint64_t rem   = mod64_hwrecip(0xFFFFFFFFFFFFFFFFULL, mod);
-    uint64_t mu_lo = div128by64_hwrecip(rem, 0xFFFFFFFFFFFFFFFFULL, mod);
-
-    uint64_t result = 1;
-    while (exp > 0) {
-        if (exp & 1) {
-            uint64_t lo = result * base;
-            uint64_t hi = __umul64hi(result, base);
-            result = barrett_reduce(lo, hi, mod, mu_lo, mu_hi);
-        }
-        exp >>= 1;
-        if (exp > 0) {
-            uint64_t lo = base * base;
-            uint64_t hi = __umul64hi(base, base);
-            base = barrett_reduce(lo, hi, mod, mu_lo, mu_hi);
-            if (base == 0) return 0;
-        }
-    }
-    return result;
-}
-#endif
-
 #define U128_LT(a_hi,a_lo,b_hi,b_lo) (((a_hi) < (b_hi)) || (((a_hi) == (b_hi)) && ((a_lo) < (b_lo))))
 #define U128_GT(a_hi,a_lo,b_hi,b_lo) (((a_hi) > (b_hi)) || (((a_hi) == (b_hi)) && ((a_lo) > (b_lo))))
-
-__device__ __forceinline__ uint64_t execute_op_offset(
-    uint32_t op, uint64_t a, uint64_t b, uint64_t c,
-    uint32_t r, uint64_t result, uint32_t i, uint32_t j)
-{
-  // ── Cheap path (56.25%) ──
-  uint64_t m3  = -(uint64_t)(op==3),  m4  = -(uint64_t)(op==4);
-  uint64_t m5  = -(uint64_t)(op==5),  m6  = -(uint64_t)(op==6);
-  uint64_t m7  = -(uint64_t)(op==7),  m8  = -(uint64_t)(op==8);
-  uint64_t m9  = -(uint64_t)(op==9);
-  uint64_t m14 = -(uint64_t)(op==14), m15 = -(uint64_t)(op==15);
-
-  // Precompute products (ILP parallel)
-  uint64_t ab = a * b, ac = a * c, bc = b * c;
-
-  // Ops 3-8: unified x + y - z
-  uint64_t cx = (ac & (m3|m8)) | (ab & m4) | (c & m5) | (a & m6) | (bc & m7);
-  uint64_t cy = (bc & m3)      | (b & m5)  | (c & m6) | (a & m7) | (b & m8);
-  uint64_t cz = (ac & m4)      | (a & m5)  | (b & m6);
-  uint64_t cheap = cx + cy - cz;
-  cheap |= (ab * c) & m9;  // op9: triple product
-
-  // Ops 14,15: unified __umul64hi(p, q) + n
-  uint64_t mhi = m14 | m15;
-  uint64_t hp = (a & m14) | (c & m15);
-  uint64_t hq = (c & m14) | (b & m15);
-  uint64_t hn = (bc & m14) | ((ab + c * ROTR(result, r)) & m15);
-  cheap |= (__umul64hi(hp, hq) + hn) & mhi;
-
-  // 0x3C07 = bits {0,1,2,10,11,12,13}
-  if (!((1u<<op) & 0x3C07u)) return cheap;
-
-  // ── Flat expensive path (43.75%) ──
-  // Reuse dead cheap masks
-  m3  = -(uint64_t)(op==0);   // m0
-  m4  = -(uint64_t)(op==1);   // m1
-  m5  = -(uint64_t)(op==2);   // m2
-  m6  = -(uint64_t)(op==10);  // m10
-  m7  = -(uint64_t)(op==11);  // m11
-  m8  = -(uint64_t)(op==12);  // m12
-  m9  = -(uint64_t)(op==13);  // m13
-  #define m0  m3
-  #define m1  m4
-  #define m2  m5
-  #define m10 m6
-  #define m11 m7
-  #define m12 m8
-  #define m13 m9
-
-  uint64_t t0 = ROTL(result, r);
-
-  // 2 grouped isqrts (ops 0,1,2)
-  uint64_t sqrt_in_A = ((b+j) & m0) | ((b|2) & m1) | ((a+i) & m2) | ~(m0|m1|m2);
-  uint64_t sqrt_in_B = ((a+j) & m1) | ((c+j) & m2) | ~(m1|m2);
-  uint64_t sqrt_A = isqrt(sqrt_in_A);
-  uint64_t sqrt_B = isqrt(sqrt_in_B);
-
-  uint64_t mur = murmurhash3(c ^ result ^ i ^ j) | 1;
-
-  // 128-bit divmod (ops 0,10,12)
-  uint64_t m128 = m0 | m10 | m12;
-  uint64_t dv128_hi = ((a+i) & m0) | (a     & m10) | (c     & m12) | ~m128;
-  uint64_t dv128_lo = (sqrt_A & m0) | (b     & m10) | (a     & m12);
-  uint64_t dv128_d  = (mur    & m0) | ((c|1) & m10) | ((b|4) & m12) | ~m128;
-  divmod_result dm128 = divmod128by64_split32(dv128_hi, dv128_lo, dv128_d);
-  uint64_t res128 = (dm128.r & (m0|m10)) | (dm128.q & m12);
-
-  // 64-bit divmod (ops 1,11,13)
-  uint64_t m64 = m1 | m11 | m13;
-  uint64_t dv64_num = ((c+i) & m1) | (b  & m11) | (t0 & m13) | ~m64;
-  uint64_t dv64_den = (sqrt_A & m1) | (t0 & m11) | (a  & m13) | ~m64;
-  dv64_den |= (uint64_t)(dv64_den == 0);
-  divmod_result dm64 = divmod64_split32(dv64_num, dv64_den);
-
-  uint64_t res1  = ROTL(dm64.r, i+j) * sqrt_B;
-  uint64_t t1_11 = a | 2;
-  uint64_t cmp_11 = -(uint64_t)U128_LT(b, c, t0, t1_11);
-  uint64_t res11  = (c & cmp_11) | ((c - t1_11 * dm64.q) & ~cmp_11);
-  uint64_t cmp_13 = -(uint64_t)U128_GT(t0, b, a, (c|8));
-  uint64_t res13  = (dm64.q & cmp_13) | ((a ^ b) & ~cmp_13);
-  uint64_t res64 = (res1 & m1) | (res11 & m11) | (res13 & m13);
-
-  // op2: pure isqrt
-  uint64_t res2 = (sqrt_A * sqrt_B) ^ (b + i + j);
-
-  return (res128 & m128) | (res64 & m64) | (res2 & m2);
-
-  #undef m0
-  #undef m1
-  #undef m2
-  #undef m10
-  #undef m11
-  #undef m12
-  #undef m13
-}
-
-#ifdef XELIS_USE_HWRECIP
-// execute_op using hwrecip division + isqrt_drcp — 3-way split by divmod type.
-// Each group has independent register lifetimes; compiler reuses regs across
-// serialized branches → peak = max(group_regs) instead of sum(all_regs).
-__device__ __forceinline__ uint64_t execute_op_offset_hwrecip(
-    uint32_t op, uint64_t a, uint64_t b, uint64_t c,
-    uint32_t r, uint64_t result, uint32_t i, uint32_t j)
-{
-  // Cheap path (56.25%) — identical to split32, no division
-  uint64_t m3  = -(uint64_t)(op==3),  m4  = -(uint64_t)(op==4);
-  uint64_t m5  = -(uint64_t)(op==5),  m6  = -(uint64_t)(op==6);
-  uint64_t m7  = -(uint64_t)(op==7),  m8  = -(uint64_t)(op==8);
-  uint64_t m9  = -(uint64_t)(op==9);
-  uint64_t m14 = -(uint64_t)(op==14), m15 = -(uint64_t)(op==15);
-
-  uint64_t ab = a * b, ac = a * c, bc = b * c;
-
-  uint64_t cx = (ac & (m3|m8)) | (ab & m4) | (c & m5) | (a & m6) | (bc & m7);
-  uint64_t cy = (bc & m3)      | (b & m5)  | (c & m6) | (a & m7) | (b & m8);
-  uint64_t cz = (ac & m4)      | (a & m5)  | (b & m6);
-  uint64_t cheap = cx + cy - cz;
-  cheap |= (ab * c) & m9;
-
-  uint64_t mhi = m14 | m15;
-  uint64_t hp = (a & m14) | (c & m15);
-  uint64_t hq = (c & m14) | (b & m15);
-  uint64_t hn = (bc & m14) | ((ab + c * ROTR(result, r)) & m15);
-  cheap |= (__umul64hi(hp, hq) + hn) & mhi;
-
-  // 0x3C07 = bits {0,1,2,10,11,12,13}
-  if (!((1u<<op) & 0x3C07u)) return cheap;
-
-  // 3-way split by divmod type
-  if ((1u<<op) & 0x1401u)
-  {
-    // Group A: 128-bit divmod (ops 0, 10, 12)
-    uint64_t ma = -(uint64_t)(op==0), mb = -(uint64_t)(op==10), mc = -(uint64_t)(op==12);
-    uint64_t s0 = isqrt_drcp(b + j);
-    uint64_t mur = murmurhash3(c ^ result ^ i ^ j) | 1;
-
-    uint64_t mAny = ma | mb | mc;
-    uint64_t hi = ((a+i) & ma) | (a     & mb) | (c     & mc) | ~mAny;
-    uint64_t lo = (s0    & ma) | (b     & mb) | (a     & mc);
-    uint64_t dv = (mur   & ma) | ((c|1) & mb) | ((b|4) & mc) | ~mAny;
-    divmod_result dm = divmod128by64_hwrecip(hi, lo, dv);
-    return (dm.r & (ma|mb)) | (dm.q & mc);
-  }
-  else if ((1u<<op) & 0x2802u)
-  {
-    // Group B: 64-bit divmod (ops 1, 11, 13)
-    uint64_t ma = -(uint64_t)(op==1), mb = -(uint64_t)(op==11), mc = -(uint64_t)(op==13);
-    uint64_t t0 = ROTL(result, r);
-    uint64_t s0 = isqrt_drcp(b | 2);
-    uint64_t s1 = isqrt_drcp(a + j);
-
-    uint64_t mAny = ma | mb | mc;
-    uint64_t num = ((c+i) & ma) | (b  & mb) | (t0 & mc) | ~mAny;
-    uint64_t den = (s0    & ma) | (t0 & mb) | (a  & mc) | ~mAny;
-    den |= (uint64_t)(den == 0);
-    divmod_result dm = divmod64_hwrecip(num, den);
-
-    uint64_t res1  = ROTL(dm.r, i+j) * s1;
-    uint64_t t1 = a | 2;
-    uint64_t cmp_11 = -(uint64_t)U128_LT(b, c, t0, t1);
-    uint64_t res11  = (c & cmp_11) | ((c - t1 * dm.q) & ~cmp_11);
-    uint64_t cmp_13 = -(uint64_t)U128_GT(t0, b, a, (c|8));
-    uint64_t res13  = (dm.q & cmp_13) | ((a ^ b) & ~cmp_13);
-    return (res1 & ma) | (res11 & mb) | (res13 & mc);
-  }
-  else
-  {
-    // Group C: op 2 — pure isqrt, no divmod
-    return (isqrt_drcp(a + i) * isqrt_drcp(c + j)) ^ (b + i + j);
-  }
-}
-#endif // XELIS_USE_HWRECIP
 
 // ============================================================================
 // ============================================================================
@@ -1476,8 +1142,7 @@ __device__ __forceinline__ uint64_t s3_mod64_newton(uint64_t a, uint64_t d,
 }
 
 // ============================================================================
-// Legacy branchless exec_op — kept for reference, no longer used in production
-// Self-contained divmod128: float reciprocal + FP64 NR, no __drcp_rn needed
+// Float-reciprocal division helpers (used by s3_divmod128_newton)
 // ============================================================================
 
 __device__ __forceinline__ uint64_t s3_mod64(uint64_t a, uint64_t d) {
@@ -1509,15 +1174,6 @@ __device__ __forceinline__ uint32_t s3_div96by64(uint64_t r, uint32_t x, uint64_
     uint64_t ov = (uint64_t)(hi < 0); q -= ov; rem += d & -ov; hi += ov & (rem < d);
     uint64_t un = (uint64_t)(hi > 0) | (uint64_t)(rem >= d); q += un; rem -= d & -un;
     *ro = rem; return (uint32_t)q;
-}
-
-__device__ __forceinline__ divmod_result s3_divmod128(uint64_t hi, uint64_t lo, uint64_t d) {
-    uint64_t r = s3_mod64(hi, d);
-    int s = __clzll(d); uint64_t dn = d << s; double recip = s3_recip_norm(dn);
-    uint64_t n_hi = s ? ((r << s) | (lo >> (64 - s))) : r, n_lo = lo << s, rem;
-    uint32_t q1 = s3_div96by64(n_hi, (uint32_t)(n_lo >> 32), dn, recip, &rem);
-    uint32_t q0 = s3_div96by64(rem, (uint32_t)n_lo, dn, recip, &rem);
-    return { ((uint64_t)q1 << 32) | q0, rem >> s };
 }
 
 // divmod128 using newton mod64 for the hi reduction, then existing split32 for lo
@@ -1602,75 +1258,6 @@ __device__ __noinline__ uint64_t exec_op_split_newton(
     uint64_t resB = (res1 & m1) | (r11 & m11) | (r13 & m13);
     uint64_t resC = (sq0 * sq1) ^ (b + i + j);
     return (resA & pA) | (resB & pB) | (resC & pC);
-}
-
-__device__ __noinline__ uint64_t exec_op_bl_fast(
-    uint32_t op, uint64_t a, uint64_t b, uint64_t c,
-    uint32_t r, uint64_t result, uint32_t i, uint32_t j)
-{
-  // Cheap path (ops 3-9, 14, 15)
-  uint64_t m3  = -(uint64_t)(op==3),  m4  = -(uint64_t)(op==4);
-  uint64_t m5  = -(uint64_t)(op==5),  m6  = -(uint64_t)(op==6);
-  uint64_t m7  = -(uint64_t)(op==7),  m8  = -(uint64_t)(op==8);
-  uint64_t m9  = -(uint64_t)(op==9);
-  uint64_t m14 = -(uint64_t)(op==14), m15 = -(uint64_t)(op==15);
-
-  uint64_t ab = a * b, ac = a * c, bc = b * c;
-  uint64_t cx = (ac & (m3|m8)) | (ab & m4) | (c & m5) | (a & m6) | (bc & m7);
-  uint64_t cy = (bc & m3)      | (b & m5)  | (c & m6) | (a & m7) | (b & m8);
-  uint64_t cz = (ac & m4)      | (a & m5)  | (b & m6);
-  uint64_t cheap = cx + cy - cz;
-  cheap |= (ab * c) & m9;
-
-  uint64_t mhi = m14 | m15;
-  uint64_t hp = (a & m14) | (c & m15);
-  uint64_t hq = (c & m14) | (b & m15);
-  uint64_t hn = (bc & m14) | ((ab + c * ROTR(result, r)) & m15);
-  cheap |= (__umul64hi(hp, hq) + hn) & mhi;
-
-  // Expensive path — fully branchless
-  uint64_t t0 = ROTL(result, r);
-  uint64_t mur = murmurhash3(c ^ result ^ i ^ j) | 1;
-  uint64_t m0  = -(uint64_t)(op==0),  m1  = -(uint64_t)(op==1),  m2  = -(uint64_t)(op==2);
-  uint64_t m10 = -(uint64_t)(op==10), m11 = -(uint64_t)(op==11);
-  uint64_t m12 = -(uint64_t)(op==12), m13 = -(uint64_t)(op==13);
-  uint64_t pA = m0 | m10 | m12, pB = m1 | m11 | m13, pC = m2;
-  uint64_t expensive = pA | pB | pC;
-
-  // Paired isqrt — 2 isqrts in parallel pipeline
-  uint64_t sq0_in = ((b+j) & pA) | ((b|2) & pB) | ((a+i) & pC) | (4 & ~expensive);
-  uint64_t sq1_in = ((a+j) & pB) | ((c+j) & pC) | (4 & ~(pB|pC));
-  uint64_t sq0, sq1;
-  isqrt_pair(sq0_in, sq1_in, &sq0, &sq1);
-
-  // Merged divmod128 — group A uses hi!=0, group B uses hi==0
-  uint64_t hiA  = ((a+i) & m0) | (a     & m10) | (c     & m12) | ~pA;
-  uint64_t loA  = (sq0   & m0) | (b     & m10) | (a     & m12);
-  uint64_t dvA  = (mur   & m0) | ((c|1) & m10) | ((b|4) & m12) | ~pA;
-  uint64_t numB = ((c+i) & m1) | (b  & m11) | (t0 & m13) | ~pB;
-  uint64_t denB = (sq0   & m1) | (t0 & m11) | (a  & m13) | ~pB;
-  denB |= (uint64_t)(denB == 0);
-  uint64_t dm_hi  = hiA & pA;
-  uint64_t dm_lo  = (loA & pA) | (numB & pB) | (1 & ~(pA|pB));
-  uint64_t dm_div = (dvA & pA) | (denB & pB) | (1 & ~(pA|pB));
-  dm_div |= (uint64_t)(dm_div == 0);
-
-  divmod_result dm = s3_divmod128(dm_hi, dm_lo, dm_div);
-
-  uint64_t resA = (dm.r & (m0|m10)) | (dm.q & m12);
-
-  uint64_t res1 = ROTL(dm.r, i+j) * sq1;
-  uint64_t t1 = a | 2;
-  uint64_t c11 = -(uint64_t)U128_LT(b, c, t0, t1);
-  uint64_t r11 = (c & c11) | ((c - t1 * dm.q) & ~c11);
-  uint64_t c13 = -(uint64_t)U128_GT(t0, b, a, (c|8));
-  uint64_t r13 = (dm.q & c13) | ((a ^ b) & ~c13);
-  uint64_t resB = (res1 & m1) | (r11 & m11) | (r13 & m13);
-
-  uint64_t resC = (sq0 * sq1) ^ (b + i + j);
-
-  uint64_t exp_res = (resA & pA) | (resB & pB) | (resC & pC);
-  return (cheap & ~expensive) | (exp_res & expensive);
 }
 
 #if defined(__CUDA_ARCH__) || defined(__HIP_PLATFORM_NVIDIA__)

@@ -14,6 +14,11 @@
 #include <tnn_hip/crypto/xelis-hash/newton-lut-config.hip.inc>
 #endif
 
+#ifdef TNN_KAWPOW
+#include "kawpow.hip.hpp"
+#include <algo_definitions.h>
+#endif
+
 // ============================================================================
 // Xelis V3 Shared Memory Calculator
 // ============================================================================
@@ -1262,6 +1267,99 @@ inline AlgoConfig XELIS_V3_CONFIG = {
 };
 
 // ============================================================================
+// KawPow Configuration (single strategy)
+// ============================================================================
+#ifdef TNN_KAWPOW
+
+inline size_t kawpow_shared_mem(int block_size)
+{
+  return 0;
+}
+
+// Single-strategy execute: just launch the monolithic kernel
+inline bool kawpow_execute(
+    const KernelMap& kernels,
+    const KernelLaunchContext& ctx)
+{
+    auto it = kernels.find("kawpow_hash_kernel");
+    if (it == kernels.end()) return false;
+
+    uint32_t grid = (ctx.batch_size + ctx.block_size - 1) / ctx.block_size;
+
+    // TODO: wire up DAG + l1_cache device pointers and block_number/dag_num_items
+    // For now this is a stub — the kernel itself is a placeholder
+    uint8_t* header = ctx.d_input;
+    uint32_t* dag = nullptr;
+    uint32_t* l1_cache = nullptr;
+    uint64_t nonce_start = ctx.nonce_start;
+    uint32_t batch_size = ctx.batch_size;
+    uint64_t* target = ctx.d_difficulty_target;
+    uint64_t* solutions = ctx.d_solutions;
+    int block_number = 0;
+    int dag_num_items = 0;
+
+    void* args[] = {
+        &header,
+        &dag,
+        &l1_cache,
+        &nonce_start,
+        &batch_size,
+        &target,
+        &solutions,
+        &block_number,
+        &dag_num_items,
+    };
+
+    auto err = oroModuleLaunchKernel(
+        it->second, grid, 1, 1,
+        ctx.block_size, 1, 1,
+        0, ctx.stream, args, nullptr);
+    return (err == oroSuccess);
+}
+
+inline AlgoConfig KAWPOW_CONFIG = {
+    .name = "kawpow",
+    .source_path = "src/tnn_hip/crypto/kawpow/kawpow.hip",
+    .source = hip_kawpow_source::SRC_TNN_HIP_CRYPTO_KAWPOW_KAWPOW_HIP_SOURCE.data(),
+
+    .kernel_names = {"kawpow_hash_kernel"},
+    .kernel_name = "",
+
+    .rtc_headers = build_rtc_headers(hip_embedded::COMMON_HEADERS),
+    .template_size = 32,   // header hash (will be refined for actual stratum)
+    .hash_size = 32,
+    .nonce_size = 8,
+    .scratch_per_hash = 0, // DAG is shared, not per-hash scratch
+    .preferred_block_size = 128,
+    .algo_id = ALGO_KAWPOW,
+    .calc_shared_mem = kawpow_shared_mem,
+
+    .category = AlgoCategory::MemoryHard,
+    .enable_reg_tuning = false,
+
+    .amd_blocks = {64, 256, 64},
+    .nvidia_blocks = {128, 256, 128},
+    .target_batch_time_ms = 200.0,
+    .max_batch_time_ms = 500.0,
+    .min_batch_time_ms = 50.0,
+    .enable_autotune = true,
+    .autotune_warmup = 2,
+    .autotune_iterations = 3,
+    .memory_reserve_mb = 256.0,   // DAG can be 2-4 GB
+    .memory_usage_factor = 0.85,
+
+    .execute_fn = kawpow_execute,
+
+    // Single strategy — no sweep
+    .strategy_variants = {},
+    .strategy_names = {},
+    .strategy_bottleneck_kernels = {},
+
+    .occupancy_threshold = 0.70,
+};
+#endif // TNN_KAWPOW
+
+// ============================================================================
 // Algorithm Registry
 // ============================================================================
 class AlgoRegistry
@@ -1279,11 +1377,22 @@ public:
     {
       return std::make_unique<GPUAlgorithm>(XELIS_V3_CONFIG);
     }
+#ifdef TNN_KAWPOW
+    if (name == "kawpow")
+    {
+      return std::make_unique<GPUAlgorithm>(KAWPOW_CONFIG);
+    }
+#endif
     return nullptr;
   }
 
   std::vector<std::string> list_algorithms() const
   {
-    return {"xelis_v3"};
+    return {
+      "xelis_v3",
+#ifdef TNN_KAWPOW
+      "kawpow",
+#endif
+    };
   }
 };

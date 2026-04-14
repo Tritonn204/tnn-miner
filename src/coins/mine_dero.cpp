@@ -16,6 +16,17 @@
 static std::once_flag s_wolfLUTOnce;
 void ensureWolfLUT() { std::call_once(s_wolfLUTOnce, initWolfLUT); }
 
+// target = (2^256) / diff, stored as LE bytes
+static inline void deroTargetFromDiff(uint64_t diff, uint8_t *targetOut) {
+    static const boost::multiprecision::uint256_t kMaxU256 =
+        (boost::multiprecision::uint256_t(1) << 256) - 1;
+    if (diff == 0) { memset(targetOut, 0xFF, 32); return; }
+    boost::multiprecision::uint256_t target = kMaxU256 / diff;
+    boost::multiprecision::uint256_t rem = kMaxU256 % diff;
+    if (rem + 1 >= diff) target += 1;
+    cpp_int_to_byte_array(target, targetOut);
+}
+
 namespace {
 
 static inline void write_nonce_be(byte* WORK, uint32_t N) {
@@ -71,7 +82,10 @@ void mineDero(int tid)
 
   int64_t localJobCounter = -1;
 
-  Num cmpDiffUser, cmpDiffDev;
+  alignas(8) byte diffBytesUser[32] = {0};
+  alignas(8) byte diffBytesDev[32] = {0};
+  uint64_t cachedDiffUser = 0;
+  uint64_t cachedDiffDev = 0;
 
 waitForJob:
 
@@ -116,8 +130,14 @@ waitForJob:
         continue;
       }
 
-      cmpDiffUser = ConvertDifficultyToBig(diffUserSnapshot, ALGO_ASTROBWTV3);
-      cmpDiffDev  = ConvertDifficultyToBig(diffDevSnapshot,  ALGO_ASTROBWTV3);
+      if (diffUserSnapshot != cachedDiffUser) {
+        deroTargetFromDiff(diffUserSnapshot, diffBytesUser);
+        cachedDiffUser = diffUserSnapshot;
+      }
+      if (diffDevSnapshot != cachedDiffDev) {
+        deroTargetFromDiff(diffDevSnapshot, diffBytesDev);
+        cachedDiffDev = diffDevSnapshot;
+      }
 
       localJobCounter = snapshotCounter;
       uint32_t nonce  = 0;
@@ -127,7 +147,7 @@ waitForJob:
 
         const bool devMine = (devConnected && (dev_dist(gen_local) < devFee * 100.0));
         byte*      WORK    = devMine ? devWork.data() : work.data();
-        const Num& cmp     = devMine ? cmpDiffDev    : cmpDiffUser;
+        byte*      cmpTarget = devMine ? diffBytesDev : diffBytesUser;
 
         ++nonce;
         write_nonce_be(WORK, nonce);
@@ -135,12 +155,12 @@ waitForJob:
         AstroBWTv3(WORK, MINIBLOCK_SIZE, powHash.data(), *worker, useLookupMine);
 
         if (++localCount >= 512) {
-          counter.fetch_add(localCount);
+          cpu_counter.fetch_add(localCount);
           localCount = 0;
         }
         // counter.fetch_add(1);
 
-        if (CheckHash(powHash.data(), cmp, ALGO_ASTROBWTV3)) {
+        if (hashMeetsTarget_le(powHash.data(), cmpTarget)) {
           bool submit = devMine ? !submittingDev : !submitting;
           if (!submit) {
             for (;;) {
@@ -179,7 +199,7 @@ waitForJob:
       }
 
       if (localCount) {
-        counter.fetch_add(localCount);
+        cpu_counter.fetch_add(localCount);
         localCount = 0;
       }
 
@@ -192,7 +212,7 @@ waitForJob:
 
       localJobCounter = -1;
       if (localCount) {
-        counter.fetch_add(localCount);
+        cpu_counter.fetch_add(localCount);
         localCount = 0;
       }
     }

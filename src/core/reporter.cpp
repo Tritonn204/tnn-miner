@@ -100,8 +100,8 @@ int update_handler(const boost::system::error_code& error)
     // =========================================================================
     // Accumulate CPU stats (always, even before mining_started)
     // =========================================================================
-    uint64_t currentHashes = counter.load();
-    counter.store(0);
+    uint64_t currentHashes = cpu_counter.load();
+    cpu_counter.store(0);
 
     if (currentHashes > 0) {
         any_gpu_hashing = true;  // Reuse flag for CPU too

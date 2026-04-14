@@ -144,7 +144,7 @@ waitForJob:
 
         if (ShaiHive::hash(workCtx, WORK))
         {
-          counter.fetch_add(1);
+          cpu_counter.fetch_add(1);
 
           submit = devMine ? !submittingDev : !submitting;
           TT = devMine ? target_bytes_dev : target_bytes;

@@ -53,7 +53,10 @@ public:
     }
 
     void set_difficulty(uint64_t difficulty) {
-        current_difficulty_ = difficulty;
+        if (difficulty != current_difficulty_) {
+            current_difficulty_ = difficulty;
+            recomputeTarget(difficulty, algo_->get_config().algo_id);
+        }
     }
 
     // Compute one hash with automatic nonce encoding
@@ -79,8 +82,8 @@ public:
 
         total_hashes_++;
 
-        // Check difficulty using existing CheckHash function
-        if (current_difficulty_ > 0 && check_difficulty(hash_output, current_difficulty_, config.algo_id)) {
+        // Fast LE byte comparison (no bignum, no hex, no reverse)
+        if (current_difficulty_ > 0 && hashMeetsTarget_le(hash_output, cached_target_)) {
             *found_nonce = encoded_nonce;
             return true;
         }
@@ -109,23 +112,27 @@ public:
     }
 
 private:
-    // Difficulty check using existing infrastructure
-    bool check_difficulty(uint8_t* hash, uint64_t difficulty, int algo_id) {
-        // Use existing ConvertDifficultyToBig and CheckHash from miners.hpp
-        Num cmpDiff = ConvertDifficultyToBig(difficulty, algo_id);
-
-        // CheckHash expects big-endian, handles reversing internally
-        if (littleEndian()) {
-            std::reverse(hash, hash + 32);
+    void recomputeTarget(uint64_t diff, int algo_id) {
+        static const boost::multiprecision::uint256_t kMaxU256 =
+            (boost::multiprecision::uint256_t(1) << 256) - 1;
+        if (diff == 0) { memset(cached_target_, 0xFF, 32); return; }
+        boost::multiprecision::uint256_t target;
+        switch (algo_id) {
+            case ALGO_ASTROBWTV3: {
+                // (2^256) / d
+                target = kMaxU256 / diff;
+                boost::multiprecision::uint256_t rem = kMaxU256 % diff;
+                if (rem + 1 >= diff) target += 1;
+                break;
+            }
+            case ALGO_XELISV2:
+            case ALGO_XELISV3:
+            default:
+                // (2^256 - 1) / d
+                target = kMaxU256 / diff;
+                break;
         }
-
-        bool result = (Num(hexStr(hash, 32).c_str(), 16) <= cmpDiff);
-
-        if (littleEndian()) {
-            std::reverse(hash, hash + 32);
-        }
-
-        return result;
+        cpp_int_to_byte_array(target, cached_target_);
     }
 
     int thread_id_;
@@ -136,4 +143,5 @@ private:
 
     std::vector<uint8_t> work_buffer_;
     uint64_t current_difficulty_;
+    alignas(8) uint8_t cached_target_[32] = {0};
 };

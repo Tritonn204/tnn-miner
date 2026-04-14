@@ -4,6 +4,14 @@
 #include <base64.hpp>
 #include <stratum/stratum.h>
 
+// target = (2^256 - 1) / diff, stored as LE bytes
+static inline void xelisTargetFromDiff(uint64_t diff, uint8_t *targetOut) {
+    static const boost::multiprecision::uint256_t kMaxU256 =
+        (boost::multiprecision::uint256_t(1) << 256) - 1;
+    if (diff == 0) { memset(targetOut, 0xFF, 32); return; }
+    cpp_int_to_byte_array(kMaxU256 / diff, targetOut);
+}
+
 void mineXelis_v1(int tid)
 {
   int64_t localJobCounter;
@@ -16,7 +24,6 @@ void mineXelis_v1(int tid)
   byte powHash[32];
   alignas(64) thread_local byte work[XELIS_BYTES_ARRAY_INPUT] = {0};
   alignas(64) thread_local byte devWork[XELIS_BYTES_ARRAY_INPUT] = {0};
-  alignas(64) thread_local byte FINALWORK[XELIS_BYTES_ARRAY_INPUT] = {0};
 
   alignas(64) thread_local workerData_xelis *worker = (workerData_xelis *)malloc_huge_pages(sizeof(workerData_xelis));
 
@@ -25,6 +32,12 @@ void mineXelis_v1(int tid)
   thread_local std::uniform_real_distribution<double> dist(0, 10000);
 
   thread_local uint64_t localCount = 0;
+
+  // Pre-computed target bytes (LE), recomputed only on difficulty change
+  alignas(8) byte diffBytes[32];
+  alignas(8) byte diffBytes_dev[32];
+  uint64_t cachedDiff = 0;
+  uint64_t cachedDiffDev = 0;
 
 waitForJob:
 
@@ -106,18 +119,27 @@ waitForJob:
       bool devMine = false;
       double which;
       bool submit = false;
-      uint64_t DIFF;
-      Num cmpDiff;
+
+      // Recompute target bytes only when difficulty changes
+      uint64_t curDiff = difficulty;
+      uint64_t curDiffDev = difficultyDev;
+      if (curDiff != cachedDiff) {
+        xelisTargetFromDiff(curDiff, diffBytes);
+        cachedDiff = curDiff;
+      }
+      if (curDiffDev != cachedDiffDev) {
+        xelisTargetFromDiff(curDiffDev, diffBytes_dev);
+        cachedDiffDev = curDiffDev;
+      }
 
       while (localJobCounter == jobCounter)
       {
         CHECK_CLOSE;
         which = dist(rng);
         devMine = (devConnected && devHeight > 0 && which < devFee * 100.0);
-        DIFF = devMine ? difficultyDev : difficulty;
+        uint64_t DIFF = devMine ? curDiffDev : curDiff;
         if (DIFF == 0)
           continue;
-        cmpDiff = ConvertDifficultyToBig(DIFF, ALGO_XELISV2);
 
         uint64_t *nonce = devMine ? &i_dev : &i;
         (*nonce)++;
@@ -128,27 +150,22 @@ waitForJob:
         memcpy(nonceBytes, (byte *)&n, 8);
 
         if (localJobCounter != jobCounter) {
-          if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+          if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
           break;
         }
 
-        memcpy(FINALWORK, WORK, XELIS_BYTES_ARRAY_INPUT);
-        xelis_hash(FINALWORK, *worker, powHash);
+        xelis_hash(WORK, *worker, powHash);
 
-        if (littleEndian())
-        {
-          std::reverse(powHash, powHash + 32);
-        }
-
-        if (++localCount >= 1024) { counter.fetch_add(localCount); localCount = 0; }
+        if (++localCount >= 1024) { cpu_counter.fetch_add(localCount); localCount = 0; }
         submit = (devMine && devConnected) ? !submittingDev : !submitting;
 
         if (localJobCounter != jobCounter || localOurHeight != ourHeight) {
-          if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+          if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
           break;
         }
 
-        if (CheckHash(powHash, cmpDiff, ALGO_XELISV2))
+        byte *cmpTarget = devMine ? diffBytes_dev : diffBytes;
+        if (hashMeetsTarget_le(powHash, cmpTarget))
         {
           if (!submit) {
             for(;;) {
@@ -158,19 +175,14 @@ waitForJob:
               std::this_thread::yield();
             }
           }
-          if (miningProfile.protocol == PROTO_XELIS_XATUM && littleEndian())
-          {
-            std::reverse(powHash, powHash + 32);
-          }
 
           std::string b64 = base64::to_base64(std::string((char *)&WORK[0], XELIS_TEMPLATE_SIZE));
-          std::string foundBlob = hexStr(&WORK[0], XELIS_TEMPLATE_SIZE);
           if (devMine)
           {
             submittingDev = true;
             if (localJobCounter != jobCounter || localDevHeight != devHeight)
             {
-              if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+              if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
               break;
             }
             setcolor(CYAN);
@@ -204,7 +216,7 @@ waitForJob:
             submitting = true;
             if (localJobCounter != jobCounter || localOurHeight != ourHeight)
             {
-              if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+              if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
               break;
             }
             setcolor(BRIGHT_YELLOW);
@@ -229,8 +241,6 @@ waitForJob:
                         {"params", {workerName,
                                     myJob.at("jobId").as_string().c_str(),
                                     hexStr((byte *)&n, 8).c_str()}}}};
-              std::vector<char> diffHex;
-              cmpDiff.print(diffHex, 16);
               break;
             }
             data_ready = true;
@@ -239,11 +249,11 @@ waitForJob:
         }
 
         if (!isConnected) {
-          if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+          if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
           break;
         }
       }
-      if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+      if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
       if (!isConnected)
         break;
     }
@@ -253,7 +263,7 @@ waitForJob:
       std::cerr << "Error in POW Function" << std::endl;
       std::cerr << e.what() << std::endl << std::flush;
       setcolor(BRIGHT_WHITE);
-      if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+      if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
       localJobCounter = -1;
       localOurHeight = -1;
       localDevHeight = -1;
@@ -276,11 +286,10 @@ void mineXelis(int tid)
   thread_local byte powHash[32];
   alignas(64) thread_local byte work[XELIS_TEMPLATE_SIZE] = {0};
   alignas(64) thread_local byte devWork[XELIS_TEMPLATE_SIZE] = {0};
-  alignas(64) thread_local byte FINALWORK[XELIS_TEMPLATE_SIZE] = {0};
 
   // Determine which version to use based on the mining profile
   bool useV3 = (miningProfile.coin.miningAlgo == ALGO_XELISV3);
-  
+
   // Allocate the appropriate worker struct based on version
   alignas(64) thread_local void* worker = nullptr;
   if (useV3) {
@@ -295,6 +304,12 @@ void mineXelis(int tid)
   thread_local std::uniform_real_distribution<double> n2(0, 256);
 
   thread_local uint64_t localCount = 0;
+
+  // Pre-computed target bytes (LE), recomputed only on difficulty change
+  alignas(8) byte diffBytes[32];
+  alignas(8) byte diffBytes_dev[32];
+  uint64_t cachedDiff = 0;
+  uint64_t cachedDiffDev = 0;
 
 waitForJob:
 
@@ -376,11 +391,19 @@ waitForJob:
       bool devMine = false;
       double which;
       bool submit = false;
-      uint64_t DIFF;
-      Num cmpDiff;
-      
-      // Check if we need to update the version during mining
-      // This handles the case where dev mining might use a different version
+
+      // Recompute target bytes only when difficulty changes
+      uint64_t curDiff = difficulty;
+      uint64_t curDiffDev = difficultyDev;
+      if (curDiff != cachedDiff) {
+        xelisTargetFromDiff(curDiff, diffBytes);
+        cachedDiff = curDiff;
+      }
+      if (curDiffDev != cachedDiffDev) {
+        xelisTargetFromDiff(curDiffDev, diffBytes_dev);
+        cachedDiffDev = curDiffDev;
+      }
+
       bool currentUseV3 = useV3;
 
       while (localJobCounter == jobCounter)
@@ -388,21 +411,16 @@ waitForJob:
         CHECK_CLOSE;
         which = dist(rng);
         devMine = (devConnected && devHeight > 0 && which < devFee * 100.0);
-        
-        // Determine which algorithm version to use for this iteration
+
         if (devMine) {
           currentUseV3 = (devMiningProfile.coin.miningAlgo == ALGO_XELISV3);
         } else {
           currentUseV3 = (miningProfile.coin.miningAlgo == ALGO_XELISV3);
         }
-        
-        DIFF = devMine ? difficultyDev : difficulty;
+
+        uint64_t DIFF = devMine ? curDiffDev : curDiff;
         if (DIFF == 0)
           continue;
-        
-        // Use the appropriate algorithm constant for difficulty conversion
-        int algoForDiff = currentUseV3 ? ALGO_XELISV3 : ALGO_XELISV2;
-        cmpDiff = ConvertDifficultyToBig(DIFF, algoForDiff);
 
         uint64_t *nonce = devMine ? &i_dev : &i;
         (*nonce)++;
@@ -413,49 +431,44 @@ waitForJob:
         memcpy(nonceBytes, (byte *)&n, 8);
 
         if (localJobCounter != jobCounter) {
-          if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+          if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
           break;
         }
 
-        memcpy(FINALWORK, WORK, XELIS_TEMPLATE_SIZE);
-
-        // Call the appropriate hash function based on version
+        // Hash directly from WORK (nonce already written in place)
         if (currentUseV3) {
           bool is_ht = xelis_v3_use_hybrid && (unsigned)tid > xelis_v3_ht_threshold;
           if (xelis_v3_use_merged) {
             if (is_ht)
-              xelis_hash_v3_merged_nt(FINALWORK, *(workerData_xelis_v3*)worker, powHash);
+              xelis_hash_v3_merged_nt(WORK, *(workerData_xelis_v3*)worker, powHash);
             else
-              xelis_hash_v3_merged(FINALWORK, *(workerData_xelis_v3*)worker, powHash);
+              xelis_hash_v3_merged(WORK, *(workerData_xelis_v3*)worker, powHash);
           } else if (xelis_v3_use_switch) {
             if (is_ht)
-              xelis_hash_v3_switch_nt(FINALWORK, *(workerData_xelis_v3*)worker, powHash);
+              xelis_hash_v3_switch_nt(WORK, *(workerData_xelis_v3*)worker, powHash);
             else
-              xelis_hash_v3_switch(FINALWORK, *(workerData_xelis_v3*)worker, powHash);
+              xelis_hash_v3_switch(WORK, *(workerData_xelis_v3*)worker, powHash);
           } else {
             if (is_ht)
-              xelis_hash_v3_nt(FINALWORK, *(workerData_xelis_v3*)worker, powHash);
+              xelis_hash_v3_nt(WORK, *(workerData_xelis_v3*)worker, powHash);
             else
-              xelis_hash_v3(FINALWORK, *(workerData_xelis_v3*)worker, powHash);
+              xelis_hash_v3(WORK, *(workerData_xelis_v3*)worker, powHash);
           }
         } else {
-          xelis_hash_v2(FINALWORK, *(workerData_xelis_v2*)worker, powHash);
+          xelis_hash_v2(WORK, *(workerData_xelis_v2*)worker, powHash);
         }
 
-        if (littleEndian())
-        {
-          std::reverse(powHash, powHash + 32);
-        }
-
-        if (++localCount >= 1024) { counter.fetch_add(localCount); localCount = 0; }
+        if (++localCount >= 1024) { cpu_counter.fetch_add(localCount); localCount = 0; }
         submit = (devMine && devConnected) ? !submittingDev : !submitting;
 
         if (localJobCounter != jobCounter || localOurHeight != ourHeight) {
-          if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+          if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
           break;
         }
 
-        if (CheckHash(powHash, cmpDiff, algoForDiff))
+        // Fast LE byte comparison (no bignum, no hex, no reverse)
+        byte *cmpTarget = devMine ? diffBytes_dev : diffBytes;
+        if (hashMeetsTarget_le(powHash, cmpTarget))
         {
           if (!submit) {
             for(;;) {
@@ -465,18 +478,13 @@ waitForJob:
               std::this_thread::yield();
             }
           }
-          if (miningProfile.protocol == PROTO_XELIS_XATUM && littleEndian())
-          {
-            std::reverse(powHash, powHash + 32);
-          }
 
           std::string b64 = base64::to_base64(std::string((char *)&WORK[0], XELIS_TEMPLATE_SIZE));
-          std::string foundBlob = hexStr(&WORK[0], XELIS_TEMPLATE_SIZE);
           if (devMine)
           {
             if (localJobCounter != jobCounter || localDevHeight != devHeight)
             {
-              if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+              if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
               break;
             }
             submittingDev = true;
@@ -510,7 +518,7 @@ waitForJob:
           {
             if (localJobCounter != jobCounter || localOurHeight != ourHeight)
             {
-              if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+              if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
               break;
             }
             submitting = true;
@@ -536,8 +544,6 @@ waitForJob:
                         {"params", {workerName,
                                     myJob.at("jobId").as_string().c_str(),
                                     hexStr((byte *)&n, 8).c_str()}}}};
-              std::vector<char> diffHex;
-              cmpDiff.print(diffHex, 16);
               break;
             }
             data_ready = true;
@@ -548,11 +554,11 @@ waitForJob:
         if (!isConnected) {
           data_ready = true;
           cv.notify_all();
-          if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+          if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
           break;
         }
       }
-      if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+      if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
       if (!isConnected) {
         data_ready = true;
         cv.notify_all();
@@ -566,7 +572,7 @@ waitForJob:
       std::cerr << e.what() << std::endl << std::flush;
       setcolor(BRIGHT_WHITE);
 
-      if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+      if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
 
       localJobCounter = -1;
       localOurHeight = -1;

@@ -196,14 +196,14 @@ waitForJob:
 
                 // Batch update counter every 512 hashes
                 if (++localCount >= 512) {
-                    counter.fetch_add(localCount);
+                    cpu_counter.fetch_add(localCount);
                     localCount = 0;
                 }
 
                 // Check if job changed
                 if (localJobCounter != jobCounter || localOurHeight != ourHeight) {
                     if (localCount) {
-                        counter.fetch_add(localCount);
+                        cpu_counter.fetch_add(localCount);
                         localCount = 0;
                     }
                     break;
@@ -229,7 +229,7 @@ waitForJob:
                     // Verify still valid
                     if (localJobCounter != jobCounter || localHeightCheck != heightCheck) {
                         if (localCount) {
-                            counter.fetch_add(localCount);
+                            cpu_counter.fetch_add(localCount);
                             localCount = 0;
                         }
                         break;
@@ -329,7 +329,7 @@ waitForJob:
 
                 if (!isConnected) {
                     if (localCount) {
-                        counter.fetch_add(localCount);
+                        cpu_counter.fetch_add(localCount);
                         localCount = 0;
                     }
                     break;
@@ -337,7 +337,7 @@ waitForJob:
             }
 
             if (localCount) {
-                counter.fetch_add(localCount);
+                cpu_counter.fetch_add(localCount);
                 localCount = 0;
             }
 
@@ -351,7 +351,7 @@ waitForJob:
             setcolor(BRIGHT_WHITE);
 
             if (localCount) {
-                counter.fetch_add(localCount);
+                cpu_counter.fetch_add(localCount);
                 localCount = 0;
             }
 

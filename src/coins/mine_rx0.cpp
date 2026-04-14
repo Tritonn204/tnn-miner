@@ -544,7 +544,7 @@ waitForJob:
           
           localCount++;
           if (localCount >= 256) { 
-            counter.fetch_add(localCount); 
+            cpu_counter.fetch_add(localCount); 
             localCount = 0; 
           }
           
@@ -576,7 +576,7 @@ waitForJob:
             int64_t &rH = devMine ? devHeight : ourHeight;
             int64_t &lH = devMine ? localDevHeight : localUserHeight;
             if (localJobCounter != jobCounter || rH != lH) {
-              if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+              if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
               break;
             }
 
@@ -585,7 +585,7 @@ waitForJob:
 
               if (localJobCounter != jobCounter || localDevHeight != devHeight) {
                 submittingDev = false;
-                if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+                if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
                 break;
               }
 
@@ -611,7 +611,7 @@ waitForJob:
 
               if (localJobCounter != jobCounter || localUserHeight  != ourHeight) {
                 submitting = false;
-                if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+                if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
                 break;
               }
 
@@ -673,7 +673,7 @@ waitForJob:
         randomx_calculate_hash_last(vm, powHash);
         
         if (!isConnected) {
-          if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+          if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
           break;
         }
       }
@@ -686,7 +686,7 @@ waitForJob:
           globalBatchSalt = (globalBatchSalt + jobCounter) ^ (rand() & 0xFFFFFF);
         }
       }
-      if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+      if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
     }
     catch (std::exception& e) {
       setcolor(RED);
@@ -704,7 +704,7 @@ waitForJob:
       }
       localCacheKey = "";
       globalInDevBatch.store(false);
-      if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+      if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
     }
     if (!isConnected)
       break;
@@ -714,7 +714,7 @@ waitForJob:
     randomx_destroy_vm(vm);
     vm = nullptr;
   }
-  if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+  if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
   localCacheKey = "";
  
   goto waitForJob;

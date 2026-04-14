@@ -117,7 +117,9 @@ uint64_t v      = execute_operation(op_raw, a, b, c, r, result, i, j);
         }
 
         addr_a = modular_power_fast(addr_a, addr_b, result);
-        addr_b = isqrt(result) * (r + 1) * isqrt(addr_a);
+        uint64_t sq_r, sq_a;
+        isqrt_pair(result, addr_a, &sq_r, &sq_a);
+        addr_b = sq_r * (r + 1) * sq_a;
     }
 }
 
@@ -523,14 +525,14 @@ namespace xelis_tests_v3
 
     __attribute__((cold)) bool test_reused_scratchpad()
     {
-        workerData_xelis_v3 worker;
+        auto worker = std::make_unique<workerData_xelis_v3>();
         byte input[112];
         srand(time(NULL));
         for (int i = 0; i < 112; i++) input[i] = rand() & 0xFF;
 
         byte h1[XELIS_HASH_SIZE], h2[XELIS_HASH_SIZE];
-        xelis_hash_v3(input, worker, h1);
-        xelis_hash_v3(input, worker, h2);
+        xelis_hash_v3(input, *worker, h1);
+        xelis_hash_v3(input, *worker, h2);
 
         bool ok = std::memcmp(h1, h2, XELIS_HASH_SIZE) == 0;
         std::cout << (ok ? "PASS" : "FAIL") << " test_reused_scratchpad\n";
@@ -635,12 +637,12 @@ namespace xelis_tests_v3
     __attribute__((cold)) bool test_stage3_single_iteration()
     {
         byte input[112] = {0};
-        workerData_xelis_v3 worker;
-        memset(worker.scratchPad, 0, XELIS_MEMORY_SIZE_V3 * 8);
-        get_stage_1()(input, worker.scratchPad, 112);
+        auto worker = std::make_unique<workerData_xelis_v3>();
+        memset(worker->scratchPad, 0, XELIS_MEMORY_SIZE_V3 * 8);
+        get_stage_1()(input, worker->scratchPad, 112);
 
-        uint64_t *mem_buffer_a = worker.scratchPad;
-        uint64_t *mem_buffer_b = worker.scratchPad + XELIS_BUFFER_SIZE_V3;
+        uint64_t *mem_buffer_a = worker->scratchPad;
+        uint64_t *mem_buffer_b = worker->scratchPad + XELIS_BUFFER_SIZE_V3;
         uint64_t addr_a = mem_buffer_b[XELIS_BUFFER_SIZE_V3 - 1];
         uint64_t addr_b = mem_buffer_a[XELIS_BUFFER_SIZE_V3 - 1] >> 32;
 
@@ -1019,8 +1021,8 @@ struct XelisTuneConfig {
 
 __attribute__((cold)) void xelis_tune_v3(int num_threads)
 {
-    constexpr double WARMUP_SEC  = 1.0;
-    constexpr double BENCH_SEC   = 2.0;
+    constexpr double WARMUP_SEC  = 2.0;
+    constexpr double BENCH_SEC   = 3.0;
 
     unsigned phys = std::thread::hardware_concurrency();
     unsigned ht_thresh = (std::min)(phys, (unsigned)num_threads);
@@ -1036,14 +1038,14 @@ __attribute__((cold)) void xelis_tune_v3(int num_threads)
     XelisTuneConfig configs[] = {
         { "pipe+goto",           s1_pipe,   nullptr,  s3_goto,   false, false, false, false },
         { "pipe+goto+hyb",      s1_pipe,   s1_nt,    s3_goto,   false, false, false, true  },
-        { "pipe+switch",        s1_pipe,   nullptr,  s3_sw,     false, true,  false, false },
-        { "pipe+switch+hyb",    s1_pipe,   s1_nt,    s3_sw,     false, true,  false, true  },
+        // { "pipe+switch",        s1_pipe,   nullptr,  s3_sw,     false, true,  false, false },
+        // { "pipe+switch+hyb",    s1_pipe,   s1_nt,    s3_sw,     false, true,  false, true  },
         { "pipe+merged",        s1_pipe,   nullptr,  s3_merge,  false, false, true,  false },
         { "pipe+merged+hyb",    s1_pipe,   s1_nt,    s3_merge,  false, false, true,  true  },
         { "ser+goto",           s1_serial, nullptr,  s3_goto,   true,  false, false, false },
         { "ser+goto+hyb",       s1_serial, s1_nt,    s3_goto,   true,  false, false, true  },
-        { "ser+switch",         s1_serial, nullptr,  s3_sw,     true,  true,  false, false },
-        { "ser+switch+hyb",     s1_serial, s1_nt,    s3_sw,     true,  true,  false, true  },
+        // { "ser+switch",         s1_serial, nullptr,  s3_sw,     true,  true,  false, false },
+        // { "ser+switch+hyb",     s1_serial, s1_nt,    s3_sw,     true,  true,  false, true  },
         { "ser+merged",         s1_serial, nullptr,  s3_merge,  true,  false, true,  false },
         { "ser+merged+hyb",     s1_serial, s1_nt,    s3_merge,  true,  false, true,  true  },
     };

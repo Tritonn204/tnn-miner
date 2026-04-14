@@ -115,19 +115,19 @@ waitForJob:
         be32enc(FINALWORK + 76, n);
 
         if (localJobCounter != jobCounter) {
-          if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+          if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
           break;
         }
 
         RinHash::hash(powHash, FINALWORK, devMine ? &blake3_prefix_dev : &blake3_prefix_main);
 
         uint32_t *currentTarget = devMine ? targetWords_dev : targetWords;
-        if (++localCount >= 512) { counter.fetch_add(localCount); localCount = 0; }
+        if (++localCount >= 512) { cpu_counter.fetch_add(localCount); localCount = 0; }
 
         submit = (devMine && devConnected) ? !submittingDev : !submitting;
 
         if (localJobCounter != jobCounter || localOurHeight != ourHeight) {
-          if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+          if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
           break;
         }
 
@@ -150,7 +150,7 @@ waitForJob:
           {
             submittingDev = true;
             if (localJobCounter != jobCounter || localDevHeight != devHeight) {
-              if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+              if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
               break;
             }
             setcolor(CYAN);
@@ -165,7 +165,7 @@ waitForJob:
           {
             submitting = true;
             if (localJobCounter != jobCounter || localOurHeight != ourHeight) {
-              if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+              if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
               break;
             }
             setcolor(BRIGHT_YELLOW);
@@ -183,11 +183,11 @@ waitForJob:
         {
           data_ready = true;
           cv.notify_all();
-          if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+          if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
           break;
         }
       }
-      if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+      if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
     }
     catch (std::exception &e)
     {
@@ -195,7 +195,7 @@ waitForJob:
       std::cerr << "Error in POW Function: " << e.what() << std::endl << std::flush;
       setcolor(BRIGHT_WHITE);
 
-      if (localCount) { counter.fetch_add(localCount); localCount = 0; }
+      if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
 
       localJobCounter = -1;
       localOurHeight = -1;

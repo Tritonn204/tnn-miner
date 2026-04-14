@@ -187,7 +187,7 @@ waitForJob:
         gr_hash(hash, FINALWORK, FINALWORK2, tid);
         
         uint32_t *currentTarget = devMine ? targetWords_dev : targetWords;
-        counter.fetch_add(2);  // GhostRider does 2 hashes at once
+        cpu_counter.fetch_add(2);  // GhostRider does 2 hashes at once
         
         submit = (devMine && devConnected) ? !submittingDev : !submitting;
         
