@@ -502,16 +502,20 @@ static inline uint64_t modular_power_fast(uint64_t base, uint64_t exp, uint64_t 
 static inline void isqrt_pair(uint64_t x0, uint64_t x1,
                               uint64_t *r0, uint64_t *r1)
 {
+#if defined(__x86_64__)
     __m128d v = _mm_set_pd((double)x1, (double)x0);
     v = _mm_sqrt_pd(v);
     uint64_t q0 = (uint64_t)_mm_cvtsd_f64(v);
     uint64_t q1 = (uint64_t)_mm_cvtsd_f64(_mm_unpackhi_pd(v, v));
-    /* one-step integer correction each */
-
-    // q0 -= (q0 * q0 > x0);
-    // q0 += ((q0 + 1) * (q0 + 1) <= x0);
-    // q1 -= (q1 * q1 > x1);
-    // q1 += ((q1 + 1) * (q1 + 1) <= x1);
+#elif defined(__aarch64__)
+    double d0 = (double)x0, d1 = (double)x1;
+    float64x2_t v = vsqrtq_f64(vsetq_lane_f64(d1, vdupq_n_f64(d0), 1));
+    uint64_t q0 = (uint64_t)vgetq_lane_f64(v, 0);
+    uint64_t q1 = (uint64_t)vgetq_lane_f64(v, 1);
+#else
+    uint64_t q0 = (uint64_t)sqrt((double)x0);
+    uint64_t q1 = (uint64_t)sqrt((double)x1);
+#endif
     *r0 = q0; *r1 = q1;
 }
 
