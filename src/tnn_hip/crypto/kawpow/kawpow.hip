@@ -250,7 +250,9 @@ void kawpow_hash_kernel(
     uint32_t                     block_number,
     uint32_t                     dag_num_items_div, // full_dataset_num_items / 2
     uint32_t* __restrict__       d_result_hashes,  // nullable: [hash_id*16+0..7]=mix, [+8..15]=final
-    const uint32_t* __restrict__ d_l1_cache)       // first 16KB of DAG, uploaded once per epoch
+    const uint32_t* __restrict__ d_l1_cache,       // first 16KB of DAG, uploaded once per epoch
+    uint32_t                     barrett_m,        // floor(2^32 / dag_num_items)
+    uint32_t                     barrett_shift)    // extra shift (0 for all KawPow epochs)
 {
     // ---- Thread → lane / hash mapping ----
     const uint32_t global_id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -311,7 +313,12 @@ void kawpow_hash_kernel(
     {
         // ---- DAG address (broadcast from the designated lane) ----
         uint32_t dag_addr = shfl_lane16(mix[0], loop % PROGPOW_LANES);
-        dag_addr %= dag_num_items_div;
+        // Barrett reduction: floor-based m underestimates q by ≤1, single correction
+        {
+            uint32_t q = __umulhi(dag_addr, barrett_m) >> barrett_shift;
+            dag_addr -= q * dag_num_items_div;
+            if (dag_addr >= dag_num_items_div) dag_addr -= dag_num_items_div;
+        }
 
         /* PROGPOW_PROGRAM */
 

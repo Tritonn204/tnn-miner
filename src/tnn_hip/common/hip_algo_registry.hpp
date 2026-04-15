@@ -1290,7 +1290,7 @@ struct KawPowAlgoData {
     size_t    dag_size_bytes = 0;
 
     // Barrett reduction for dag_addr %= dag_num_items (precomputed on host)
-    uint32_t  barrett_m = 0;     // ceil(2^(32+shift) / dag_num_items)
+    uint32_t  barrett_m = 0;     // floor(2^(32+shift) / dag_num_items)
     uint32_t  barrett_shift = 0; // extra shift bits
 
     // Occupancy-based config: set by pre_tune, consumed by configure_batch
@@ -1339,16 +1339,12 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
 
     // Barrett reduction constants for dag_addr %= dag_num_items
     // q = __umulhi(dag_addr, m) >> s;  r = dag_addr - q * d;  if (r >= d) r -= d;
-    // Pick smallest s where ceil(2^(32+s)/d) fits in u32.
+    // Floor-based: underestimates q by ≤1, single correction fixes it.
     // For all KawPow epochs d < 2^26, so s=0 always works.
     {
         uint32_t d = kp->dag_num_items;
         uint32_t s = 0;
-        uint64_t m64 = ((1ULL << 32) + d - 1) / d; // ceil(2^32 / d)
-        if (m64 > 0xFFFFFFFFULL) { // shouldn't happen for d >= 2, but be safe
-            s = 1;
-            m64 = ((1ULL << 33) + d - 1) / d;
-        }
+        uint64_t m64 = (1ULL << 32) / d; // floor(2^32 / d)
         kp->barrett_m = (uint32_t)m64;
         kp->barrett_shift = s;
     }
@@ -1530,13 +1526,15 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
                 uint32_t dag_items = kp->dag_num_items;
                 uint32_t* rh = nullptr;
                 uint32_t* l1 = kp->d_l1_cache;
+                uint32_t bm = kp->barrett_m;
+                uint32_t bs2 = kp->barrett_shift;
                 uint64_t nonce = 0;
 
                 uint32_t* hdr = (uint32_t*)bh;
                 uint32_t* dag = kp->d_dag;
                 void* args[] = {
                     &hdr, &dag, &nonce, &batch,
-                    &bt, &bs_sol, &block_number, &dag_items, &rh, &l1,
+                    &bt, &bs_sol, &block_number, &dag_items, &rh, &l1, &bm, &bs2,
                 };
 
                 // Warmup: 5s to reach thermal steady state
@@ -1685,11 +1683,13 @@ inline bool kawpow_execute(
     uint32_t dag_num_items = kp->dag_num_items;
     uint32_t* result_hashes = nullptr;
     uint32_t* l1_cache = kp->d_l1_cache;
+    uint32_t b_m = kp->barrett_m;
+    uint32_t b_s = kp->barrett_shift;
 
     void* args[] = {
         &header, &dag, &nonce_start, &batch_size,
         &target, &solutions, &block_number, &dag_num_items, &result_hashes,
-        &l1_cache,
+        &l1_cache, &b_m, &b_s,
     };
 
     size_t shared_mem = 0; // no LDS — L1 cache lives in global memory now
@@ -1748,11 +1748,13 @@ inline void kawpow_post_tune(const TuningResult& result,
     uint32_t dag_num_items = kp->dag_num_items;
     uint32_t* result_hashes = nullptr;
     uint32_t* l1_cache = kp->d_l1_cache;
+    uint32_t b_m = kp->barrett_m;
+    uint32_t b_s = kp->barrett_shift;
 
     void* args[] = {
         &header, &dag, &nonce_start, &batch_size,
         &d_target, &d_solutions, &block_number, &dag_num_items, &result_hashes,
-        &l1_cache,
+        &l1_cache, &b_m, &b_s,
     };
 
     // ---- Sustained bench with period 0 (matches shootout) ----

@@ -304,11 +304,13 @@ int kawpow_gpu_test()
         uint32_t batch_size  = 1;
         uint32_t block_num   = (uint32_t)tv.block_number;
         uint32_t dagdiv      = dag.dag_num_items_div;
+        uint32_t b_m = (uint32_t)((1ULL << 32) / dagdiv); // floor-based Barrett
+        uint32_t b_s = 0;
 
         void* args[] = {
             &d_header, &d_dag, &nonce, &batch_size,
             &d_target, &d_solutions, &block_num, &dagdiv, &d_results,
-            &d_l1_cache,
+            &d_l1_cache, &b_m, &b_s,
         };
 
         KP_CHECK(oroModuleLaunchKernel(
