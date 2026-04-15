@@ -217,44 +217,87 @@ inline std::string generate_program(int block_number) {
         "        // ProgPoW program for period %llu (block %d)\n",
         (unsigned long long)period, block_number);
 
-    // ---- Phase 1: generate cache+math code (advances RNG in spec order) ----
-    std::string body;
-    body.reserve(6144);
-
-    // Shared temps — one declaration, reused across all rounds
-    body += "        uint32_t _c, _m;\n";
+    // ---- Phase 1a: collect all ops (RNG order preserved exactly) ----
+    struct CacheOp { uint32_t src, dst, sel; };
+    struct MathOp  { uint32_t src1, src2, sel1, dst, sel2; };
+    CacheOp cache_ops[CNT_CACHE];
+    MathOp  math_ops[CNT_MATH];
 
     constexpr int max_ops = (CNT_CACHE > CNT_MATH) ? CNT_CACHE : CNT_MATH;
 
     for (int i = 0; i < max_ops; ++i) {
-
         if (i < (int)CNT_CACHE) {
-            uint32_t src = state.next_src();
-            uint32_t dst = state.next_dst();
-            uint32_t sel = state.rng();
+            cache_ops[i] = { state.next_src(), state.next_dst(), state.rng() };
+        }
+        if (i < (int)CNT_MATH) {
+            uint32_t sr = state.rng() % (NUM_REGS * (NUM_REGS - 1));
+            uint32_t s1 = sr % NUM_REGS, s2 = sr / NUM_REGS;
+            if (s2 >= s1) ++s2;
+            uint32_t sel1 = state.rng();
+            uint32_t mdst = state.next_dst();
+            uint32_t sel2 = state.rng();
+            math_ops[i] = { s1, s2, sel1, mdst, sel2 };
+        }
+    }
 
-            // AND mask instead of modulo (4096 = 2^12)
-            body += "        _c = l1_cache[" + reg(src) + " & 0xFFFu];\n";
-            body += "        " + emit_merge(reg(dst), "_c", sel) + "\n";
+    // ---- Phase 1b: emit with ILP cache read pairing ----
+    // When safe, issue two LDS reads back-to-back so the compiler can
+    // overlap them (LDS has 2-cycle latency, dual-issue hides it).
+    // Safe when: cache[i+1].src is NOT written by cache[i].merge or math[i].
+
+    // Helper lambda to emit a math op block.
+    // Always inlines math into merge — eliminates _m temp, lets compiler see
+    // the full expression (NVIDIA emits lop3 for X^(Y&Z), X^(Y|Z), etc.)
+    auto emit_math_block = [&](std::string& out, const MathOp& m) {
+        // Try explicit fusion first (exposes v_add3/v_xor3 3-operand patterns)
+        std::string fused = try_fuse_math_merge(reg(m.dst), reg(m.src1), reg(m.src2), m.sel1, m.sel2);
+        if (!fused.empty()) {
+            out += "        " + fused + "\n";
+        } else {
+            // Inline: emit merge with math expression as operand (parenthesized)
+            std::string math_expr = "(" + emit_math(reg(m.src1), reg(m.src2), m.sel1) + ")";
+            out += "        " + emit_merge(reg(m.dst), math_expr, m.sel2) + "\n";
+        }
+    };
+
+    std::string body;
+    body.reserve(6144);
+    body += "        uint32_t _c0, _c1;\n";
+
+    int i = 0;
+    while (i < max_ops) {
+        bool did_pair = false;
+
+        if (i < (int)CNT_CACHE && i + 1 < (int)CNT_CACHE) {
+            uint32_t next_src = cache_ops[i + 1].src;
+            bool safe = (cache_ops[i].dst != next_src);
+            if (safe && i < (int)CNT_MATH)
+                safe = (math_ops[i].dst != next_src);
+
+            if (safe) {
+                // Two cache reads back-to-back (LDS ILP)
+                body += "        _c0 = l1_cache[" + reg(cache_ops[i].src) + " & 0xFFFu];\n";
+                body += "        _c1 = l1_cache[" + reg(cache_ops[i+1].src) + " & 0xFFFu];\n";
+                // First cache merge
+                body += "        " + emit_merge(reg(cache_ops[i].dst), "_c0", cache_ops[i].sel) + "\n";
+                // First math
+                if (i < (int)CNT_MATH) emit_math_block(body, math_ops[i]);
+                // Second cache merge (after first math, same as original relative order)
+                body += "        " + emit_merge(reg(cache_ops[i+1].dst), "_c1", cache_ops[i+1].sel) + "\n";
+                // Second math
+                if (i + 1 < (int)CNT_MATH) emit_math_block(body, math_ops[i + 1]);
+                i += 2;
+                did_pair = true;
+            }
         }
 
-        if (i < (int)CNT_MATH) {
-            uint32_t src_rnd = state.rng() % (NUM_REGS * (NUM_REGS - 1));
-            uint32_t src1 = src_rnd % NUM_REGS;
-            uint32_t src2 = src_rnd / NUM_REGS;
-            if (src2 >= src1) ++src2;
-
-            uint32_t sel1 = state.rng();
-            uint32_t dst  = state.next_dst();
-            uint32_t sel2 = state.rng();
-
-            std::string fused = try_fuse_math_merge(reg(dst), reg(src1), reg(src2), sel1, sel2);
-            if (!fused.empty()) {
-                body += "        " + fused + "\n";
-            } else {
-                body += "        _m = " + emit_math(reg(src1), reg(src2), sel1) + ";\n";
-                body += "        " + emit_merge(reg(dst), "_m", sel2) + "\n";
+        if (!did_pair) {
+            if (i < (int)CNT_CACHE) {
+                body += "        _c0 = l1_cache[" + reg(cache_ops[i].src) + " & 0xFFFu];\n";
+                body += "        " + emit_merge(reg(cache_ops[i].dst), "_c0", cache_ops[i].sel) + "\n";
             }
+            if (i < (int)CNT_MATH) emit_math_block(body, math_ops[i]);
+            ++i;
         }
     }
 
@@ -295,23 +338,25 @@ inline std::string generate_program(int block_number) {
 }
 
 // ---------------------------------------------------------------------------
-// inject_coin_padding — replaces /* KAWPOW_COIN_PADDING */ with a constant array
+// inject_coin_padding — replaces /* KAWPOW_COIN_PADDING */ with constexpr scalars
+//
+// Using individual constexpr instead of __constant__ array lets the RTC compiler
+// embed each value as an inline immediate (s_mov_b32 imm) — zero constant-memory loads.
 // ---------------------------------------------------------------------------
 inline std::string inject_coin_padding(const std::string& kernel_source,
                                        const kawpow_coin_padding_t& padding) {
-    std::string arr = "__device__ __constant__ static const uint32_t kawpow_coin_padding[15] = {\n";
-    char buf[64];
+    std::string decls;
+    char buf[80];
     for (int i = 0; i < 15; ++i) {
-        snprintf(buf, sizeof(buf), "    0x%08xu%s\n", padding.words[i], i < 14 ? "," : "");
-        arr += buf;
+        snprintf(buf, sizeof(buf), "constexpr uint32_t KPAD%d = 0x%08xu;\n", i, padding.words[i]);
+        decls += buf;
     }
-    arr += "};\n";
 
     std::string result = kernel_source;
     const std::string marker = "/* KAWPOW_COIN_PADDING */";
     auto pos = result.find(marker);
     if (pos != std::string::npos)
-        result.replace(pos, marker.size(), arr);
+        result.replace(pos, marker.size(), decls);
     return result;
 }
 

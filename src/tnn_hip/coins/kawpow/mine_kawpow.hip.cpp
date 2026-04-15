@@ -81,15 +81,14 @@ static int compile_kawpow_kernel(
     const kawpow_coin_padding_t& padding,
     bool is_amd,
     const oroDeviceProp_t& props,
-    oroFunction_t& out_func)
+    oroFunction_t& out_func,
+    oroModule_t* out_module = nullptr)
 {
     std::string src(hip_kawpow_source::SRC_TNN_HIP_CRYPTO_KAWPOW_KAWPOW_HIP_SOURCE);
     src = kawpow_proggen::inject_coin_padding(src, padding);
     src = kawpow_proggen::inject_program(src, block_number);
 
     auto& compiler = RTCCompiler::instance();
-
-    // kawpow.hip is self-contained — no RTC headers needed
 
     std::vector<std::string> opts;
     if (is_amd) {
@@ -108,6 +107,7 @@ static int compile_kawpow_kernel(
 
     auto ck = compiler.compile_from_source(src, name, "kawpow_hash_kernel", opts);
     out_func = ck.function;
+    if (out_module) *out_module = ck.module;
     return 0;
 }
 
@@ -313,8 +313,7 @@ int kawpow_gpu_test()
             &d_l1_cache, &b_m, &b_s,
         };
 
-        // shared mem: seed_state[8] per hash in LDS
-        size_t smem = (size_t)(block_size / 16) * 8 * sizeof(uint32_t);
+        size_t smem = kawpow_shared_mem(block_size);
         KP_CHECK(oroModuleLaunchKernel(
             kernel_func, grid_size, 1, 1, block_size, 1, 1,
             smem, nullptr, args, nullptr));
@@ -351,7 +350,137 @@ int kawpow_gpu_test()
         fflush(stdout);
     }
 
+    // ================================================================
+    // Split strategy tests — same test vectors, 3-kernel pipeline
+    // ================================================================
+    printf("\n[KawPow] Split strategy validation\n");
+    printf("----------------------------------------\n");
+    fflush(stdout);
+
+    int split_pass = 0, split_fail = 0;
+    last_period = -1;
+    oroFunction_t seed_fn = nullptr, progpow_fn = nullptr, final_fn = nullptr;
+    oroModule_t split_module = nullptr;
+
+    // Intermediate buffer: 16 uint32 per hash
+    uint32_t* d_intermediate = nullptr;
+    KP_CHECK(oroMalloc((oroDeviceptr*)&d_intermediate, 16 * sizeof(uint32_t)));
+
+    for (int t = 0; t < NUM_GPU_TESTS; t++) {
+        const auto& tv = gpu_test_vecs[t];
+        int period = tv.block_number / 3;
+
+        printf("[Split %d] block=%d period=%d nonce=%s\n",
+               t + 1, tv.block_number, period, tv.nonce_hex);
+        fflush(stdout);
+
+        // Recompile if period changed
+        if (period != last_period) {
+            oroFunction_t mono_fn = nullptr;
+            printf("         Compiling kernel for period %d...\n", period);
+            fflush(stdout);
+            if (compile_kawpow_kernel(tv.block_number, KAWPOW_PADDING_RVN,
+                                      is_amd, props, mono_fn, &split_module) != 0) {
+                fprintf(stderr, "         Compile failed!\n");
+                split_fail++;
+                continue;
+            }
+            // Extract split kernels from the same module
+            oroModuleGetFunction(&seed_fn,    split_module, "kawpow_seed_kernel");
+            oroModuleGetFunction(&progpow_fn, split_module, "kawpow_progpow_kernel");
+            oroModuleGetFunction(&final_fn,   split_module, "kawpow_final_kernel");
+
+            if (!seed_fn || !progpow_fn || !final_fn) {
+                fprintf(stderr, "         Failed to extract split kernels!\n");
+                split_fail++;
+                continue;
+            }
+            last_period = period;
+        }
+
+        // CPU reference
+        ethash::hash256 header = hex_to_h256(tv.header_hex);
+        uint64_t nonce = hex_to_u64(tv.nonce_hex);
+        auto cpu_result = progpow::hash(*ctx, tv.block_number, header, nonce);
+
+        // Upload header
+        KP_CHECK(oroMemcpy(d_header, header.word32s, 32, oroMemcpyHostToDevice));
+
+        // Clear solutions + results + intermediate
+        uint32_t zero = 0;
+        KP_CHECK(oroMemcpy(d_solutions, &zero, 4, oroMemcpyHostToDevice));
+        uint32_t zeros[16] = {};
+        KP_CHECK(oroMemcpy(d_results, zeros, 64, oroMemcpyHostToDevice));
+        KP_CHECK(oroMemset((oroDeviceptr)d_intermediate, 0, 64));
+
+        uint32_t batch_size = 1;
+        uint32_t dagdiv = dag.dag_num_items_div;
+        uint32_t b_m = (uint32_t)((1ULL << 32) / dagdiv);
+        uint32_t b_s = 0;
+
+        // Seed kernel: 1 thread per hash
+        {
+            void* args[] = { &d_header, &nonce, &batch_size, &d_intermediate };
+            KP_CHECK(oroModuleLaunchKernel(seed_fn, 1, 1, 1, 1, 1, 1,
+                                           0, nullptr, args, nullptr));
+            KP_CHECK(oroDeviceSynchronize());
+        }
+
+        // Progpow kernel: 16 threads per hash (1 block of 16)
+        {
+            void* args[] = { &d_dag, &batch_size, &dagdiv, &d_l1_cache,
+                             &b_m, &b_s, &d_intermediate };
+            KP_CHECK(oroModuleLaunchKernel(progpow_fn, 1, 1, 1, 16, 1, 1,
+                                           kawpow_shared_mem_split(16), nullptr, args, nullptr));
+            KP_CHECK(oroDeviceSynchronize());
+        }
+
+        // Final kernel: 1 thread per hash
+        {
+            void* args[] = { &nonce, &batch_size, &d_target, &d_solutions,
+                             &d_results, &d_intermediate };
+            KP_CHECK(oroModuleLaunchKernel(final_fn, 1, 1, 1, 1, 1, 1,
+                                           0, nullptr, args, nullptr));
+            KP_CHECK(oroDeviceSynchronize());
+        }
+
+        // Download results (16 uint32: 8 mix + 8 final)
+        uint32_t gpu_out[16];
+        KP_CHECK(oroMemcpy(gpu_out, d_results, 64, oroMemcpyDeviceToHost));
+
+        // Compare
+        std::string cpu_mix_hex   = hash256_hex(cpu_result.mix_hash);
+        std::string cpu_final_hex = hash256_hex(cpu_result.final_hash);
+        std::string gpu_mix_hex   = words_hex(gpu_out, 8);
+        std::string gpu_final_hex = words_hex(gpu_out + 8, 8);
+
+        bool mix_ok   = (cpu_mix_hex == gpu_mix_hex);
+        bool final_ok = (cpu_final_hex == gpu_final_hex);
+
+        if (mix_ok && final_ok) {
+            printf("         \033[32mPASS\033[0m mix=%s\n", gpu_mix_hex.c_str());
+            split_pass++;
+        } else {
+            printf("         \033[31mFAIL\033[0m\n");
+            if (!mix_ok) {
+                printf("           mix cpu: %s\n", cpu_mix_hex.c_str());
+                printf("           mix gpu: %s\n", gpu_mix_hex.c_str());
+            }
+            if (!final_ok) {
+                printf("           fin cpu: %s\n", cpu_final_hex.c_str());
+                printf("           fin gpu: %s\n", gpu_final_hex.c_str());
+            }
+            split_fail++;
+        }
+        fflush(stdout);
+    }
+
+    pass += split_pass;
+    fail += split_fail;
+    int total_tests = NUM_GPU_TESTS * 2; // mono + split
+
     // Cleanup
+    oroFree((oroDeviceptr)d_intermediate);
     oroFree((oroDeviceptr)d_dag);
     oroFree((oroDeviceptr)d_l1_cache);
     oroFree((oroDeviceptr)d_header);
@@ -361,7 +490,10 @@ int kawpow_gpu_test()
     oroCtxDestroy(gpu_ctx);
 
     printf("\n========================================\n");
-    printf("[GPU] %d/%d passed", pass, NUM_GPU_TESTS);
+    printf("[GPU] %d/%d passed (mono: %d/%d, split: %d/%d)",
+           pass, total_tests,
+           pass - split_pass, NUM_GPU_TESTS,
+           split_pass, NUM_GPU_TESTS);
     if (fail > 0) printf(", \033[31m%d FAILED\033[0m", fail);
     else          printf(", \033[32mall passed\033[0m");
     printf("\n========================================\n\n");

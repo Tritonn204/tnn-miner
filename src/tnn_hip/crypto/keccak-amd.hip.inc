@@ -204,10 +204,39 @@ static __device__ __forceinline__ uint32_t rotr32(uint32_t x, uint32_t n)
     return (x >> n) | (x << (32u - n));
 }
 
-// BFI pattern: (x & ~c) | (a & c)  →  v_bfi_b32 on AMD
-static __device__ __forceinline__ uint32_t bfi32(uint32_t x, uint32_t a, uint32_t c)
+// χ step: a ^ (~b & c)
+// AMD:    v_xor + v_bfi_b32 (2 instructions)
+// NVIDIA: lop3.b32 0xD2     (1 instruction)
+static __device__ __forceinline__ uint32_t chi32(uint32_t a, uint32_t b, uint32_t c)
 {
-    return (x & ~c) | (a & c);
+#ifdef __HIP_PLATFORM_AMD__
+    uint32_t result;
+    asm volatile("v_bfi_b32 %0, %1, %2, %3"
+                 : "=v"(result) : "v"(b), "v"(a), "v"(a ^ c));
+    return result;
+#else
+    uint32_t result;
+    asm volatile("lop3.b32 %0, %1, %2, %3, 0xD2;"
+                 : "=r"(result) : "r"(a), "r"(b), "r"(c));
+    return result;
+#endif
+}
+
+// 5-way XOR for θ column parity
+// AMD:    4 v_xor (compiler handles)
+// NVIDIA: 2 lop3.b32 0x96 (3-input XOR truth table)
+static __device__ __forceinline__ uint32_t xor5_32(uint32_t a, uint32_t b, uint32_t c, uint32_t d, uint32_t e)
+{
+#ifndef __HIP_PLATFORM_AMD__
+    uint32_t result;
+    asm volatile(
+        "lop3.b32 %0, %1, %2, %3, 0x96;\n\t"
+        "lop3.b32 %0, %0, %4, %5, 0x96;"
+        : "=r"(result) : "r"(a), "r"(b), "r"(c), "r"(d), "r"(e));
+    return result;
+#else
+    return a ^ b ^ c ^ d ^ e;
+#endif
 }
 
 static __device__ void keccak_f800(uint32_t* __restrict__ st)
@@ -221,12 +250,12 @@ static __device__ void keccak_f800(uint32_t* __restrict__ st)
     #pragma unroll
     for (int round = 0; round < 21; round++)
     {
-        // θ
-        b[0] = s[0] ^ s[5] ^ s[10] ^ s[15] ^ s[20];
-        b[1] = s[1] ^ s[6] ^ s[11] ^ s[16] ^ s[21];
-        b[2] = s[2] ^ s[7] ^ s[12] ^ s[17] ^ s[22];
-        b[3] = s[3] ^ s[8] ^ s[13] ^ s[18] ^ s[23];
-        b[4] = s[4] ^ s[9] ^ s[14] ^ s[19] ^ s[24];
+        // θ — column parity
+        b[0] = xor5_32(s[0], s[5], s[10], s[15], s[20]);
+        b[1] = xor5_32(s[1], s[6], s[11], s[16], s[21]);
+        b[2] = xor5_32(s[2], s[7], s[12], s[17], s[22]);
+        b[3] = xor5_32(s[3], s[8], s[13], s[18], s[23]);
+        b[4] = xor5_32(s[4], s[9], s[14], s[19], s[24]);
 
         u = b[4] ^ rotl32(b[1], 1);
         s[0]  ^= u; s[5]  ^= u; s[10] ^= u; s[15] ^= u; s[20] ^= u;
@@ -266,16 +295,16 @@ static __device__ void keccak_f800(uint32_t* __restrict__ st)
         s[7]  = rotl32(s[10],  3);
         s[10] = rotl32(u,      1);
 
-        // χ (BFI pattern — 2 instructions per element on AMD)
+        // χ — platform-optimized (LOP3 on NVIDIA, BFI on AMD)
         #pragma unroll
         for (int y = 0; y < 25; y += 5)
         {
             uint32_t v = s[y], t = s[y + 1];
-            s[y]     = bfi32(s[y]     ^ s[y + 2], s[y],     s[y + 1]);
-            s[y + 1] = bfi32(s[y + 1] ^ s[y + 3], s[y + 1], s[y + 2]);
-            s[y + 2] = bfi32(s[y + 2] ^ s[y + 4], s[y + 2], s[y + 3]);
-            s[y + 3] = bfi32(s[y + 3] ^ v,        s[y + 3], s[y + 4]);
-            s[y + 4] = bfi32(s[y + 4] ^ t,        s[y + 4], v);
+            s[y]     = chi32(s[y],     s[y + 1], s[y + 2]);
+            s[y + 1] = chi32(s[y + 1], s[y + 2], s[y + 3]);
+            s[y + 2] = chi32(s[y + 2], s[y + 3], s[y + 4]);
+            s[y + 3] = chi32(s[y + 3], s[y + 4], v);
+            s[y + 4] = chi32(s[y + 4], v,        t);
         }
 
         // ι
@@ -284,11 +313,11 @@ static __device__ void keccak_f800(uint32_t* __restrict__ st)
 
     // ---- Round 21 (last) — pruned for 8-word output ----
     // θ: full column parity (needs all 25 words)
-    b[0] = s[0] ^ s[5] ^ s[10] ^ s[15] ^ s[20];
-    b[1] = s[1] ^ s[6] ^ s[11] ^ s[16] ^ s[21];
-    b[2] = s[2] ^ s[7] ^ s[12] ^ s[17] ^ s[22];
-    b[3] = s[3] ^ s[8] ^ s[13] ^ s[18] ^ s[23];
-    b[4] = s[4] ^ s[9] ^ s[14] ^ s[19] ^ s[24];
+    b[0] = xor5_32(s[0], s[5], s[10], s[15], s[20]);
+    b[1] = xor5_32(s[1], s[6], s[11], s[16], s[21]);
+    b[2] = xor5_32(s[2], s[7], s[12], s[17], s[22]);
+    b[3] = xor5_32(s[3], s[8], s[13], s[18], s[23]);
+    b[4] = xor5_32(s[4], s[9], s[14], s[19], s[24]);
 
     uint32_t d0 = b[4] ^ rotl32(b[1], 1);
     uint32_t d1 = b[0] ^ rotl32(b[2], 1);
@@ -309,12 +338,12 @@ static __device__ void keccak_f800(uint32_t* __restrict__ st)
     uint32_t t9 = rotl32(s[22] ^ d2, 29);
 
     // χ rows 0–1 only (positions 0–7 are the output)
-    st[0] = (t0 ^ (~t1 & t2)) ^ keccak_f800_rc[21];  // fused ι
-    st[1] = t1 ^ (~t2 & t3);
-    st[2] = t2 ^ (~t3 & t4);
-    st[3] = t3 ^ (~t4 & t0);
-    st[4] = t4 ^ (~t0 & t1);
-    st[5] = t5 ^ (~t6 & t7);
-    st[6] = t6 ^ (~t7 & t8);
-    st[7] = t7 ^ (~t8 & t9);
+    st[0] = chi32(t0, t1, t2) ^ keccak_f800_rc[21];  // fused ι
+    st[1] = chi32(t1, t2, t3);
+    st[2] = chi32(t2, t3, t4);
+    st[3] = chi32(t3, t4, t0);
+    st[4] = chi32(t4, t0, t1);
+    st[5] = chi32(t5, t6, t7);
+    st[6] = chi32(t6, t7, t8);
+    st[7] = chi32(t7, t8, t9);
 }

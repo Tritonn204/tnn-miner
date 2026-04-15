@@ -1281,6 +1281,12 @@ static constexpr int KAWPOW_BENCH_PERIODS = 10;
 // Avoids degenerate period-0 seed (all-zero FNV input). Period = block/3.
 static constexpr int KAWPOW_BENCH_BASE_BLOCK = 3500001;
 
+enum class KawPowStrategy : uint8_t {
+    Mono        = 0,  // Single monolithic kernel (seed keccak + progpow + final keccak)
+    Split       = 1,  // 3 kernels: seed → progpow → final (LDS L1 cache)
+    SplitGlobal = 2,  // 3 kernels: seed → progpow_global → final (global L1, no LDS)
+};
+
 // Per-device KawPow state (DAG, epoch info)
 struct KawPowAlgoData {
     uint32_t* d_dag = nullptr;
@@ -1298,15 +1304,102 @@ struct KawPowAlgoData {
     int       occ_grid_size = 0;    // optimal grid size (total blocks for full occupancy)
 
     // Multi-period bench: compiled kernels for periods 0..N-1
-    oroFunction_t period_kernels[KAWPOW_BENCH_PERIODS] = {};
     oroModule_t   period_modules[KAWPOW_BENCH_PERIODS] = {};
+    oroFunction_t period_mono_kernels[KAWPOW_BENCH_PERIODS] = {};
+    oroFunction_t period_seed_kernels[KAWPOW_BENCH_PERIODS] = {};
+    oroFunction_t period_progpow_kernels[KAWPOW_BENCH_PERIODS] = {};
+    oroFunction_t period_progpow_global_kernels[KAWPOW_BENCH_PERIODS] = {};
+    oroFunction_t period_final_kernels[KAWPOW_BENCH_PERIODS] = {};
     int           num_period_kernels = 0;
+
+    // Split strategy: intermediate buffer (16 uint32 per hash)
+    uint32_t* d_intermediate = nullptr;
+    size_t    intermediate_capacity = 0;  // max hashes the buffer can hold
+
+    // Strategy selection (determined by shootout in pre_tune)
+    KawPowStrategy best_strategy = KawPowStrategy::Mono;
+
+    // Split-specific occupancy config (progpow kernel is the bottleneck)
+    int split_progpow_block = 0;
+    int split_progpow_blocks_per_cu = 0;
+
+    // SplitGlobal-specific occupancy config (progpow_global kernel, 0 LDS)
+    int split_global_progpow_block = 0;
+    int split_global_progpow_blocks_per_cu = 0;
+
+    // Ensure intermediate buffer can hold at least `needed` hashes
+    bool ensure_intermediate(size_t needed) {
+        if (d_intermediate && intermediate_capacity >= needed) return true;
+        if (d_intermediate) oroFree((oroDeviceptr)d_intermediate);
+        size_t bytes = needed * 16 * sizeof(uint32_t);
+        oroError_t err = oroMalloc((oroDeviceptr*)&d_intermediate, bytes);
+        if (err != oroSuccess) { d_intermediate = nullptr; intermediate_capacity = 0; return false; }
+        intermediate_capacity = needed;
+        return true;
+    }
 };
 
+// Shared mem for monolithic kernel: L1 cache + seed_state spill
+inline size_t kawpow_shared_mem_mono(int block_size)
+{
+  return 16384 + (size_t)(block_size / 16) * 8 * sizeof(uint32_t);
+}
+
+// Shared mem for split progpow kernel: L1 cache only (no seed_state needed)
+inline size_t kawpow_shared_mem_split(int /*block_size*/)
+{
+  return 16384;
+}
+
+// Default: mono (used by framework for calc_shared_mem)
 inline size_t kawpow_shared_mem(int block_size)
 {
-  // seed_state[8] spilled to LDS: 8 words × (block_size / 16 hashes) × 4 bytes
-  return (size_t)(block_size / 16) * 8 * sizeof(uint32_t);
+  return kawpow_shared_mem_mono(block_size);
+}
+
+// ---------------------------------------------------------------------------
+// Helper: launch the 3-kernel split pipeline on raw kernel functions
+// seed_block/final_block are tunable via tune_keys (swept in tune_key_probe)
+// ---------------------------------------------------------------------------
+inline void kawpow_launch_split(
+    oroFunction_t seed_fn, oroFunction_t progpow_fn, oroFunction_t final_fn,
+    uint32_t* d_header, uint32_t* d_dag, uint64_t nonce_start, uint32_t batch_size,
+    uint64_t* d_target, uint32_t* d_solutions, uint32_t dag_num_items,
+    uint32_t* d_result_hashes, uint32_t* d_l1_cache,
+    uint32_t barrett_m, uint32_t barrett_shift,
+    uint32_t* d_intermediate,
+    int progpow_grid, int progpow_block,
+    int seed_block, int final_block,
+    oroStream_t stream,
+    size_t progpow_shared_mem = (size_t)-1 /* -1 = use default kawpow_shared_mem_split */)
+{
+    if (progpow_shared_mem == (size_t)-1)
+        progpow_shared_mem = kawpow_shared_mem_split(progpow_block);
+
+    // Kernel A: seed keccak (1 thread/hash, no LDS)
+    int seed_grid = ((int)batch_size + seed_block - 1) / seed_block;
+    {
+        void* args[] = { &d_header, &nonce_start, &batch_size, &d_intermediate };
+        oroModuleLaunchKernel(seed_fn, seed_grid, 1, 1, seed_block, 1, 1,
+                              0, stream, args, nullptr);
+    }
+
+    // Kernel B: progpow main loop
+    {
+        void* args[] = { &d_dag, &batch_size, &dag_num_items, &d_l1_cache,
+                         &barrett_m, &barrett_shift, &d_intermediate };
+        oroModuleLaunchKernel(progpow_fn, progpow_grid, 1, 1, progpow_block, 1, 1,
+                              progpow_shared_mem, stream, args, nullptr);
+    }
+
+    // Kernel C: final keccak + target check (1 thread/hash, no LDS)
+    int final_grid = ((int)batch_size + final_block - 1) / final_block;
+    {
+        void* args[] = { &nonce_start, &batch_size, &d_target, &d_solutions,
+                         &d_result_hashes, &d_intermediate };
+        oroModuleLaunchKernel(final_fn, final_grid, 1, 1, final_block, 1, 1,
+                              0, stream, args, nullptr);
+    }
 }
 
 // Source transform: inject period-0 program + RVN coin padding
@@ -1439,10 +1532,18 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
             std::string src = kawpow_proggen::inject_program(base_src, block_num);
             std::string name = "kawpow_p" + std::to_string(p) + ".hip";
 
+            // Compile module — extract mono kernel as primary
             auto ck = compiler.compile_from_source(src, name, "kawpow_hash_kernel", opts, device_id);
             if (ck.function) {
-                kp->period_kernels[p] = ck.function;
                 kp->period_modules[p] = ck.module;
+                kp->period_mono_kernels[p] = ck.function;
+
+                // Extract split kernels from the same module
+                oroModuleGetFunction(&kp->period_seed_kernels[p],            ck.module, "kawpow_seed_kernel");
+                oroModuleGetFunction(&kp->period_progpow_kernels[p],         ck.module, "kawpow_progpow_kernel");
+                oroModuleGetFunction(&kp->period_progpow_global_kernels[p],  ck.module, "kawpow_progpow_global_kernel");
+                oroModuleGetFunction(&kp->period_final_kernels[p],           ck.module, "kawpow_final_kernel");
+
                 compiled_ok++;
             } else {
                 fprintf(stderr, "[KawPow] GPU %d: Failed to compile period %d\n", device_id, p);
@@ -1457,26 +1558,20 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
         fflush(stdout);
     }
 
-    // Query occupancy across candidate block sizes on period-0 kernel.
-    // KawPow is DAG-bound — block size sweep is flat noise, but different block
-    // sizes at the same occupancy can differ in wavefront scheduling / cache behavior.
-    // Pick the candidate with the most total threads (highest occupancy).
-    if (kp->period_kernels[0]) {
-        oroFunction_t f = kp->period_kernels[0];
-        // KawPow is memory-latency bound — more blocks/CU = more wavefronts
-        // to hide DAG load latency. Find highest blocks/CU, then shootout ties.
+    // ---- Mono occupancy query + shootout ----
+    if (kp->period_mono_kernels[0]) {
+        oroFunction_t f = kp->period_mono_kernels[0];
         static constexpr int candidates[] = {32, 64, 128, 256, 512, 768, 1024};
         int peak_threads_per_cu = 0;
 
-        // Phase 1: query all, find peak threads/CU
         struct OccEntry { int bs; int blocks_per_cu; int threads; };
         std::vector<OccEntry> entries;
 
-        printf("[KawPow] GPU %d: Occupancy query (CUs=%d):\n", device_id, props.multiProcessorCount);
+        printf("[KawPow] GPU %d: Mono occupancy (CUs=%d):\n", device_id, props.multiProcessorCount);
         for (int bs : candidates) {
             int max_blocks = 0;
             oroError_t oerr = oroModuleOccupancyMaxActiveBlocksPerMultiprocessor(
-                &max_blocks, f, bs, kawpow_shared_mem(bs));
+                &max_blocks, f, bs, kawpow_shared_mem_mono(bs));
             if (oerr != oroSuccess || max_blocks <= 0) continue;
 
             int threads = max_blocks * bs;
@@ -1486,25 +1581,19 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
                    bs, max_blocks, threads);
         }
 
-        // Phase 2: collect candidates tied at peak threads/CU
         std::vector<OccEntry> tied;
-        for (auto& e : entries) {
-            if (e.threads == peak_threads_per_cu)
-                tied.push_back(e);
-        }
+        for (auto& e : entries)
+            if (e.threads == peak_threads_per_cu) tied.push_back(e);
 
         int best_block = 0, best_blocks_per_cu = 0;
         if (tied.size() == 1) {
-            // Only one candidate at peak — use it directly
             best_block = tied[0].bs;
             best_blocks_per_cu = tied[0].blocks_per_cu;
             printf("  → block=%d (%d blocks/CU, %d threads/CU, no tie)\n",
                    best_block, best_blocks_per_cu, peak_threads_per_cu);
         } else if (!tied.empty()) {
-            // Shootout: quick timed comparison among tied candidates
             printf("  Shootout (%zu tied at %d threads/CU):\n", tied.size(), peak_threads_per_cu);
 
-            // Allocate minimal bench buffers
             uint8_t* bh = nullptr; uint64_t* bt = nullptr; uint64_t* bs_sol = nullptr;
             oroStream_t bstream = nullptr;
             oroStreamCreate(&bstream);
@@ -1537,19 +1626,17 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
                     &bt, &bs_sol, &block_number, &dag_items, &rh, &l1, &bm, &bs2,
                 };
 
-                // Warmup: 5s to reach thermal steady state
                 {
                     auto tw0 = std::chrono::steady_clock::now();
                     while (std::chrono::duration<double>(
                                std::chrono::steady_clock::now() - tw0).count() < 5.0) {
                         nonce = 0;
                         oroModuleLaunchKernel(f, grid, 1, 1, e.bs, 1, 1,
-                                              kawpow_shared_mem(e.bs), bstream, args, nullptr);
+                                              kawpow_shared_mem_mono(e.bs), bstream, args, nullptr);
                         oroStreamSynchronize(bstream);
                     }
                 }
 
-                // Sustained 10s run with rolling output
                 uint64_t total_hashes = 0;
                 uint64_t interval_hashes = 0;
                 auto t0 = std::chrono::steady_clock::now();
@@ -1560,7 +1647,7 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
                 while (true) {
                     nonce = total_hashes;
                     oroModuleLaunchKernel(f, grid, 1, 1, e.bs, 1, 1,
-                                          kawpow_shared_mem(e.bs), bstream, args, nullptr);
+                                          kawpow_shared_mem_mono(e.bs), bstream, args, nullptr);
                     oroStreamSynchronize(bstream);
                     total_hashes += batch;
                     interval_hashes += batch;
@@ -1600,8 +1687,67 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
         if (best_block > 0) {
             kp->occ_block_size = best_block;
             kp->occ_grid_size = best_blocks_per_cu * props.multiProcessorCount;
-            printf("[KawPow] GPU %d: Winner: block=%d, %d blocks/CU\n",
+            printf("[KawPow] GPU %d: Mono winner: block=%d, %d blocks/CU\n",
                    device_id, best_block, best_blocks_per_cu);
+            fflush(stdout);
+        }
+    }
+
+    // ---- Split occupancy query (progpow kernel = bottleneck) ----
+    // Just picks the highest-occupancy block size; bookend sweeps happen in tune_key_probe.
+    if (kp->period_progpow_kernels[0]) {
+        oroFunction_t f = kp->period_progpow_kernels[0];
+        static constexpr int candidates[] = {32, 64, 128, 256, 512, 768, 1024};
+        int peak_threads = 0;
+
+        printf("[KawPow] GPU %d: Split progpow occupancy:\n", device_id);
+        for (int bs : candidates) {
+            int max_blocks = 0;
+            oroError_t oerr = oroModuleOccupancyMaxActiveBlocksPerMultiprocessor(
+                &max_blocks, f, bs, kawpow_shared_mem_split(bs));
+            if (oerr != oroSuccess || max_blocks <= 0) continue;
+
+            int threads = max_blocks * bs;
+            printf("    block=%4d: %2d blocks/CU, %4d threads/CU\n", bs, max_blocks, threads);
+            // Prefer largest block at peak (fewer launch overhead, better L1 fill amortization)
+            if (threads > peak_threads || (threads == peak_threads && bs > kp->split_progpow_block)) {
+                peak_threads = threads;
+                kp->split_progpow_block = bs;
+                kp->split_progpow_blocks_per_cu = max_blocks;
+            }
+        }
+        if (kp->split_progpow_block > 0) {
+            printf("  → block=%d (%d blocks/CU, %d threads/CU)\n",
+                   kp->split_progpow_block, kp->split_progpow_blocks_per_cu, peak_threads);
+            fflush(stdout);
+        }
+    }
+
+    // ---- SplitGlobal occupancy query (progpow_global kernel, 0 LDS) ----
+    if (kp->period_progpow_global_kernels[0]) {
+        oroFunction_t f = kp->period_progpow_global_kernels[0];
+        static constexpr int candidates[] = {32, 64, 128, 256, 512, 768, 1024};
+        int peak_threads = 0;
+
+        printf("[KawPow] GPU %d: SplitGlobal progpow occupancy (0 LDS):\n", device_id);
+        for (int bs : candidates) {
+            int max_blocks = 0;
+            oroError_t oerr = oroModuleOccupancyMaxActiveBlocksPerMultiprocessor(
+                &max_blocks, f, bs, 0);
+            if (oerr != oroSuccess || max_blocks <= 0) continue;
+
+            int threads = max_blocks * bs;
+            printf("    block=%4d: %2d blocks/CU, %4d threads/CU\n", bs, max_blocks, threads);
+            // Prefer more blocks/CU at equal threads (better scheduling, no LDS fill to amortize)
+            if (threads > peak_threads || (threads == peak_threads && max_blocks > kp->split_global_progpow_blocks_per_cu)) {
+                peak_threads = threads;
+                kp->split_global_progpow_block = bs;
+                kp->split_global_progpow_blocks_per_cu = max_blocks;
+            }
+        }
+        if (kp->split_global_progpow_block > 0) {
+            printf("  → block=%d (%d blocks/CU, %d threads/CU)\n",
+                   kp->split_global_progpow_block, kp->split_global_progpow_blocks_per_cu, peak_threads);
             fflush(stdout);
         }
     }
@@ -1610,10 +1756,37 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
     return true;
 }
 
-// Occupancy-based tune: use period-0 kernel occupancy directly, skip sweep
-// KawPow has no per-hash VRAM — scale batch to keep the GPU fed with waves.
-// The occupancy query picks the block size; we multiply up to ~10x full-GPU
-// occupancy so the scheduler always has work queued behind in-flight DAG loads.
+// ---------------------------------------------------------------------------
+// Helper: timed bench of a single kernel launch pattern (returns MH/s)
+// ---------------------------------------------------------------------------
+inline double kawpow_timed_bench(
+    std::function<void()> launch_fn,
+    oroStream_t stream,
+    uint32_t batch_size,
+    double warmup_s, double bench_s)
+{
+    // Warmup
+    {
+        auto t0 = std::chrono::steady_clock::now();
+        while (std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() < warmup_s) {
+            launch_fn();
+            oroStreamSynchronize(stream);
+        }
+    }
+    // Timed
+    uint64_t total = 0;
+    auto t0 = std::chrono::steady_clock::now();
+    while (true) {
+        launch_fn();
+        oroStreamSynchronize(stream);
+        total += batch_size;
+        if (std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() >= bench_s) break;
+    }
+    double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    return (double)total / (elapsed * 1e6);
+}
+
+// Occupancy-based tune: picks block sizes + strategy (mono vs split)
 inline bool kawpow_occupancy_tune(TuningResult& result, const oroDeviceProp_t& props,
                                    int device_id, void* algo_data,
                                    double memory_reserve_mb, double memory_usage_factor)
@@ -1622,24 +1795,363 @@ inline bool kawpow_occupancy_tune(TuningResult& result, const oroDeviceProp_t& p
     auto* kp = static_cast<KawPowAlgoData*>(algo_data);
     if (!kp || kp->occ_block_size <= 0 || kp->occ_grid_size <= 0) return false;
 
-    int block = kp->occ_block_size;
-    int blocks_per_cu = kp->occ_grid_size / props.multiProcessorCount;
     int CUs = props.multiProcessorCount;
-
-    // 1x occupancy = blocks_per_cu * CUs blocks. Scale up so the scheduler
-    // has deep queues. ~10x keeps the memory system saturated.
     constexpr int BATCH_MULTIPLIER = 64;
-    int grid = blocks_per_cu * CUs * BATCH_MULTIPLIER;
-    // 16 threads per hash (PROGPOW_LANES)
-    uint32_t batch = (uint32_t)grid * (uint32_t)block / 16u;
 
-    result.block_size = block;
-    result.num_blocks = grid;
-    result.batch_size = batch;
+    // Mono config (kept for fallback path in multiplier sweep)
+    int mono_block = kp->occ_block_size;
+    int mono_blocks_per_cu = kp->occ_grid_size / CUs;
+    oroFunction_t mono_fn = kp->period_mono_kernels[0];
 
-    printf("[KawPow] GPU %d: Occupancy config: block=%d, %d blocks/CU, %dx fill → grid=%d, batch=%u\n",
-           device_id, block, blocks_per_cu, BATCH_MULTIPLIER, grid, batch);
+    // ---- Split strategy: require split kernels ----
+    if (kp->split_progpow_block <= 0 || !kp->period_seed_kernels[0] ||
+        !kp->period_progpow_kernels[0] || !kp->period_final_kernels[0]) {
+        printf("[KawPow] GPU %d: Split kernels not available, cannot tune\n", device_id);
+        fflush(stdout);
+        return false;
+    }
+
+    int pp_block = kp->split_progpow_block;
+    int pp_bpc = kp->split_progpow_blocks_per_cu;
+    int pp_grid = pp_bpc * CUs * BATCH_MULTIPLIER;
+    uint32_t split_batch = (uint32_t)pp_grid * (uint32_t)pp_block / 16u;
+
+    printf("[KawPow] GPU %d: Split progpow config: block=%d, %d blocks/CU → batch=%u\n",
+           device_id, pp_block, pp_bpc, split_batch);
     fflush(stdout);
+
+    // Allocate intermediate buffer + bench buffers
+    if (!kp->ensure_intermediate(split_batch)) {
+        printf("[KawPow] GPU %d: Failed to alloc intermediate buffer, using Mono\n", device_id);
+        fflush(stdout);
+        return true;
+    }
+
+    uint8_t* bh = nullptr; uint64_t* bt = nullptr; uint32_t* bsol = nullptr;
+    oroStream_t stream = nullptr;
+    oroStreamCreate(&stream);
+    oroMalloc((oroDeviceptr*)&bh, 32);
+    oroMalloc((oroDeviceptr*)&bt, 32);
+    oroMalloc((oroDeviceptr*)&bsol, 320);
+    oroMemset((oroDeviceptr)bh, 0, 32);
+    uint64_t maxt[4] = {~0ULL, ~0ULL, ~0ULL, ~0ULL};
+    oroMemcpy(bt, maxt, 32, oroMemcpyHostToDevice);
+
+    uint32_t* hdr = (uint32_t*)bh;
+    uint32_t* dag = kp->d_dag;
+    uint32_t dag_items = kp->dag_num_items;
+    uint32_t* l1 = kp->d_l1_cache;
+    uint32_t bm = kp->barrett_m;
+    uint32_t bs = kp->barrett_shift;
+    uint64_t nonce = 0;
+    uint32_t* rh = nullptr;
+
+    oroFunction_t seed_fn = kp->period_seed_kernels[0];
+    oroFunction_t pp_fn   = kp->period_progpow_kernels[0];
+    oroFunction_t final_fn = kp->period_final_kernels[0];
+
+    // ---- Sweep seed_tpb ----
+    static constexpr int tpb_candidates[] = {32, 64, 128, 256, 512, 1024};
+    int best_seed_tpb = 256;
+    {
+        printf("[KawPow] GPU %d: Seed TPB sweep: ", device_id);
+        fflush(stdout);
+        double best_ms = 1e9;
+        for (int tpb : tpb_candidates) {
+            int sgrid = ((int)split_batch + tpb - 1) / tpb;
+            void* args[] = { &hdr, &nonce, &split_batch, &kp->d_intermediate };
+
+            // Quick timing: 20 launches
+            oroStreamSynchronize(stream);
+            auto t0 = std::chrono::steady_clock::now();
+            for (int r = 0; r < 20; r++)
+                oroModuleLaunchKernel(seed_fn, sgrid, 1, 1, tpb, 1, 1, 0, stream, args, nullptr);
+            oroStreamSynchronize(stream);
+            double ms = std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - t0).count() / 20.0;
+
+            printf("%d=%.2fms ", tpb, ms);
+            fflush(stdout);
+            if (ms < best_ms) { best_ms = ms; best_seed_tpb = tpb; }
+        }
+        printf("→ best=%d\n", best_seed_tpb);
+        fflush(stdout);
+    }
+
+    // ---- Sweep final_tpb ----
+    int best_final_tpb = 256;
+    {
+        // First run seed to fill intermediate buffer with valid data
+        int sgrid = ((int)split_batch + best_seed_tpb - 1) / best_seed_tpb;
+        void* sargs[] = { &hdr, &nonce, &split_batch, &kp->d_intermediate };
+        oroModuleLaunchKernel(seed_fn, sgrid, 1, 1, best_seed_tpb, 1, 1, 0, stream, sargs, nullptr);
+        // Run progpow to fill digest in intermediate
+        void* pargs[] = { &dag, &split_batch, &dag_items, &l1, &bm, &bs, &kp->d_intermediate };
+        oroModuleLaunchKernel(pp_fn, pp_grid, 1, 1, pp_block, 1, 1,
+                              kawpow_shared_mem_split(pp_block), stream, pargs, nullptr);
+        oroStreamSynchronize(stream);
+
+        printf("[KawPow] GPU %d: Final TPB sweep: ", device_id);
+        fflush(stdout);
+        double best_ms = 1e9;
+        for (int tpb : tpb_candidates) {
+            int fgrid = ((int)split_batch + tpb - 1) / tpb;
+            void* args[] = { &nonce, &split_batch, &bt, &bsol, &rh, &kp->d_intermediate };
+
+            oroStreamSynchronize(stream);
+            auto t0 = std::chrono::steady_clock::now();
+            for (int r = 0; r < 20; r++)
+                oroModuleLaunchKernel(final_fn, fgrid, 1, 1, tpb, 1, 1, 0, stream, args, nullptr);
+            oroStreamSynchronize(stream);
+            double ms = std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - t0).count() / 20.0;
+
+            printf("%d=%.2fms ", tpb, ms);
+            fflush(stdout);
+            if (ms < best_ms) { best_ms = ms; best_final_tpb = tpb; }
+        }
+        printf("→ best=%d\n", best_final_tpb);
+        fflush(stdout);
+    }
+
+    // ---- SplitGlobal: sweep progpow block size (0 LDS → occupancy-equal, perf may differ) ----
+    oroFunction_t pp_global_fn = kp->period_progpow_global_kernels[0];
+    int sg_block = kp->split_global_progpow_block;
+    int sg_bpc   = kp->split_global_progpow_blocks_per_cu;
+    bool have_split_global = (sg_block > 0 && pp_global_fn);
+
+    // Sweep: for each block candidate at max threads/CU, time actual progpow launches
+    if (have_split_global) {
+        // First ensure intermediate for the sweep (use occupancy default batch)
+        int sg_grid_default = sg_bpc * CUs * BATCH_MULTIPLIER;
+        uint32_t sg_batch_default = (uint32_t)sg_grid_default * (uint32_t)sg_block / 16u;
+        if (!kp->ensure_intermediate(sg_batch_default)) {
+            have_split_global = false;
+        } else {
+            // Run seed once to fill intermediate
+            int sgrid_tmp = ((int)sg_batch_default + best_seed_tpb - 1) / best_seed_tpb;
+            void* sargs_tmp[] = { &hdr, &nonce, &sg_batch_default, &kp->d_intermediate };
+            oroModuleLaunchKernel(seed_fn, sgrid_tmp, 1, 1, best_seed_tpb, 1, 1, 0, stream, sargs_tmp, nullptr);
+            oroStreamSynchronize(stream);
+
+            printf("[KawPow] GPU %d: SplitGlobal progpow block sweep: ", device_id);
+            fflush(stdout);
+
+            static constexpr int sg_candidates[] = {32, 64, 128, 256, 512, 1024};
+            double best_sg_ms = 1e9;
+
+            for (int tbs : sg_candidates) {
+                int max_blocks = 0;
+                oroModuleOccupancyMaxActiveBlocksPerMultiprocessor(&max_blocks, pp_global_fn, tbs, 0);
+                if (max_blocks <= 0) continue;
+
+                int trial_grid = max_blocks * CUs * BATCH_MULTIPLIER;
+                uint32_t trial_batch = (uint32_t)trial_grid * (uint32_t)tbs / 16u;
+                if (!kp->ensure_intermediate(trial_batch)) continue;
+
+                // Re-run seed for this batch size
+                int sg2 = ((int)trial_batch + best_seed_tpb - 1) / best_seed_tpb;
+                void* sa2[] = { &hdr, &nonce, &trial_batch, &kp->d_intermediate };
+                oroModuleLaunchKernel(seed_fn, sg2, 1, 1, best_seed_tpb, 1, 1, 0, stream, sa2, nullptr);
+                oroStreamSynchronize(stream);
+
+                void* pargs[] = { &dag, &trial_batch, &dag_items, &l1, &bm, &bs, &kp->d_intermediate };
+
+                oroStreamSynchronize(stream);
+                auto t0 = std::chrono::steady_clock::now();
+                for (int r = 0; r < 20; r++)
+                    oroModuleLaunchKernel(pp_global_fn, trial_grid, 1, 1, tbs, 1, 1, 0, stream, pargs, nullptr);
+                oroStreamSynchronize(stream);
+                double ms = std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - t0).count() / 20.0;
+
+                printf("%d(%d bpc)=%.2fms ", tbs, max_blocks, ms);
+                fflush(stdout);
+                if (ms < best_sg_ms) {
+                    best_sg_ms = ms;
+                    sg_block = tbs;
+                    sg_bpc = max_blocks;
+                }
+            }
+            printf("→ best=%d (%d blocks/CU)\n", sg_block, sg_bpc);
+            fflush(stdout);
+
+            kp->split_global_progpow_block = sg_block;
+            kp->split_global_progpow_blocks_per_cu = sg_bpc;
+        }
+    }
+
+    int sg_grid  = sg_bpc * CUs * BATCH_MULTIPLIER;
+    uint32_t sg_batch = (uint32_t)sg_grid * (uint32_t)sg_block / 16u;
+
+    if (have_split_global) {
+        printf("[KawPow] GPU %d: SplitGlobal config: block=%d, %d blocks/CU → batch=%u\n",
+               device_id, sg_block, sg_bpc, sg_batch);
+        fflush(stdout);
+        uint32_t max_batch = split_batch > sg_batch ? split_batch : sg_batch;
+        if (!kp->ensure_intermediate(max_batch)) have_split_global = false;
+    }
+
+    // ---- Head-to-head: Split vs SplitGlobal (5s warmup, 10s bench each) ----
+    printf("[KawPow] GPU %d: Strategy head-to-head (5s warmup + 10s each):\n", device_id);
+    fflush(stdout);
+
+    {
+        // Split bench (LDS L1)
+        auto split_launch = [&]() {
+            kawpow_launch_split(
+                seed_fn, pp_fn, final_fn,
+                hdr, dag, nonce, split_batch,
+                (uint64_t*)bt, bsol, dag_items, rh, l1, bm, bs,
+                kp->d_intermediate,
+                pp_grid, pp_block, best_seed_tpb, best_final_tpb,
+                stream);
+        };
+        double split_mhs = kawpow_timed_bench(split_launch, stream, split_batch, 5.0, 10.0);
+        printf("  Split:       %.2f MH/s (pp_block=%d, batch=%u)\n", split_mhs, pp_block, split_batch);
+        fflush(stdout);
+
+        // SplitGlobal bench (global L1, no LDS)
+        double sg_mhs = 0;
+        if (have_split_global) {
+            auto sg_launch = [&]() {
+                kawpow_launch_split(
+                    seed_fn, pp_global_fn, final_fn,
+                    hdr, dag, nonce, sg_batch,
+                    (uint64_t*)bt, bsol, dag_items, rh, l1, bm, bs,
+                    kp->d_intermediate,
+                    sg_grid, sg_block, best_seed_tpb, best_final_tpb,
+                    stream, 0 /* no LDS */);
+            };
+            sg_mhs = kawpow_timed_bench(sg_launch, stream, sg_batch, 5.0, 10.0);
+            printf("  SplitGlobal: %.2f MH/s (pp_block=%d, batch=%u, 0 LDS)\n", sg_mhs, sg_block, sg_batch);
+            fflush(stdout);
+        }
+
+        // Pick winner (Split vs SplitGlobal)
+        if (have_split_global && sg_mhs > split_mhs) {
+            printf("[KawPow] GPU %d: → SplitGlobal wins (%.2f MH/s, +%.1f%%)\n",
+                   device_id, sg_mhs, (sg_mhs - split_mhs) / split_mhs * 100.0);
+            result.block_size = sg_block;
+            result.num_blocks = sg_grid;
+            result.batch_size = sg_batch;
+            result.tune_keys["strategy"] = (int64_t)KawPowStrategy::SplitGlobal;
+            kp->best_strategy = KawPowStrategy::SplitGlobal;
+        } else {
+            printf("[KawPow] GPU %d: → Split wins (%.2f MH/s)\n", device_id, split_mhs);
+            result.block_size = pp_block;
+            result.num_blocks = pp_grid;
+            result.batch_size = split_batch;
+            result.tune_keys["strategy"] = (int64_t)KawPowStrategy::Split;
+            kp->best_strategy = KawPowStrategy::Split;
+        }
+        result.tune_keys["seed_tpb"] = best_seed_tpb;
+        result.tune_keys["final_tpb"] = best_final_tpb;
+    }
+
+    // ---- Batch multiplier sweep on the winning strategy ----
+    {
+        static constexpr int mult_candidates[] = {8, 16, 32, 64, 128, 256, 384, 512, 768, 1024};
+        auto winner = static_cast<KawPowStrategy>(result.tune_keys["strategy"]);
+        bool is_split_any = (winner == KawPowStrategy::Split || winner == KawPowStrategy::SplitGlobal);
+        bool is_global = (winner == KawPowStrategy::SplitGlobal);
+        const char* strat_name = is_global ? "SplitGlobal" : is_split_any ? "Split" : "Mono";
+
+        // Base occupancy params (without multiplier)
+        int base_block = result.block_size;
+        int base_bpc = is_global ? sg_bpc : is_split_any ? pp_bpc : mono_blocks_per_cu;
+
+        printf("[KawPow] GPU %d: Batch multiplier sweep (%s): ", device_id, strat_name);
+        fflush(stdout);
+
+        // Collect (mult, mhs) pairs, then pick the knee
+        struct MultResult { int mult; double mhs; };
+        MultResult results[16];
+        int n_results = 0;
+
+        // Pick the right progpow function and shared_mem for the sweep
+        oroFunction_t sweep_pp_fn = is_global ? pp_global_fn : pp_fn;
+        size_t sweep_shared_mem = is_global ? 0 : (size_t)-1; // 0 = no LDS, -1 = default
+
+        for (int mult : mult_candidates) {
+            int trial_grid = base_bpc * CUs * mult;
+            uint32_t trial_batch = (uint32_t)trial_grid * (uint32_t)base_block / 16u;
+
+            if (is_split_any) {
+                if (!kp->ensure_intermediate(trial_batch)) continue;
+
+                auto trial_launch = [&]() {
+                    kawpow_launch_split(
+                        seed_fn, sweep_pp_fn, final_fn,
+                        hdr, dag, nonce, trial_batch,
+                        (uint64_t*)bt, bsol, dag_items, rh, l1, bm, bs,
+                        kp->d_intermediate,
+                        trial_grid, base_block, best_seed_tpb, best_final_tpb,
+                        stream, sweep_shared_mem);
+                };
+                double mhs = kawpow_timed_bench(trial_launch, stream, trial_batch, 1.0, 3.0);
+                printf("%dx=%.2f ", mult, mhs);
+                fflush(stdout);
+                results[n_results++] = {mult, mhs};
+            } else {
+                uint32_t trial_block_number = KAWPOW_BENCH_BASE_BLOCK;
+                void* trial_args[] = {
+                    &hdr, &dag, &nonce, &trial_batch,
+                    &bt, &bsol, &trial_block_number, &dag_items, &rh, &l1, &bm, &bs,
+                };
+                auto trial_launch = [&]() {
+                    oroModuleLaunchKernel(mono_fn, trial_grid, 1, 1, mono_block, 1, 1,
+                                          kawpow_shared_mem_mono(mono_block), stream, trial_args, nullptr);
+                };
+                double mhs = kawpow_timed_bench(trial_launch, stream, trial_batch, 1.0, 3.0);
+                printf("%dx=%.2f ", mult, mhs);
+                fflush(stdout);
+                results[n_results++] = {mult, mhs};
+            }
+        }
+
+        // Pick knee: last point before gains stay below threshold
+        int best_idx = 0;
+        for (int i = 0; i < n_results; i++) {
+            if (results[i].mhs > results[best_idx].mhs) best_idx = i;
+        }
+        int knee_idx = n_results - 1;
+        for (int i = n_results - 2; i >= 0; i--) {
+            double gain = (results[i + 1].mhs - results[i].mhs) / results[i].mhs;
+            if (gain >= 0.0025) {  // >=0.25% marginal gain — this is the knee
+                knee_idx = i + 1;
+                break;
+            }
+        }
+        // Safety: if knee is somehow worse than best by >1%, use best
+        if (results[knee_idx].mhs < results[best_idx].mhs * 0.99)
+            knee_idx = best_idx;
+
+        int best_mult = results[knee_idx].mult;
+        double best_mhs = results[knee_idx].mhs;
+        printf("→ knee=%dx (%.2f MH/s, peak=%dx %.2f)\n",
+               best_mult, best_mhs, results[best_idx].mult, results[best_idx].mhs);
+        fflush(stdout);
+
+        // Apply winning multiplier
+        int final_grid = base_bpc * CUs * best_mult;
+        uint32_t final_batch = (uint32_t)final_grid * (uint32_t)base_block / 16u;
+        result.num_blocks = final_grid;
+        result.batch_size = final_batch;
+        result.tune_keys["batch_mult"] = best_mult;
+
+        if (is_split_any) kp->ensure_intermediate(final_batch);
+
+        printf("[KawPow] GPU %d: Final config: %s, block=%d, %dx mult, grid=%d, batch=%u (%.2f MH/s)\n",
+               device_id, strat_name, base_block, best_mult, final_grid, final_batch, best_mhs);
+        fflush(stdout);
+    }
+
+    oroFree((oroDeviceptr)bh);
+    oroFree((oroDeviceptr)bt);
+    oroFree((oroDeviceptr)bsol);
+    oroStreamDestroy(stream);
+
     return true;
 }
 
@@ -1650,6 +2162,7 @@ inline void kawpow_algo_data_cleanup(void* algo_data)
     if (kp) {
         if (kp->d_dag) oroFree((oroDeviceptr)kp->d_dag);
         if (kp->d_l1_cache) oroFree((oroDeviceptr)kp->d_l1_cache);
+        if (kp->d_intermediate) oroFree((oroDeviceptr)kp->d_intermediate);
         for (int i = 0; i < kp->num_period_kernels; ++i) {
             if (kp->period_modules[i])
                 oroModuleUnload(kp->period_modules[i]);
@@ -1658,20 +2171,15 @@ inline void kawpow_algo_data_cleanup(void* algo_data)
     }
 }
 
-// Execute: launch kawpow_hash_kernel with DAG from algo_data
+// Execute: dispatch based on strategy (Mono or Split)
 inline bool kawpow_execute(
     const KernelMap& kernels,
     const KernelLaunchContext& ctx)
 {
-    auto it = kernels.find("kawpow_hash_kernel");
-    if (it == kernels.end()) return false;
-
     auto* kp = static_cast<KawPowAlgoData*>(ctx.algo_data);
     if (!kp || !kp->d_dag) return false;
 
-    // 16 threads per hash (PROGPOW_LANES)
-    uint32_t total_threads = ctx.batch_size * 16u;
-    uint32_t grid = (total_threads + ctx.block_size - 1) / ctx.block_size;
+    auto strategy = static_cast<KawPowStrategy>(ctx.get_tune_key("strategy", (int64_t)KawPowStrategy::Mono));
 
     uint32_t* header = (uint32_t*)ctx.d_input;
     uint32_t* dag = kp->d_dag;
@@ -1679,25 +2187,61 @@ inline bool kawpow_execute(
     uint32_t batch_size = ctx.batch_size;
     uint64_t* target = ctx.d_difficulty_target;
     uint32_t* solutions = (uint32_t*)ctx.d_solutions;
-    uint32_t block_number = kp->block_number;
     uint32_t dag_num_items = kp->dag_num_items;
     uint32_t* result_hashes = nullptr;
     uint32_t* l1_cache = kp->d_l1_cache;
     uint32_t b_m = kp->barrett_m;
     uint32_t b_s = kp->barrett_shift;
 
-    void* args[] = {
-        &header, &dag, &nonce_start, &batch_size,
-        &target, &solutions, &block_number, &dag_num_items, &result_hashes,
-        &l1_cache, &b_m, &b_s,
-    };
+    switch (strategy) {
+    case KawPowStrategy::SplitGlobal:
+    case KawPowStrategy::Split: {
+        auto it_seed = kernels.find("kawpow_seed_kernel");
+        auto it_fin  = kernels.find("kawpow_final_kernel");
+        bool is_global = (strategy == KawPowStrategy::SplitGlobal);
+        auto it_pp = kernels.find(is_global ? "kawpow_progpow_global_kernel" : "kawpow_progpow_kernel");
+        if (it_seed == kernels.end() || it_pp == kernels.end() || it_fin == kernels.end())
+            return false;
 
-    size_t shared_mem = 0; // no LDS — L1 cache lives in global memory now
-    auto err = oroModuleLaunchKernel(
-        it->second, grid, 1, 1,
-        ctx.block_size, 1, 1,
-        shared_mem, ctx.stream, args, nullptr);
-    return (err == oroSuccess);
+        if (!kp->ensure_intermediate(batch_size)) return false;
+
+        int seed_tpb  = (int)ctx.get_tune_key("seed_tpb", 256);
+        int final_tpb = (int)ctx.get_tune_key("final_tpb", 256);
+
+        kawpow_launch_split(
+            it_seed->second, it_pp->second, it_fin->second,
+            header, dag, nonce_start, batch_size,
+            target, solutions, dag_num_items, result_hashes, l1_cache, b_m, b_s,
+            kp->d_intermediate,
+            ctx.num_blocks, ctx.block_size,
+            seed_tpb, final_tpb,
+            ctx.stream,
+            is_global ? 0 : (size_t)-1);
+        return true;
+    }
+
+    case KawPowStrategy::Mono:
+    default: {
+        auto it = kernels.find("kawpow_hash_kernel");
+        if (it == kernels.end()) return false;
+
+        uint32_t total_threads = batch_size * 16u;
+        uint32_t grid = (total_threads + ctx.block_size - 1) / ctx.block_size;
+        uint32_t block_number = kp->block_number;
+
+        void* args[] = {
+            &header, &dag, &nonce_start, &batch_size,
+            &target, &solutions, &block_number, &dag_num_items, &result_hashes,
+            &l1_cache, &b_m, &b_s,
+        };
+
+        auto err = oroModuleLaunchKernel(
+            it->second, grid, 1, 1,
+            ctx.block_size, 1, 1,
+            kawpow_shared_mem_mono(ctx.block_size), ctx.stream, args, nullptr);
+        return (err == oroSuccess);
+    }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1757,14 +2301,44 @@ inline void kawpow_post_tune(const TuningResult& result,
         &l1_cache, &b_m, &b_s,
     };
 
-    // ---- Sustained bench with period 0 (matches shootout) ----
-    oroFunction_t func = kp->period_kernels[0];
+    // ---- Sustained bench with winning strategy ----
+    auto strategy = static_cast<KawPowStrategy>(
+        result.tune_keys.count("strategy") ? result.tune_keys.at("strategy") : 0);
+    bool use_split = (strategy == KawPowStrategy::Split || strategy == KawPowStrategy::SplitGlobal);
+    bool is_global = (strategy == KawPowStrategy::SplitGlobal);
+    int seed_tpb = result.tune_keys.count("seed_tpb") ? (int)result.tune_keys.at("seed_tpb") : 256;
+    int final_tpb = result.tune_keys.count("final_tpb") ? (int)result.tune_keys.at("final_tpb") : 256;
+
+    const char* strat_name = is_global ? "SplitGlobal" : use_split ? "Split" : "Mono";
+    printf("  Strategy: %s\n", strat_name);
+    fflush(stdout);
+
+    // For split variants, ensure intermediate buffer
+    if (use_split) kp->ensure_intermediate(batch_size);
+
+    // Pick the right progpow kernel
+    oroFunction_t pp_kern = is_global ? kp->period_progpow_global_kernels[0] : kp->period_progpow_kernels[0];
+
+    // Build launch lambda
+    auto launch = [&]() {
+        if (use_split) {
+            kawpow_launch_split(
+                kp->period_seed_kernels[0], pp_kern, kp->period_final_kernels[0],
+                header, dag, nonce_start, batch_size,
+                d_target, (uint32_t*)d_solutions, dag_num_items, result_hashes, l1_cache, b_m, b_s,
+                kp->d_intermediate,
+                grid, result.block_size, seed_tpb, final_tpb,
+                stream, is_global ? 0 : (size_t)-1);
+        } else {
+            oroModuleLaunchKernel(kp->period_mono_kernels[0], grid, 1, 1, result.block_size, 1, 1,
+                                  shared_mem, stream, args, nullptr);
+        }
+    };
 
     // Warmup: 3 launches
     for (int w = 0; w < 3; ++w) {
         oroMemsetAsync((oroDeviceptr)d_solutions, 0, 4, stream);
-        oroModuleLaunchKernel(func, grid, 1, 1, result.block_size, 1, 1,
-                              shared_mem, stream, args, nullptr);
+        launch();
     }
     oroStreamSynchronize(stream);
     auto t_start = std::chrono::steady_clock::now();
@@ -1779,8 +2353,7 @@ inline void kawpow_post_tune(const TuningResult& result,
     while (true) {
         oroMemsetAsync((oroDeviceptr)d_solutions, 0, 4, stream);
         nonce_start = total_hashes;
-        oroModuleLaunchKernel(func, grid, 1, 1, result.block_size, 1, 1,
-                              shared_mem, stream, args, nullptr);
+        launch();
         oroStreamSynchronize(stream);
 
         total_hashes += batch_size;
@@ -1826,7 +2399,7 @@ inline AlgoConfig KAWPOW_CONFIG = {
     .source_path = "src/tnn_hip/crypto/kawpow/kawpow.hip",
     .source = hip_kawpow_source::SRC_TNN_HIP_CRYPTO_KAWPOW_KAWPOW_HIP_SOURCE.data(),
 
-    .kernel_names = {"kawpow_hash_kernel"},
+    .kernel_names = {"kawpow_hash_kernel", "kawpow_seed_kernel", "kawpow_progpow_kernel", "kawpow_progpow_global_kernel", "kawpow_final_kernel"},
     .kernel_name = "",
 
     .rtc_headers = {},  // kawpow.hip is self-contained
