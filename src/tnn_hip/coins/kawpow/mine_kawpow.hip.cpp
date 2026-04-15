@@ -238,6 +238,11 @@ int kawpow_gpu_test()
     KP_CHECK(oroMalloc((oroDeviceptr*)&d_dag, dag.size_bytes));
     KP_CHECK(oroMemcpy(d_dag, dag.data.data(), dag.size_bytes, oroMemcpyHostToDevice));
 
+    // L1 cache: first 16KB of DAG in a separate buffer for hardware L0 caching
+    uint32_t* d_l1_cache = nullptr;
+    KP_CHECK(oroMalloc((oroDeviceptr*)&d_l1_cache, 16384));
+    KP_CHECK(oroMemcpy(d_l1_cache, dag.data.data(), 16384, oroMemcpyHostToDevice));
+
     // ---- Allocate GPU buffers ----
     uint32_t* d_header    = nullptr;
     uint64_t* d_target    = nullptr;
@@ -293,7 +298,7 @@ int kawpow_gpu_test()
         uint32_t zeros[16] = {};
         KP_CHECK(oroMemcpy(d_results, zeros, 64, oroMemcpyHostToDevice));
 
-        // Launch: 1 hash = 16 threads, use block_size=16 to avoid syncthreads issues
+        // Launch: 1 hash = 16 threads
         uint32_t block_size  = 16;
         uint32_t grid_size   = 1;
         uint32_t batch_size  = 1;
@@ -302,7 +307,8 @@ int kawpow_gpu_test()
 
         void* args[] = {
             &d_header, &d_dag, &nonce, &batch_size,
-            &d_target, &d_solutions, &block_num, &dagdiv, &d_results
+            &d_target, &d_solutions, &block_num, &dagdiv, &d_results,
+            &d_l1_cache,
         };
 
         KP_CHECK(oroModuleLaunchKernel(
@@ -343,6 +349,7 @@ int kawpow_gpu_test()
 
     // Cleanup
     oroFree((oroDeviceptr)d_dag);
+    oroFree((oroDeviceptr)d_l1_cache);
     oroFree((oroDeviceptr)d_header);
     oroFree((oroDeviceptr)d_target);
     oroFree((oroDeviceptr)d_solutions);
@@ -370,8 +377,7 @@ void kawpow_bench()
     printf("========================================\n\n");
     fflush(stdout);
 
-    // Force retune — bench always overwrites cached results
-    g_tuning_overrides.force_retune = true;
+    // Use cached tune if available; --gpu-retune forces a fresh sweep
 
     auto algo = AlgoRegistry::instance().create("kawpow");
     if (!algo) {

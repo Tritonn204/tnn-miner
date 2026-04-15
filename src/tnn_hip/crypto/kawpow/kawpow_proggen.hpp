@@ -248,8 +248,13 @@ inline std::string generate_program(int block_number) {
             uint32_t dst  = state.next_dst();
             uint32_t sel2 = state.rng();
 
-            body += "        _m = " + emit_math(reg(src1), reg(src2), sel1) + ";\n";
-            body += "        " + emit_merge(reg(dst), "_m", sel2) + "\n";
+            std::string fused = try_fuse_math_merge(reg(dst), reg(src1), reg(src2), sel1, sel2);
+            if (!fused.empty()) {
+                body += "        " + fused + "\n";
+            } else {
+                body += "        _m = " + emit_math(reg(src1), reg(src2), sel1) + ";\n";
+                body += "        " + emit_merge(reg(dst), "_m", sel2) + "\n";
+            }
         }
     }
 
@@ -272,18 +277,38 @@ inline std::string generate_program(int block_number) {
     c += "\n";
 
     // DAG load — issued early, data arrives during cache+math
-    // NT hint bypasses Infinity Cache (DAG has near-zero reuse)
-    // __builtin_nontemporal_load rejects HIP_vector_type, so load scalar words
-    c += "        const uint32_t* _dp = &d_dag[(dag_addr * 64u) + ((lane_id ^ loop) & 15u) * 4u];\n";
-    c += "        uint4 _dg;\n";
+    // Non-temporal: DAG has near-zero reuse, bypass caches to avoid evicting useful data
+    // Arch-gated asm: mnemonic + cache bits differ across GCN/RDNA generations
     c += "#ifdef __HIP_PLATFORM_AMD__\n";
-    c += "        _dg = make_uint4("
-         "__builtin_nontemporal_load(_dp), "
-         "__builtin_nontemporal_load(_dp+1), "
-         "__builtin_nontemporal_load(_dp+2), "
-         "__builtin_nontemporal_load(_dp+3));\n";
+    c += "        uint4 _dg;\n";
+    c += "        {\n";
+    c += "            const uint4* _dp4 = &((const uint4*)d_dag)"
+        "[dag_addr * 16u + ((lane_id ^ loop) & 15u)];\n";
+    // GFX11 / RDNA3: b128 mnemonic, glc+slc+dlc bypasses L0/L1/Infinity Cache
+    c += "#if defined(__gfx1100__) || defined(__gfx1101__) || defined(__gfx1102__) || defined(__gfx1103__)\n";
+    c += "            __asm__ volatile(\"global_load_b128 %0, %1, off glc slc dlc\"\n";
+    c += "                : \"=v\"(_dg) : \"v\"(_dp4) : \"memory\");\n";
+    // GFX10 / RDNA1+2: dwordx4 mnemonic, glc+slc+dlc bypasses L0/L1/Infinity Cache
+    c += "#elif defined(__gfx1010__) || defined(__gfx1011__) || defined(__gfx1012__) "
+        "|| defined(__gfx1030__) || defined(__gfx1031__) || defined(__gfx1032__) "
+        "|| defined(__gfx1033__) || defined(__gfx1034__) || defined(__gfx1035__) || defined(__gfx1036__)\n";
+    c += "            __asm__ volatile(\"global_load_dwordx4 %0, %1, off glc slc dlc\"\n";
+    c += "                : \"=v\"(_dg) : \"v\"(_dp4) : \"memory\");\n";
+    // GFX9 / Vega+CDNA: dwordx4 mnemonic, glc+slc (no dlc bit on this gen)
+    c += "#elif defined(__gfx900__) || defined(__gfx902__) || defined(__gfx906__) "
+        "|| defined(__gfx908__) || defined(__gfx90a__) "
+        "|| defined(__gfx940__) || defined(__gfx941__) || defined(__gfx942__)\n";
+    c += "            __asm__ volatile(\"global_load_dwordx4 %0, %1, off glc slc\"\n";
+    c += "                : \"=v\"(_dg) : \"v\"(_dp4) : \"memory\");\n";
+    // Unknown/future arch (GFX12+): plain load, let compiler pick cache policy
     c += "#else\n";
-    c += "        _dg = *(const uint4*)_dp;\n";
+    c += "            _dg = *_dp4;\n";
+    c += "#endif\n";
+    c += "        }\n";
+    c += "#else\n";
+    // NVIDIA: plain uint4 load (hardware L2 handles caching; __ldg optional)
+    c += "        uint4 _dg = ((const uint4*)d_dag)"
+        "[dag_addr * 16u + ((lane_id ^ loop) & 15u)];\n";
     c += "#endif\n\n";
 
     // Cache + math body

@@ -1277,13 +1277,25 @@ inline AlgoConfig XELIS_V3_CONFIG = {
 
 // Number of periods to compile for benchmarking (measures average across programs)
 static constexpr int KAWPOW_BENCH_PERIODS = 10;
+// Base block number for bench programs — approximate current RVN chain height.
+// Avoids degenerate period-0 seed (all-zero FNV input). Period = block/3.
+static constexpr int KAWPOW_BENCH_BASE_BLOCK = 3500001;
 
 // Per-device KawPow state (DAG, epoch info)
 struct KawPowAlgoData {
     uint32_t* d_dag = nullptr;
+    uint32_t* d_l1_cache = nullptr; // first 16KB of DAG, separate buffer for L0 caching
     uint32_t  dag_num_items = 0;    // full_dataset_num_items / 2
     uint32_t  block_number = 0;
     size_t    dag_size_bytes = 0;
+
+    // Barrett reduction for dag_addr %= dag_num_items (precomputed on host)
+    uint32_t  barrett_m = 0;     // ceil(2^(32+shift) / dag_num_items)
+    uint32_t  barrett_shift = 0; // extra shift bits
+
+    // Occupancy-based config: set by pre_tune, consumed by configure_batch
+    int       occ_block_size = 0;   // optimal block size from occupancy query
+    int       occ_grid_size = 0;    // optimal grid size (total blocks for full occupancy)
 
     // Multi-period bench: compiled kernels for periods 0..N-1
     oroFunction_t period_kernels[KAWPOW_BENCH_PERIODS] = {};
@@ -1293,7 +1305,8 @@ struct KawPowAlgoData {
 
 inline size_t kawpow_shared_mem(int block_size)
 {
-  return 16384; // PROGPOW_CACHE_BYTES — 16KB L1 cache in LDS
+  (void)block_size;
+  return 0; // L1 cache moved to global memory (hardware L0 caching)
 }
 
 // Source transform: inject period-0 program + RVN coin padding
@@ -1301,7 +1314,7 @@ inline std::string kawpow_source_transform(const std::string& source, int device
 {
     (void)device_id;
     std::string src = kawpow_proggen::inject_coin_padding(source, KAWPOW_PADDING_RVN);
-    src = kawpow_proggen::inject_program(src, 0); // period 0 for tune/bench
+    src = kawpow_proggen::inject_program(src, KAWPOW_BENCH_BASE_BLOCK); // RVN-like period for tune/bench
     return src;
 }
 
@@ -1323,6 +1336,22 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
     kp->dag_num_items = (uint32_t)(ctx->full_dataset_num_items / 2);
     size_t dag_words = (size_t)kp->dag_num_items * 64;
     kp->dag_size_bytes = dag_words * sizeof(uint32_t);
+
+    // Barrett reduction constants for dag_addr %= dag_num_items
+    // q = __umulhi(dag_addr, m) >> s;  r = dag_addr - q * d;  if (r >= d) r -= d;
+    // Pick smallest s where ceil(2^(32+s)/d) fits in u32.
+    // For all KawPow epochs d < 2^26, so s=0 always works.
+    {
+        uint32_t d = kp->dag_num_items;
+        uint32_t s = 0;
+        uint64_t m64 = ((1ULL << 32) + d - 1) / d; // ceil(2^32 / d)
+        if (m64 > 0xFFFFFFFFULL) { // shouldn't happen for d >= 2, but be safe
+            s = 1;
+            m64 = ((1ULL << 33) + d - 1) / d;
+        }
+        kp->barrett_m = (uint32_t)m64;
+        kp->barrett_shift = s;
+    }
 
     printf("[KawPow] GPU %d: Generating DAG for epoch %d: %u items (%.1f MB)...\n",
            device_id, epoch, kp->dag_num_items, kp->dag_size_bytes / (1024.0 * 1024.0));
@@ -1372,6 +1401,18 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
         return false;
     }
 
+    // Allocate separate L1 cache buffer (first 16KB of DAG, for L0 hardware caching)
+    constexpr size_t L1_CACHE_BYTES = 16384; // PROGPOW_CACHE_BYTES: 4096 words × 4
+    err = oroMalloc((oroDeviceptr*)&kp->d_l1_cache, L1_CACHE_BYTES);
+    if (err != oroSuccess) {
+        fprintf(stderr, "[KawPow] GPU %d: L1 cache alloc failed: %s\n",
+                device_id, tnn_error_string(err));
+        oroFree((oroDeviceptr)kp->d_dag);
+        delete kp;
+        return false;
+    }
+    oroMemcpy(kp->d_l1_cache, h_dag.data(), L1_CACHE_BYTES, oroMemcpyHostToDevice);
+
     // Compile kernels for multiple periods (variance measurement during autotune)
     {
         bool is_amd = tnn_is_amd_device(device_id);
@@ -1398,7 +1439,7 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
         auto ct0 = std::chrono::steady_clock::now();
         int compiled_ok = 0;
         for (int p = 0; p < KAWPOW_BENCH_PERIODS; ++p) {
-            int block_num = p * 3; // first block of each period
+            int block_num = KAWPOW_BENCH_BASE_BLOCK + p * 3; // consecutive periods from RVN-like height
             std::string src = kawpow_proggen::inject_program(base_src, block_num);
             std::string name = "kawpow_p" + std::to_string(p) + ".hip";
 
@@ -1420,7 +1461,187 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
         fflush(stdout);
     }
 
+    // Query occupancy across candidate block sizes on period-0 kernel.
+    // KawPow is DAG-bound — block size sweep is flat noise, but different block
+    // sizes at the same occupancy can differ in wavefront scheduling / cache behavior.
+    // Pick the candidate with the most total threads (highest occupancy).
+    if (kp->period_kernels[0]) {
+        oroFunction_t f = kp->period_kernels[0];
+        // KawPow is memory-latency bound — more blocks/CU = more wavefronts
+        // to hide DAG load latency. Find highest blocks/CU, then shootout ties.
+        static constexpr int candidates[] = {32, 64, 128, 256, 512, 768, 1024};
+        int peak_threads_per_cu = 0;
+
+        // Phase 1: query all, find peak threads/CU
+        struct OccEntry { int bs; int blocks_per_cu; int threads; };
+        std::vector<OccEntry> entries;
+
+        printf("[KawPow] GPU %d: Occupancy query (CUs=%d):\n", device_id, props.multiProcessorCount);
+        for (int bs : candidates) {
+            int max_blocks = 0;
+            oroError_t oerr = oroModuleOccupancyMaxActiveBlocksPerMultiprocessor(
+                &max_blocks, f, bs, 0);
+            if (oerr != oroSuccess || max_blocks <= 0) continue;
+
+            int threads = max_blocks * bs;
+            entries.push_back({bs, max_blocks, threads});
+            if (threads > peak_threads_per_cu) peak_threads_per_cu = threads;
+            printf("    block=%4d: %2d blocks/CU, %4d threads/CU\n",
+                   bs, max_blocks, threads);
+        }
+
+        // Phase 2: collect candidates tied at peak threads/CU
+        std::vector<OccEntry> tied;
+        for (auto& e : entries) {
+            if (e.threads == peak_threads_per_cu)
+                tied.push_back(e);
+        }
+
+        int best_block = 0, best_blocks_per_cu = 0;
+        if (tied.size() == 1) {
+            // Only one candidate at peak — use it directly
+            best_block = tied[0].bs;
+            best_blocks_per_cu = tied[0].blocks_per_cu;
+            printf("  → block=%d (%d blocks/CU, %d threads/CU, no tie)\n",
+                   best_block, best_blocks_per_cu, peak_threads_per_cu);
+        } else if (!tied.empty()) {
+            // Shootout: quick timed comparison among tied candidates
+            printf("  Shootout (%zu tied at %d threads/CU):\n", tied.size(), peak_threads_per_cu);
+
+            // Allocate minimal bench buffers
+            uint8_t* bh = nullptr; uint64_t* bt = nullptr; uint64_t* bs_sol = nullptr;
+            oroStream_t bstream = nullptr;
+            oroStreamCreate(&bstream);
+            oroMalloc((oroDeviceptr*)&bh, 32);
+            oroMalloc((oroDeviceptr*)&bt, 32);
+            oroMalloc((oroDeviceptr*)&bs_sol, 320);
+            oroMemset((oroDeviceptr)bh, 0, 32);
+            uint64_t maxt[4] = {~0ULL, ~0ULL, ~0ULL, ~0ULL};
+            oroMemcpy(bt, maxt, 32, oroMemcpyHostToDevice);
+
+            constexpr int SHOOTOUT_MULT = 10;
+            constexpr double SHOOTOUT_DURATION_S = 10.0;
+
+            double best_rate = 0;
+            for (auto& e : tied) {
+                int grid = e.blocks_per_cu * props.multiProcessorCount * SHOOTOUT_MULT;
+                uint32_t batch = (uint32_t)grid * (uint32_t)e.bs / 16u;
+                uint32_t block_number = KAWPOW_BENCH_BASE_BLOCK;
+                uint32_t dag_items = kp->dag_num_items;
+                uint32_t* rh = nullptr;
+                uint32_t* l1 = kp->d_l1_cache;
+                uint64_t nonce = 0;
+
+                uint32_t* hdr = (uint32_t*)bh;
+                uint32_t* dag = kp->d_dag;
+                void* args[] = {
+                    &hdr, &dag, &nonce, &batch,
+                    &bt, &bs_sol, &block_number, &dag_items, &rh, &l1,
+                };
+
+                // Warmup: 5s to reach thermal steady state
+                {
+                    auto tw0 = std::chrono::steady_clock::now();
+                    while (std::chrono::duration<double>(
+                               std::chrono::steady_clock::now() - tw0).count() < 5.0) {
+                        nonce = 0;
+                        oroModuleLaunchKernel(f, grid, 1, 1, e.bs, 1, 1,
+                                              0, bstream, args, nullptr);
+                        oroStreamSynchronize(bstream);
+                    }
+                }
+
+                // Sustained 10s run with rolling output
+                uint64_t total_hashes = 0;
+                uint64_t interval_hashes = 0;
+                auto t0 = std::chrono::steady_clock::now();
+                auto t_last = t0;
+                printf("    block=%4d: ", e.bs);
+                fflush(stdout);
+
+                while (true) {
+                    nonce = total_hashes;
+                    oroModuleLaunchKernel(f, grid, 1, 1, e.bs, 1, 1,
+                                          0, bstream, args, nullptr);
+                    oroStreamSynchronize(bstream);
+                    total_hashes += batch;
+                    interval_hashes += batch;
+
+                    auto now = std::chrono::steady_clock::now();
+                    double elapsed_total = std::chrono::duration<double>(now - t0).count();
+                    double elapsed_interval = std::chrono::duration<double>(now - t_last).count();
+
+                    if (elapsed_interval >= 1.0) {
+                        double instant = (double)interval_hashes / (elapsed_interval * 1e6);
+                        printf("%.1f ", instant);
+                        fflush(stdout);
+                        interval_hashes = 0;
+                        t_last = now;
+                    }
+                    if (elapsed_total >= SHOOTOUT_DURATION_S) break;
+                }
+                double elapsed = std::chrono::duration<double>(
+                    std::chrono::steady_clock::now() - t0).count();
+                double mhs = (double)total_hashes / (elapsed * 1e6);
+
+                bool winner = mhs > best_rate;
+                printf("→ avg %.2f MH/s%s\n", mhs, winner ? " *" : "");
+                if (winner) {
+                    best_rate = mhs;
+                    best_block = e.bs;
+                    best_blocks_per_cu = e.blocks_per_cu;
+                }
+            }
+
+            oroFree((oroDeviceptr)bh);
+            oroFree((oroDeviceptr)bt);
+            oroFree((oroDeviceptr)bs_sol);
+            oroStreamDestroy(bstream);
+        }
+
+        if (best_block > 0) {
+            kp->occ_block_size = best_block;
+            kp->occ_grid_size = best_blocks_per_cu * props.multiProcessorCount;
+            printf("[KawPow] GPU %d: Winner: block=%d, %d blocks/CU\n",
+                   device_id, best_block, best_blocks_per_cu);
+            fflush(stdout);
+        }
+    }
+
     *algo_data = kp;
+    return true;
+}
+
+// Occupancy-based tune: use period-0 kernel occupancy directly, skip sweep
+// KawPow has no per-hash VRAM — scale batch to keep the GPU fed with waves.
+// The occupancy query picks the block size; we multiply up to ~10x full-GPU
+// occupancy so the scheduler always has work queued behind in-flight DAG loads.
+inline bool kawpow_occupancy_tune(TuningResult& result, const oroDeviceProp_t& props,
+                                   int device_id, void* algo_data,
+                                   double memory_reserve_mb, double memory_usage_factor)
+{
+    (void)memory_reserve_mb; (void)memory_usage_factor;
+    auto* kp = static_cast<KawPowAlgoData*>(algo_data);
+    if (!kp || kp->occ_block_size <= 0 || kp->occ_grid_size <= 0) return false;
+
+    int block = kp->occ_block_size;
+    int blocks_per_cu = kp->occ_grid_size / props.multiProcessorCount;
+    int CUs = props.multiProcessorCount;
+
+    // 1x occupancy = blocks_per_cu * CUs blocks. Scale up so the scheduler
+    // has deep queues. ~10x keeps the memory system saturated.
+    constexpr int BATCH_MULTIPLIER = 10;
+    int grid = blocks_per_cu * CUs * BATCH_MULTIPLIER;
+    // 16 threads per hash (PROGPOW_LANES)
+    uint32_t batch = (uint32_t)grid * (uint32_t)block / 16u;
+
+    result.block_size = block;
+    result.num_blocks = grid;
+    result.batch_size = batch;
+
+    printf("[KawPow] GPU %d: Occupancy config: block=%d, %d blocks/CU, %dx fill → grid=%d, batch=%u\n",
+           device_id, block, blocks_per_cu, BATCH_MULTIPLIER, grid, batch);
+    fflush(stdout);
     return true;
 }
 
@@ -1430,6 +1651,7 @@ inline void kawpow_algo_data_cleanup(void* algo_data)
     auto* kp = static_cast<KawPowAlgoData*>(algo_data);
     if (kp) {
         if (kp->d_dag) oroFree((oroDeviceptr)kp->d_dag);
+        if (kp->d_l1_cache) oroFree((oroDeviceptr)kp->d_l1_cache);
         for (int i = 0; i < kp->num_period_kernels; ++i) {
             if (kp->period_modules[i])
                 oroModuleUnload(kp->period_modules[i]);
@@ -1462,13 +1684,15 @@ inline bool kawpow_execute(
     uint32_t block_number = kp->block_number;
     uint32_t dag_num_items = kp->dag_num_items;
     uint32_t* result_hashes = nullptr;
+    uint32_t* l1_cache = kp->d_l1_cache;
 
     void* args[] = {
         &header, &dag, &nonce_start, &batch_size,
         &target, &solutions, &block_number, &dag_num_items, &result_hashes,
+        &l1_cache,
     };
 
-    size_t shared_mem = kawpow_shared_mem(ctx.block_size);
+    size_t shared_mem = 0; // no LDS — L1 cache lives in global memory now
     auto err = oroModuleLaunchKernel(
         it->second, grid, 1, 1,
         ctx.block_size, 1, 1,
@@ -1484,12 +1708,15 @@ inline void kawpow_post_tune(const TuningResult& result,
                               int device_id, void* algo_data,
                               int warmup_count, int timed_count)
 {
-    (void)props;
+    (void)props; (void)warmup_count; (void)timed_count;
     auto* kp = static_cast<KawPowAlgoData*>(algo_data);
     if (!kp || kp->num_period_kernels == 0) return;
 
-    printf("\n[KawPow] GPU %d: Period variance bench (%d programs, block=%d, batch=%u)\n",
-           device_id, kp->num_period_kernels, result.block_size, result.batch_size);
+    constexpr double BENCH_DURATION_S = 30.0;
+
+    printf("\n[KawPow] GPU %d: Sustained bench (%.0fs, %d programs, block=%d, batch=%u)\n",
+           device_id, BENCH_DURATION_S, kp->num_period_kernels,
+           result.block_size, result.batch_size);
     fflush(stdout);
 
     // Allocate minimal test buffers
@@ -1503,7 +1730,6 @@ inline void kawpow_post_tune(const TuningResult& result,
     oroMalloc((oroDeviceptr*)&d_target, 32);
     oroMalloc((oroDeviceptr*)&d_solutions, 320);
 
-    // Zero header, max target (accept everything)
     oroMemset((oroDeviceptr)d_header, 0, 32);
     uint64_t max_tgt[4] = {~0ULL, ~0ULL, ~0ULL, ~0ULL};
     oroMemcpy(d_target, max_tgt, 32, oroMemcpyHostToDevice);
@@ -1512,73 +1738,79 @@ inline void kawpow_post_tune(const TuningResult& result,
     uint32_t total_threads = batch_size * 16u;
     uint32_t grid = (total_threads + result.block_size - 1) / result.block_size;
     size_t shared_mem = kawpow_shared_mem(result.block_size);
+    int num_kernels = kp->num_period_kernels;
 
-    double rates[KAWPOW_BENCH_PERIODS];
-    double min_rate = 1e18, max_rate = 0, sum_rate = 0;
-    int measured = 0;
+    // Build args — nonce_start and block_number are updated in the loop
+    uint32_t* header = (uint32_t*)d_header;
+    uint32_t* dag = kp->d_dag;
+    uint64_t nonce_start = 0;
+    uint32_t block_number = KAWPOW_BENCH_BASE_BLOCK;
+    uint32_t dag_num_items = kp->dag_num_items;
+    uint32_t* result_hashes = nullptr;
+    uint32_t* l1_cache = kp->d_l1_cache;
 
-    for (int p = 0; p < kp->num_period_kernels; ++p) {
-        oroFunction_t func = kp->period_kernels[p];
-        if (!func) continue;
+    void* args[] = {
+        &header, &dag, &nonce_start, &batch_size,
+        &d_target, &d_solutions, &block_number, &dag_num_items, &result_hashes,
+        &l1_cache,
+    };
 
-        uint32_t* header = (uint32_t*)d_header;
-        uint32_t* dag = kp->d_dag;
-        uint64_t nonce_start = 0;
-        uint32_t block_number = (uint32_t)(p * 3);
-        uint32_t dag_num_items = kp->dag_num_items;
-        uint32_t* result_hashes = nullptr;
+    // ---- Sustained bench with period 0 (matches shootout) ----
+    oroFunction_t func = kp->period_kernels[0];
 
-        void* args[] = {
-            &header, &dag, &nonce_start, &batch_size,
-            &d_target, &d_solutions, &block_number, &dag_num_items, &result_hashes,
-        };
+    // Warmup: 3 launches
+    for (int w = 0; w < 3; ++w) {
+        oroMemsetAsync((oroDeviceptr)d_solutions, 0, 4, stream);
+        oroModuleLaunchKernel(func, grid, 1, 1, result.block_size, 1, 1,
+                              shared_mem, stream, args, nullptr);
+    }
+    oroStreamSynchronize(stream);
+    auto t_start = std::chrono::steady_clock::now();
+    auto t_last_print = t_start;
+    uint64_t total_hashes = 0;
+    uint64_t interval_hashes = 0;
+    double peak_mhs = 0;
 
-        // Warmup launches to stabilize clocks/caches
-        for (int w = 0; w < warmup_count; ++w) {
-            oroMemsetAsync((oroDeviceptr)d_solutions, 0, 4, stream);
-            oroModuleLaunchKernel(func, grid, 1, 1, result.block_size, 1, 1,
-                                  shared_mem, stream, args, nullptr);
-        }
+    printf("  [time]  instant    avg      peak\n");
+    fflush(stdout);
+
+    while (true) {
+        oroMemsetAsync((oroDeviceptr)d_solutions, 0, 4, stream);
+        nonce_start = total_hashes;
+        oroModuleLaunchKernel(func, grid, 1, 1, result.block_size, 1, 1,
+                              shared_mem, stream, args, nullptr);
         oroStreamSynchronize(stream);
 
-        // Timed iterations
-        oroEvent_t ev_start, ev_stop;
-        oroEventCreate(&ev_start);
-        oroEventCreate(&ev_stop);
+        total_hashes += batch_size;
+        interval_hashes += batch_size;
 
-        oroEventRecord(ev_start, stream);
-        for (int iter = 0; iter < timed_count; ++iter) {
-            oroMemsetAsync((oroDeviceptr)d_solutions, 0, 4, stream);
-            nonce_start = (uint64_t)iter * batch_size;
-            oroModuleLaunchKernel(func, grid, 1, 1, result.block_size, 1, 1,
-                                  shared_mem, stream, args, nullptr);
+        auto now = std::chrono::steady_clock::now();
+        double elapsed_total = std::chrono::duration<double>(now - t_start).count();
+        double elapsed_interval = std::chrono::duration<double>(now - t_last_print).count();
+
+        if (elapsed_interval >= 1.0) {
+            double instant_mhs = (double)interval_hashes / (elapsed_interval * 1e6);
+            double avg_mhs = (double)total_hashes / (elapsed_total * 1e6);
+            if (instant_mhs > peak_mhs) peak_mhs = instant_mhs;
+
+            printf("  [%4.0fs]  %6.2f    %6.2f    %6.2f MH/s\n",
+                   elapsed_total, instant_mhs, avg_mhs, peak_mhs);
+            fflush(stdout);
+
+            interval_hashes = 0;
+            t_last_print = now;
         }
-        oroEventRecord(ev_stop, stream);
-        oroStreamSynchronize(stream);
 
-        float ms = 0;
-        oroEventElapsedTime(&ms, ev_start, ev_stop);
-        oroEventDestroy(ev_start);
-        oroEventDestroy(ev_stop);
-
-        double hashes = (double)batch_size * timed_count;
-        double mh_s = hashes / (ms * 1000.0); // ms → s, then /1e6
-        rates[p] = mh_s;
-        sum_rate += mh_s;
-        if (mh_s < min_rate) min_rate = mh_s;
-        if (mh_s > max_rate) max_rate = mh_s;
-        measured++;
-
-        printf("  period %2d: %7.2f MH/s\n", p, mh_s);
+        if (elapsed_total >= BENCH_DURATION_S) break;
     }
 
-    if (measured > 0) {
-        double avg = sum_rate / measured;
-        double spread = (max_rate - min_rate) / avg * 100.0;
-        printf("  ----------------------------------------\n");
-        printf("  avg: %.2f MH/s  min: %.2f  max: %.2f  spread: %.1f%%\n",
-               avg, min_rate, max_rate, spread);
-    }
+    double total_s = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - t_start).count();
+    double final_avg = (double)total_hashes / (total_s * 1e6);
+
+    printf("  ----------------------------------------\n");
+    printf("  %llu hashes in %.1fs — avg: %.2f MH/s, peak: %.2f MH/s\n",
+           (unsigned long long)total_hashes, total_s, final_avg, peak_mhs);
     fflush(stdout);
 
     oroFree((oroDeviceptr)d_header);
@@ -1607,15 +1839,15 @@ inline AlgoConfig KAWPOW_CONFIG = {
     .category = AlgoCategory::MemoryHard,
     .enable_reg_tuning = false,
 
-    .amd_blocks = {64, 1024, 64},
+    .amd_blocks = {32, 1024, 32},
     .nvidia_blocks = {32, 1024, 32},
     .target_batch_time_ms = 200.0,
     .max_batch_time_ms = 500.0,
     .min_batch_time_ms = 0.1,
     .enable_autotune = true,
-    .autotune_warmup = 1,
-    .autotune_iterations = 2,
-    .batch_step_denom = 4,  // quarter-steps: 1x, 1.25x, 1.5x, 1.75x, 2x, ...
+    .autotune_warmup = 2,
+    .autotune_iterations = 3,
+    .batch_step_denom = 2,
     .memory_reserve_mb = 256.0,
     .memory_usage_factor = 1.0,
 
@@ -1625,11 +1857,12 @@ inline AlgoConfig KAWPOW_CONFIG = {
     .strategy_names = {},
     .strategy_bottleneck_kernels = {},
 
-    .occupancy_threshold = 0.66,
+    .occupancy_threshold = 0.7,
 
     // KawPow-specific hooks
     .source_transform_fn = kawpow_source_transform,
     .pre_tune_fn = kawpow_pre_tune,
+    .occupancy_tune_fn = kawpow_occupancy_tune,
     .post_tune_fn = kawpow_post_tune,
     .algo_data_cleanup_fn = kawpow_algo_data_cleanup,
 };

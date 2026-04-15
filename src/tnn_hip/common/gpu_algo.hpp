@@ -429,6 +429,16 @@ struct AlgoConfig {
                                           int device_id, void** algo_data)>;
     PreTuneFn pre_tune_fn = nullptr;
 
+    // Occupancy-based tune — when set, skips the autotune sweep entirely.
+    // Returns {block_size, batch_size} via the TuningResult. Called after pre_tune_fn.
+    // If it returns true, configure_batch uses the result directly (no sweep).
+    using OccupancyTuneFn = std::function<bool(TuningResult& result,
+                                               const oroDeviceProp_t& props,
+                                               int device_id, void* algo_data,
+                                               double memory_reserve_mb,
+                                               double memory_usage_factor)>;
+    OccupancyTuneFn occupancy_tune_fn = nullptr;
+
     // Post-tune — called after autotune completes with the winning result.
     // Use for variance measurement, diagnostics, etc.
     using PostTuneFn = std::function<void(const TuningResult& result,

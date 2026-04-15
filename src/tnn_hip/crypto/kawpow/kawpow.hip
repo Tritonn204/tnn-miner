@@ -249,7 +249,8 @@ void kawpow_hash_kernel(
     uint32_t* __restrict__       d_solutions,      // [0]=count, [1..]=nonces
     uint32_t                     block_number,
     uint32_t                     dag_num_items_div, // full_dataset_num_items / 2
-    uint32_t* __restrict__       d_result_hashes)  // nullable: [hash_id*16+0..7]=mix, [+8..15]=final
+    uint32_t* __restrict__       d_result_hashes,  // nullable: [hash_id*16+0..7]=mix, [+8..15]=final
+    const uint32_t* __restrict__ d_l1_cache)       // first 16KB of DAG, uploaded once per epoch
 {
     // ---- Thread → lane / hash mapping ----
     const uint32_t global_id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -258,16 +259,9 @@ void kawpow_hash_kernel(
 
     const uint64_t nonce = nonce_start + (uint64_t)hash_id;
 
-    // ---- Load 16 KB L1 cache into LDS ----
-    // All threads participate BEFORE early exit (syncthreads requires it).
-    __shared__ uint32_t l1_cache[PROGPOW_CACHE_WORDS]; // 4096 words = 16 KB
-
-    const uint32_t threads_in_block = blockDim.x;
-    static_assert(PROGPOW_CACHE_WORDS % 4 == 0);
-    for (uint32_t i = threadIdx.x; i < PROGPOW_CACHE_WORDS / 4; i += threads_in_block)
-        ((uint4*)l1_cache)[i] = ((const uint4*)d_dag)[i];
-        
-    __syncthreads();
+    // l1_cache alias — lives in global memory, hardware L0/L1 keeps it hot (16KB fits in 32KB L0)
+    // Frees 16KB LDS per block → higher occupancy → more wavefronts to hide DAG latency
+    const uint32_t* __restrict__ l1_cache = d_l1_cache;
 
     if (hash_id >= batch_size) return;
 
@@ -276,8 +270,6 @@ void kawpow_hash_kernel(
     // ================================================================
 
     uint32_t state[25];
-    #pragma unroll
-    for (int i = 0; i < 25; i++) state[i] = 0;
 
     // Absorb header hash (8 words)
     #pragma unroll
@@ -347,9 +339,6 @@ void kawpow_hash_kernel(
     // Phase 5:  Final Keccak-f800
     // (All lanes compute — divergence-free; only lane 0 checks solution)
     // ================================================================
-
-    #pragma unroll
-    for (int i = 0; i < 25; i++) state[i] = 0;
 
     // Absorb seed state (8 words)
     #pragma unroll

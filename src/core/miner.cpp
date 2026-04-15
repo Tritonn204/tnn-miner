@@ -839,6 +839,33 @@ int tnn_main(int argc, char **argv)
 
   miningProfile.useStratum |= vm.count("stratum");
 
+  // Parse GPU overrides early — before any bench/test entry points that may return
+#ifdef TNN_HIP
+  if (vm.count("gpu-retune"))
+  {
+    g_tuning_overrides.force_retune = true;
+    std::string csv = vm["gpu-retune"].as<std::string>();
+    if (!csv.empty()) {
+      std::istringstream ss(csv);
+      std::string tok;
+      while (std::getline(ss, tok, ',')) {
+        try { g_tuning_overrides.retune_devices.insert(std::stoi(tok)); }
+        catch (...) {}
+      }
+    }
+  }
+  if (vm.count("devices"))
+  {
+    std::string csv = vm["devices"].as<std::string>();
+    std::istringstream ss(csv);
+    std::string tok;
+    while (std::getline(ss, tok, ',')) {
+      try { HIP_includeDevices.insert(std::stoi(tok)); }
+      catch (...) {}
+    }
+  }
+#endif
+
   if (vm.count("test-spectre"))
   {
 #if defined(TNN_ASTROBWTV3)
@@ -1247,29 +1274,7 @@ int tnn_main(int argc, char **argv)
     batchSize = vm["batch-size"].as<int>();
   }
 #ifdef TNN_HIP
-  if (vm.count("gpu-retune"))
-  {
-    g_tuning_overrides.force_retune = true;
-    std::string csv = vm["gpu-retune"].as<std::string>();
-    if (!csv.empty()) {
-      std::istringstream ss(csv);
-      std::string tok;
-      while (std::getline(ss, tok, ',')) {
-        try { g_tuning_overrides.retune_devices.insert(std::stoi(tok)); }
-        catch (...) {}
-      }
-    }
-  }
-  if (vm.count("devices"))
-  {
-    std::string csv = vm["devices"].as<std::string>();
-    std::istringstream ss(csv);
-    std::string tok;
-    while (std::getline(ss, tok, ',')) {
-      try { HIP_includeDevices.insert(std::stoi(tok)); }
-      catch (...) {}
-    }
-  }
+  // gpu-retune and devices already parsed above (before bench/test entry points)
   if (vm.count("gpu-disable"))
   {
     std::string csv = vm["gpu-disable"].as<std::string>();

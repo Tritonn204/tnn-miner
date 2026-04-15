@@ -624,6 +624,30 @@ private:
             return true;
         }
         
+        // Occupancy-based tune: algo provides optimal config directly, skip sweep
+        if (config_.occupancy_tune_fn) {
+            TuningResult occ_result{};
+            if (config_.occupancy_tune_fn(occ_result, device_props_, device_id_, algo_data_,
+                                            config_.memory_reserve_mb, config_.memory_usage_factor)) {
+                block_size_ = occ_result.block_size;
+                batch_size_ = occ_result.batch_size;
+                num_blocks_ = occ_result.num_blocks;
+                tuning_result_ = occ_result;
+                tuning_result_.valid = true;
+
+                TNN_LOG_INFO("[AUTOTUNE] GPU %d: Occupancy tune → block=%d, batch=%u\n",
+                             device_id_, block_size_, batch_size_);
+
+                // Run post-tune hook (bench, diagnostics)
+                if (config_.post_tune_fn) {
+                    config_.post_tune_fn(tuning_result_, device_props_, device_id_, algo_data_,
+                                         config_.variance_warmup, config_.variance_iterations);
+                }
+                return true;
+            }
+            // Fall through to autotune if occupancy_tune_fn returns false
+        }
+
         if (config_.enable_autotune && !g_tuning_overrides.disable_autotune) {
             return run_autotune();
         } else {
@@ -1114,11 +1138,15 @@ private:
                 out.printf("[AUTOTUNE] GPU %d: Tune already done this session for %s, loading cache\n",
                            device_id_, tune_key.c_str());
                 out.flush();
-                
+
                 if (load_cached_tune()) {
                     TuneOutputBuffer out2(device_id_);
-                    out2.printf("[AUTOTUNE] GPU %d: Loaded cached tune: %s\n", 
+                    out2.printf("[AUTOTUNE] GPU %d: Loaded cached tune: %s\n",
                                device_id_, tuning_result_.describe().c_str());
+                    if (config_.post_tune_fn) {
+                        config_.post_tune_fn(tuning_result_, device_props_, device_id_, algo_data_,
+                                             config_.variance_warmup, config_.variance_iterations);
+                    }
                     return true;
                 }
                 // Cache load failed somehow, fall through to static
@@ -1136,8 +1164,12 @@ private:
                 
                 if (success && load_cached_tune()) {
                     TuneOutputBuffer out2(device_id_);
-                    out2.printf("[AUTOTUNE] GPU %d: Loaded tune from other GPU: %s\n", 
+                    out2.printf("[AUTOTUNE] GPU %d: Loaded tune from other GPU: %s\n",
                                device_id_, tuning_result_.describe().c_str());
+                    if (config_.post_tune_fn) {
+                        config_.post_tune_fn(tuning_result_, device_props_, device_id_, algo_data_,
+                                             config_.variance_warmup, config_.variance_iterations);
+                    }
                     return true;
                 }
                 
@@ -1156,11 +1188,17 @@ private:
         // Check disk cache first (before doing expensive tuning)
         if (!g_tuning_overrides.should_retune(device_id_) && load_cached_tune()) {
             TuneOutputBuffer out(device_id_);
-            out.printf("[AUTOTUNE] GPU %d: Loaded cached tune for %s\n", 
+            out.printf("[AUTOTUNE] GPU %d: Loaded cached tune for %s\n",
                        device_id_, config_.name.c_str());
-            out.printf("[AUTOTUNE] GPU %d: %s\n", 
+            out.printf("[AUTOTUNE] GPU %d: %s\n",
                        device_id_, tuning_result_.describe().c_str());
-            
+
+            // Run post-tune hook even on cache hit (bench, diagnostics, etc.)
+            if (config_.post_tune_fn) {
+                config_.post_tune_fn(tuning_result_, device_props_, device_id_, algo_data_,
+                                     config_.variance_warmup, config_.variance_iterations);
+            }
+
             // Mark as complete so other identical GPUs can use cache
             TuneCoordinator::instance().end_tune(tune_key, true);
             return true;
