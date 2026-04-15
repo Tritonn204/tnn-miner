@@ -1305,8 +1305,8 @@ struct KawPowAlgoData {
 
 inline size_t kawpow_shared_mem(int block_size)
 {
-  (void)block_size;
-  return 0; // L1 cache moved to global memory (hardware L0 caching)
+  // seed_state[8] spilled to LDS: 8 words × (block_size / 16 hashes) × 4 bytes
+  return (size_t)(block_size / 16) * 8 * sizeof(uint32_t);
 }
 
 // Source transform: inject period-0 program + RVN coin padding
@@ -1476,7 +1476,7 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
         for (int bs : candidates) {
             int max_blocks = 0;
             oroError_t oerr = oroModuleOccupancyMaxActiveBlocksPerMultiprocessor(
-                &max_blocks, f, bs, 0);
+                &max_blocks, f, bs, kawpow_shared_mem(bs));
             if (oerr != oroSuccess || max_blocks <= 0) continue;
 
             int threads = max_blocks * bs;
@@ -1515,7 +1515,7 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
             uint64_t maxt[4] = {~0ULL, ~0ULL, ~0ULL, ~0ULL};
             oroMemcpy(bt, maxt, 32, oroMemcpyHostToDevice);
 
-            constexpr int SHOOTOUT_MULT = 10;
+            constexpr int SHOOTOUT_MULT = 64;
             constexpr double SHOOTOUT_DURATION_S = 10.0;
 
             double best_rate = 0;
@@ -1544,7 +1544,7 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
                                std::chrono::steady_clock::now() - tw0).count() < 5.0) {
                         nonce = 0;
                         oroModuleLaunchKernel(f, grid, 1, 1, e.bs, 1, 1,
-                                              0, bstream, args, nullptr);
+                                              kawpow_shared_mem(e.bs), bstream, args, nullptr);
                         oroStreamSynchronize(bstream);
                     }
                 }
@@ -1560,7 +1560,7 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
                 while (true) {
                     nonce = total_hashes;
                     oroModuleLaunchKernel(f, grid, 1, 1, e.bs, 1, 1,
-                                          0, bstream, args, nullptr);
+                                          kawpow_shared_mem(e.bs), bstream, args, nullptr);
                     oroStreamSynchronize(bstream);
                     total_hashes += batch;
                     interval_hashes += batch;
@@ -1628,7 +1628,7 @@ inline bool kawpow_occupancy_tune(TuningResult& result, const oroDeviceProp_t& p
 
     // 1x occupancy = blocks_per_cu * CUs blocks. Scale up so the scheduler
     // has deep queues. ~10x keeps the memory system saturated.
-    constexpr int BATCH_MULTIPLIER = 10;
+    constexpr int BATCH_MULTIPLIER = 64;
     int grid = blocks_per_cu * CUs * BATCH_MULTIPLIER;
     // 16 threads per hash (PROGPOW_LANES)
     uint32_t batch = (uint32_t)grid * (uint32_t)block / 16u;

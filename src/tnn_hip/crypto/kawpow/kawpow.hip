@@ -292,11 +292,16 @@ void kawpow_hash_kernel(
     // Seed for fill_mix
     const uint64_t seed = (uint64_t)state[0] | ((uint64_t)state[1] << 32);
 
-    // Save state[0..7] for final hash
-    uint32_t seed_state[8];
-    #pragma unroll
-    for (int i = 0; i < 8; i++)
-        seed_state[i] = state[i];
+    // Save state[0..7] to LDS for phase 5 — frees 8 VGPRs through the main loop
+    extern __shared__ uint32_t lds_seed_state[];
+    {
+        // Each hash within the block gets 8 words of LDS
+        // hash_within_block = threadIdx.x >> 4  (16 threads per hash)
+        uint32_t hwb = threadIdx.x >> PROGPOW_LANES_LOG2;
+        #pragma unroll
+        for (int i = 0; i < 8; i++)
+            lds_seed_state[hwb * 8u + i] = state[i];
+    }
 
     // ================================================================
     // Phase 2:  Initialize mix registers
@@ -347,10 +352,13 @@ void kawpow_hash_kernel(
     // (All lanes compute — divergence-free; only lane 0 checks solution)
     // ================================================================
 
-    // Absorb seed state (8 words)
-    #pragma unroll
-    for (int i = 0; i < 8; i++)
-        state[i] = seed_state[i];
+    // Absorb seed state (8 words) — reload from LDS
+    {
+        uint32_t hwb = threadIdx.x >> PROGPOW_LANES_LOG2;
+        #pragma unroll
+        for (int i = 0; i < 8; i++)
+            state[i] = lds_seed_state[hwb * 8u + i];
+    }
 
     // Absorb mix digest (8 words)
     #pragma unroll

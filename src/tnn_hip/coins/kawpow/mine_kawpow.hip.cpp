@@ -313,9 +313,11 @@ int kawpow_gpu_test()
             &d_l1_cache, &b_m, &b_s,
         };
 
+        // shared mem: seed_state[8] per hash in LDS
+        size_t smem = (size_t)(block_size / 16) * 8 * sizeof(uint32_t);
         KP_CHECK(oroModuleLaunchKernel(
             kernel_func, grid_size, 1, 1, block_size, 1, 1,
-            0, nullptr, args, nullptr));
+            smem, nullptr, args, nullptr));
         KP_CHECK(oroDeviceSynchronize());
 
         // Download results (16 uint32: 8 mix + 8 final)
