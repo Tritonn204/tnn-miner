@@ -181,6 +181,14 @@ public:
             return false;
         }
 
+        // Pre-tune setup: algo-specific resource allocation (e.g., KawPow DAG)
+        if (config_.pre_tune_fn) {
+            if (!config_.pre_tune_fn(kernels_, device_props_, device_id_, &algo_data_)) {
+                TNN_LOG_ERROR("[ERROR] GPU %d: pre_tune_fn failed\n", device_id_);
+                return false;
+            }
+        }
+
         if (!configure_batch()) {
             return false;
         }
@@ -220,6 +228,11 @@ public:
     {
         // Rebind context for cleanup (runs on destructor thread, not mine_loop)
         if (ctx_) (void)oroCtxSetCurrent(ctx_);
+
+        if (config_.algo_data_cleanup_fn && algo_data_) {
+            config_.algo_data_cleanup_fn(algo_data_);
+            algo_data_ = nullptr;
+        }
 
         cleanup_batch_buffers();
         if (start_event_) { (void)oroEventDestroy(start_event_); start_event_ = nullptr; }
@@ -271,6 +284,7 @@ public:
         ctx.block_size = block_size_;
         ctx.num_blocks = num_blocks_;
         ctx.strategy = tuning_result_.strategy;
+        ctx.algo_data = algo_data_;
         ctx.tune_keys = &tuning_result_.tune_keys;
         ctx.config = &config_;
         ctx.stream = nullptr;  // Default stream
@@ -428,8 +442,11 @@ private:
             std::string primary_kernel = config_.get_primary_kernel();
 
             if (!config_.source.empty()) {
+                std::string src_str = std::string(config_.source);
+                if (config_.source_transform_fn)
+                    src_str = config_.source_transform_fn(src_str, device_id_);
                 compiled = compiler.compile_from_source(
-                    std::string(config_.source),
+                    src_str,
                     config_.source_path,
                     primary_kernel,
                     options,
@@ -878,6 +895,7 @@ private:
             ctx.block_size = block_size_;
             ctx.num_blocks = trial_num_blocks;
             ctx.strategy = tuning_result_.strategy;
+            ctx.algo_data = algo_data_;
             ctx.tune_keys = &tuning_result_.tune_keys;
             ctx.config = &config_;
             ctx.stream = nullptr;
@@ -944,6 +962,7 @@ private:
         ctx.block_size = test_block_size;
         ctx.num_blocks = test_num_blocks;
         ctx.strategy = test_strategy;
+        ctx.algo_data = algo_data_;
         ctx.tune_keys = &tuning_result_.tune_keys;
         ctx.config = &config_;
         ctx.stream = stream;
@@ -1364,7 +1383,8 @@ private:
                 block_sizes_to_test.push_back(bs);
         }
 
-        const uint32_t max_half_mult = 48;  // 24x in half-steps (2=1x, 3=1.5x, ..., 48=24x)
+        const int denom = config_.batch_step_denom;
+        const uint32_t max_step = (uint32_t)(24 * denom);  // up to 24x regardless of step size
 
         for (size_t bsi = 0; bsi < block_sizes_to_test.size() && !g_autotune_stop.load(std::memory_order_relaxed); bsi++) {
             int test_block_size = block_sizes_to_test[bsi];
@@ -1390,22 +1410,22 @@ private:
 
             // Probe increasing batch sizes using half-step multipliers
             uint32_t successful_batch = 0;
-            uint32_t half_step = 2;  // starts at 1x (2/2)
+            uint32_t step = (uint32_t)denom;  // starts at 1x (denom/denom)
 
-            while (half_step <= max_half_mult) {
+            while (step <= max_step) {
                 // Compute raw probe batch from fixed base, then align to block_size
-                uint64_t raw_batch = (uint64_t)base_batch * half_step / 2;
+                uint64_t raw_batch = (uint64_t)base_batch * step / denom;
                 uint32_t probe_batch = (uint32_t)((raw_batch / test_block_size) * test_block_size);
                 if (probe_batch < (uint32_t)test_block_size) probe_batch = test_block_size;
 
                 // Skip if we've already tested this exact batch (alignment can cause duplicates)
                 if (probe_batch <= successful_batch) {
-                    half_step++;
+                    step++;
                     continue;
                 }
 
                 size_t probe_mem = (size_t)probe_batch * config_.scratch_per_hash;
-                double mult_display = half_step / 2.0;
+                double mult_display = (double)step / denom;
 
                 // Check if this would exceed available memory
                 bool clamped_to_max = false;
@@ -1574,7 +1594,7 @@ private:
                     break;
                 }
 
-                half_step++;
+                step++;
             }
 
             block_out.newline();
@@ -1648,6 +1668,12 @@ private:
         // Save to disk
         save_tune_cache();
 
+        // Post-tune hook (variance measurement, diagnostics, etc.)
+        if (config_.post_tune_fn && tune_success) {
+            config_.post_tune_fn(tuning_result_, device_props_, device_id_, algo_data_,
+                                 config_.variance_warmup, config_.variance_iterations);
+        }
+
         // Notify coordinator that we're done
         TuneCoordinator::instance().end_tune(tune_key, tune_success);
 
@@ -1666,6 +1692,7 @@ private:
 
     KernelMap kernels_;
     oroModule_t module_ = nullptr;
+    void* algo_data_ = nullptr;
 
     uint8_t *d_input_ = nullptr;
     uint8_t *d_outputs_ = nullptr;

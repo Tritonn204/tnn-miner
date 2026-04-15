@@ -9,6 +9,7 @@
 /// This file provides the public API for ProgPoW as the Ethash API extension.
 
 #include <ethash/ethash.hpp>
+#include <ethash/kawpow_coins.h>
 
 namespace progpow
 {
@@ -27,6 +28,18 @@ constexpr int num_math_operations = 18;
 constexpr size_t l1_cache_size = 16 * 1024;
 constexpr size_t l1_cache_num_items = l1_cache_size / sizeof(uint32_t);
 
+// Parameterized overloads — pass coin-specific Keccak padding
+result hash(const epoch_context& context, int block_number, const hash256& header_hash,
+    uint64_t nonce, const kawpow_coin_padding_t& padding) noexcept;
+
+result hash(const epoch_context_full& context, int block_number, const hash256& header_hash,
+    uint64_t nonce, const kawpow_coin_padding_t& padding) noexcept;
+
+bool verify(const epoch_context& context, int block_number, const hash256& header_hash,
+    const hash256& mix_hash, uint64_t nonce, const hash256& boundary,
+    const kawpow_coin_padding_t& padding) noexcept;
+
+// Default overloads — use Ravencoin padding
 result hash(const epoch_context& context, int block_number, const hash256& header_hash,
     uint64_t nonce) noexcept;
 
@@ -35,9 +48,6 @@ result hash(const epoch_context_full& context, int block_number, const hash256& 
 
 bool verify(const epoch_context& context, int block_number, const hash256& header_hash,
     const hash256& mix_hash, uint64_t nonce, const hash256& boundary) noexcept;
-
-//bool light_verify(const char* str_header_hash,
-//        const char* str_mix_hash, const char* str_nonce, const char* str_boundary, char* str_final) noexcept;
 
 search_result search_light(const epoch_context& context, int block_number,
     const hash256& header_hash, const hash256& boundary, uint64_t start_nonce,

@@ -163,6 +163,9 @@ struct KernelLaunchContext {
     // Module handle (for oroModuleGetGlobal — e.g., texture object setup)
     oroModule_t module = nullptr;
 
+    // Algo-specific opaque state (e.g., KawPow DAG pointer + metadata)
+    void* algo_data = nullptr;
+
     // Algo-specific tune keys (pointer to TuningResult's map, non-owning)
     const std::unordered_map<std::string, int64_t>* tune_keys = nullptr;
 
@@ -367,7 +370,10 @@ struct AlgoConfig {
     bool enable_autotune = true;
     int autotune_warmup = 2;
     int autotune_iterations = 3;
-    
+    int batch_step_denom = 2;  // batch multiplier denominator: 2=half-steps (1x,1.5x,2x), 4=quarter-steps (1x,1.25x,1.5x,...)
+    int variance_warmup = 2;      // warmup launches per variant in post-tune variance bench
+    int variance_iterations = 20; // timed launches per variant in post-tune variance bench
+
     // Memory overhead factor
     double memory_reserve_mb = 128.0;
     double memory_usage_factor = 0.9;
@@ -411,6 +417,29 @@ struct AlgoConfig {
 
     // Post-sweep tune key probe (nullptr = no extra probing)
     TuneKeyProbeFn tune_key_probe_fn = nullptr;
+
+    // Source transformation — called before RTC compile to modify kernel source.
+    // Used by KawPow to inject the random program + coin padding.
+    using SourceTransformFn = std::function<std::string(const std::string& source, int device_id)>;
+    SourceTransformFn source_transform_fn = nullptr;
+
+    // Pre-tune setup — called after compile, before autotune sweep.
+    // Allocates algo-specific resources (e.g., KawPow DAG) and sets *algo_data.
+    using PreTuneFn = std::function<bool(const KernelMap& kernels, const oroDeviceProp_t& props,
+                                          int device_id, void** algo_data)>;
+    PreTuneFn pre_tune_fn = nullptr;
+
+    // Post-tune — called after autotune completes with the winning result.
+    // Use for variance measurement, diagnostics, etc.
+    using PostTuneFn = std::function<void(const TuningResult& result,
+                                          const oroDeviceProp_t& props,
+                                          int device_id, void* algo_data,
+                                          int variance_warmup, int variance_iters)>;
+    PostTuneFn post_tune_fn = nullptr;
+
+    // Cleanup for algo_data (called during GPUAlgorithm::cleanup)
+    using AlgoDataCleanupFn = std::function<void(void* algo_data)>;
+    AlgoDataCleanupFn algo_data_cleanup_fn = nullptr;
 
     // Helper to get all kernel names (handles legacy single name)
     std::vector<std::string> get_kernel_names() const {

@@ -357,9 +357,9 @@ private:
         d.emplace_back("-std=c++20");
 
         if (is_amd) {
-            d.emplace_back("-DHIP_PLATFORM_AMD");
+            d.emplace_back("-D__HIP_PLATFORM_AMD__");
         } else {
-            d.emplace_back("-DHIP_PLATFORM_NVIDIA");
+            d.emplace_back("-D__HIP_PLATFORM_NVIDIA__");
         }
 
         return d;

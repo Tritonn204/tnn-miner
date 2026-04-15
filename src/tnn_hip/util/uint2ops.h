@@ -1,6 +1,19 @@
 #pragma once
 
+#if !defined(__HIPCC_RTC__) && !defined(__CUDACC_RTC__)
 #include <hip/hip_runtime.h>
+#else
+// hipRTC: stdint types live in __hip_internal:: on AMD
+#ifndef __HIPRTC__INTTYPES_DEFINED
+#define __HIPRTC__INTTYPES_DEFINED
+#ifdef __HIP_PLATFORM_AMD__
+using uint8_t  = __hip_internal::uint8_t;
+using uint16_t = __hip_internal::uint16_t;
+#elif defined(__CUDACC_RTC__)
+#include "stdint-jit.hip.inc"
+#endif
+#endif
+#endif
 static __device__ __forceinline__ uint2 rol64(const uint2 a, const uint8_t r)
 {
   uint2 result;

@@ -10,6 +10,7 @@
 #include "kiss99.hpp"
 // helpers.hpp from test/ not needed — hash comparison utils are in ethash-internal.hpp
 #include <ethash/keccak.hpp>
+#include <ethash/kawpow_coins.h>
 
 #include <array>
 
@@ -144,24 +145,6 @@ inline void random_merge(uint32_t& a, uint32_t b, uint32_t selector) noexcept
     }
 }
 
-static const uint32_t ravencoin_kawpow[15] = {
-        0x00000072, //R
-        0x00000041, //A
-        0x00000056, //V
-        0x00000045, //E
-        0x0000004E, //N
-        0x00000043, //C
-        0x0000004F, //O
-        0x00000049, //I
-        0x0000004E, //N
-        0x0000004B, //K
-        0x00000041, //A
-        0x00000057, //W
-        0x00000050, //P
-        0x0000004F, //O
-        0x00000057, //W
-};
-
 using lookup_fn = hash2048 (*)(const epoch_context&, uint32_t);
 
 using mix_array = std::array<std::array<uint32_t, num_regs>, num_lanes>;
@@ -286,7 +269,7 @@ hash256 hash_mix(
 }  // namespace
 
 result hash(const epoch_context& context, int block_number, const hash256& header_hash,
-    uint64_t nonce) noexcept
+    uint64_t nonce, const kawpow_coin_padding_t& padding) noexcept
 {
     uint32_t hash_seed[2];  // KISS99 initiator
 
@@ -304,9 +287,9 @@ result hash(const epoch_context& context, int block_number, const hash256& heade
         state[8] = (uint32_t)nonce;
         state[9] = (uint32_t)(nonce >> 32);
 
-        // 3rd apply ravencoin input constraints
+        // 3rd apply coin-specific padding
         for (int i = 10; i < 25; i++)
-            state[i] = ravencoin_kawpow[i-10];
+            state[i] = padding.words[i-10];
 
         keccak_progpow_64(state);
 
@@ -329,9 +312,9 @@ result hash(const epoch_context& context, int block_number, const hash256& heade
     for (int i = 8; i < 16; i++)
         state[i] = mix_hash.word32s[i-8];
 
-    // 3rd apply ravencoin input constraints
+    // 3rd apply coin-specific padding (first 9 words)
     for (int i = 16; i < 25; i++)
-        state[i] = ravencoin_kawpow[i - 16];
+        state[i] = padding.words[i - 16];
 
     // Run keccak loop
     keccak_progpow_256(state);
@@ -343,8 +326,14 @@ result hash(const epoch_context& context, int block_number, const hash256& heade
     return {output, mix_hash};
 }
 
-result hash(const epoch_context_full& context, int block_number, const hash256& header_hash,
+result hash(const epoch_context& context, int block_number, const hash256& header_hash,
     uint64_t nonce) noexcept
+{
+    return hash(context, block_number, header_hash, nonce, KAWPOW_PADDING_RVN);
+}
+
+result hash(const epoch_context_full& context, int block_number, const hash256& header_hash,
+    uint64_t nonce, const kawpow_coin_padding_t& padding) noexcept
 {
     static const auto lazy_lookup = [](const epoch_context& ctx, uint32_t index) noexcept
     {
@@ -376,9 +365,9 @@ result hash(const epoch_context_full& context, int block_number, const hash256& 
         state[8] = (uint32_t)nonce;
         state[9] = (uint32_t)(nonce >> 32);
 
-        // 3rd apply ravencoin input constraints
+        // 3rd apply coin-specific padding
         for (int i = 10; i < 25; i++)
-            state[i] = ravencoin_kawpow[i-10];
+            state[i] = padding.words[i-10];
 
         keccak_progpow_64(state);
 
@@ -402,9 +391,9 @@ result hash(const epoch_context_full& context, int block_number, const hash256& 
     for (int i = 8; i < 16; i++)
         state[i] = mix_hash.word32s[i-8];
 
-    // 3rd apply ravencoin input constraints
+    // 3rd apply coin-specific padding (first 9 words)
     for (int i = 16; i < 25; i++)
-        state[i] = ravencoin_kawpow[i - 16];
+        state[i] = padding.words[i - 16];
 
     // Run keccak loop
     keccak_progpow_256(state);
@@ -416,8 +405,15 @@ result hash(const epoch_context_full& context, int block_number, const hash256& 
     return {output, mix_hash};
 }
 
+result hash(const epoch_context_full& context, int block_number, const hash256& header_hash,
+    uint64_t nonce) noexcept
+{
+    return hash(context, block_number, header_hash, nonce, KAWPOW_PADDING_RVN);
+}
+
 bool verify(const epoch_context& context, int block_number, const hash256& header_hash,
-    const hash256& mix_hash, uint64_t nonce, const hash256& boundary) noexcept
+    const hash256& mix_hash, uint64_t nonce, const hash256& boundary,
+    const kawpow_coin_padding_t& padding) noexcept
 {
     uint32_t hash_seed[2];  // KISS99 initiator
     uint32_t state2[8];
@@ -433,9 +429,9 @@ bool verify(const epoch_context& context, int block_number, const hash256& heade
         state[8] = (uint32_t)nonce;
         state[9] = (uint32_t)(nonce >> 32);
 
-        // 3rd apply ravencoin input constraints
+        // 3rd apply coin-specific padding
         for (int i = 10; i < 25; i++)
-            state[i] = ravencoin_kawpow[i-10];
+            state[i] = padding.words[i-10];
 
         keccak_progpow_64(state);
 
@@ -453,14 +449,13 @@ bool verify(const epoch_context& context, int block_number, const hash256& heade
     for (int i = 0; i < 8; i++)
         state[i] = state2[i];
 
-
     // 2nd subsequent 8 words are carried from digest/mix
     for (int i = 8; i < 16; i++)
         state[i] = mix_hash.word32s[i-8];
 
-    // 3rd apply ravencoin input constraints
+    // 3rd apply coin-specific padding (first 9 words)
     for (int i = 16; i < 25; i++)
-        state[i] = ravencoin_kawpow[i - 16];
+        state[i] = padding.words[i - 16];
 
     // Run keccak loop
     keccak_progpow_256(state);
@@ -475,6 +470,12 @@ bool verify(const epoch_context& context, int block_number, const hash256& heade
         hash_mix(context, block_number, hash_seed, calculate_dataset_item_2048);
 
     return is_equal(expected_mix_hash, mix_hash);
+}
+
+bool verify(const epoch_context& context, int block_number, const hash256& header_hash,
+    const hash256& mix_hash, uint64_t nonce, const hash256& boundary) noexcept
+{
+    return verify(context, block_number, header_hash, mix_hash, nonce, boundary, KAWPOW_PADDING_RVN);
 }
 
 //bool light_verify(const char* str_header_hash,

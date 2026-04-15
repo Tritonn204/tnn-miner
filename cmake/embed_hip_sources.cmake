@@ -91,11 +91,11 @@ function(embed_hip_sources)
         set(EMBEDDED_CONTENT "${EMBEDDED_CONTENT}\n)EMBEDSRC\";\n\n")
 
         # Store the path for runtime reference
-        # For .inc header files, use just the basename so #include "file.inc" works
+        # For header files (.inc, .h, .hip.h), use just the basename so #include "file" works in RTC
         # For .hip source files, use the full path
-        string(REGEX MATCH "\\.inc$" IS_INC_FILE "${REL_PATH}")
+        string(REGEX MATCH "\\.(inc|h|hip\\.h)$" IS_HEADER_FILE "${REL_PATH}")
 
-        if(IS_INC_FILE)
+        if(IS_HEADER_FILE)
             get_filename_component(FILE_BASENAME "${REL_PATH}" NAME)
             set(EMBEDDED_CONTENT "${EMBEDDED_CONTENT}constexpr std::string_view ${VAR_NAME}_PATH = \"${FILE_BASENAME}\";\n\n")
             message(STATUS "  -> Using basename for HIPRTC header: ${FILE_BASENAME}")

@@ -1,13 +1,401 @@
 #ifdef TNN_KAWPOW
 
 #include "../../common/gpu_compat.hpp"
-#include "../../common/gpu_miner.hpp"
+#include "../../common/gpu_rtc.hpp"
 #include "../../common/hip_algo_registry.hpp"
+#include "../../crypto/kawpow/kawpow_proggen.hpp"
+#include <kawpow.hip.hpp>
+#include <ethash/ethash.hpp>
+#include <ethash/progpow.hpp>
+#include <ethash/ethash-internal.hpp>
+#include <ethash/kawpow_coins.h>
 #include <algo_definitions.h>
 #include <tnn_log.hpp>
 
+#include <chrono>
+#include <thread>
+#include <vector>
+#include <cstring>
+#include <cstdio>
+#include <string>
+
 // ============================================================================
-// KawPow GPU mining entry point (stub)
+// Helpers
+// ============================================================================
+
+#define KP_CHECK(expr)                                                       \
+    do {                                                                      \
+        oroError_t _e = (expr);                                               \
+        if (_e != oroSuccess) {                                               \
+            fprintf(stderr, "[KawPow] GPU error at %s:%d: %s\n",             \
+                    __FILE__, __LINE__, tnn_error_string(_e));                 \
+            return -1;                                                        \
+        }                                                                     \
+    } while (0)
+
+#define KP_CHECK_VOID(expr)                                                  \
+    do {                                                                      \
+        oroError_t _e = (expr);                                               \
+        if (_e != oroSuccess) {                                               \
+            fprintf(stderr, "[KawPow] GPU error at %s:%d: %s\n",             \
+                    __FILE__, __LINE__, tnn_error_string(_e));                 \
+            return;                                                           \
+        }                                                                     \
+    } while (0)
+
+static std::string hash256_hex(const ethash::hash256& h)
+{
+    static const char hx[] = "0123456789abcdef";
+    std::string s;
+    s.reserve(64);
+    for (int i = 0; i < 32; i++) {
+        s.push_back(hx[h.bytes[i] >> 4]);
+        s.push_back(hx[h.bytes[i] & 0xf]);
+    }
+    return s;
+}
+
+static std::string words_hex(const uint32_t* w, int n)
+{
+    static const char hx[] = "0123456789abcdef";
+    std::string s;
+    s.reserve(n * 8);
+    for (int i = 0; i < n; i++) {
+        uint32_t v = w[i];
+        for (int b = 0; b < 4; b++) {
+            uint8_t byte = (uint8_t)(v & 0xFF);
+            s.push_back(hx[byte >> 4]);
+            s.push_back(hx[byte & 0xf]);
+            v >>= 8;
+        }
+    }
+    return s;
+}
+
+// ============================================================================
+// Compile KawPow kernel with program + padding injection
+// ============================================================================
+
+static int compile_kawpow_kernel(
+    int block_number,
+    const kawpow_coin_padding_t& padding,
+    bool is_amd,
+    const oroDeviceProp_t& props,
+    oroFunction_t& out_func)
+{
+    std::string src(hip_kawpow_source::SRC_TNN_HIP_CRYPTO_KAWPOW_KAWPOW_HIP_SOURCE);
+    src = kawpow_proggen::inject_coin_padding(src, padding);
+    src = kawpow_proggen::inject_program(src, block_number);
+
+    auto& compiler = RTCCompiler::instance();
+
+    // kawpow.hip is self-contained — no RTC headers needed
+
+    std::vector<std::string> opts;
+    if (is_amd) {
+        opts = {"-O3", "-mno-cumode", "-ffast-math"};
+        if (props.gcnArchName[0] != '\0')
+            opts.push_back(std::string("--gpu-architecture=") + props.gcnArchName);
+    } else {
+        opts = {"--dopt=on", "--use_fast_math"};
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "sm_%d%d", props.major, props.minor);
+        opts.push_back(std::string("--gpu-architecture=") + buf);
+    }
+
+    uint64_t period = (uint64_t)block_number / 3;
+    std::string name = "kawpow_p" + std::to_string(period) + ".hip";
+
+    auto ck = compiler.compile_from_source(src, name, "kawpow_hash_kernel", opts);
+    out_func = ck.function;
+    return 0;
+}
+
+// ============================================================================
+// Generate full DAG for an epoch (multi-threaded CPU)
+// ============================================================================
+
+struct KawPowDAG {
+    std::vector<uint32_t> data;
+    uint32_t num_items_2048;
+    uint32_t dag_num_items_div;
+    size_t   size_bytes;
+};
+
+static int generate_dag(int epoch, const ethash::epoch_context& ctx, KawPowDAG& dag)
+{
+    dag.num_items_2048    = (uint32_t)(ctx.full_dataset_num_items / 2);
+    dag.dag_num_items_div = dag.num_items_2048;
+    size_t dag_words      = (size_t)dag.num_items_2048 * 64;
+    dag.size_bytes        = dag_words * sizeof(uint32_t);
+
+    printf("[KawPow] Generating DAG for epoch %d: %u items (%.1f MB)...\n",
+           epoch, dag.num_items_2048, dag.size_bytes / (1024.0 * 1024.0));
+    fflush(stdout);
+
+    dag.data.resize(dag_words);
+
+    auto t0 = std::chrono::steady_clock::now();
+
+    unsigned nthreads = std::max(1u, std::thread::hardware_concurrency());
+    std::vector<std::thread> threads;
+    uint32_t chunk = (dag.num_items_2048 + nthreads - 1) / nthreads;
+
+    for (unsigned t = 0; t < nthreads; ++t) {
+        uint32_t start = t * chunk;
+        uint32_t end   = std::min(start + chunk, dag.num_items_2048);
+        threads.emplace_back([&ctx, &dag, start, end]() {
+            for (uint32_t i = start; i < end; ++i) {
+                auto item = ethash::calculate_dataset_item_2048(ctx, i);
+                std::memcpy(&dag.data[i * 64], item.word32s, 256);
+            }
+        });
+    }
+    for (auto& t : threads) t.join();
+
+    auto t1 = std::chrono::steady_clock::now();
+    double elapsed = std::chrono::duration<double>(t1 - t0).count();
+    printf("[KawPow] DAG generated in %.1fs (%u threads)\n", elapsed, nthreads);
+    fflush(stdout);
+    return 0;
+}
+
+// ============================================================================
+// GPU Test: compile kernel, generate DAG, compare GPU vs CPU reference
+// ============================================================================
+
+struct KPTestVec {
+    int         block_number;
+    const char* header_hex;
+    const char* nonce_hex;
+};
+
+static const KPTestVec gpu_test_vecs[] = {
+    {0,  "0000000000000000000000000000000000000000000000000000000000000000", "0000000000000000"},
+    {49, "63155f732f2bf556967f906155b510c917e48e99685ead76ea83f4eca03ab12b", "0000000007073c07"},
+    {50, "9e7248f20914913a73d80a70174c331b1d34f260535ac3631d770e656b5dd922", "00000000076e482e"},
+    {99, "de37e1824c86d35d154cf65a88de6d9286aec4f7f10c3fc9f0fa1bcc2687188d", "000000003917afab"},
+};
+static const int NUM_GPU_TESTS = sizeof(gpu_test_vecs) / sizeof(gpu_test_vecs[0]);
+
+static ethash::hash256 hex_to_h256(const char* hex)
+{
+    ethash::hash256 h = {};
+    for (size_t i = 0; i < 64 && hex[i] && hex[i + 1]; i += 2) {
+        auto nib = [](char c) -> int { return c <= '9' ? (c - '0') : (c - 'a' + 10); };
+        h.bytes[i / 2] = (uint8_t)((nib(hex[i]) << 4) | nib(hex[i + 1]));
+    }
+    return h;
+}
+
+static uint64_t hex_to_u64(const char* hex)
+{
+    uint64_t v = 0;
+    for (int i = 0; hex[i]; i++) {
+        v <<= 4;
+        v |= (hex[i] <= '9') ? (hex[i] - '0') : (hex[i] - 'a' + 10);
+    }
+    return v;
+}
+
+int kawpow_gpu_test()
+{
+    printf("\n========================================\n");
+    printf("[KawPow] Phase 2: GPU Kernel Validation\n");
+    printf("========================================\n\n");
+    fflush(stdout);
+
+    // ---- Init GPU ----
+    int devCount = 0;
+    KP_CHECK(oroGetDeviceCount(&devCount));
+    if (devCount == 0) { fprintf(stderr, "No GPU found\n"); return 1; }
+
+    oroDeviceProp_t props;
+    KP_CHECK(oroGetDeviceProperties(&props, tnn_get_device(0)));
+
+    oroCtx gpu_ctx;
+    KP_CHECK(oroCtxCreate(&gpu_ctx, 0, tnn_get_device(0)));
+
+    bool is_amd = tnn_is_amd_device(0);
+    printf("[KawPow] Device: %s (%s)\n\n", props.name,
+           is_amd ? "AMD" : "NVIDIA");
+    fflush(stdout);
+
+    // ---- Generate DAG (epoch 0) ----
+    const int epoch = 0;
+    auto ctx = ethash::create_epoch_context(epoch);
+    if (!ctx) { fprintf(stderr, "Failed to create epoch context\n"); return 1; }
+
+    KawPowDAG dag;
+    if (generate_dag(epoch, *ctx, dag) != 0) return 1;
+
+    // ---- Upload DAG to GPU ----
+    printf("[KawPow] Uploading DAG to GPU (%.1f MB)...\n",
+           dag.size_bytes / (1024.0 * 1024.0));
+    fflush(stdout);
+
+    uint32_t* d_dag = nullptr;
+    KP_CHECK(oroMalloc((oroDeviceptr*)&d_dag, dag.size_bytes));
+    KP_CHECK(oroMemcpy(d_dag, dag.data.data(), dag.size_bytes, oroMemcpyHostToDevice));
+
+    // ---- Allocate GPU buffers ----
+    uint32_t* d_header    = nullptr;
+    uint64_t* d_target    = nullptr;
+    uint32_t* d_solutions = nullptr;
+    uint32_t* d_results   = nullptr;
+
+    KP_CHECK(oroMalloc((oroDeviceptr*)&d_header,    32));
+    KP_CHECK(oroMalloc((oroDeviceptr*)&d_target,    32));
+    KP_CHECK(oroMalloc((oroDeviceptr*)&d_solutions, 320));
+    KP_CHECK(oroMalloc((oroDeviceptr*)&d_results,   16 * sizeof(uint32_t)));
+
+    // Set target to all-1s (accept everything)
+    uint64_t max_target[4] = {~0ULL, ~0ULL, ~0ULL, ~0ULL};
+    KP_CHECK(oroMemcpy(d_target, max_target, 32, oroMemcpyHostToDevice));
+
+    // ---- Run tests ----
+    int pass = 0, fail = 0;
+    int last_period = -1;
+    oroFunction_t kernel_func = nullptr;
+
+    for (int t = 0; t < NUM_GPU_TESTS; t++) {
+        const auto& tv = gpu_test_vecs[t];
+        int period = tv.block_number / 3;
+
+        printf("[GPU %d] block=%d period=%d nonce=%s\n",
+               t + 1, tv.block_number, period, tv.nonce_hex);
+        fflush(stdout);
+
+        // Recompile if period changed
+        if (period != last_period) {
+            printf("         Compiling kernel for period %d...\n", period);
+            fflush(stdout);
+            if (compile_kawpow_kernel(tv.block_number, KAWPOW_PADDING_RVN,
+                                      is_amd, props, kernel_func) != 0) {
+                fprintf(stderr, "         Compile failed!\n");
+                fail++;
+                continue;
+            }
+            last_period = period;
+        }
+
+        // CPU reference
+        ethash::hash256 header = hex_to_h256(tv.header_hex);
+        uint64_t nonce = hex_to_u64(tv.nonce_hex);
+        auto cpu_result = progpow::hash(*ctx, tv.block_number, header, nonce);
+
+        // Upload header
+        KP_CHECK(oroMemcpy(d_header, header.word32s, 32, oroMemcpyHostToDevice));
+
+        // Clear solutions + results
+        uint32_t zero = 0;
+        KP_CHECK(oroMemcpy(d_solutions, &zero, 4, oroMemcpyHostToDevice));
+        uint32_t zeros[16] = {};
+        KP_CHECK(oroMemcpy(d_results, zeros, 64, oroMemcpyHostToDevice));
+
+        // Launch: 1 hash = 16 threads, use block_size=16 to avoid syncthreads issues
+        uint32_t block_size  = 16;
+        uint32_t grid_size   = 1;
+        uint32_t batch_size  = 1;
+        uint32_t block_num   = (uint32_t)tv.block_number;
+        uint32_t dagdiv      = dag.dag_num_items_div;
+
+        void* args[] = {
+            &d_header, &d_dag, &nonce, &batch_size,
+            &d_target, &d_solutions, &block_num, &dagdiv, &d_results
+        };
+
+        KP_CHECK(oroModuleLaunchKernel(
+            kernel_func, grid_size, 1, 1, block_size, 1, 1,
+            0, nullptr, args, nullptr));
+        KP_CHECK(oroDeviceSynchronize());
+
+        // Download results (16 uint32: 8 mix + 8 final)
+        uint32_t gpu_out[16];
+        KP_CHECK(oroMemcpy(gpu_out, d_results, 64, oroMemcpyDeviceToHost));
+
+        // Compare
+        std::string cpu_mix_hex   = hash256_hex(cpu_result.mix_hash);
+        std::string cpu_final_hex = hash256_hex(cpu_result.final_hash);
+        std::string gpu_mix_hex   = words_hex(gpu_out, 8);
+        std::string gpu_final_hex = words_hex(gpu_out + 8, 8);
+
+        bool mix_ok   = (cpu_mix_hex == gpu_mix_hex);
+        bool final_ok = (cpu_final_hex == gpu_final_hex);
+
+        if (mix_ok && final_ok) {
+            printf("         \033[32mPASS\033[0m mix=%s\n", gpu_mix_hex.c_str());
+            pass++;
+        } else {
+            printf("         \033[31mFAIL\033[0m\n");
+            if (!mix_ok) {
+                printf("           mix cpu: %s\n", cpu_mix_hex.c_str());
+                printf("           mix gpu: %s\n", gpu_mix_hex.c_str());
+            }
+            if (!final_ok) {
+                printf("           fin cpu: %s\n", cpu_final_hex.c_str());
+                printf("           fin gpu: %s\n", gpu_final_hex.c_str());
+            }
+            fail++;
+        }
+        fflush(stdout);
+    }
+
+    // Cleanup
+    oroFree((oroDeviceptr)d_dag);
+    oroFree((oroDeviceptr)d_header);
+    oroFree((oroDeviceptr)d_target);
+    oroFree((oroDeviceptr)d_solutions);
+    oroFree((oroDeviceptr)d_results);
+    oroCtxDestroy(gpu_ctx);
+
+    printf("\n========================================\n");
+    printf("[GPU] %d/%d passed", pass, NUM_GPU_TESTS);
+    if (fail > 0) printf(", \033[31m%d FAILED\033[0m", fail);
+    else          printf(", \033[32mall passed\033[0m");
+    printf("\n========================================\n\n");
+    fflush(stdout);
+
+    return (fail == 0) ? 0 : 1;
+}
+
+// ============================================================================
+// GPU Benchmark — uses generic autotune (compile + DAG setup + block size sweep)
+// ============================================================================
+
+void kawpow_bench()
+{
+    printf("\n========================================\n");
+    printf("[KawPow] GPU Benchmark (autotune)\n");
+    printf("========================================\n\n");
+    fflush(stdout);
+
+    // Force retune — bench always overwrites cached results
+    g_tuning_overrides.force_retune = true;
+
+    auto algo = AlgoRegistry::instance().create("kawpow");
+    if (!algo) {
+        fprintf(stderr, "[KawPow] Failed to create algorithm instance\n");
+        return;
+    }
+
+    if (!algo->initialize(0)) {
+        fprintf(stderr, "[KawPow] Initialization / autotune failed\n");
+        return;
+    }
+
+    auto result = algo->get_tuning_result();
+    printf("\n========================================\n");
+    printf("[KawPow] Autotune complete:\n");
+    printf("  %s\n", result.describe().c_str());
+    printf("========================================\n\n");
+    fflush(stdout);
+
+    algo->cleanup();
+}
+
+// ============================================================================
+// Mining entry point (stub)
 // ============================================================================
 
 void mineKawPow_hip(int tid)

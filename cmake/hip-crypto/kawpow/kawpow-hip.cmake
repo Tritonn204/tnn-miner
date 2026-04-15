@@ -3,6 +3,16 @@ if (WITH_KAWPOW)
 
   message(STATUS "Building with KawPow support")
 
+  # Embed dependency headers for HIPRTC include resolution
+  embed_hip_sources(
+      OUTPUT_FILE "${PROJECT_BINARY_DIR}/generated/kawpow_embedded_headers.hpp"
+      SOURCES
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/bitselect.hip.h"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/util/uint2ops.h"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/keccak-amd.hip.inc"
+      MANIFEST_NAME KAWPOW_HEADERS
+  )
+
   # Embed the KawPow GPU kernel source for HIPRTC
   embed_hip_sources(
       OUTPUT_FILE "${PROJECT_BINARY_DIR}/generated/kawpow.hip.hpp"

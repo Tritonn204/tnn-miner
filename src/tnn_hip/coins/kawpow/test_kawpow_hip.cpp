@@ -4,6 +4,7 @@
 #include <string>
 
 #include <ethash/progpow.hpp>
+#include "test_kawpow_hip.h"
 
 // ============================================================
 // KawPow (ProgPoW 0.9.4 / Ravencoin) test vectors
@@ -135,11 +136,11 @@ static std::string hash256_to_hex(const ethash::hash256& h)
 // Test runner
 // ============================================================
 
-int test_kawpow_hip()
+static int test_kawpow_cpu()
 {
     printf("\n");
     printf("========================================\n");
-    printf("[hip-test-kawpow] KawPow CPU reference validation\n");
+    printf("[hip-test-kawpow] Phase 1: CPU reference validation\n");
     printf("========================================\n\n");
     fflush(stdout);
 
@@ -154,7 +155,7 @@ int test_kawpow_hip()
         const auto& tv = test_vectors[t];
         int epoch = ethash::get_epoch_number(tv.block_number);
 
-        printf("[TEST %2d] block=%d epoch=%d nonce=%s\n", t + 1, tv.block_number, epoch, tv.nonce_hex);
+        printf("[CPU %2d] block=%d epoch=%d nonce=%s\n", t + 1, tv.block_number, epoch, tv.nonce_hex);
         fflush(stdout);
 
         // Create epoch context if epoch changed
@@ -209,7 +210,7 @@ int test_kawpow_hip()
     }
 
     printf("\n========================================\n");
-    printf("[TEST] %d/%d passed", pass, NUM_TEST_VECTORS);
+    printf("[CPU] %d/%d passed", pass, NUM_TEST_VECTORS);
     if (fail > 0)
         printf(", \033[31m%d FAILED\033[0m", fail);
     else
@@ -218,4 +219,15 @@ int test_kawpow_hip()
     fflush(stdout);
 
     return (fail == 0) ? 0 : 1;
+}
+
+int test_kawpow_hip()
+{
+    // Phase 1: CPU reference validation against known test vectors
+    int rc = test_kawpow_cpu();
+    if (rc != 0)
+        return rc;
+
+    // Phase 2: GPU kernel validation against CPU reference
+    return kawpow_gpu_test();
 }

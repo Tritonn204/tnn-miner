@@ -903,6 +903,20 @@ int tnn_main(int argc, char **argv)
 #endif
   }
 
+  if (vm.count("bench-kawpow"))
+  {
+#if defined(TNN_KAWPOW)
+    kawpow_bench();
+    return 0;
+#else
+    setcolor(RED);
+    printf("ERROR: --bench-kawpow requires TNN_KAWPOW to be enabled\n");
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+#endif
+  }
+
   if (vm.count("test-yespower"))
   {
 #if defined(TNN_YESPOWER)
