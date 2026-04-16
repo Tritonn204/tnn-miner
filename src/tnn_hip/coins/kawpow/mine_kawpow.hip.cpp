@@ -83,10 +83,14 @@ static int compile_kawpow_kernel(
     bool is_amd,
     const oroDeviceProp_t& props,
     oroFunction_t& out_func,
-    oroModule_t* out_module = nullptr)
+    oroModule_t* out_module = nullptr,
+    uint32_t dag_num_items_div = 1,
+    uint32_t barrett_m = 1,
+    uint32_t barrett_shift = 0)
 {
     std::string src(hip_kawpow_source::SRC_TNN_HIP_CRYPTO_KAWPOW_KAWPOW_HIP_SOURCE);
     src = kawpow_proggen::inject_coin_padding(src, padding);
+    src = kawpow_proggen::inject_dag_constants(src, dag_num_items_div, barrett_m, barrett_shift);
     src = kawpow_proggen::inject_program(src, block_number);
 
     auto& compiler = RTCCompiler::instance();
@@ -328,6 +332,11 @@ int kawpow_gpu_test()
     printf("----------------------------------------\n");
     fflush(stdout);
 
+    // Barrett constants for compile-time injection
+    uint32_t dag_div = dag.dag_num_items_div;
+    uint32_t barrett_m = (uint32_t)((1ULL << 32) / dag_div);
+    uint32_t barrett_s = 0;
+
     int pass = 0, fail = 0;
     int last_period = -1;
     oroFunction_t kernel_func = nullptr;
@@ -345,7 +354,8 @@ int kawpow_gpu_test()
             printf("         Compiling kernel for period %d...\n", period);
             fflush(stdout);
             if (compile_kawpow_kernel(tv.block_number, KAWPOW_PADDING_RVN,
-                                      is_amd, props, kernel_func) != 0) {
+                                      is_amd, props, kernel_func, nullptr,
+                                      dag_div, barrett_m, barrett_s) != 0) {
                 fprintf(stderr, "         Compile failed!\n");
                 fail++;
                 continue;
@@ -372,14 +382,11 @@ int kawpow_gpu_test()
         uint32_t grid_size   = 1;
         uint32_t batch_size  = 1;
         uint32_t block_num   = (uint32_t)tv.block_number;
-        uint32_t dagdiv      = dag.dag_num_items_div;
-        uint32_t b_m = (uint32_t)((1ULL << 32) / dagdiv); // floor-based Barrett
-        uint32_t b_s = 0;
 
         void* args[] = {
             &d_header, &d_dag, &nonce, &batch_size,
-            &d_target, &d_solutions, &block_num, &dagdiv, &d_results,
-            &d_l1_cache, &b_m, &b_s,
+            &d_target, &d_solutions, &block_num, &d_results,
+            &d_l1_cache,
         };
 
         size_t smem = kawpow_shared_mem(block_size);
@@ -449,7 +456,8 @@ int kawpow_gpu_test()
             printf("         Compiling kernel for period %d...\n", period);
             fflush(stdout);
             if (compile_kawpow_kernel(tv.block_number, KAWPOW_PADDING_RVN,
-                                      is_amd, props, mono_fn, &split_module) != 0) {
+                                      is_amd, props, mono_fn, &split_module,
+                                      dag_div, barrett_m, barrett_s) != 0) {
                 fprintf(stderr, "         Compile failed!\n");
                 split_fail++;
                 continue;
@@ -483,9 +491,6 @@ int kawpow_gpu_test()
         KP_CHECK(oroMemset((oroDeviceptr)d_intermediate, 0, 64));
 
         uint32_t batch_size = 1;
-        uint32_t dagdiv = dag.dag_num_items_div;
-        uint32_t b_m = (uint32_t)((1ULL << 32) / dagdiv);
-        uint32_t b_s = 0;
 
         // Seed kernel: 1 thread per hash
         {
@@ -497,8 +502,7 @@ int kawpow_gpu_test()
 
         // Progpow kernel: 16 threads per hash (1 block of 16)
         {
-            void* args[] = { &d_dag, &batch_size, &dagdiv, &d_l1_cache,
-                             &b_m, &b_s, &d_intermediate };
+            void* args[] = { &d_dag, &batch_size, &d_l1_cache, &d_intermediate };
             KP_CHECK(oroModuleLaunchKernel(progpow_fn, 1, 1, 1, 16, 1, 1,
                                            kawpow_shared_mem_split(16), nullptr, args, nullptr));
             KP_CHECK(oroDeviceSynchronize());

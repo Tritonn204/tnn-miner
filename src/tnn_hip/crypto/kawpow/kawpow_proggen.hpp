@@ -316,44 +316,57 @@ inline std::string generate_program(int block_number) {
 
     std::string body;
     body.reserve(6144);
-    body += "        uint32_t _c0, _c1, _m;\n";
+constexpr int MAX_K = 4;
 
-    int i = 0;
-    while (i < max_ops) {
-        bool did_pair = false;
-
-        if (i < (int)CNT_CACHE && i + 1 < (int)CNT_CACHE) {
-            uint32_t next_src = cache_ops[i + 1].src;
-            bool safe = (cache_ops[i].dst != next_src);
-            if (safe && i < (int)CNT_MATH)
-                safe = (math_ops[i].dst != next_src);
-
-            if (safe) {
-                // Two cache reads back-to-back (LDS ILP)
-                body += "        _c0 = l1_cache[" + reg(cache_ops[i].src) + " & 0xFFFu];\n";
-                body += "        _c1 = l1_cache[" + reg(cache_ops[i+1].src) + " & 0xFFFu];\n";
-                // First cache merge
-                body += "        " + emit_merge(reg(cache_ops[i].dst), "_c0", cache_ops[i].sel) + "\n";
-                // First math
-                if (i < (int)CNT_MATH) emit_math_block(body, math_ops[i]);
-                // Second cache merge (after first math, same as original relative order)
-                body += "        " + emit_merge(reg(cache_ops[i+1].dst), "_c1", cache_ops[i+1].sel) + "\n";
-                // Second math
-                if (i + 1 < (int)CNT_MATH) emit_math_block(body, math_ops[i + 1]);
-                i += 2;
-                did_pair = true;
-            }
-        }
-
-        if (!did_pair) {
-            if (i < (int)CNT_CACHE) {
-                body += "        _c0 = l1_cache[" + reg(cache_ops[i].src) + " & 0xFFFu];\n";
-                body += "        " + emit_merge(reg(cache_ops[i].dst), "_c0", cache_ops[i].sel) + "\n";
-            }
-            if (i < (int)CNT_MATH) emit_math_block(body, math_ops[i]);
-            ++i;
+auto can_pair_k = [&](int i, int k) -> bool {
+    if (i + k > (int)CNT_CACHE) return false;
+    for (int j = 1; j < k; ++j) {
+        uint32_t s = cache_ops[i + j].src;
+        for (int p = 0; p < j; ++p) {
+            if (s == cache_ops[i + p].dst) return false;
+            if (i + p < (int)CNT_MATH && s == math_ops[i + p].dst) return false;
         }
     }
+    return true;
+};
+
+// ensure we've declared enough temps at body scope
+body += "        uint32_t _c0, _c1, _c2, _c3, _m;\n";
+
+int i = 0;
+while (i < max_ops) {
+    int k = 1;
+    if (i < (int)CNT_CACHE) {
+        int kmax = std::min(MAX_K, (int)CNT_CACHE - i);
+        for (int t = kmax; t >= 2; --t) {
+            if (can_pair_k(i, t)) { k = t; break; }
+        }
+    }
+
+    if (k >= 2) {
+        // Phase 1: issue all k LDS reads up front
+        for (int j = 0; j < k; ++j) {
+            body += "        _c" + std::to_string(j) + " = l1_cache["
+                  + reg(cache_ops[i + j].src) + " & 0xFFFu];\n";
+        }
+        // Phase 2: interleave merges and maths in original order
+        for (int j = 0; j < k; ++j) {
+            body += "        " + emit_merge(reg(cache_ops[i + j].dst),
+                                            "_c" + std::to_string(j),
+                                            cache_ops[i + j].sel) + "\n";
+            if (i + j < (int)CNT_MATH) emit_math_block(body, math_ops[i + j]);
+        }
+        i += k;
+    } else {
+        // 1-way fallback (unchanged)
+        if (i < (int)CNT_CACHE) {
+            body += "        _c0 = l1_cache[" + reg(cache_ops[i].src) + " & 0xFFFu];\n";
+            body += "        " + emit_merge(reg(cache_ops[i].dst), "_c0", cache_ops[i].sel) + "\n";
+        }
+        if (i < (int)CNT_MATH) emit_math_block(body, math_ops[i]);
+        ++i;
+    }
+}
 
     // ---- Phase 2: generate DAG params (RNG advances AFTER cache+math) ----
     uint32_t dag_dsts[NUM_WORDS_PER_LANE];
@@ -374,7 +387,7 @@ inline std::string generate_program(int block_number) {
     c += "\n";
 
     // DAG load — issued early, data arrives during cache+math
-    // Single uint4 load → compiler emits global_load_b128 (vectorized, not 4 scalar loads)
+    // Nontemporal (SLC) to avoid L2 pollution from random 4.6GB DAG reads
     c += "        uint4 _dg = ((const uint4*)d_dag)"
         "[dag_addr * 16u + ((lane_id ^ loop) & 15u)];\n\n";
 
@@ -411,6 +424,28 @@ inline std::string inject_coin_padding(const std::string& kernel_source,
     auto pos = result.find(marker);
     if (pos != std::string::npos)
         result.replace(pos, marker.size(), decls);
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// inject_dag_constants — replaces /* KAWPOW_DAG_CONSTS */ with compile-time defines
+// ---------------------------------------------------------------------------
+inline std::string inject_dag_constants(const std::string& kernel_source,
+                                         uint32_t dag_num_items_div,
+                                         uint32_t barrett_m,
+                                         uint32_t barrett_shift) {
+    char buf[256];
+    snprintf(buf, sizeof(buf),
+        "constexpr uint32_t KAWPOW_DAG_NUM_ITEMS_DIV = %uu;\n"
+        "constexpr uint32_t KAWPOW_BARRETT_M         = 0x%08xu;\n"
+        "constexpr uint32_t KAWPOW_BARRETT_SHIFT     = %uu;\n",
+        dag_num_items_div, barrett_m, barrett_shift);
+
+    std::string result = kernel_source;
+    const std::string marker = "/* KAWPOW_DAG_CONSTS */";
+    auto pos = result.find(marker);
+    if (pos != std::string::npos)
+        result.replace(pos, marker.size(), buf);
     return result;
 }
 

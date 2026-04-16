@@ -22,6 +22,9 @@
 // Phase 5 (final): state[16..24] = KPAD0..KPAD8
 /* KAWPOW_COIN_PADDING */
 
+// Barrett reduction constants for DAG address modulo — injected by host before RTC.
+/* KAWPOW_DAG_CONSTS */
+
 // ============================================================================
 // keccak_f800 — AMD-optimized Keccak-f[800] (25 × 32-bit, 22 rounds)
 //
@@ -255,7 +258,7 @@ __device__ __forceinline__ uint32_t kiss99(kiss99_state& st)
     return (((z << 16) + w) ^ jcong) + jsr;
 }
 
-__device__ void fill_mix(uint64_t seed, uint32_t lane_id, uint32_t* mix)
+__device__ __forceinline__ void fill_mix(uint64_t seed, uint32_t lane_id, uint32_t* mix)
 {
     uint32_t z     = fnv1a(FNV_OFFSET_BASIS, (uint32_t)seed);
     uint32_t w     = fnv1a(z,                (uint32_t)(seed >> 32));
@@ -288,9 +291,13 @@ __device__ __forceinline__ uint4 load_dag_nt(const uint4* __restrict__ p)
 {
 #ifdef __HIP_PLATFORM_AMD__
     // Single 128-bit nontemporal load — skip L2 for random DAG reads
+    // GFX11 mnemonic is global_load_b128; older arches use global_load_dwordx4
     uint4 r;
-    asm("global_load_dwordx4 %0, %1, off slc"
-        : "=v"(r) : "v"(p));
+#if __gfx11__ || __gfx1100__ || __gfx1101__ || __gfx1102__
+    asm volatile("global_load_b128 %0, %1, off slc" : "=v"(r) : "v"(p));
+#else
+    asm volatile("global_load_dwordx4 %0, %1, off slc" : "=v"(r) : "v"(p));
+#endif
     return r;
 #else
     return __ldcs(p);
@@ -334,18 +341,15 @@ __device__ __forceinline__ void progpow_main_loop(
     uint32_t* mix,
     const uint32_t* __restrict__ l1_cache,
     const uint32_t* __restrict__ d_dag,
-    uint32_t dag_num_items_div,
-    uint32_t barrett_m,
-    uint32_t barrett_shift,
     uint32_t lane_id)
 {
     const uint32_t lane_base = (threadIdx.x & ~15u);   // hoisted
     for (uint32_t loop = 0; loop < KAWPOW_MAIN_LOOPS; loop++) {
         uint32_t src = (lane_base | (loop & 15u));
         uint32_t dag_addr = __builtin_amdgcn_ds_bpermute(src << 2, mix[0]);
-        uint32_t q = __umulhi(dag_addr, barrett_m) >> barrett_shift;
-        dag_addr  -= q * dag_num_items_div;
-        if (dag_addr >= dag_num_items_div) dag_addr -= dag_num_items_div;
+        uint32_t q = __umulhi(dag_addr, KAWPOW_BARRETT_M) >> KAWPOW_BARRETT_SHIFT;
+        dag_addr  -= q * KAWPOW_DAG_NUM_ITEMS_DIV;
+        if (dag_addr >= KAWPOW_DAG_NUM_ITEMS_DIV) dag_addr -= KAWPOW_DAG_NUM_ITEMS_DIV;
         progpow_iteration(mix, l1_cache, d_dag, dag_addr, lane_id, loop);
     }
 }
@@ -379,11 +383,8 @@ void kawpow_hash_kernel(
     const uint64_t* __restrict__ d_target,         // 4 × uint64 = 32 bytes (LE)
     uint32_t* __restrict__       d_solutions,      // [0]=count, [1..]=nonces
     uint32_t                     block_number,
-    uint32_t                     dag_num_items_div, // full_dataset_num_items / 2
     uint32_t* __restrict__       d_result_hashes,  // nullable: [hash_id*16+0..7]=mix, [+8..15]=final
-    const uint32_t* __restrict__ d_l1_cache,       // first 16KB of DAG, uploaded once per epoch
-    uint32_t                     barrett_m,        // floor(2^32 / dag_num_items)
-    uint32_t                     barrett_shift)    // extra shift (0 for all KawPow epochs)
+    const uint32_t* __restrict__ d_l1_cache)       // first 16KB of DAG, uploaded once per epoch
 {
     const uint32_t global_id = blockIdx.x * blockDim.x + threadIdx.x;
     const uint32_t lane_id   = global_id & 0xF;
@@ -432,8 +433,7 @@ void kawpow_hash_kernel(
     uint32_t mix[PROGPOW_REGS];
     fill_mix(seed, lane_id, mix);
 
-    progpow_main_loop(mix, l1_cache, d_dag,
-                       dag_num_items_div, barrett_m, barrett_shift, lane_id);
+    progpow_main_loop(mix, l1_cache, d_dag, lane_id);
 
     uint32_t digest[8];
     progpow_reduce(mix, digest);
@@ -554,10 +554,7 @@ extern "C" __global__
 void kawpow_progpow_kernel(
     const uint32_t* __restrict__ d_dag,
     uint32_t                     batch_size,
-    uint32_t                     dag_num_items_div,
     const uint32_t* __restrict__ d_l1_cache,
-    uint32_t                     barrett_m,
-    uint32_t                     barrett_shift,
     uint32_t* __restrict__       d_intermediate)
 {
     const uint32_t global_id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -579,8 +576,7 @@ void kawpow_progpow_kernel(
     uint32_t mix[PROGPOW_REGS];
     fill_mix(seed, lane_id, mix);
 
-    progpow_main_loop(mix, l1_cache, d_dag,
-                       dag_num_items_div, barrett_m, barrett_shift, lane_id);
+    progpow_main_loop(mix, l1_cache, d_dag, lane_id);
 
     uint32_t digest[8];
     progpow_reduce(mix, digest);
@@ -602,10 +598,7 @@ extern "C" __global__
 void kawpow_progpow_global_kernel(
     const uint32_t* __restrict__ d_dag,
     uint32_t                     batch_size,
-    uint32_t                     dag_num_items_div,
     const uint32_t* __restrict__ d_l1_cache,
-    uint32_t                     barrett_m,
-    uint32_t                     barrett_shift,
     uint32_t* __restrict__       d_intermediate)
 {
     const uint32_t global_id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -622,8 +615,7 @@ void kawpow_progpow_global_kernel(
     fill_mix(seed, lane_id, mix);
 
     // Use d_l1_cache directly — no LDS, rely on hardware L1 cache
-    progpow_main_loop(mix, d_l1_cache, d_dag,
-                       dag_num_items_div, barrett_m, barrett_shift, lane_id);
+    progpow_main_loop(mix, d_l1_cache, d_dag, lane_id);
 
     uint32_t digest[8];
     progpow_reduce(mix, digest);
