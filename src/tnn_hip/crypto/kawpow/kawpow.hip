@@ -277,11 +277,23 @@ __device__ void fill_mix(uint64_t seed, uint32_t lane_id, uint32_t* mix)
 __device__ __forceinline__ uint32_t shfl_lane16(uint32_t val, int src_lane)
 {
 #ifdef __HIP_PLATFORM_AMD__
-    // __shfl with width=16: reads from src_lane within the 16-lane sub-group
-    return __shfl(val, src_lane, 16);
+    uint32_t base = __lane_id() & ~15u;
+    return __builtin_amdgcn_ds_bpermute(((base | src_lane) << 2), val);
 #else
-    // NVIDIA: __shfl_sync with full mask, width 16
-    return __shfl_sync(0xFFFFFFFF, val, src_lane, 16);
+    return __shfl_sync(0xFFFFFFFF, v, src, 16);
+#endif
+}
+
+__device__ __forceinline__ uint4 load_dag_nt(const uint4* __restrict__ p)
+{
+#ifdef __HIP_PLATFORM_AMD__
+    // Single 128-bit nontemporal load — skip L2 for random DAG reads
+    uint4 r;
+    asm("global_load_dwordx4 %0, %1, off slc"
+        : "=v"(r) : "v"(p));
+    return r;
+#else
+    return __ldcs(p);
 #endif
 }
 
@@ -327,14 +339,13 @@ __device__ __forceinline__ void progpow_main_loop(
     uint32_t barrett_shift,
     uint32_t lane_id)
 {
-    for (uint32_t loop = 0; loop < KAWPOW_MAIN_LOOPS; loop++)
-    {
-        uint32_t dag_addr = shfl_lane16(mix[0], loop % PROGPOW_LANES);
-        {
-            uint32_t q = __umulhi(dag_addr, barrett_m) >> barrett_shift;
-            dag_addr -= q * dag_num_items_div;
-            if (dag_addr >= dag_num_items_div) dag_addr -= dag_num_items_div;
-        }
+    const uint32_t lane_base = (threadIdx.x & ~15u);   // hoisted
+    for (uint32_t loop = 0; loop < KAWPOW_MAIN_LOOPS; loop++) {
+        uint32_t src = (lane_base | (loop & 15u));
+        uint32_t dag_addr = __builtin_amdgcn_ds_bpermute(src << 2, mix[0]);
+        uint32_t q = __umulhi(dag_addr, barrett_m) >> barrett_shift;
+        dag_addr  -= q * dag_num_items_div;
+        if (dag_addr >= dag_num_items_div) dag_addr -= dag_num_items_div;
         progpow_iteration(mix, l1_cache, d_dag, dag_addr, lane_id, loop);
     }
 }

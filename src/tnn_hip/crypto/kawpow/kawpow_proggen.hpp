@@ -139,23 +139,54 @@ inline std::string emit_math(const std::string& a, const std::string& b, uint32_
 inline std::string reg(uint32_t r) { return "mix[" + std::to_string(r) + "]"; }
 
 // ---------------------------------------------------------------------------
-// Fused math+merge for compound instruction patterns only.
+// Fused math+merge for compound instruction patterns.
 // Returns empty string if no fusion applies (caller falls back to _m temp).
 //
 // IMPORTANT: never strength-reduce * 33u here — the compiler does it better.
-// Only fuse when the combined expression exposes a three-operand ISA pattern
+// Only fuse when the combined expression exposes a multi-operand ISA pattern
 // that the _m temp would obscure.
 //
-// v_add3_u32 patterns (three-way add):
+// v_add3_u32 patterns (three-way add, AMD RDNA + NVIDIA):
 //   math(add:0)       + merge(mul33+add:0): (dst*33) + a + b
 //   math(clz+clz:9)   + merge(mul33+add:0): (dst*33) + __clz(a) + __clz(b)
 //   math(popc+popc:10) + merge(mul33+add:0): (dst*33) + __popc(a) + __popc(b)
 //
-// v_xor3_b32 patterns (three-way xor):
+// v_xor3_b32 patterns (three-way xor, AMD RDNA + NVIDIA):
 //   math(xor:8) + merge(rotl^:2):    rotl32(dst, x) ^ a ^ b
 //   math(xor:8) + merge(rotr^:3):    rotr32(dst, x) ^ a ^ b
 //   math(xor:8) + merge(xor_mul33:1): (dst ^ a ^ b) * 33
+//
+// lop3.b32 patterns (NVIDIA only — 3-input boolean in 1 instruction):
+//   math(and:6) + merge(rotl^:2/rotr^:3): rot(dst,x) ^ (a & b)  → lop3 0x78
+//   math(or:7)  + merge(rotl^:2/rotr^:3): rot(dst,x) ^ (a | b)  → lop3 0x1E
+//   math(and:6) + merge(xor_mul33:1):     (dst ^ (a & b)) * 33   → lop3 0x78
+//   math(or:7)  + merge(xor_mul33:1):     (dst ^ (a | b)) * 33   → lop3 0x1E
 // ---------------------------------------------------------------------------
+
+// Helper: emit NVIDIA lop3.b32 inline asm, guarded by #ifndef __HIP_PLATFORM_AMD__
+// lop3.b32 computes an arbitrary 3-input boolean function in 1 instruction.
+// truth_table: 8-bit LUT index (e.g. 0x78 = P^(Q&R), 0x1E = P^(Q|R))
+inline std::string emit_lop3(const std::string& dst,
+                              const std::string& a,
+                              const std::string& b,
+                              const std::string& c,
+                              uint32_t truth_table) {
+    char tt[8];
+    std::snprintf(tt, sizeof(tt), "0x%02x", truth_table);
+    // NVIDIA path: single lop3 instruction
+    // AMD path: expand to individual ops (compiler picks best encoding)
+    return "{ uint32_t _t;\n"
+           "#ifndef __HIP_PLATFORM_AMD__\n"
+           "        asm(\"lop3.b32 %0, %1, %2, %3, " + std::string(tt) + ";\" "
+           ": \"=r\"(_t) : \"r\"((uint32_t)" + a + "), \"r\"((uint32_t)" + b + "), \"r\"((uint32_t)" + c + "));\n"
+           "#else\n"
+           "        _t = " + a + (truth_table == 0x78 ? " ^ (" + b + " & " + c + ")" :
+                                  truth_table == 0x1E ? " ^ (" + b + " | " + c + ")" :
+                                  " ^ " + b + " ^ " + c) + ";\n"
+           "#endif\n"
+           "        " + dst + " = _t; }";
+}
+
 inline std::string try_fuse_math_merge(const std::string& dst,
                                        const std::string& src1,
                                        const std::string& src2,
@@ -166,15 +197,12 @@ inline std::string try_fuse_math_merge(const std::string& dst,
 
     // ---- v_add3 patterns: merge(0) with add-like math ----
     if (merge_op == 0) {
-        // add + mul33_add: (dst * 33) + src1 + src2
         if (math_op == 0) {
             return dst + " = (" + dst + " * 33u) + " + src1 + " + " + src2 + ";";
         }
-        // clz+clz + mul33_add: (dst * 33) + __clz(src1) + __clz(src2)
         if (math_op == 9) {
             return dst + " = (" + dst + " * 33u) + __clz(" + src1 + ") + __clz(" + src2 + ");";
         }
-        // popc+popc + mul33_add: (dst * 33) + __popc(src1) + __popc(src2)
         if (math_op == 10) {
             return dst + " = (" + dst + " * 33u) + __popc(" + src1 + ") + __popc(" + src2 + ");";
         }
@@ -182,19 +210,49 @@ inline std::string try_fuse_math_merge(const std::string& dst,
 
     // ---- v_xor3 patterns: math(xor:8) with xor-like merge ----
     if (math_op == 8) {
-        // xor + xor_mul33: (dst ^ src1 ^ src2) * 33
         if (merge_op == 1) {
             return dst + " = (" + dst + " ^ " + src1 + " ^ " + src2 + ") * 33u;";
         }
-        // xor + rotl_xor: rotl32(dst, x) ^ src1 ^ src2
         if (merge_op == 2) {
             uint32_t x = ((merge_sel >> 16) % 31) + 1;
             return dst + " = rotl32(" + dst + ", " + std::to_string(x) + "u) ^ " + src1 + " ^ " + src2 + ";";
         }
-        // xor + rotr_xor: rotr32(dst, x) ^ src1 ^ src2
         if (merge_op == 3) {
             uint32_t x = ((merge_sel >> 16) % 31) + 1;
             return dst + " = rotr32(" + dst + ", " + std::to_string(x) + "u) ^ " + src1 + " ^ " + src2 + ";";
+        }
+    }
+
+    // ---- lop3 patterns: math(and:6 / or:7) with xor-based merge ----
+    // NVIDIA: lop3.b32 computes P^(Q&R) or P^(Q|R) in 1 instruction
+    // AMD: falls back to 2 separate ops (and/or + xor)
+    if (math_op == 6 || math_op == 7) {
+        uint32_t tt = (math_op == 6) ? 0x78u : 0x1Eu; // and→0x78, or→0x1E
+
+        // and/or + rotl_xor: lop3(rotl32(dst, x), src1, src2)
+        if (merge_op == 2) {
+            uint32_t x = ((merge_sel >> 16) % 31) + 1;
+            return emit_lop3(dst, "rotl32(" + dst + ", " + std::to_string(x) + "u)",
+                             src1, src2, tt);
+        }
+        // and/or + rotr_xor: lop3(rotr32(dst, x), src1, src2)
+        if (merge_op == 3) {
+            uint32_t x = ((merge_sel >> 16) % 31) + 1;
+            return emit_lop3(dst, "rotr32(" + dst + ", " + std::to_string(x) + "u)",
+                             src1, src2, tt);
+        }
+        // and/or + xor_mul33: lop3(dst, src1, src2) * 33
+        if (merge_op == 1) {
+            return "{ uint32_t _t;\n"
+                   "#ifndef __HIP_PLATFORM_AMD__\n"
+                   "        asm(\"lop3.b32 %0, %1, %2, %3, " +
+                   std::string(tt == 0x78 ? "0x78" : "0x1e") + ";\" "
+                   ": \"=r\"(_t) : \"r\"((uint32_t)" + dst + "), \"r\"((uint32_t)" + src1 + "), \"r\"((uint32_t)" + src2 + "));\n"
+                   "#else\n"
+                   "        _t = " + dst + (tt == 0x78 ? " ^ (" + src1 + " & " + src2 + ")" :
+                                            " ^ (" + src1 + " | " + src2 + ")") + ";\n"
+                   "#endif\n"
+                   "        " + dst + " = _t * 33u; }";
         }
     }
 
@@ -245,24 +303,20 @@ inline std::string generate_program(int block_number) {
     // overlap them (LDS has 2-cycle latency, dual-issue hides it).
     // Safe when: cache[i+1].src is NOT written by cache[i].merge or math[i].
 
-    // Helper lambda to emit a math op block.
-    // Always inlines math into merge — eliminates _m temp, lets compiler see
-    // the full expression (NVIDIA emits lop3 for X^(Y&Z), X^(Y|Z), etc.)
+    // Helper lambda to emit a math op block
     auto emit_math_block = [&](std::string& out, const MathOp& m) {
-        // Try explicit fusion first (exposes v_add3/v_xor3 3-operand patterns)
         std::string fused = try_fuse_math_merge(reg(m.dst), reg(m.src1), reg(m.src2), m.sel1, m.sel2);
         if (!fused.empty()) {
             out += "        " + fused + "\n";
         } else {
-            // Inline: emit merge with math expression as operand (parenthesized)
-            std::string math_expr = "(" + emit_math(reg(m.src1), reg(m.src2), m.sel1) + ")";
-            out += "        " + emit_merge(reg(m.dst), math_expr, m.sel2) + "\n";
+            out += "        _m = " + emit_math(reg(m.src1), reg(m.src2), m.sel1) + ";\n";
+            out += "        " + emit_merge(reg(m.dst), "_m", m.sel2) + "\n";
         }
     };
 
     std::string body;
     body.reserve(6144);
-    body += "        uint32_t _c0, _c1;\n";
+    body += "        uint32_t _c0, _c1, _m;\n";
 
     int i = 0;
     while (i < max_ops) {

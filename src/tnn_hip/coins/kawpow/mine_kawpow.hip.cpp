@@ -5,6 +5,8 @@
 #include "../../common/hip_algo_registry.hpp"
 #include "../../crypto/kawpow/kawpow_proggen.hpp"
 #include <kawpow.hip.hpp>
+#include <kawpow_embedded_headers.hpp>
+#include <ethash-dag-gen.hip.hpp>
 #include <ethash/ethash.hpp>
 #include <ethash/progpow.hpp>
 #include <ethash/ethash-internal.hpp>
@@ -13,7 +15,6 @@
 #include <tnn_log.hpp>
 
 #include <chrono>
-#include <thread>
 #include <vector>
 #include <cstring>
 #include <cstdio>
@@ -112,57 +113,16 @@ static int compile_kawpow_kernel(
 }
 
 // ============================================================================
-// Generate full DAG for an epoch (multi-threaded CPU)
+// GPU Test: compile kernel, generate DAG on GPU, compare GPU vs CPU reference
 // ============================================================================
 
 struct KawPowDAG {
-    std::vector<uint32_t> data;
-    uint32_t num_items_2048;
-    uint32_t dag_num_items_div;
-    size_t   size_bytes;
+    uint32_t* d_dag = nullptr;        // device pointer
+    uint32_t* d_l1_cache = nullptr;   // device pointer (first 16KB of DAG)
+    uint32_t  num_items_2048;
+    uint32_t  dag_num_items_div;
+    size_t    size_bytes;
 };
-
-static int generate_dag(int epoch, const ethash::epoch_context& ctx, KawPowDAG& dag)
-{
-    dag.num_items_2048    = (uint32_t)(ctx.full_dataset_num_items / 2);
-    dag.dag_num_items_div = dag.num_items_2048;
-    size_t dag_words      = (size_t)dag.num_items_2048 * 64;
-    dag.size_bytes        = dag_words * sizeof(uint32_t);
-
-    printf("[KawPow] Generating DAG for epoch %d: %u items (%.1f MB)...\n",
-           epoch, dag.num_items_2048, dag.size_bytes / (1024.0 * 1024.0));
-    fflush(stdout);
-
-    dag.data.resize(dag_words);
-
-    auto t0 = std::chrono::steady_clock::now();
-
-    unsigned nthreads = std::max(1u, std::thread::hardware_concurrency());
-    std::vector<std::thread> threads;
-    uint32_t chunk = (dag.num_items_2048 + nthreads - 1) / nthreads;
-
-    for (unsigned t = 0; t < nthreads; ++t) {
-        uint32_t start = t * chunk;
-        uint32_t end   = std::min(start + chunk, dag.num_items_2048);
-        threads.emplace_back([&ctx, &dag, start, end]() {
-            for (uint32_t i = start; i < end; ++i) {
-                auto item = ethash::calculate_dataset_item_2048(ctx, i);
-                std::memcpy(&dag.data[i * 64], item.word32s, 256);
-            }
-        });
-    }
-    for (auto& t : threads) t.join();
-
-    auto t1 = std::chrono::steady_clock::now();
-    double elapsed = std::chrono::duration<double>(t1 - t0).count();
-    printf("[KawPow] DAG generated in %.1fs (%u threads)\n", elapsed, nthreads);
-    fflush(stdout);
-    return 0;
-}
-
-// ============================================================================
-// GPU Test: compile kernel, generate DAG, compare GPU vs CPU reference
-// ============================================================================
 
 struct KPTestVec {
     int         block_number;
@@ -201,7 +161,7 @@ static uint64_t hex_to_u64(const char* hex)
 int kawpow_gpu_test()
 {
     printf("\n========================================\n");
-    printf("[KawPow] Phase 2: GPU Kernel Validation\n");
+    printf("[KawPow] GPU Kernel Validation\n");
     printf("========================================\n\n");
     fflush(stdout);
 
@@ -221,27 +181,132 @@ int kawpow_gpu_test()
            is_amd ? "AMD" : "NVIDIA");
     fflush(stdout);
 
-    // ---- Generate DAG (epoch 0) ----
+    // ---- Generate DAG on GPU (epoch 0) ----
     const int epoch = 0;
     auto ctx = ethash::create_epoch_context(epoch);
     if (!ctx) { fprintf(stderr, "Failed to create epoch context\n"); return 1; }
 
     KawPowDAG dag;
-    if (generate_dag(epoch, *ctx, dag) != 0) return 1;
+    dag.num_items_2048    = (uint32_t)(ctx->full_dataset_num_items / 2);
+    dag.dag_num_items_div = dag.num_items_2048;
+    size_t dag_words      = (size_t)dag.num_items_2048 * 64;
+    dag.size_bytes        = dag_words * sizeof(uint32_t);
 
-    // ---- Upload DAG to GPU ----
-    printf("[KawPow] Uploading DAG to GPU (%.1f MB)...\n",
-           dag.size_bytes / (1024.0 * 1024.0));
+    printf("[KawPow] Generating DAG on GPU for epoch %d: %u items (%.1f MB)...\n",
+           epoch, dag.num_items_2048, dag.size_bytes / (1024.0 * 1024.0));
     fflush(stdout);
 
-    uint32_t* d_dag = nullptr;
-    KP_CHECK(oroMalloc((oroDeviceptr*)&d_dag, dag.size_bytes));
-    KP_CHECK(oroMemcpy(d_dag, dag.data.data(), dag.size_bytes, oroMemcpyHostToDevice));
+    // Allocate DAG on GPU
+    KP_CHECK(oroMalloc((oroDeviceptr*)&dag.d_dag, dag.size_bytes));
 
-    // L1 cache: first 16KB of DAG in a separate buffer for hardware L0 caching
-    uint32_t* d_l1_cache = nullptr;
-    KP_CHECK(oroMalloc((oroDeviceptr*)&d_l1_cache, 16384));
-    KP_CHECK(oroMemcpy(d_l1_cache, dag.data.data(), 16384, oroMemcpyHostToDevice));
+    // Upload light cache
+    uint32_t num_cache_items = (uint32_t)ctx->light_cache_num_items;
+    size_t cache_bytes = (size_t)num_cache_items * 64;
+    uint32_t* d_light_cache = nullptr;
+    KP_CHECK(oroMalloc((oroDeviceptr*)&d_light_cache, cache_bytes));
+    KP_CHECK(oroMemcpy(d_light_cache, ctx->light_cache, cache_bytes, oroMemcpyHostToDevice));
+
+    printf("[KawPow] Light cache uploaded (%.1f MB, %u items)\n",
+           cache_bytes / (1024.0 * 1024.0), num_cache_items);
+    fflush(stdout);
+
+    // Compile DAG gen kernel
+    auto& compiler = RTCCompiler::instance();
+    for (const auto& h : hip_embedded::KAWPOW_HEADERS)
+        compiler.add_header_source(std::string(h.path), std::string(h.source));
+    for (const auto& h : hip_embedded::COMMON_HEADERS)
+        compiler.add_header_source(std::string(h.path), std::string(h.source));
+
+    std::vector<std::string> dag_opts;
+    if (is_amd) {
+        dag_opts = {"-O3", "-mno-cumode", "-ffast-math"};
+        if (props.gcnArchName[0] != '\0')
+            dag_opts.push_back(std::string("--gpu-architecture=") + props.gcnArchName);
+    } else {
+        dag_opts = {"--dopt=on", "--use_fast_math"};
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "sm_%d%d", props.major, props.minor);
+        dag_opts.push_back(std::string("--gpu-architecture=") + buf);
+    }
+
+    std::string dag_src(hip_ethash_dag_source::SRC_TNN_HIP_CRYPTO_KAWPOW_ETHASH_DAG_GEN_HIP_SOURCE);
+    auto dag_ck = compiler.compile_from_source(dag_src, "ethash-dag-gen.hip",
+                                                "ethash_dag_gen_kernel", dag_opts);
+    if (!dag_ck.function) {
+        fprintf(stderr, "[KawPow] DAG gen kernel compile failed\n");
+        oroFree((oroDeviceptr)d_light_cache);
+        oroFree((oroDeviceptr)dag.d_dag);
+        return 1;
+    }
+
+    // Launch DAG gen kernel
+    auto t0 = std::chrono::steady_clock::now();
+    {
+        uint32_t dag_items = dag.num_items_2048;
+        int block_size = 256;
+        int grid_size = (dag_items + block_size - 1) / block_size;
+        void* args[] = { &d_light_cache, &dag.d_dag, &num_cache_items, &dag_items };
+        KP_CHECK(oroModuleLaunchKernel(dag_ck.function, grid_size, 1, 1, block_size, 1, 1,
+                                        0, nullptr, args, nullptr));
+        KP_CHECK(oroDeviceSynchronize());
+    }
+    auto t1 = std::chrono::steady_clock::now();
+    printf("[KawPow] DAG generated on GPU in %.2fs\n",
+           std::chrono::duration<double>(t1 - t0).count());
+    fflush(stdout);
+
+    oroFree((oroDeviceptr)d_light_cache);
+
+    // ---- Validate GPU DAG against CPU reference ----
+    printf("\n[KawPow] Phase 1: DAG Validation (GPU vs CPU reference)\n");
+    printf("----------------------------------------\n");
+    fflush(stdout);
+
+    // Spot-check items at various positions
+    const uint32_t check_indices[] = { 0, 1, 2, 100, 1000, dag.num_items_2048 / 2, dag.num_items_2048 - 1 };
+    const int num_checks = sizeof(check_indices) / sizeof(check_indices[0]);
+    int dag_pass = 0, dag_fail = 0;
+
+    for (int c = 0; c < num_checks; c++) {
+        uint32_t item_idx = check_indices[c];
+        if (item_idx >= dag.num_items_2048) continue;
+
+        // GPU: download this 2048-bit item (64 uint32)
+        uint32_t gpu_item[64];
+        KP_CHECK(oroMemcpy(gpu_item, (uint8_t*)dag.d_dag + (size_t)item_idx * 256,
+                            256, oroMemcpyDeviceToHost));
+
+        // CPU: compute reference
+        ethash::hash2048 cpu_item = ethash::calculate_dataset_item_2048(*ctx, item_idx);
+
+        if (memcmp(gpu_item, &cpu_item, 256) == 0) {
+            printf("  [DAG %u] \033[32mPASS\033[0m\n", item_idx);
+            dag_pass++;
+        } else {
+            printf("  [DAG %u] \033[31mFAIL\033[0m\n", item_idx);
+            printf("    GPU: %s...\n", words_hex(gpu_item, 4).c_str());
+            printf("    CPU: %s...\n", words_hex((const uint32_t*)&cpu_item, 4).c_str());
+            dag_fail++;
+        }
+    }
+    fflush(stdout);
+
+    if (dag_fail > 0) {
+        fprintf(stderr, "\n[KawPow] DAG validation FAILED (%d/%d), aborting kernel tests\n",
+                dag_fail, dag_pass + dag_fail);
+        oroFree((oroDeviceptr)dag.d_dag);
+        oroCtxDestroy(gpu_ctx);
+        return 1;
+    }
+    printf("  DAG validation: %d/%d \033[32mpassed\033[0m\n\n", dag_pass, dag_pass);
+    fflush(stdout);
+
+    // ---- L1 cache: first 16KB of DAG ----
+    KP_CHECK(oroMalloc((oroDeviceptr*)&dag.d_l1_cache, 16384));
+    KP_CHECK(oroMemcpy(dag.d_l1_cache, dag.d_dag, 16384, oroMemcpyDeviceToDevice));
+
+    uint32_t* d_dag = dag.d_dag;
+    uint32_t* d_l1_cache = dag.d_l1_cache;
 
     // ---- Allocate GPU buffers ----
     uint32_t* d_header    = nullptr;
@@ -258,7 +323,11 @@ int kawpow_gpu_test()
     uint64_t max_target[4] = {~0ULL, ~0ULL, ~0ULL, ~0ULL};
     KP_CHECK(oroMemcpy(d_target, max_target, 32, oroMemcpyHostToDevice));
 
-    // ---- Run tests ----
+    // ---- Phase 2: Kernel tests (mono + split) ----
+    printf("[KawPow] Phase 2: ProgPoW Kernel Validation\n");
+    printf("----------------------------------------\n");
+    fflush(stdout);
+
     int pass = 0, fail = 0;
     int last_period = -1;
     oroFunction_t kernel_func = nullptr;
@@ -477,7 +546,7 @@ int kawpow_gpu_test()
 
     pass += split_pass;
     fail += split_fail;
-    int total_tests = NUM_GPU_TESTS * 2; // mono + split
+    int total_kernel_tests = NUM_GPU_TESTS * 2; // mono + split
 
     // Cleanup
     oroFree((oroDeviceptr)d_intermediate);
@@ -490,8 +559,8 @@ int kawpow_gpu_test()
     oroCtxDestroy(gpu_ctx);
 
     printf("\n========================================\n");
-    printf("[GPU] %d/%d passed (mono: %d/%d, split: %d/%d)",
-           pass, total_tests,
+    printf("[GPU] DAG: %d/%d, Kernel: %d/%d (mono: %d/%d, split: %d/%d)",
+           dag_pass, dag_pass, pass, total_kernel_tests,
            pass - split_pass, NUM_GPU_TESTS,
            split_pass, NUM_GPU_TESTS);
     if (fail > 0) printf(", \033[31m%d FAILED\033[0m", fail);

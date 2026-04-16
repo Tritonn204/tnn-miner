@@ -10,6 +10,7 @@ if (WITH_KAWPOW)
           "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/bitselect.hip.h"
           "${PROJECT_SOURCE_DIR}/src/tnn_hip/util/uint2ops.h"
           "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/keccak-amd.hip.inc"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/keccak-tiny.hip.inc"
       MANIFEST_NAME KAWPOW_HEADERS
   )
 
@@ -20,6 +21,15 @@ if (WITH_KAWPOW)
           "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/kawpow/kawpow.hip"
       NO_MANIFEST
       NAMESPACE hip_kawpow_source
+  )
+
+  # Embed the ethash DAG generation kernel for HIPRTC
+  embed_hip_sources(
+      OUTPUT_FILE "${PROJECT_BINARY_DIR}/generated/ethash-dag-gen.hip.hpp"
+      SOURCES
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/kawpow/ethash-dag-gen.hip"
+      NO_MANIFEST
+      NAMESPACE hip_ethash_dag_source
   )
 
   include_directories("${PROJECT_BINARY_DIR}/generated")
