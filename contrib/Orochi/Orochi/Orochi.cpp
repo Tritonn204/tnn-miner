@@ -2136,6 +2136,13 @@ oroError_t OROAPI oroMalloc(void ** ptr, size_t size)
 		hipMalloc(ptr, size)     );
 	return oroErrorUnknown;
 }
+oroError_t OROAPI oroExtMallocWithFlags(void ** ptr, size_t size, unsigned int flags)
+{
+	__ORO_FUNC(
+		CU4ORO::hipMalloc_cu4oro(__ORO_FORCE_CAST(void **,ptr), __ORO_FORCE_CAST(size_t,size)),
+		hipExtMallocWithFlags(ptr, size, flags)     );
+	return oroErrorUnknown;
+}
 oroError_t OROAPI oroMalloc3D(oroPitchedPtr * pitchedDevPtr, oroExtent extent)
 {
 	__ORO_FUNC(

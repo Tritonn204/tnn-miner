@@ -210,36 +210,6 @@ __device__ __forceinline__ uint32_t fnv1a(uint32_t h, uint32_t d)
     return (h ^ d) * FNV_PRIME;
 }
 
-__device__ __forceinline__ uint32_t progpow_merge(uint32_t a, uint32_t b, uint32_t sel)
-{
-    const uint32_t x = ((sel >> 16) % 31) + 1;
-    switch (sel % 4)
-    {
-        case 0:  return (a * 33) + b;
-        case 1:  return (a ^ b) * 33;
-        case 2:  return rotl32(a, x) ^ b;
-        default: return rotr32(a, x) ^ b;
-    }
-}
-
-__device__ __forceinline__ uint32_t progpow_math(uint32_t a, uint32_t b, uint32_t sel)
-{
-    switch (sel % 11)
-    {
-        case 0:  return a + b;
-        case 1:  return a * b;
-        case 2:  return __umulhi(a, b);
-        case 3:  return min(a, b);
-        case 4:  return rotl32(a, b % 32);
-        case 5:  return rotr32(a, b % 32);
-        case 6:  return a & b;
-        case 7:  return a | b;
-        case 8:  return a ^ b;
-        case 9:  return __clz(a) + __clz(b);
-        default: return __popc(a) + __popc(b);
-    }
-}
-
 struct kiss99_state
 {
     uint32_t z, w, jsr, jcong;
@@ -582,6 +552,58 @@ void kawpow_progpow_kernel(
     progpow_reduce(mix, digest);
 
     // Write digest to intermediate buffer (lane 0 only — all lanes computed same digest)
+    if (lane_id == 0) {
+        #pragma unroll
+        for (int i = 0; i < 8; i++)
+            d_intermediate[base + 8 + i] = digest[i];
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Split kernel B-GLC: ProgPoW main loop — GLC DAG loads (LDS L1 cache)
+// Uses non-volatile inline asm for globally-coherent DAG loads.
+// The program body MUST be inlined directly in the loop — calling a separate
+// function breaks the compiler's def-use chain for the asm load output.
+// ---------------------------------------------------------------------------
+extern "C" __global__
+void kawpow_progpow_kernel_glc(
+    const uint32_t* __restrict__ d_dag,
+    uint32_t                     batch_size,
+    const uint32_t* __restrict__ d_l1_cache,
+    uint32_t* __restrict__       d_intermediate)
+{
+    const uint32_t global_id = blockIdx.x * blockDim.x + threadIdx.x;
+    const uint32_t lane_id   = global_id & 0xF;
+    const uint32_t hash_id   = global_id >> PROGPOW_LANES_LOG2;
+
+    extern __shared__ uint32_t lds_raw[];
+    uint32_t* __restrict__ l1_cache = lds_raw;
+
+    cooperative_l1_fill(l1_cache, d_l1_cache);
+
+    if (hash_id >= batch_size) return;
+
+    uint32_t base = hash_id * 16u;
+    uint64_t seed = (uint64_t)d_intermediate[base] | ((uint64_t)d_intermediate[base + 1] << 32);
+
+    uint32_t mix[PROGPOW_REGS];
+    fill_mix(seed, lane_id, mix);
+
+    const uint32_t lane_base = (threadIdx.x & ~15u);
+    #pragma unroll 1
+    for (uint32_t loop = 0; loop < KAWPOW_MAIN_LOOPS; loop++) {
+        uint32_t src = (lane_base | (loop & 15u));
+        uint32_t dag_addr = __builtin_amdgcn_ds_bpermute(src << 2, mix[0]);
+        uint32_t q = __umulhi(dag_addr, KAWPOW_BARRETT_M) >> KAWPOW_BARRETT_SHIFT;
+        dag_addr  -= q * KAWPOW_DAG_NUM_ITEMS_DIV;
+        if (dag_addr >= KAWPOW_DAG_NUM_ITEMS_DIV) dag_addr -= KAWPOW_DAG_NUM_ITEMS_DIV;
+
+/* PROGPOW_PROGRAM_GLC */
+    }
+
+    uint32_t digest[8];
+    progpow_reduce(mix, digest);
+
     if (lane_id == 0) {
         #pragma unroll
         for (int i = 0; i < 8; i++)

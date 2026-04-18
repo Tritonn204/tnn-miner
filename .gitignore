@@ -65,6 +65,7 @@ build/*
 hiprtc_standalone_test/
 nvidia_bench/
 nvrtc_debug/
+kawpow_iterate/
 
 !CMakeLists.txt
 # Winring0

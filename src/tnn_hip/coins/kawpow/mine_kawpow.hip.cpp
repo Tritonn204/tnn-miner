@@ -579,11 +579,19 @@ int kawpow_gpu_test()
 // GPU Benchmark — uses generic autotune (compile + DAG setup + block size sweep)
 // ============================================================================
 
-void kawpow_bench()
+void kawpow_bench(int block_height)
 {
-    printf("\n========================================\n");
-    printf("[KawPow] GPU Benchmark (autotune)\n");
-    printf("========================================\n\n");
+    if (block_height > 0) {
+        kawpow_bench_block_override() = block_height;
+        int epoch = ethash::get_epoch_number(block_height);
+        printf("\n========================================\n");
+        printf("[KawPow] GPU Benchmark (block %d, epoch %d)\n", block_height, epoch);
+        printf("========================================\n\n");
+    } else {
+        printf("\n========================================\n");
+        printf("[KawPow] GPU Benchmark (autotune)\n");
+        printf("========================================\n\n");
+    }
     fflush(stdout);
 
     // Use cached tune if available; --gpu-retune forces a fresh sweep

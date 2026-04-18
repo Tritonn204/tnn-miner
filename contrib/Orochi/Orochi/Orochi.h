@@ -507,6 +507,10 @@ typedef hipMemoryAdvise oroMemoryAdvise;
 	const hipMemoryAdvise oroMemAdviseUnsetAccessedBy = hipMemAdviseUnsetAccessedBy;
 	const hipMemoryAdvise oroMemAdviseSetCoarseGrain = hipMemAdviseSetCoarseGrain;
 	const hipMemoryAdvise oroMemAdviseUnsetCoarseGrain = hipMemAdviseUnsetCoarseGrain;
+	constexpr unsigned int oroDeviceMallocDefault     = hipDeviceMallocDefault;
+	constexpr unsigned int oroDeviceMallocFinegrained = hipDeviceMallocFinegrained;
+	constexpr unsigned int oroDeviceMallocUncached    = hipDeviceMallocUncached;
+	constexpr unsigned int oroDeviceMallocContiguous  = hipDeviceMallocContiguous;
 typedef hipMemRangeCoherencyMode oroMemRangeCoherencyMode;
 	const hipMemRangeCoherencyMode oroMemRangeCoherencyModeFineGrain = hipMemRangeCoherencyModeFineGrain;
 	const hipMemRangeCoherencyMode oroMemRangeCoherencyModeCoarseGrain = hipMemRangeCoherencyModeCoarseGrain;
@@ -939,6 +943,7 @@ oroError_t OROAPI oroLaunchCooperativeKernel(const void * f, dim3 gridDim, dim3 
 oroError_t OROAPI oroLaunchCooperativeKernelMultiDevice(oroLaunchParams * launchParamsList, int numDevices, unsigned int flags);
 oroError_t OROAPI oroLaunchKernel(const void * function_address, dim3 numBlocks, dim3 dimBlocks, void ** args, size_t sharedMemBytes, oroStream_t stream);
 oroError_t OROAPI oroMalloc(void ** ptr, size_t size);
+oroError_t OROAPI oroExtMallocWithFlags(void ** ptr, size_t size, unsigned int flags);
 oroError_t OROAPI oroMalloc3D(oroPitchedPtr * pitchedDevPtr, oroExtent extent);
 oroError_t OROAPI oroMalloc3DArray(oroArray_t * array, const  oroChannelFormatDesc * desc,  oroExtent extent, unsigned int flags);
 oroError_t OROAPI oroMallocArray(oroArray_t * array, const oroChannelFormatDesc * desc, size_t width, size_t height, unsigned int flags);

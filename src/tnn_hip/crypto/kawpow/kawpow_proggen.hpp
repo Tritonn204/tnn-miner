@@ -331,7 +331,7 @@ auto can_pair_k = [&](int i, int k) -> bool {
 };
 
 // ensure we've declared enough temps at body scope
-body += "        uint32_t _c0, _c1, _c2, _c3, _m;\n";
+body += "        uint32_t _c0, _c1, _c2, _c3, _m, _m1;\n";
 
 int i = 0;
 while (i < max_ops) {
@@ -357,8 +357,39 @@ while (i < max_ops) {
             if (i + j < (int)CNT_MATH) emit_math_block(body, math_ops[i + j]);
         }
         i += k;
+    } else if (i >= (int)CNT_CACHE && i + 1 < (int)CNT_MATH) {
+        // Tail: pure math ops — try to pair adjacent ops for VOPD packing
+        // Safe when math[i+1] doesn't read math[i].dst
+        const auto& m0 = math_ops[i];
+        const auto& m1 = math_ops[i + 1];
+        // Safe when: m1 doesn't read m0.dst, m0 doesn't read m1.dst,
+        // and they don't write the same dst (merge reads+writes dst)
+        bool can_pair = (m1.src1 != m0.dst && m1.src2 != m0.dst
+                      && m0.src1 != m1.dst && m0.src2 != m1.dst
+                      && m0.dst != m1.dst);
+        if (can_pair) {
+            // Check if either can fuse — if so, emit individually (fuse is already optimal)
+            std::string fused0 = try_fuse_math_merge(reg(m0.dst), reg(m0.src1), reg(m0.src2), m0.sel1, m0.sel2);
+            std::string fused1 = try_fuse_math_merge(reg(m1.dst), reg(m1.src1), reg(m1.src2), m1.sel1, m1.sel2);
+            if (fused0.empty() && fused1.empty()) {
+                // Neither fuses — pair them: compute both, then merge both
+                body += "        _m = " + emit_math(reg(m0.src1), reg(m0.src2), m0.sel1) + ";\n";
+                body += "        _m1 = " + emit_math(reg(m1.src1), reg(m1.src2), m1.sel1) + ";\n";
+                body += "        " + emit_merge(reg(m0.dst), "_m", m0.sel2) + "\n";
+                body += "        " + emit_merge(reg(m1.dst), "_m1", m1.sel2) + "\n";
+                i += 2;
+            } else {
+                // At least one fuses — emit individually
+                emit_math_block(body, m0);
+                ++i;
+            }
+        } else {
+            // Dependency — emit individually
+            emit_math_block(body, m0);
+            ++i;
+        }
     } else {
-        // 1-way fallback (unchanged)
+        // 1-way fallback
         if (i < (int)CNT_CACHE) {
             body += "        _c0 = l1_cache[" + reg(cache_ops[i].src) + " & 0xFFFu];\n";
             body += "        " + emit_merge(reg(cache_ops[i].dst), "_c0", cache_ops[i].sel) + "\n";
@@ -399,6 +430,180 @@ while (i < max_ops) {
     static const char* fields[] = {"_dg.x", "_dg.y", "_dg.z", "_dg.w"};
     for (uint32_t i = 0; i < NUM_WORDS_PER_LANE; ++i) {
         c += "        " + emit_merge(reg(dag_dsts[i]), fields[i], dag_sels[i]) + "\n";
+    }
+
+    return c;
+}
+
+// ---------------------------------------------------------------------------
+// generate_program_glc — GLC variant with inline asm DAG load
+//
+// Same RNG sequence and body as generate_program(), but uses non-volatile
+// asm for global_load_dwordx4 with GLC flag.  The body MUST be emitted
+// directly inside the main loop — NOT in a separate function.
+// ---------------------------------------------------------------------------
+inline std::string generate_program_glc(int block_number) {
+    uint64_t period = static_cast<uint64_t>(block_number) / 3;
+    MixRngState state(period);
+
+    char buf[256];
+    snprintf(buf, sizeof(buf),
+        "        // ProgPoW GLC program for period %llu (block %d)\n",
+        (unsigned long long)period, block_number);
+
+    // ---- Phase 1a: collect all ops (RNG order preserved exactly) ----
+    struct CacheOp { uint32_t src, dst, sel; };
+    struct MathOp  { uint32_t src1, src2, sel1, dst, sel2; };
+    CacheOp cache_ops[CNT_CACHE];
+    MathOp  math_ops[CNT_MATH];
+
+    constexpr int max_ops = (CNT_CACHE > CNT_MATH) ? CNT_CACHE : CNT_MATH;
+
+    for (int i = 0; i < max_ops; ++i) {
+        if (i < (int)CNT_CACHE) {
+            cache_ops[i] = { state.next_src(), state.next_dst(), state.rng() };
+        }
+        if (i < (int)CNT_MATH) {
+            uint32_t sr = state.rng() % (NUM_REGS * (NUM_REGS - 1));
+            uint32_t s1 = sr % NUM_REGS, s2 = sr / NUM_REGS;
+            if (s2 >= s1) ++s2;
+            uint32_t sel1 = state.rng();
+            uint32_t mdst = state.next_dst();
+            uint32_t sel2 = state.rng();
+            math_ops[i] = { s1, s2, sel1, mdst, sel2 };
+        }
+    }
+
+    // ---- Phase 1b: emit body (same pairing logic as generate_program) ----
+    auto emit_math_block = [&](std::string& out, const MathOp& m) {
+        std::string fused = try_fuse_math_merge(reg(m.dst), reg(m.src1), reg(m.src2), m.sel1, m.sel2);
+        if (!fused.empty()) {
+            out += "        " + fused + "\n";
+        } else {
+            out += "        _m = " + emit_math(reg(m.src1), reg(m.src2), m.sel1) + ";\n";
+            out += "        " + emit_merge(reg(m.dst), "_m", m.sel2) + "\n";
+        }
+    };
+
+    std::string body;
+    body.reserve(6144);
+    constexpr int MAX_K = 4;
+
+    auto can_pair_k = [&](int i, int k) -> bool {
+        if (i + k > (int)CNT_CACHE) return false;
+        for (int j = 1; j < k; ++j) {
+            uint32_t s = cache_ops[i + j].src;
+            for (int p = 0; p < j; ++p) {
+                if (s == cache_ops[i + p].dst) return false;
+                if (i + p < (int)CNT_MATH && s == math_ops[i + p].dst) return false;
+            }
+        }
+        return true;
+    };
+
+    body += "        uint32_t _c0, _c1, _c2, _c3, _m, _m1;\n";
+
+    int i = 0;
+    while (i < max_ops) {
+        int k = 1;
+        if (i < (int)CNT_CACHE) {
+            int kmax = std::min(MAX_K, (int)CNT_CACHE - i);
+            for (int t = kmax; t >= 2; --t) {
+                if (can_pair_k(i, t)) { k = t; break; }
+            }
+        }
+
+        if (k >= 2) {
+            for (int j = 0; j < k; ++j) {
+                body += "        _c" + std::to_string(j) + " = l1_cache["
+                      + reg(cache_ops[i + j].src) + " & 0xFFFu];\n";
+            }
+            for (int j = 0; j < k; ++j) {
+                body += "        " + emit_merge(reg(cache_ops[i + j].dst),
+                                                "_c" + std::to_string(j),
+                                                cache_ops[i + j].sel) + "\n";
+                if (i + j < (int)CNT_MATH) emit_math_block(body, math_ops[i + j]);
+            }
+            i += k;
+        } else if (i >= (int)CNT_CACHE && i + 1 < (int)CNT_MATH) {
+            const auto& m0 = math_ops[i];
+            const auto& m1 = math_ops[i + 1];
+            bool can_pair = (m1.src1 != m0.dst && m1.src2 != m0.dst
+                          && m0.src1 != m1.dst && m0.src2 != m1.dst
+                          && m0.dst != m1.dst);
+            if (can_pair) {
+                std::string fused0 = try_fuse_math_merge(reg(m0.dst), reg(m0.src1), reg(m0.src2), m0.sel1, m0.sel2);
+                std::string fused1 = try_fuse_math_merge(reg(m1.dst), reg(m1.src1), reg(m1.src2), m1.sel1, m1.sel2);
+                if (fused0.empty() && fused1.empty()) {
+                    body += "        _m = " + emit_math(reg(m0.src1), reg(m0.src2), m0.sel1) + ";\n";
+                    body += "        _m1 = " + emit_math(reg(m1.src1), reg(m1.src2), m1.sel1) + ";\n";
+                    body += "        " + emit_merge(reg(m0.dst), "_m", m0.sel2) + "\n";
+                    body += "        " + emit_merge(reg(m1.dst), "_m1", m1.sel2) + "\n";
+                    i += 2;
+                } else {
+                    emit_math_block(body, m0);
+                    ++i;
+                }
+            } else {
+                emit_math_block(body, m0);
+                ++i;
+            }
+        } else {
+            if (i < (int)CNT_CACHE) {
+                body += "        _c0 = l1_cache[" + reg(cache_ops[i].src) + " & 0xFFFu];\n";
+                body += "        " + emit_merge(reg(cache_ops[i].dst), "_c0", cache_ops[i].sel) + "\n";
+            }
+            if (i < (int)CNT_MATH) emit_math_block(body, math_ops[i]);
+            ++i;
+        }
+    }
+
+    // ---- Phase 2: generate DAG params (RNG advances AFTER cache+math) ----
+    uint32_t dag_dsts[NUM_WORDS_PER_LANE];
+    uint32_t dag_sels[NUM_WORDS_PER_LANE];
+    for (uint32_t i = 0; i < NUM_WORDS_PER_LANE; ++i) {
+        dag_dsts[i] = (i == 0) ? 0 : state.next_dst();
+        dag_sels[i] = state.rng();
+    }
+
+    // ---- Phase 3: assemble — GLC asm load, then body, then merge ----
+    std::string c;
+    c.reserve(8192);
+    c += buf; // header comment
+    c += "\n";
+
+    // GLC asm DAG load — volatile to pin scheduling
+    c += "        const void* _p = d_dag + (dag_addr * 16u + ((lane_id ^ loop) & 15u)) * 4u;\n";
+    c += "        uint4 _dg;\n";
+    c += "#if __gfx11__ || __gfx1100__ || __gfx1101__ || __gfx1102__\n";
+    c += "        asm volatile(\"global_load_b128 %0, %1, off glc\" : \"=v\"(_dg) : \"v\"(_p));\n";
+    c += "#else\n";
+    c += "        asm volatile(\"global_load_dwordx4 %0, %1, off glc\" : \"=v\"(_dg) : \"v\"(_p));\n";
+    c += "#endif\n\n";
+
+    // Cache + math body
+    c += body;
+
+    // DAG merge — split rot+xor so rotations execute while DAG load is in-flight
+    c += "\n        // DAG merge (rotation-first split)\n";
+    static const char* fields[] = {"_dg.x", "_dg.y", "_dg.z", "_dg.w"};
+    // Phase 1: emit rotations into temps (no _dg dependency, can overlap with load)
+    for (uint32_t i = 0; i < NUM_WORDS_PER_LANE; ++i) {
+        uint32_t mtype = dag_sels[i] % 4;
+        if (mtype == 2 || mtype == 3) {
+            uint32_t x = ((dag_sels[i] >> 16) % 31) + 1;
+            const char* rot = (mtype == 2) ? "rotl32" : "rotr32";
+            c += "        uint32_t _r" + std::to_string(i) + " = " + rot + "(" + reg(dag_dsts[i]) + ", " + std::to_string(x) + "u);\n";
+        }
+    }
+    // Phase 2: XOR with _dg (stalls on load if needed), then non-rot merges
+    for (uint32_t i = 0; i < NUM_WORDS_PER_LANE; ++i) {
+        uint32_t mtype = dag_sels[i] % 4;
+        if (mtype == 2 || mtype == 3) {
+            c += "        " + reg(dag_dsts[i]) + " = _r" + std::to_string(i) + " ^ " + fields[i] + ";\n";
+        } else {
+            c += "        " + emit_merge(reg(dag_dsts[i]), fields[i], dag_sels[i]) + "\n";
+        }
     }
 
     return c;
@@ -458,6 +663,11 @@ inline std::string inject_program(const std::string& kernel_source, int block_nu
     auto pos = result.find(marker);
     if (pos != std::string::npos) {
         result.replace(pos, marker.size(), generate_program(block_number));
+    }
+    const std::string glc_marker = "/* PROGPOW_PROGRAM_GLC */";
+    pos = result.find(glc_marker);
+    if (pos != std::string::npos) {
+        result.replace(pos, glc_marker.size(), generate_program_glc(block_number));
     }
     return result;
 }

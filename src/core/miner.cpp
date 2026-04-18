@@ -933,7 +933,7 @@ int tnn_main(int argc, char **argv)
   if (vm.count("bench-kawpow"))
   {
 #if defined(TNN_KAWPOW)
-    kawpow_bench();
+    kawpow_bench(vm["bench-kawpow"].as<int>());
     return 0;
 #else
     setcolor(RED);

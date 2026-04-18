@@ -7,4 +7,4 @@ int test_kawpow_hip();
 int kawpow_gpu_test();
 
 // GPU benchmark: measure kernel throughput
-void kawpow_bench();
+void kawpow_bench(int block_height = -1);
