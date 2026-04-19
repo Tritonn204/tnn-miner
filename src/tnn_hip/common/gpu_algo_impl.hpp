@@ -9,6 +9,7 @@
 #include <fstream>
 #include <filesystem>
 #include <thread>
+#include <mutex>
 #include <ctime>
 #include <vector>
 #include <set>
@@ -258,14 +259,67 @@ public:
                           device_id_, tnn_error_string(e2));
     }
 
+    // Upload a raw 32-byte target directly (bypasses compute_target).
+    // Used by algos like KawPow where the pool sends a 256-bit target.
+    void set_raw_target(const uint8_t* target_32bytes) override
+    {
+        oroError_t err = oro_safe_memcpy(d_difficulty_target_, target_32bytes, 32, oroMemcpyHostToDevice);
+        if (err != oroSuccess)
+            TNN_LOG_ERROR("[ERROR] GPU %d: set_raw_target memcpy failed: %s\n",
+                          device_id_, tnn_error_string(err));
+    }
+
     // Get the currently-active work template for this miner (for solution verification)
     const uint8_t* get_current_work_template() const override {
         return h_work_template_.empty() ? nullptr : h_work_template_.data();
     }
 
+    void set_dep(const std::string& key, int64_t value) override {
+        std::lock_guard<std::mutex> lock(dep_mutex_);
+        pending_deps_[key] = value;
+    }
+
+    void set_dev_dep(const std::string& key, int64_t value) override {
+        std::lock_guard<std::mutex> lock(dep_mutex_);
+        pending_dev_deps_[key] = value;
+    }
+
+    void use_dev_deps(bool dev) override {
+        std::lock_guard<std::mutex> lock(dep_mutex_);
+        use_dev_deps_ = dev;
+    }
+
     BatchResult mine_batch(uint64_t nonce_start, uint32_t count = 0) override
     {
         if (count == 0) count = batch_size_;
+
+        // Snapshot is_dev flag for this batch
+        bool batch_is_dev;
+        {
+            std::lock_guard<std::mutex> lock(dep_mutex_);
+            batch_is_dev = use_dev_deps_;
+        }
+
+        // Check for dependency changes and fire hook (on GPU thread)
+        if (config_.deps_changed_fn) {
+            std::unordered_map<std::string, int64_t> snapshot;
+            {
+                std::lock_guard<std::mutex> lock(dep_mutex_);
+                snapshot = batch_is_dev ? pending_dev_deps_ : pending_deps_;
+            }
+            auto& active = batch_is_dev ? active_dev_deps_ : active_deps_;
+            if (snapshot != active) {
+                if (!config_.deps_changed_fn(snapshot, active, kernels_, algo_data_, device_id_, batch_is_dev)) {
+                    // Hook said skip this batch
+                    BatchResult skip;
+                    skip.nonce_start = nonce_start;
+                    skip.count = 0;
+                    skip.num_valid = 0;
+                    return skip;
+                }
+                active = snapshot;
+            }
+        }
 
         oroError_t merr = oro_safe_memset(d_solutions_, 0, 24);
         if (merr != oroSuccess)
@@ -289,6 +343,7 @@ public:
         ctx.config = &config_;
         ctx.stream = nullptr;  // Default stream
         ctx.module = module_;
+        ctx.is_dev = batch_is_dev;
 
         (void)oro_safe_event_record(start_event_, 0);
 
@@ -1751,4 +1806,12 @@ private:
     double last_hashrate_ = 0;
     
     TuningResult tuning_result_;
+
+    // Dependency tracking (set_dep / deps_changed_fn)
+    std::mutex dep_mutex_;
+    std::unordered_map<std::string, int64_t> pending_deps_;      // regular work deps
+    std::unordered_map<std::string, int64_t> pending_dev_deps_;  // dev work deps
+    std::unordered_map<std::string, int64_t> active_deps_;       // last-executed regular snapshot
+    std::unordered_map<std::string, int64_t> active_dev_deps_;   // last-executed dev snapshot
+    bool use_dev_deps_ = false;                                  // which set mine_batch checks
 };

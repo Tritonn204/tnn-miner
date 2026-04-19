@@ -118,6 +118,8 @@ const TnnDevMinerInfo devInfo[COIN_COUNT] = {
   {COIN_YSC,      "stratum+ssl://stratum-eu.rplant.xyz",        "17149",    "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
   {COIN_EQPAY,    "stratum+ssl://stratum-eu.rplant.xyz",        "17149",    "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
   {COIN_YCR32,    "stratum+ssl://stratum-eu.rplant.xyz",        "17149",    "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj", "AaM7AxuyWyPKRMGC8wZxub2rXYUiinZDwj"},
+  {COIN_RVN,      "stratum+tcp://rvn.2miners.com",               "6060",     "RVM93VRB9jn6FXps9mMu4iftxt7BpGexGM", "RVM93VRB9jn6FXps9mMu4iftxt7BpGexGM"},  // TODO: real donation RVN address
+  {COIN_QUAI,     "",                                           "",         "RKsw3mMRPVNMon1VBoXQSV9aDjVGbGFMRi", "RKsw3mMRPVNMon1VBoXQSV9aDjVGbGFMRi"},  // TODO: real donation QUAI address + pool
 };
 
 typedef struct {
@@ -156,6 +158,8 @@ const Coin coins[COIN_COUNT] = {
   {COIN_YSC,      ALGO_YESPOWER,    "YSC",      "Yescrypt"},
   {COIN_EQPAY,    ALGO_YESPOWER,    "EQPAY",    "EqpayCoin (YespowerEQPAY)"},
   {COIN_YCR32,    ALGO_YESPOWER,    "LPEPE",    "LuckyPepe (YescryptR32)"},
+  {COIN_RVN,      ALGO_KAWPOW,      "RVN",      "Ravencoin (KawPow)"},
+  {COIN_QUAI,     ALGO_KAWPOW,      "QUAI",     "Quai Network (KawPow)"},
 };
 
 // ============================================================================
@@ -373,6 +377,9 @@ class MiningProfile {
             break;
           case ALGO_RINHASH:
             this->protocol = PROTO_BTC_STRATUM;
+            break;
+          case ALGO_KAWPOW:
+            this->protocol = PROTO_KAWPOW_STRATUM;
             break;
         }
       } else {

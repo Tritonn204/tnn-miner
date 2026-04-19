@@ -166,6 +166,9 @@ struct KernelLaunchContext {
     // Algo-specific opaque state (e.g., KawPow DAG pointer + metadata)
     void* algo_data = nullptr;
 
+    // True when this batch is mining for dev fee
+    bool is_dev = false;
+
     // Algo-specific tune keys (pointer to TuningResult's map, non-owning)
     const std::unordered_map<std::string, int64_t>* tune_keys = nullptr;
 
@@ -451,6 +454,20 @@ struct AlgoConfig {
     using AlgoDataCleanupFn = std::function<void(void* algo_data)>;
     AlgoDataCleanupFn algo_data_cleanup_fn = nullptr;
 
+    // Dependency-change hook — called on GPU thread inside mine_batch when any
+    // dep set via set_dep() differs from the last-executed snapshot.
+    // Receives the new dep map, mutable kernel map (can recompile/swap kernels),
+    // the previous dep snapshot, algo_data, and device_id.
+    // Return true to proceed with execution, false to skip this batch.
+    using DepsChangedFn = std::function<bool(
+        const std::unordered_map<std::string, int64_t>& new_deps,
+        const std::unordered_map<std::string, int64_t>& old_deps,
+        KernelMap& kernels,
+        void* algo_data,
+        int device_id,
+        bool is_dev)>;
+    DepsChangedFn deps_changed_fn = nullptr;
+
     // Helper to get all kernel names (handles legacy single name)
     std::vector<std::string> get_kernel_names() const {
         if (!kernel_names.empty()) {
@@ -521,16 +538,28 @@ public:
     virtual oroCtx get_ctx() const = 0;
 
     virtual void set_work(const uint8_t* work_template, uint64_t difficulty) = 0;
+    virtual void set_raw_target(const uint8_t* target_32bytes) = 0;
     virtual const uint8_t* get_current_work_template() const = 0;
     virtual BatchResult mine_batch(uint64_t nonce_start, uint32_t batch_size = 0) = 0;
 
     virtual uint32_t get_batch_size() const = 0;
     virtual double get_hashrate() const = 0;
-    
+
     virtual const AlgoConfig& get_config() const = 0;
-    
+
     virtual TuningResult get_tuning_result() const = 0;
     virtual bool set_batch_size_override(uint32_t batch_size) = 0;
+
+    // Algo-agnostic dependency tracking.  The mining loop sets named deps
+    // (e.g. "period", "epoch"); mine_batch fires the algo's deps_changed_fn
+    // hook (on the GPU thread) whenever any value differs from the last
+    // snapshot — the hook can recompile kernels, rebuild state, etc.
+    virtual void set_dep(const std::string& key, int64_t value) = 0;
+    virtual void set_dev_dep(const std::string& key, int64_t value) = 0;
+
+    // Select which dep set (regular vs dev) mine_batch should check.
+    // Called by the GPU thread before each mine_batch call.
+    virtual void use_dev_deps(bool dev) = 0;
 };
 
 // ============================================================================

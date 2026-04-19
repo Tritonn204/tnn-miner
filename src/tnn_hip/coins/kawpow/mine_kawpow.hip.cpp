@@ -1,8 +1,19 @@
 #ifdef TNN_KAWPOW
 
+#include <coins/miners.hpp>
+#include <net/net.hpp>
+#include <stratum/kawpow-stratum.h>
+#include <hex.h>
+#include <algo_definitions.h>
+#include <tnn_log.hpp>
+
 #include "../../common/gpu_compat.hpp"
 #include "../../common/gpu_rtc.hpp"
+#include "../../common/gpu_miner.hpp"
 #include "../../common/hip_algo_registry.hpp"
+#include "../../common/gpu_submit_queue.hpp"
+#include "../../common/gpu_device_filter.hpp"
+#include <job_safe.hpp>
 #include "../../crypto/kawpow/kawpow_proggen.hpp"
 #include <kawpow.hip.hpp>
 #include <kawpow_embedded_headers.hpp>
@@ -11,14 +22,13 @@
 #include <ethash/progpow.hpp>
 #include <ethash/ethash-internal.hpp>
 #include <ethash/kawpow_coins.h>
-#include <algo_definitions.h>
-#include <tnn_log.hpp>
 
 #include <chrono>
 #include <vector>
 #include <cstring>
 #include <cstdio>
 #include <string>
+#include <thread>
 
 // ============================================================================
 // Helpers
@@ -315,12 +325,12 @@ int kawpow_gpu_test()
     // ---- Allocate GPU buffers ----
     uint32_t* d_header    = nullptr;
     uint64_t* d_target    = nullptr;
-    uint32_t* d_solutions = nullptr;
+    uint64_t* d_solutions = nullptr;
     uint32_t* d_results   = nullptr;
 
     KP_CHECK(oroMalloc((oroDeviceptr*)&d_header,    32));
     KP_CHECK(oroMalloc((oroDeviceptr*)&d_target,    32));
-    KP_CHECK(oroMalloc((oroDeviceptr*)&d_solutions, 320));
+    KP_CHECK(oroMalloc((oroDeviceptr*)&d_solutions, 8 + 1024 * 40));
     KP_CHECK(oroMalloc((oroDeviceptr*)&d_results,   16 * sizeof(uint32_t)));
 
     // Set target to all-1s (accept everything)
@@ -353,7 +363,7 @@ int kawpow_gpu_test()
         if (period != last_period) {
             printf("         Compiling kernel for period %d...\n", period);
             fflush(stdout);
-            if (compile_kawpow_kernel(tv.block_number, KAWPOW_PADDING_RVN,
+            if (compile_kawpow_kernel(tv.block_number, *currentKawpowPadding,
                                       is_amd, props, kernel_func, nullptr,
                                       dag_div, barrett_m, barrett_s) != 0) {
                 fprintf(stderr, "         Compile failed!\n");
@@ -372,8 +382,8 @@ int kawpow_gpu_test()
         KP_CHECK(oroMemcpy(d_header, header.word32s, 32, oroMemcpyHostToDevice));
 
         // Clear solutions + results
-        uint32_t zero = 0;
-        KP_CHECK(oroMemcpy(d_solutions, &zero, 4, oroMemcpyHostToDevice));
+        uint64_t zero = 0;
+        KP_CHECK(oroMemcpy(d_solutions, &zero, 8, oroMemcpyHostToDevice));
         uint32_t zeros[16] = {};
         KP_CHECK(oroMemcpy(d_results, zeros, 64, oroMemcpyHostToDevice));
 
@@ -455,7 +465,7 @@ int kawpow_gpu_test()
             oroFunction_t mono_fn = nullptr;
             printf("         Compiling kernel for period %d...\n", period);
             fflush(stdout);
-            if (compile_kawpow_kernel(tv.block_number, KAWPOW_PADDING_RVN,
+            if (compile_kawpow_kernel(tv.block_number, *currentKawpowPadding,
                                       is_amd, props, mono_fn, &split_module,
                                       dag_div, barrett_m, barrett_s) != 0) {
                 fprintf(stderr, "         Compile failed!\n");
@@ -484,8 +494,8 @@ int kawpow_gpu_test()
         KP_CHECK(oroMemcpy(d_header, header.word32s, 32, oroMemcpyHostToDevice));
 
         // Clear solutions + results + intermediate
-        uint32_t zero = 0;
-        KP_CHECK(oroMemcpy(d_solutions, &zero, 4, oroMemcpyHostToDevice));
+        uint64_t zero = 0;
+        KP_CHECK(oroMemcpy(d_solutions, &zero, 8, oroMemcpyHostToDevice));
         uint32_t zeros[16] = {};
         KP_CHECK(oroMemcpy(d_results, zeros, 64, oroMemcpyHostToDevice));
         KP_CHECK(oroMemset((oroDeviceptr)d_intermediate, 0, 64));
@@ -618,13 +628,412 @@ void kawpow_bench(int block_height)
 }
 
 // ============================================================================
-// Mining entry point (stub)
+// Dump generated program body for a given block number
+// ============================================================================
+
+void kawpow_dump_program(int block_number)
+{
+    uint64_t period = (uint64_t)block_number / 3;
+    int epoch = ethash::get_epoch_number(block_number);
+
+    printf("\n========================================\n");
+    printf("[KawPow] Program dump: block %d, period %llu, epoch %d\n",
+           block_number, (unsigned long long)period, epoch);
+    printf("========================================\n\n");
+
+    // Expanded body (for reading)
+    std::string prog = kawpow_proggen::generate_program(block_number);
+    // Macro body (what RTC compiles)
+    std::string prog_macro = kawpow_proggen::generate_program_macro(block_number);
+    // GLC body
+    std::string prog_glc = kawpow_proggen::generate_program_glc(block_number);
+
+    // Write expanded body
+    {
+        char path[128];
+        snprintf(path, sizeof(path), "kawpow_program_b%d.hip", block_number);
+        FILE* f = fopen(path, "w");
+        if (f) {
+            fprintf(f, "// ProgPoW program for block %d (period %llu, epoch %d)\n",
+                    block_number, (unsigned long long)period, epoch);
+            fprintf(f, "// Expanded body (for reading)\n\n");
+            fwrite(prog.data(), 1, prog.size(), f);
+            fclose(f);
+            printf("  Expanded body   → %s\n", path);
+        }
+    }
+
+    // Write macro definition
+    {
+        char path[128];
+        snprintf(path, sizeof(path), "kawpow_macro_b%d.hip", block_number);
+        FILE* f = fopen(path, "w");
+        if (f) {
+            fprintf(f, "// ProgPoW macro for block %d (period %llu, epoch %d)\n",
+                    block_number, (unsigned long long)period, epoch);
+            fprintf(f, "// This is the actual #define injected into the RTC kernel\n\n");
+            fwrite(prog_macro.data(), 1, prog_macro.size(), f);
+
+            // Also show example 1-way, 2-way, 4-way loop usage with ping-pong
+            fprintf(f, "\n// ============================================================\n");
+            fprintf(f, "// Example: 1-way main loop (ping-pong BODY_PIPE)\n");
+            fprintf(f, "// ============================================================\n");
+            fprintf(f, "//\n");
+            fprintf(f, "// uint4 _dg0, _dg1;\n");
+            fprintf(f, "// PROGPOW_ISSUE_DAG(mix, _dg0, 0u);\n");
+            fprintf(f, "// for (uint32_t loop = 0; loop < 62; loop += 2) {\n");
+            fprintf(f, "//     PROGPOW_BODY_PIPE(mix, _dg0, _dg1, loop + 1);\n");
+            fprintf(f, "//     PROGPOW_BODY_PIPE(mix, _dg1, _dg0, loop + 2);\n");
+            fprintf(f, "// }\n");
+            fprintf(f, "// PROGPOW_BODY_PIPE(mix, _dg0, _dg1, 63);\n");
+            fprintf(f, "// PROGPOW_BODY(mix, _dg1);\n");
+            fprintf(f, "\n// ============================================================\n");
+            fprintf(f, "// Example: 2-way interleaved loop (ping-pong)\n");
+            fprintf(f, "// ============================================================\n");
+            fprintf(f, "//\n");
+            fprintf(f, "// uint4 _da0, _da1, _db0, _db1;\n");
+            fprintf(f, "// PROGPOW_ISSUE_DAG(m0, _da0, 0u);\n");
+            fprintf(f, "// PROGPOW_ISSUE_DAG(m1, _db0, 0u);\n");
+            fprintf(f, "// for (uint32_t loop = 0; loop < 62; loop += 2) {\n");
+            fprintf(f, "//     PROGPOW_BODY_PIPE(m0, _da0, _da1, loop + 1);\n");
+            fprintf(f, "//     PROGPOW_BODY_PIPE(m1, _db0, _db1, loop + 1);\n");
+            fprintf(f, "//     PROGPOW_BODY_PIPE(m0, _da1, _da0, loop + 2);\n");
+            fprintf(f, "//     PROGPOW_BODY_PIPE(m1, _db1, _db0, loop + 2);\n");
+            fprintf(f, "// }\n");
+            fprintf(f, "// PROGPOW_BODY_PIPE(m0, _da0, _da1, 63);\n");
+            fprintf(f, "// PROGPOW_BODY_PIPE(m1, _db0, _db1, 63);\n");
+            fprintf(f, "// PROGPOW_BODY(m0, _da1); PROGPOW_BODY(m1, _db1);\n");
+            fprintf(f, "\n// ============================================================\n");
+            fprintf(f, "// Example: 4-way interleaved loop (ping-pong)\n");
+            fprintf(f, "// ============================================================\n");
+            fprintf(f, "//\n");
+            fprintf(f, "// uint4 _da0,_da1, _db0,_db1, _dc0,_dc1, _dd0,_dd1;\n");
+            fprintf(f, "// PROGPOW_ISSUE_DAG(m0, _da0, 0u); ...\n");
+            fprintf(f, "// for (uint32_t loop = 0; loop < 62; loop += 2) {\n");
+            fprintf(f, "//     PROGPOW_BODY_PIPE(m0, _da0, _da1, loop+1); ...\n");
+            fprintf(f, "//     PROGPOW_BODY_PIPE(m0, _da1, _da0, loop+2); ...\n");
+            fprintf(f, "// }\n");
+            fprintf(f, "// PROGPOW_BODY_PIPE(m0, _da0, _da1, 63); ...\n");
+            fprintf(f, "// PROGPOW_BODY(m0, _da1); ...\n");
+
+            fclose(f);
+            printf("  Macro def       → %s\n", path);
+        }
+    }
+
+    // Write GLC body
+    {
+        char path[128];
+        snprintf(path, sizeof(path), "kawpow_program_glc_b%d.hip", block_number);
+        FILE* f = fopen(path, "w");
+        if (f) {
+            fprintf(f, "// ProgPoW GLC program for block %d (period %llu, epoch %d)\n",
+                    block_number, (unsigned long long)period, epoch);
+            fprintf(f, "// GLC variant (inline asm DAG load with GLC flag)\n\n");
+            fwrite(prog_glc.data(), 1, prog_glc.size(), f);
+            fclose(f);
+            printf("  GLC program     → %s\n", path);
+        }
+    }
+
+    // Dump full injected kernel source (with placeholder DAG constants)
+    {
+        std::string src(hip_kawpow_source::SRC_TNN_HIP_CRYPTO_KAWPOW_KAWPOW_HIP_SOURCE);
+        src = kawpow_proggen::inject_coin_padding(src, *currentKawpowPadding);
+        src = kawpow_proggen::inject_dag_constants(src, 1, 1, 0); // placeholder
+        src = kawpow_proggen::inject_program(src, block_number);
+
+        char path[128];
+        snprintf(path, sizeof(path), "kawpow_full_b%d.hip", block_number);
+        FILE* f = fopen(path, "w");
+        if (f) {
+            fwrite(src.data(), 1, src.size(), f);
+            fclose(f);
+            printf("  Full kernel     → %s  (includes 1-way, 2-way, 4-way kernels)\n", path);
+        }
+    }
+
+    printf("\n");
+    fflush(stdout);
+}
+
+// ============================================================================
+// Helper: parse 64-char hex target string into 32-byte LE array
+// ============================================================================
+static void parse_hex_target(const std::string& hex, uint8_t out[32])
+{
+    memset(out, 0, 32);
+    auto nib = [](char c) -> uint8_t {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return 0;
+    };
+    // hex is big-endian (MSB first), GPU target is LE
+    size_t len = std::min(hex.size(), (size_t)64);
+    for (size_t i = 0; i + 1 < len; i += 2) {
+        uint8_t byte = (nib(hex[i]) << 4) | nib(hex[i + 1]);
+        // hex[0..1] = MSB = out[31], hex[62..63] = LSB = out[0]
+        out[31 - i / 2] = byte;
+    }
+}
+
+// ============================================================================
+// KawPow solution builder
+// ============================================================================
+static std::optional<GPUSubmitEntry> kawpow_build_solution(
+    const uint8_t* hash, uint64_t nonce, int gpu_id,
+    const JobSnapshot& job_snapshot, bool devMine)
+{
+    // hash = 32 bytes of mix_hash from GPU
+    // job_snapshot.work_template = 32 bytes of header_hash
+
+    // CPU verification: recompute using progpow reference
+    // We need epoch context + block number, stored in job_snapshot extras
+    // For now, skip CPU verification — the GPU kernel already does target check
+    // TODO: add CPU verification with progpow::hash()
+
+    // Format nonce as 16-char hex (LE bytes → hex, with 0x prefix)
+    uint8_t nonce_bytes[8];
+    for (int i = 0; i < 8; i++) nonce_bytes[i] = (nonce >> (i * 8)) & 0xFF;
+    std::string nonce_hex = "0x" + hexStr(nonce_bytes, 8);
+
+    // header_hash from job snapshot
+    std::string header_hex = "0x" + hexStr(job_snapshot.work_template.data(), 32);
+
+    // mix_hash from GPU result
+    std::string mix_hex = "0x" + hexStr(hash, 32);
+
+    auto& profile = devMine ? devMiningProfile : miningProfile;
+    (void)profile;
+
+    // KawPow stratum submit: [worker, jobId, nonce, header_hash, mix_hash]
+    boost::json::object payload = {
+        {"id", submitTracker.nextId(gpu_id)},
+        {"method", KawPowStratum::submit.method},
+        {"params", boost::json::array{
+            devMine ? devWorkerName : workerName,
+            job_snapshot.job_id_str,
+            nonce_hex,
+            header_hex,
+            mix_hex
+        }}
+    };
+
+    return GPUSubmitEntry{std::move(payload), devMine, job_snapshot.job_id};
+}
+
+// ============================================================================
+// Mining entry point
 // ============================================================================
 
 void mineKawPow_hip(int tid)
 {
-    TNN_LOG_INFO("[KawPow] GPU mining not yet implemented\n");
     (void)tid;
+
+    std::vector<std::unique_ptr<GPUMiner>> miners;
+    int gpuCount;
+    (void)oroGetDeviceCount(&gpuCount);
+
+    // Initialize GPUs in parallel
+    {
+        std::vector<std::thread> init_threads;
+        std::vector<std::unique_ptr<GPUMiner>> per_gpu(gpuCount);
+        std::vector<bool> gpu_ok(gpuCount, false);
+
+        for (int d = 0; d < gpuCount; d++) {
+            if (!shouldUseDevice(d)) continue;
+
+            init_threads.emplace_back([&, d]() {
+                try {
+                    auto miner = std::make_unique<GPUMiner>("kawpow", d);
+                    if (miner->initialize()) {
+                        per_gpu[d] = std::move(miner);
+                        gpu_ok[d] = true;
+                    } else {
+                        setcolor(RED);
+                        fprintf(stderr, "Failed to initialize GPU %d for KawPow mining\n", d);
+                        setcolor(BRIGHT_WHITE);
+                    }
+                } catch (const std::exception& e) {
+                    setcolor(RED);
+                    fprintf(stderr, "GPU %d init error: %s\n", d, e.what());
+                    setcolor(BRIGHT_WHITE);
+                }
+            });
+        }
+        for (auto& t : init_threads) t.join();
+        for (int d = 0; d < gpuCount; d++) {
+            if (gpu_ok[d]) miners.push_back(std::move(per_gpu[d]));
+        }
+    }
+
+    if (miners.empty()) {
+        setcolor(RED);
+        fprintf(stderr, "No GPUs available for KawPow mining\n");
+        setcolor(BRIGHT_WHITE);
+        return;
+    }
+
+    TNN_LOG_INFO_COLOR(BRIGHT_YELLOW, "[KawPow] All GPUs initialized, ready to mine\n");
+
+    int64_t localOurHeight = 0;
+    int64_t localDevHeight = 0;
+
+    std::atomic<int64_t> current_job_height{0};
+    std::atomic<int64_t> current_dev_job_height{0};
+
+    bool miners_started = false;
+
+waitForJob:
+    GPUSubmitQueue::instance().start(
+        &share, &devShare,
+        &submitting, &submittingDev,
+        &data_ready, &cv,
+        [&](int64_t job_id, bool is_dev) -> bool {
+            int64_t current = is_dev ? current_dev_job_height.load() : current_job_height.load();
+            // Allow 2 jobs of staleness for stratum
+            return job_id >= (current - 2) && job_id <= current;
+        }
+    );
+
+    while (!isConnected) {
+        CHECK_CLOSE;
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    while (!ABORT_MINER) {
+        std::this_thread::yield();
+        try {
+            boost::json::value myJob;
+            boost::json::value myJobDev;
+            TNN_SNAPSHOT_JOBS(myJob, myJobDev);
+
+            if (!myJob.is_object() || !myJob.as_object().contains("header_hash"))
+                continue;
+            if (ourHeight == 0 && devHeight == 0)
+                continue;
+
+            // Update main work
+            if (ourHeight == 0 || localOurHeight != ourHeight) {
+                current_job_height.store(ourHeight);
+
+                // Parse header hash (32 bytes) as work template
+                std::string hdr_hex = std::string(myJob.at("header_hash").as_string());
+                uint8_t header[32] = {};
+                hexstrToBytes(hdr_hex, header);
+
+                // Parse 256-bit target from stratum
+                std::string target_hex = std::string(myJob.at("target").as_string());
+                uint8_t target_bytes[32] = {};
+                parse_hex_target(target_hex, target_bytes);
+
+                // Use height as difficulty proxy (for display only)
+                uint64_t diff_display = (uint64_t)difficulty;
+
+                std::string job_id_str;
+                if (myJob.as_object().contains("jobId"))
+                    job_id_str = std::string(myJob.at("jobId").as_string());
+
+                // Extract block height for period tracking
+                int64_t block_height = 0;
+                if (myJob.as_object().contains("height"))
+                    block_height = myJob.at("height").to_number<int64_t>();
+
+                for (auto& miner : miners) {
+                    miner->set_work(header, diff_display);
+                    miner->set_raw_target(target_bytes);
+                    miner->set_job_id(ourHeight, job_id_str);
+                    miner->set_dep("period", block_height / 3);
+                }
+
+                if (!miners_started) {
+                    TNN_LOG_INFO("[KawPow] Starting all GPU miners\n");
+                    for (auto& miner : miners) {
+                        miner->set_dev_fee(devFee);
+                        miner->start([&](const uint8_t* hash, uint64_t nonce, int gpu_id,
+                                         const JobSnapshot& job_snapshot) -> std::optional<GPUSubmitEntry> {
+                            printf("\n");
+                            if (job_snapshot.is_dev) {
+                                setcolor(CYAN);
+                                printf("DEV | ");
+                            } else {
+                                setcolor(BRIGHT_YELLOW);
+                            }
+                            printf("GPU #%d found a share (nonce %016llx)\n", gpu_id, (unsigned long long)nonce);
+                            fflush(stdout);
+                            setcolor(BRIGHT_WHITE);
+                            return kawpow_build_solution(hash, nonce, gpu_id, job_snapshot, job_snapshot.is_dev);
+                        });
+                    }
+                    miners_started = true;
+                    TNN_LOG_INFO_COLOR(BRIGHT_YELLOW, "[KawPow] All GPU miners started\n");
+                }
+
+                localOurHeight = ourHeight;
+            }
+
+            // Update dev work
+            if (devConnected && myJobDev.is_object() && myJobDev.as_object().contains("header_hash")) {
+                if (devHeight == 0 || localDevHeight != devHeight) {
+                    current_dev_job_height.store(devHeight);
+
+                    std::string hdr_hex = std::string(myJobDev.at("header_hash").as_string());
+                    uint8_t header[32] = {};
+                    hexstrToBytes(hdr_hex, header);
+
+                    // Parse dev target
+                    uint8_t dev_target_bytes[32] = {};
+                    if (myJobDev.as_object().contains("target")) {
+                        std::string dev_target_hex = std::string(myJobDev.at("target").as_string());
+                        parse_hex_target(dev_target_hex, dev_target_bytes);
+                    }
+
+                    std::string dev_job_id_str;
+                    if (myJobDev.as_object().contains("jobId"))
+                        dev_job_id_str = std::string(myJobDev.at("jobId").as_string());
+
+                    // Extract dev block height for period tracking
+                    int64_t dev_block_height = 0;
+                    if (myJobDev.as_object().contains("height"))
+                        dev_block_height = myJobDev.at("height").to_number<int64_t>();
+
+                    for (auto& miner : miners) {
+                        miner->set_dev_work(header, (uint64_t)difficulty);
+                        miner->set_dev_raw_target(dev_target_bytes);
+                        miner->set_dev_job_id(devHeight, dev_job_id_str);
+                        miner->set_dev_dep("period", dev_block_height / 3);
+                    }
+
+                    localDevHeight = devHeight;
+                }
+            }
+
+            if (!isConnected) break;
+        } catch (std::exception& e) {
+            setcolor(RED);
+            fprintf(stderr, "KawPow mining error: %s\n", e.what());
+            setcolor(BRIGHT_WHITE);
+            localOurHeight = -1;
+            localDevHeight = -1;
+        }
+
+        if (!isConnected) {
+            data_ready = true;
+            cv.notify_all();
+            break;
+        }
+    }
+
+    for (auto& miner : miners) miner->stop();
+    GPUSubmitQueue::instance().stop();
+
+    if (!isConnected) {
+        miners_started = false;
+        localOurHeight = 0;
+        localDevHeight = 0;
+        goto waitForJob;
+    }
 }
 
 #endif // TNN_KAWPOW

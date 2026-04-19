@@ -90,6 +90,19 @@ public:
         dev_job_id_.store(job_id, std::memory_order_release);
     }
 
+    // Store a raw 256-bit target (for algos like KawPow where the pool
+    // sends the target, not a scalar difficulty).  Uploaded to GPU per-batch
+    // in mine_loop so dev and regular targets stay separate.
+    void set_raw_target(const uint8_t* target_32bytes) {
+        memcpy(raw_target_, target_32bytes, 32);
+        raw_target_valid_.store(true, std::memory_order_release);
+    }
+
+    void set_dev_raw_target(const uint8_t* target_32bytes) {
+        memcpy(dev_raw_target_, target_32bytes, 32);
+        dev_raw_target_valid_.store(true, std::memory_order_release);
+    }
+
     void set_dev_fee(double fee) {
         dev_fee_ = fee;
     }
@@ -140,6 +153,16 @@ public:
 
     void set_solution_builder(SolutionBuilder builder) {
         solution_builder_ = std::move(builder);
+    }
+
+    // Forward a named dependency to the algo (thread-safe).
+    // mine_batch fires the algo's deps_changed_fn hook when values change.
+    void set_dep(const std::string& key, int64_t value) {
+        algo_->set_dep(key, value);
+    }
+
+    void set_dev_dep(const std::string& key, int64_t value) {
+        algo_->set_dev_dep(key, value);
     }
 
 private:
@@ -213,6 +236,16 @@ private:
                     : current_difficulty_.load(std::memory_order_acquire);
 
                 algo_->set_work(local_work, batch_diff);
+
+                // Select correct dep set (regular vs dev) for this batch
+                algo_->use_dev_deps(is_dev_batch);
+
+                // Upload dev raw target if needed
+                if (is_dev_batch && dev_raw_target_valid_.load(std::memory_order_acquire)) {
+                    algo_->set_raw_target(dev_raw_target_);
+                } else if (!is_dev_batch && raw_target_valid_.load(std::memory_order_acquire)) {
+                    algo_->set_raw_target(raw_target_);
+                }
 
                 // Capture complete job state BEFORE mining exec
                 const uint8_t* template_ptr = algo_->get_current_work_template();
@@ -304,6 +337,12 @@ private:
     std::atomic<bool> dev_work_valid_{false};
     uint8_t dev_work_[512] = {};
     double dev_fee_ = 0.0;
+
+    // Raw target storage (uploaded to GPU per-batch in mine_loop)
+    uint8_t raw_target_[32] = {};
+    uint8_t dev_raw_target_[32] = {};
+    std::atomic<bool> raw_target_valid_{false};
+    std::atomic<bool> dev_raw_target_valid_{false};
 
     mutable std::mutex job_str_mutex_;
     std::string current_job_id_str_;

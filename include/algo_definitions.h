@@ -28,6 +28,9 @@
 // BTC family
 #define PROTO_BTC_STRATUM 70
 
+// KawPow family
+#define PROTO_KAWPOW_STRATUM 80
+
 #define COIN_UNKNOWN -1
 #define COIN_DERO 0
 #define COIN_XELIS 1
@@ -56,8 +59,10 @@
 #define COIN_YSC 24      // Yescrypt (plain)
 #define COIN_EQPAY 25    // YespowerEQPAY (EqpayCoin)
 #define COIN_YCR32 26    // YescryptR32 (LuckyPepe etc.)
+#define COIN_RVN 27      // Ravencoin (KawPow)
+#define COIN_QUAI 28     // Quai Network (KawPow)
 
-#define COIN_COUNT 27
+#define COIN_COUNT 29
 
 // Corresponding to the ALGO_POW[] array in miners.hpp
 // Also used in coins[COIN_COUNT] from tnn-common.hpp

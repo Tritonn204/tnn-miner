@@ -235,6 +235,7 @@ waitForJob:
 
   while (!ABORT_MINER)
   {
+    std::this_thread::yield();
     try
     {
       boost::json::value myJob;
@@ -374,7 +375,6 @@ waitForJob:
         break;
       }
 
-      std::this_thread::yield();
     }
     catch (std::exception &e)
     {

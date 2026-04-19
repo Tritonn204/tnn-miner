@@ -23,6 +23,8 @@ inline Num ConvertDifficultyToBig(Num d, int algo)
       return maxU256 / d;
     case ALGO_SPECTRE_X:
       return oneLsh256 / (d+1);
+    case ALGO_KAWPOW:
+      return maxU256 / d;
     default:
       return 0;
   }
@@ -112,6 +114,7 @@ void mineAstrix_hip(int tid);
 void mineNexellia_hip(int tid);
 void mineWaglayla_hip(int tid);
 void mineXelis_hip(int tid);
+void mineKawPow_hip(int tid);
 
 typedef void (*mineFunc)(int);
 inline mineFunc getMiningFunc(int algoNum, bool gpu) {
@@ -138,6 +141,11 @@ inline mineFunc getMiningFunc(int algoNum, bool gpu) {
 #ifdef TNN_WALAHASH
       case ALGO_WALA_HASH:
         return mineWaglayla_hip;
+        break;
+#endif
+#ifdef TNN_KAWPOW
+      case ALGO_KAWPOW:
+        return mineKawPow_hip;
         break;
 #endif
       default:

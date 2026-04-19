@@ -46,6 +46,7 @@ if (WITH_KAWPOW)
     "${KAWPOW_REF_DIR}/keccak/keccak.c"
     "${KAWPOW_REF_DIR}/keccak/keccakf800.c"
     "${KAWPOW_REF_DIR}/keccak/keccakf1600.c"
+    "${KAWPOW_REF_DIR}/kawpow_algo.cpp"
   )
 
   # The ethash headers use #include <ethash/...> so we need the parent dir as include root
@@ -54,6 +55,7 @@ if (WITH_KAWPOW)
   list(APPEND TNN_HIP_SOURCES
     src/tnn_hip/coins/kawpow/test_kawpow_hip.cpp
     src/tnn_hip/coins/kawpow/mine_kawpow.hip.cpp
+    src/net/kawpow/net_kawpow_stratum.cpp
     ${KAWPOW_REF_SOURCES}
   )
 else()

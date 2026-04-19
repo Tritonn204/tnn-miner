@@ -182,3 +182,24 @@ void btc_stratum_session_nossl(
     ssl::context &ctx,
     net::yield_context yield,
     bool isDev);
+
+// KawPow stratum
+void kawpow_stratum_session(
+    std::string host,
+    std::string const &port,
+    std::string const &wallet,
+    std::string const &worker,
+    net::io_context &ioc,
+    ssl::context &ctx,
+    net::yield_context yield,
+    bool isDev);
+
+void kawpow_stratum_session_nossl(
+    std::string host,
+    std::string const &port,
+    std::string const &wallet,
+    std::string const &worker,
+    net::io_context &ioc,
+    ssl::context &ctx,
+    net::yield_context yield,
+    bool isDev);

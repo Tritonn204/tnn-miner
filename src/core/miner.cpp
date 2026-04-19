@@ -86,6 +86,10 @@
 #include <yespower/yespower.h>
 #endif
 
+#ifdef TNN_KAWPOW
+#include <crypto/kawpow/kawpow_algo.h>
+#endif
+
 #ifdef TNN_XELISHASH
 #include <xelis-hash/xelis-hash.hpp>
 #endif
@@ -783,6 +787,21 @@ int tnn_main(int argc, char **argv)
     }
   }
 
+  {
+    int _kpCoin = miningProfile.coin.coinId;
+    if (_kpCoin == COIN_RVN || _kpCoin == COIN_QUAI)
+    {
+#if defined(TNN_KAWPOW)
+      initKawpowPaddingForCoin(_kpCoin, &currentKawpowPadding);
+      preserveAlgoOverride(miningProfile, _kpCoin);
+      miningProfile.protocol = PROTO_KAWPOW_STRATUM;
+      devKawpowPadding = &KAWPOW_PADDING_RVN;
+#else
+      UNSUPPORTED_ALGO_ERROR(unsupported_kawpow);
+#endif
+    }
+  }
+
   if (vm.count("yespower"))
   {
 #if defined(TNN_YESPOWER)
@@ -938,6 +957,20 @@ int tnn_main(int argc, char **argv)
 #else
     setcolor(RED);
     printf("ERROR: --bench-kawpow requires TNN_KAWPOW to be enabled\n");
+    fflush(stdout);
+    setcolor(BRIGHT_WHITE);
+    return 1;
+#endif
+  }
+
+  if (vm.count("dump-kawpow"))
+  {
+#if defined(TNN_KAWPOW)
+    kawpow_dump_program(vm["dump-kawpow"].as<int>());
+    return 0;
+#else
+    setcolor(RED);
+    printf("ERROR: --dump-kawpow requires TNN_KAWPOW to be enabled\n");
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
     return 1;
@@ -2324,6 +2357,7 @@ connectionAttempt:
       case ALGO_NXL_HASH:
       case ALGO_HOOHASH:
       case ALGO_WALA_HASH:
+      case ALGO_KAWPOW:
       {
         miningProf->workerName = devWorkerName;
         break;
@@ -2335,7 +2369,13 @@ connectionAttempt:
                          {
                            if (ex)
                            {
-                             std::rethrow_exception(ex);
+                             try {
+                               std::rethrow_exception(ex);
+                             } catch (const std::exception& e) {
+                               TNN_LOG_DEBUG("spawn exception: %s\n", e.what());
+                             } catch (...) {
+                               TNN_LOG_DEBUG("spawn unknown exception\n");
+                             }
                              err = true;
                            }
                          });
@@ -2348,7 +2388,13 @@ connectionAttempt:
                          {
                            if (ex)
                            {
-                             std::rethrow_exception(ex);
+                             try {
+                               std::rethrow_exception(ex);
+                             } catch (const std::exception& e) {
+                               TNN_LOG_DEBUG("spawn exception: %s\n", e.what());
+                             } catch (...) {
+                               TNN_LOG_DEBUG("spawn unknown exception\n");
+                             }
                              err = true;
                            }
                          });
