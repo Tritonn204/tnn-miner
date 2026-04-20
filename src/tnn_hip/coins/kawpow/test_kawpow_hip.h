@@ -9,5 +9,5 @@ int kawpow_gpu_test();
 // GPU benchmark: measure kernel throughput
 void kawpow_bench(int block_height = -1);
 
-// Dump generated program body (non-GLC + GLC + full kernel) for a given block
+// Dump generated program body (expanded + macro + full kernel) for a given block
 void kawpow_dump_program(int block_number);

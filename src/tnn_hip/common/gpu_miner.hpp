@@ -8,6 +8,7 @@
 #include <mutex>
 #include <random>
 #include <optional>
+#include <condition_variable>
 
 // Callback type for algo-specific solution processing.
 // Receives (hash, nonce, gpu_id, job_snapshot) and returns a GPUSubmitEntry
@@ -159,28 +160,44 @@ public:
     // mine_batch fires the algo's deps_changed_fn hook when values change.
     void set_dep(const std::string& key, int64_t value) {
         algo_->set_dep(key, value);
+        if (key == "period") user_period_.store(value, std::memory_order_release);
     }
 
     void set_dev_dep(const std::string& key, int64_t value) {
         algo_->set_dev_dep(key, value);
+        if (key == "period") dev_period_.store(value, std::memory_order_release);
+    }
+
+    // Force-apply pending deps on the calling thread (init thread, before worker starts).
+    // This triggers deps_changed → main_thread_fn in-line, so heavy GPU work (DAG build)
+    // runs on the init thread where the context is known-good.  Must be called BEFORE start().
+    bool flush_deps() {
+        return algo_->flush_deps();
+    }
+
+    // Main-thread service: poll from main loop, returns true if work was done.
+    // Worker thread pauses and waits while main thread executes GPU ops.
+    bool needs_main_thread_service() const {
+        return mt_work_pending_.load(std::memory_order_acquire);
+    }
+
+    bool service_main_thread() {
+        if (!mt_work_pending_.load(std::memory_order_acquire)) return false;
+
+        bool ok = algo_->do_main_thread_work();
+
+        {
+            std::lock_guard<std::mutex> lock(mt_mutex_);
+            mt_work_result_ = ok;
+            mt_work_done_.store(true, std::memory_order_release);
+        }
+        mt_cv_.notify_one();
+        return ok;
     }
 
 private:
     void mine_loop() {
-        // Reuse the GPU context created during initialize().
-        // This sets the thread-local s_api and binds the context (with its
-        // compiled modules/kernels) to this worker thread.
-        oroCtx ctx = algo_->get_ctx();
-        if (!ctx) {
-            TNN_LOG_ERROR("[ERROR] GPU %d: mine_loop has no context (initialize not called?)\n", device_id_);
-            return;
-        }
-        oroError_t ctx_err = oroCtxSetCurrent(ctx);
-        if (ctx_err != oroSuccess) {
-            TNN_LOG_ERROR("[ERROR] GPU %d: mine_loop oroCtxSetCurrent failed: %s\n",
-                    device_id_, tnn_error_string(ctx_err));
-            return;
-        }
+        oroSetDevice(device_id_);
 
         // Nonce segmentation:
         // - Bits 59-63 (top 5 bits): device ID (supports up to 32 GPUs)
@@ -203,8 +220,15 @@ private:
         TNN_LOG_DEBUG("[DEBUG] GPU %d: device_id_=%d, device_id_bits=0x%016llx, random_bits=0x%016llx, nonce=0x%016llx\n",
                device_id_, device_id_, (unsigned long long)device_id_bits, (unsigned long long)random_bits, (unsigned long long)nonce);
 
-        std::uniform_real_distribution<double> fee_dist(0.0, 10000.0);
+        std::uniform_real_distribution<double> fee_dist(0.0, 100.0);
         uint64_t batch_counter = 0;
+
+        // Session-based dev fee: for algos with expensive dep transitions (e.g.
+        // KawPow DAG rebuild), decide dev vs user once per period change instead
+        // of every batch.  The algo keeps one DAG at a time and rebuilds on swap.
+        const bool session_dev = algo_->get_config().dev_fee_session_based;
+        bool session_is_dev = false;     // current session mode
+        int64_t session_period = -1;     // period when current session was decided
 
         // Wait for initial work to be set
         while (running_ && !work_updated_.load(std::memory_order_acquire)) {
@@ -215,10 +239,23 @@ private:
             try {
                 work_updated_.store(false, std::memory_order_relaxed);
 
-                // Decide dev or user for this batch
-                bool is_dev_batch = (dev_work_valid_.load(std::memory_order_acquire)
-                                     && dev_fee_ > 0.0
-                                     && fee_dist(rng) < dev_fee_ * 100.0);
+                bool is_dev_batch;
+                if (session_dev) {
+                    // Check if user period changed → re-roll dev decision
+                    int64_t cur_period = user_period_.load(std::memory_order_acquire);
+                    if (cur_period != session_period) {
+                        session_period = cur_period;
+                        bool dev_available = dev_work_valid_.load(std::memory_order_acquire)
+                                             && dev_fee_ > 0.0;
+                        session_is_dev = dev_available && fee_dist(rng) < dev_fee_;
+                    }
+                    is_dev_batch = session_is_dev;
+                } else {
+                    // Per-batch random (original behaviour)
+                    is_dev_batch = (dev_work_valid_.load(std::memory_order_acquire)
+                                    && dev_fee_ > 0.0
+                                    && fee_dist(rng) < dev_fee_);
+                }
 
                 // Load the appropriate template into the algo
                 const size_t tmpl_size = algo_->get_config().template_size;
@@ -240,11 +277,18 @@ private:
                 // Select correct dep set (regular vs dev) for this batch
                 algo_->use_dev_deps(is_dev_batch);
 
-                // Upload dev raw target if needed
+                // Capture the raw target used for this batch too
+                std::array<uint8_t, 32> batch_raw_target{};
+                bool have_batch_raw_target = false;
+
                 if (is_dev_batch && dev_raw_target_valid_.load(std::memory_order_acquire)) {
                     algo_->set_raw_target(dev_raw_target_);
+                    memcpy(batch_raw_target.data(), dev_raw_target_, 32);
+                    have_batch_raw_target = true;
                 } else if (!is_dev_batch && raw_target_valid_.load(std::memory_order_acquire)) {
                     algo_->set_raw_target(raw_target_);
+                    memcpy(batch_raw_target.data(), raw_target_, 32);
+                    have_batch_raw_target = true;
                 }
 
                 // Capture complete job state BEFORE mining exec
@@ -268,6 +312,10 @@ private:
                     is_dev_batch
                 );
 
+                if (have_batch_raw_target) {
+                    job_snapshot.raw_target = batch_raw_target;
+                }
+
                 TNN_LOG_TRACE("[TRACE] GPU%d calling mine_batch: nonce=0x%016llx (dev=%llu, rand=%llu, ctr=%llu)\n",
                        device_id_, (unsigned long long)nonce,
                        (unsigned long long)((nonce >> 59) & 0x1F),
@@ -276,6 +324,37 @@ private:
                 auto result = algo_->mine_batch(nonce, batch_size);
                 TNN_LOG_TRACE("[TRACE] GPU%d mine_batch END (checked %u hashes, found %u valid)\n",
                        device_id_, result.count, result.num_valid);
+
+                // If mine_batch skipped and main-thread work is pending,
+                // signal the main thread and block until it completes.
+                if (result.count == 0 && algo_->needs_main_thread_work()) {
+                    TNN_LOG_INFO("[INFO] GPU %d: Requesting main-thread work...\n", device_id_);
+                    fflush(stdout);
+
+                    mt_work_pending_.store(true, std::memory_order_release);
+
+                    // Wait for main thread to call service_main_thread()
+                    {
+                        std::unique_lock<std::mutex> lock(mt_mutex_);
+                        mt_cv_.wait(lock, [this] {
+                            return mt_work_done_.load(std::memory_order_acquire) || !running_;
+                        });
+                    }
+
+                    bool ok = mt_work_result_;
+                    mt_work_done_.store(false, std::memory_order_relaxed);
+                    mt_work_pending_.store(false, std::memory_order_relaxed);
+
+                    if (!ok) {
+                        TNN_LOG_ERROR("[ERROR] GPU %d: Main-thread work failed, stopping\n", device_id_);
+                        running_ = false;
+                        break;
+                    }
+
+                    TNN_LOG_INFO("[INFO] GPU %d: Main-thread work done, resuming\n", device_id_);
+                    fflush(stdout);
+                    continue;  // re-enter loop with fresh work
+                }
 
                 for (uint32_t i = 0; i < result.num_valid; i++) {
                     uint64_t winning_nonce = result.valid_nonces[i];
@@ -348,6 +427,17 @@ private:
     std::string current_job_id_str_;
     std::string dev_job_id_str_;
 
+    // Period tracking for session-based dev fee
+    std::atomic<int64_t> user_period_{-1};
+    std::atomic<int64_t> dev_period_{-1};
+
     std::thread miner_thread_;
     SolutionBuilder solution_builder_;
+
+    // Main-thread work signaling
+    mutable std::mutex mt_mutex_;
+    std::condition_variable mt_cv_;
+    std::atomic<bool> mt_work_pending_{false};
+    std::atomic<bool> mt_work_done_{false};
+    bool mt_work_result_ = false;
 };

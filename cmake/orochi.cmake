@@ -72,6 +72,7 @@ if (WITH_OROCHI)
         OUTPUT_FILE "${PROJECT_BINARY_DIR}/generated/tnn_hip_common_embedded.hpp"
         SOURCES
             "${PROJECT_SOURCE_DIR}/src/tnn_hip/common/stdint-jit.hip.inc"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/common/hiprtc_types.hip.h"
             "${PROJECT_SOURCE_DIR}/src/tnn_hip/common/uint128-compat.hip.inc"
         MANIFEST_NAME COMMON_HEADERS
     )

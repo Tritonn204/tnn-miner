@@ -198,8 +198,10 @@ public:
             return false;
         }
 
-        // Validate cached tune with trial launches (catches stale caches after recompile)
-        if (tuning_result_.valid && !validate_cached_tune()) {
+        // Validate cached tune with trial launches (catches stale caches after recompile).
+        // Skip for KawPow: trial launches with bench-epoch DAG constants poison GPU
+        // state, causing subsequent DAG gen kernel launches to silently fail (0.00s).
+        if (tuning_result_.valid && config_.algo_id != ALGO_KAWPOW && !validate_cached_tune()) {
             TNN_LOG_INFO("[AUTOTUNE] GPU %d: Cached tune invalid, triggering retune\n", device_id_);
             cleanup_batch_buffers();
 
@@ -289,6 +291,92 @@ public:
         use_dev_deps_ = dev;
     }
 
+    bool needs_main_thread_work() const override {
+        return config_.needs_main_thread_fn
+            && config_.needs_main_thread_fn(algo_data_);
+    }
+
+    bool do_main_thread_work() override {
+        TNN_LOG_INFO("[INFO] GPU %d: Main-thread work starting...\n", device_id_);
+        fflush(stdout);
+
+        // Worker is paused — safe to touch shared GPU state.
+        cleanup_batch_buffers();
+        (void)oroDeviceSynchronize();
+
+        // Dispatch registered main_thread_fn (algo-specific: DAG rebuild, etc.)
+        if (config_.main_thread_fn) {
+            bool is_dev;
+            {
+                std::lock_guard<std::mutex> lock(dep_mutex_);
+                is_dev = use_dev_deps_;
+            }
+            if (!config_.main_thread_fn(kernels_, algo_data_, device_id_, is_dev)) {
+                TNN_LOG_ERROR("[ERROR] GPU %d: Main-thread: algo fn failed\n", device_id_);
+                return false;
+            }
+        }
+
+        // Re-allocate batch buffers
+        if (!allocate_batch_buffers()) {
+            TNN_LOG_ERROR("[ERROR] GPU %d: Main-thread: buffer alloc failed\n", device_id_);
+            return false;
+        }
+
+        TNN_LOG_INFO("[INFO] GPU %d: Main-thread work complete\n", device_id_);
+        fflush(stdout);
+        return true;
+    }
+
+    bool flush_deps() override {
+        // Run deps_changed + main_thread_fn in-line on the calling thread.
+        // Called from init thread BEFORE worker thread is created, so the GPU
+        // context is in its original known-good state.
+        if (!config_.deps_changed_fn) return true;
+
+        std::unordered_map<std::string, int64_t> snapshot;
+        {
+            std::lock_guard<std::mutex> lock(dep_mutex_);
+            snapshot = use_dev_deps_ ? pending_dev_deps_ : pending_deps_;
+        }
+        auto& active = use_dev_deps_ ? active_dev_deps_ : active_deps_;
+
+        if (snapshot == active) return true;  // nothing changed
+
+        if (!config_.deps_changed_fn(snapshot, active, kernels_, algo_data_, device_id_,
+                                      use_dev_deps_)) {
+            // deps_changed returned false → needs main-thread work (e.g. DAG rebuild).
+            // We ARE on the init thread, so do it now.
+            TNN_LOG_INFO("[INFO] GPU %d: flush_deps: running main-thread work inline\n", device_id_);
+            fflush(stdout);
+
+            cleanup_batch_buffers();
+            (void)oroDeviceSynchronize();
+
+            if (config_.main_thread_fn) {
+                if (!config_.main_thread_fn(kernels_, algo_data_, device_id_, use_dev_deps_)) {
+                    TNN_LOG_ERROR("[ERROR] GPU %d: flush_deps: main_thread_fn failed\n", device_id_);
+                    return false;
+                }
+            }
+
+            if (!allocate_batch_buffers()) {
+                TNN_LOG_ERROR("[ERROR] GPU %d: flush_deps: buffer alloc failed\n", device_id_);
+                return false;
+            }
+
+            // Re-run deps_changed now that rebuild is done — it should succeed
+            // and update active deps (e.g. period recompile after DAG change).
+            if (!config_.deps_changed_fn(snapshot, active, kernels_, algo_data_, device_id_,
+                                          use_dev_deps_)) {
+                TNN_LOG_ERROR("[ERROR] GPU %d: flush_deps: deps_changed still failing after rebuild\n", device_id_);
+                return false;
+            }
+        }
+        active = snapshot;
+        return true;
+    }
+
     BatchResult mine_batch(uint64_t nonce_start, uint32_t count = 0) override
     {
         if (count == 0) count = batch_size_;
@@ -310,14 +398,54 @@ public:
             auto& active = batch_is_dev ? active_dev_deps_ : active_deps_;
             if (snapshot != active) {
                 if (!config_.deps_changed_fn(snapshot, active, kernels_, algo_data_, device_id_, batch_is_dev)) {
-                    // Hook said skip this batch
+                    // Hook said skip this batch.  If main-thread work is pending
+                    // (e.g. KawPow DAG rebuild), return skip — mine_loop will
+                    // signal the main thread and wait.
                     BatchResult skip;
                     skip.nonce_start = nonce_start;
                     skip.count = 0;
                     skip.num_valid = 0;
                     return skip;
+                } else {
+                    active = snapshot;
                 }
-                active = snapshot;
+
+                // deps_changed may have altered GPU memory (e.g. DAG resize).
+                // Re-check if batch buffers still fit and scale down if needed.
+                if (config_.scratch_per_hash > 0) {
+                    size_t free_mem, total_mem;
+                    (void)oroMemGetInfo(&free_mem, &total_mem);
+                    size_t vram_reserve = (size_t)(config_.memory_reserve_mb * 1024 * 1024);
+                    size_t current_scratch = (size_t)batch_size_ * config_.scratch_per_hash;
+                    // Check if current buffers + reserve exceed what's available
+                    // free_mem already excludes our existing allocations, so we need
+                    // to check: is (free_mem + current_scratch) enough for (new_scratch + reserve)?
+                    size_t available_for_scratch = free_mem + current_scratch;
+                    if (available_for_scratch > vram_reserve)
+                        available_for_scratch -= vram_reserve;
+                    else
+                        available_for_scratch = 0;
+
+                    uint32_t max_batch = (uint32_t)(available_for_scratch / config_.scratch_per_hash);
+                    max_batch = (max_batch / block_size_) * block_size_;
+                    if (max_batch > 0 && max_batch < batch_size_) {
+                        TNN_LOG_INFO("[AUTOTUNE] GPU %d: Scaling batch %u -> %u after dep change (%.0f MB free, %.0f MB reserve)\n",
+                                     device_id_, batch_size_, max_batch,
+                                     free_mem / (1024.0 * 1024.0), config_.memory_reserve_mb);
+                        cleanup_batch_buffers();
+                        batch_size_ = max_batch;
+                        num_blocks_ = batch_size_ / block_size_;
+                        count = batch_size_;
+                        if (!allocate_batch_buffers()) {
+                            TNN_LOG_ERROR("[ERROR] GPU %d: Failed to reallocate batch buffers after dep change\n", device_id_);
+                            BatchResult skip;
+                            skip.nonce_start = nonce_start;
+                            skip.count = 0;
+                            skip.num_valid = 0;
+                            return skip;
+                        }
+                    }
+                }
             }
         }
 
@@ -681,6 +809,15 @@ private:
         
         // Occupancy-based tune: algo provides optimal config directly, skip sweep
         if (config_.occupancy_tune_fn) {
+            // Check disk cache first (same logic as run_autotune)
+            if (!g_tuning_overrides.should_retune(device_id_) && load_cached_tune()) {
+                TNN_LOG_INFO("[AUTOTUNE] GPU %d: Loaded cached tune for %s\n",
+                             device_id_, config_.name.c_str());
+                TNN_LOG_INFO("[AUTOTUNE] GPU %d: %s\n",
+                             device_id_, tuning_result_.describe().c_str());
+                return true;
+            }
+
             TuningResult occ_result{};
             if (config_.occupancy_tune_fn(occ_result, device_props_, device_id_, algo_data_,
                                             config_.memory_reserve_mb, config_.memory_usage_factor)) {
@@ -692,6 +829,9 @@ private:
 
                 TNN_LOG_INFO("[AUTOTUNE] GPU %d: Occupancy tune → block=%d, batch=%u\n",
                              device_id_, block_size_, batch_size_);
+
+                // Save to disk cache
+                save_tune_cache();
 
                 // Run post-tune hook (bench, diagnostics)
                 if (config_.post_tune_fn) {
@@ -1781,6 +1921,7 @@ private:
     bool initialized_ = false;
     int device_id_ = 0;
     oroCtx ctx_ = nullptr;
+    bool ctx_is_primary_ = false;  // true after context rebuild switched to primary ctx
     oroDeviceProp_t device_props_{};
 
     KernelMap kernels_;

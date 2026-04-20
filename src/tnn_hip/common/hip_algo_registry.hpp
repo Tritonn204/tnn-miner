@@ -1346,10 +1346,6 @@ struct KawPowAlgoData {
 
     uint32_t  block_number = 0;
 
-    // Occupancy-based config: set by pre_tune, consumed by configure_batch
-    int       occ_block_size = 0;
-    int       occ_grid_size = 0;
-
     // Multi-period bench: compiled kernels for periods 0..N-1
     oroModule_t   period_modules[KAWPOW_BENCH_PERIODS] = {};
     oroFunction_t period_mono_kernels[KAWPOW_BENCH_PERIODS] = {};
@@ -1365,13 +1361,20 @@ struct KawPowAlgoData {
     // Strategy selection
     KawPowStrategy best_strategy = KawPowStrategy::Split2Way;
 
-    // 2-way progpow occupancy config
-    int split_progpow_block = 0;
-    int split_progpow_blocks_per_cu = 0;
-
     // Compilation state (saved during pre_tune for runtime recompilation)
     std::vector<std::string> compile_opts;
     int compile_device_id = 0;
+
+    // DAG gen kernel — compiled on init thread, reloaded on context refresh.
+    oroModule_t   dag_gen_module = nullptr;
+    oroFunction_t dag_gen_function = nullptr;
+
+    // Pending rebuild: set by deps_changed, consumed by main_thread_fn.
+    int  pending_rebuild_epoch = -1;
+    bool pending_rebuild_is_dev = false;
+
+
+
 
     // Ensure intermediate buffer can hold at least `needed` hashes
     bool ensure_intermediate(size_t needed) {
@@ -1425,15 +1428,21 @@ inline void kawpow_launch_split(
     int seed_grid = ((int)batch_size + seed_block - 1) / seed_block;
     {
         void* args[] = { &d_header, &nonce_start, &batch_size, &d_intermediate };
-        oroModuleLaunchKernel(seed_fn, seed_grid, 1, 1, seed_block, 1, 1,
+        oroError_t e = oroModuleLaunchKernel(seed_fn, seed_grid, 1, 1, seed_block, 1, 1,
                               0, stream, args, nullptr);
+        if (e != oroSuccess)
+            fprintf(stderr, "[KawPow] seed launch failed: %s (grid=%d, block=%d, batch=%u)\n",
+                    tnn_error_string(e), seed_grid, seed_block, batch_size);
     }
 
     // Kernel B: progpow main loop (Barrett constants are compile-time injected)
     {
         void* args[] = { &d_dag, &batch_size, &d_l1_cache, &d_intermediate };
-        oroModuleLaunchKernel(progpow_fn, progpow_grid, 1, 1, progpow_block, 1, 1,
+        oroError_t e = oroModuleLaunchKernel(progpow_fn, progpow_grid, 1, 1, progpow_block, 1, 1,
                               progpow_shared_mem, stream, args, nullptr);
+        if (e != oroSuccess)
+            fprintf(stderr, "[KawPow] progpow launch failed: %s (grid=%d, block=%d, smem=%zu)\n",
+                    tnn_error_string(e), progpow_grid, progpow_block, progpow_shared_mem);
     }
 
     // Kernel C: final keccak + target check (1 thread/hash, no LDS)
@@ -1441,8 +1450,11 @@ inline void kawpow_launch_split(
     {
         void* args[] = { &nonce_start, &batch_size, &d_target, &d_solutions,
                          &d_result_hashes, &d_intermediate };
-        oroModuleLaunchKernel(final_fn, final_grid, 1, 1, final_block, 1, 1,
+        oroError_t e = oroModuleLaunchKernel(final_fn, final_grid, 1, 1, final_block, 1, 1,
                               0, stream, args, nullptr);
+        if (e != oroSuccess)
+            fprintf(stderr, "[KawPow] final launch failed: %s (grid=%d, block=%d)\n",
+                    tnn_error_string(e), final_grid, final_block);
     }
 }
 
@@ -1461,6 +1473,9 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
                              int device_id, void** algo_data)
 {
     (void)kernels; (void)props;
+
+    // Ensure HIP runtime is initialized on this thread
+    oroSetDevice(device_id);
 
     const int epoch = ethash::get_epoch_number(kawpow_bench_block());
     auto ctx = ethash::create_epoch_context(epoch);
@@ -1490,17 +1505,8 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
            device_id, epoch, ls.dag_num_items, ls.dag_size_bytes / (1024.0 * 1024.0 * 1024.0));
     fflush(stdout);
 
-    // ---- Allocate DAG on GPU (try contiguous for reduced TLB pressure) ----
-    bool dag_contiguous = false;
-    oroError_t err = oroExtMallocWithFlags((oroDeviceptr*)&ls.d_dag, ls.dag_size_bytes,
-                                            oroDeviceMallocContiguous);
-    if (err == oroSuccess) {
-        dag_contiguous = true;
-    } else {
-        err = oroMalloc((oroDeviceptr*)&ls.d_dag, ls.dag_size_bytes);
-    }
-    TNN_LOG_INFO("[KawPow] GPU %d: DAG alloc: %s\n", device_id,
-                 dag_contiguous ? "contiguous" : "standard");
+    // ---- Allocate DAG on GPU ----
+    oroError_t err = oroMalloc((oroDeviceptr*)&ls.d_dag, ls.dag_size_bytes);
     if (err != oroSuccess) {
         fprintf(stderr, "[KawPow] GPU %d: DAG alloc failed (need %.1f GB): %s\n",
                 device_id, ls.dag_size_bytes / (1024.0 * 1024.0 * 1024.0), tnn_error_string(err));
@@ -1508,6 +1514,7 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
         return false;
     }
     oroMemAdvise(ls.d_dag, ls.dag_size_bytes, oroMemAdviseSetReadMostly, device_id);
+    (void)oroGetLastError(); // not fatal if unsupported
 
     // ---- Upload light cache to GPU ----
     uint32_t num_cache_items = (uint32_t)ctx->light_cache_num_items;
@@ -1598,10 +1605,14 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
     }
     oroMemcpy(ls.d_l1_cache, ls.d_dag, L1_CACHE_BYTES, oroMemcpyDeviceToDevice);
 
+    // Store DAG gen kernel for reuse during epoch rebuilds on worker thread.
+    // Modules compiled on init thread work cross-thread (same as mining kernels).
+    kp->dag_gen_module = dag_ck.module;
+    kp->dag_gen_function = dag_ck.function;
+
     // Save compilation state for runtime recompilation
     kp->compile_opts = dag_opts;
     kp->compile_device_id = device_id;
-
     // Compile kernels for multiple periods (variance measurement during autotune)
     {
         auto& opts = dag_opts;
@@ -1660,36 +1671,6 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
         }
     }
 
-    // ---- 2-way progpow occupancy query ----
-    if (kp->period_progpow_2way_kernels[0]) {
-        oroFunction_t f = kp->period_progpow_2way_kernels[0];
-        static constexpr int candidates[] = {32, 64, 128, 256, 512, 768, 1024};
-        int peak_threads = 0;
-
-        printf("[KawPow] GPU %d: 2-way progpow occupancy (CUs=%d):\n", device_id, props.multiProcessorCount);
-        for (int bs : candidates) {
-            int max_blocks = 0;
-            oroError_t oerr = oroModuleOccupancyMaxActiveBlocksPerMultiprocessor(
-                &max_blocks, f, bs, kawpow_shared_mem_split(bs));
-            if (oerr != oroSuccess || max_blocks <= 0) continue;
-
-            int threads = max_blocks * bs;
-            printf("    block=%4d: %2d blocks/CU, %4d threads/CU\n", bs, max_blocks, threads);
-            if (threads > peak_threads || (threads == peak_threads && bs > kp->split_progpow_block)) {
-                peak_threads = threads;
-                kp->split_progpow_block = bs;
-                kp->split_progpow_blocks_per_cu = max_blocks;
-            }
-        }
-        if (kp->split_progpow_block > 0) {
-            kp->occ_block_size = kp->split_progpow_block;
-            kp->occ_grid_size = kp->split_progpow_blocks_per_cu * props.multiProcessorCount;
-            printf("  → block=%d (%d blocks/CU, %d threads/CU)\n",
-                   kp->split_progpow_block, kp->split_progpow_blocks_per_cu, peak_threads);
-            fflush(stdout);
-        }
-    }
-
     *algo_data = kp;
     return true;
 }
@@ -1731,28 +1712,25 @@ inline bool kawpow_occupancy_tune(TuningResult& result, const oroDeviceProp_t& p
 {
     (void)memory_reserve_mb; (void)memory_usage_factor;
     auto* kp = static_cast<KawPowAlgoData*>(algo_data);
-    if (!kp || kp->occ_block_size <= 0 || kp->occ_grid_size <= 0) return false;
-
-    int CUs = props.multiProcessorCount;
-    constexpr int BATCH_MULTIPLIER = 64;
-
-    // ---- Require 2-way split kernels ----
-    if (kp->split_progpow_block <= 0 || !kp->period_seed_kernels[0] ||
+    if (!kp || !kp->period_seed_kernels[0] ||
         !kp->period_progpow_2way_kernels[0] || !kp->period_final_kernels[0]) {
         printf("[KawPow] GPU %d: 2-way kernels not available, cannot tune\n", device_id);
         fflush(stdout);
         return false;
     }
 
-    int pp_block = kp->split_progpow_block;
-    int pp_bpc = kp->split_progpow_blocks_per_cu;
-    int pp_grid = pp_bpc * CUs * BATCH_MULTIPLIER;
-    // 2-way: each 16-thread group processes 2 hashes → /8u
-    uint32_t split_batch = (uint32_t)pp_grid * (uint32_t)pp_block / 8u;
+    int CUs = props.multiProcessorCount;
 
-    printf("[KawPow] GPU %d: Split progpow config: block=%d, %d blocks/CU → batch=%u\n",
-           device_id, pp_block, pp_bpc, split_batch);
-    fflush(stdout);
+    // Quick occupancy query at default block size to get a starting batch for seed/final sweeps
+    int pp_block = 128;
+    int pp_bpc = 0;
+    oroModuleOccupancyMaxActiveBlocksPerMultiprocessor(
+        &pp_bpc, kp->period_progpow_2way_kernels[0], pp_block, kawpow_shared_mem_split(pp_block));
+    if (pp_bpc <= 0) { pp_block = 64; pp_bpc = 4; } // safe fallback
+
+    constexpr int BATCH_MULTIPLIER = 64;
+    int pp_grid = pp_bpc * CUs * BATCH_MULTIPLIER;
+    uint32_t split_batch = (uint32_t)pp_grid * (uint32_t)pp_block / 8u;
 
     // Allocate intermediate buffer + bench buffers
     if (!kp->ensure_intermediate(split_batch)) {
@@ -1898,7 +1876,7 @@ inline bool kawpow_occupancy_tune(TuningResult& result, const oroDeviceProp_t& p
     }
 
     // ---- 2D TPB × multiplier sweep helper ----
-    static constexpr int mult_candidates[] = {8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536};
+    static constexpr int mult_candidates[] = {8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768};
     static constexpr int n_mults = sizeof(mult_candidates) / sizeof(mult_candidates[0]);
     constexpr double MAX_LAUNCH_SEC = 1.8;
 
@@ -2015,8 +1993,6 @@ inline bool kawpow_occupancy_tune(TuningResult& result, const oroDeviceProp_t& p
 
     pp_block = w.tpb;
     pp_bpc = w.bpc;
-    kp->split_progpow_block = pp_block;
-    kp->split_progpow_blocks_per_cu = pp_bpc;
 
     // 2-way: each 16-thread group processes 2 hashes → /8u
     int best_mult = w.mult;
@@ -2055,6 +2031,7 @@ inline void kawpow_algo_data_cleanup(void* algo_data)
             if (kp->period_modules[i])
                 oroModuleUnload(kp->period_modules[i]);
         }
+        if (kp->dag_gen_module) oroModuleUnload(kp->dag_gen_module);
         delete kp;
     }
 }
@@ -2066,7 +2043,10 @@ inline void kawpow_algo_data_cleanup(void* algo_data)
 inline bool kawpow_rebuild_dag(KawPowLiveState& ls, KawPowAlgoData* kp, int new_epoch, int device_id, bool is_dev)
 {
     const char* tag = is_dev ? "DEV " : "";
-    printf("[KawPow] GPU %d: %sEpoch change %d → %d, rebuilding DAG...\n",
+
+    oroDeviceSynchronize();
+
+    printf("[KawPow] GPU %d: %sEpoch change %d -> %d, rebuilding DAG...\n",
            device_id, tag, ls.current_epoch, new_epoch);
     fflush(stdout);
 
@@ -2077,8 +2057,7 @@ inline bool kawpow_rebuild_dag(KawPowLiveState& ls, KawPowAlgoData* kp, int new_
         return false;
     }
 
-    // Free old DAG
-    oroDeviceSynchronize();
+    // Free old DAG + L1 before reallocating
     ls.free_dag();
 
     // Recalculate sizes + Barrett constants
@@ -2091,22 +2070,23 @@ inline bool kawpow_rebuild_dag(KawPowLiveState& ls, KawPowAlgoData* kp, int new_
         ls.barrett_shift = 0;
     }
 
-    printf("[KawPow] GPU %d: %sDAG epoch %d: %u items (%.1f GB)\n",
-           device_id, tag, new_epoch, ls.dag_num_items,
-           ls.dag_size_bytes / (1024.0 * 1024.0 * 1024.0));
-    fflush(stdout);
-
-    // Allocate DAG
-    oroError_t err = oroExtMallocWithFlags((oroDeviceptr*)&ls.d_dag, ls.dag_size_bytes,
-                                            oroDeviceMallocContiguous);
-    if (err != oroSuccess)
-        err = oroMalloc((oroDeviceptr*)&ls.d_dag, ls.dag_size_bytes);
-    if (err != oroSuccess) {
+    {
+        size_t free_mem, total_mem;
+        oroMemGetInfo(&free_mem, &total_mem);
+        printf("[KawPow] GPU %d: %sDAG epoch %d: %u items (%.1f GB), VRAM: %.0f/%.0f MB free\n",
+               device_id, tag, new_epoch, ls.dag_num_items,
+               ls.dag_size_bytes / (1024.0 * 1024.0 * 1024.0),
+               free_mem / (1024.0 * 1024.0), total_mem / (1024.0 * 1024.0));
+        fflush(stdout);
+    }
+    oroError_t err = oroMalloc((oroDeviceptr*)&ls.d_dag, ls.dag_size_bytes);
+    if (err != oroSuccess || !ls.d_dag) {
         fprintf(stderr, "[KawPow] GPU %d: %sDAG alloc failed (%.1f GB): %s\n",
                 device_id, tag, ls.dag_size_bytes / (1024.0 * 1024.0 * 1024.0), tnn_error_string(err));
         return false;
     }
     oroMemAdvise(ls.d_dag, ls.dag_size_bytes, oroMemAdviseSetReadMostly, device_id);
+    (void)oroGetLastError(); // not fatal if unsupported
 
     // Upload light cache
     uint32_t num_cache_items = (uint32_t)ctx->light_cache_num_items;
@@ -2114,59 +2094,70 @@ inline bool kawpow_rebuild_dag(KawPowLiveState& ls, KawPowAlgoData* kp, int new_
     uint32_t* d_light_cache = nullptr;
     err = oroMalloc((oroDeviceptr*)&d_light_cache, cache_bytes);
     if (err != oroSuccess) {
-        fprintf(stderr, "[KawPow] GPU %d: Light cache alloc failed: %s\n", device_id, tnn_error_string(err));
+        fprintf(stderr, "[KawPow] GPU %d: %sLight cache alloc failed: %s\n", device_id, tag, tnn_error_string(err));
         ls.free_dag();
         return false;
     }
-    oroMemcpy(d_light_cache, ctx->light_cache, cache_bytes, oroMemcpyHostToDevice);
+    oroMemcpyHtoD((oroDeviceptr)d_light_cache, ctx->light_cache, cache_bytes);
 
-    // Compile + launch DAG gen kernel
-    auto& compiler = RTCCompiler::instance();
-    std::string dag_src(hip_ethash_dag_source::SRC_TNN_HIP_CRYPTO_KAWPOW_ETHASH_DAG_GEN_HIP_SOURCE);
-    auto dag_ck = compiler.compile_from_source(dag_src, "ethash-dag-gen.hip",
-                                                "ethash_dag_gen_kernel", kp->compile_opts,
-                                                kp->compile_device_id);
-    if (!dag_ck.function) {
-        fprintf(stderr, "[KawPow] GPU %d: DAG gen kernel compile failed\n", device_id);
+    printf("[KawPow] GPU %d: %sLight cache uploaded (%.1f MB, %u items)\n",
+           device_id, tag, cache_bytes / (1024.0 * 1024.0), num_cache_items);
+    fflush(stdout);
+
+    // Launch DAG generation kernel
+    oroFunction_t dag_fn = kp->dag_gen_function;
+    if (!dag_fn) {
+        fprintf(stderr, "[KawPow] GPU %d: DAG gen kernel not available\n", device_id);
         oroFree((oroDeviceptr)d_light_cache);
         ls.free_dag();
         return false;
     }
 
-    auto t0 = std::chrono::steady_clock::now();
+    (void)oroGetLastError();
+
     uint32_t dag_items = ls.dag_num_items;
     int block_size = 256;
     int grid_size = (dag_items + block_size - 1) / block_size;
     void* dag_args[] = { &d_light_cache, &ls.d_dag, &num_cache_items, &dag_items };
-    err = oroModuleLaunchKernel(dag_ck.function, grid_size, 1, 1, block_size, 1, 1,
+
+    auto t0 = std::chrono::steady_clock::now();
+    err = oroModuleLaunchKernel(dag_fn, grid_size, 1, 1, block_size, 1, 1,
                                  0, nullptr, dag_args, nullptr);
     if (err != oroSuccess) {
-        fprintf(stderr, "[KawPow] GPU %d: DAG gen launch failed: %s\n", device_id, tnn_error_string(err));
+        fprintf(stderr, "[KawPow] GPU %d: DAG gen launch failed: %s\n",
+                device_id, tnn_error_string(err));
         oroFree((oroDeviceptr)d_light_cache);
         ls.free_dag();
         return false;
     }
-    oroDeviceSynchronize();
+    oroError_t sync_err = oroDeviceSynchronize();
     auto t1 = std::chrono::steady_clock::now();
+    double gen_secs = std::chrono::duration<double>(t1 - t0).count();
 
-    printf("[KawPow] GPU %d: %sDAG generated in %.2fs\n",
-           device_id, tag, std::chrono::duration<double>(t1 - t0).count());
+    if (sync_err != oroSuccess) {
+        fprintf(stderr, "[KawPow] GPU %d: %sDAG gen kernel error: %s\n",
+                device_id, tag, tnn_error_string(sync_err));
+        oroFree((oroDeviceptr)d_light_cache);
+        ls.free_dag();
+        return false;
+    }
+
+    printf("[KawPow] GPU %d: %sDAG generated in %.2fs\n", device_id, tag, gen_secs);
     fflush(stdout);
 
     oroFree((oroDeviceptr)d_light_cache);
 
-    // L1 cache: first 16KB
+    // L1 cache: first 16KB of DAG
     err = oroMalloc((oroDeviceptr*)&ls.d_l1_cache, 16384);
     if (err != oroSuccess) {
         fprintf(stderr, "[KawPow] GPU %d: L1 cache alloc failed: %s\n", device_id, tnn_error_string(err));
         ls.free_dag();
         return false;
     }
-    oroMemcpy(ls.d_l1_cache, ls.d_dag, 16384, oroMemcpyDeviceToDevice);
+    oroMemcpyDtoD((oroDeviceptr)ls.d_l1_cache, (oroDeviceptr)ls.d_dag, 16384);
 
     ls.current_epoch = new_epoch;
-    // Force period recompile (Barrett constants changed)
-    ls.current_period = -1;
+    ls.current_period = -1;  // force period recompile (Barrett constants changed)
     return true;
 }
 
@@ -2186,7 +2177,9 @@ inline bool kawpow_deps_changed(
     auto* kp = static_cast<KawPowAlgoData*>(algo_data);
     if (!kp) return false;
 
-    auto& ls = kp->live[is_dev ? 1 : 0];
+    // Single shared live state — session-based dev fee means only one mode
+    // is active at a time, so DAG + kernels share live[0].
+    auto& ls = kp->live[0];
     const char* tag = is_dev ? "DEV " : "";
 
     auto it = new_deps.find("period");
@@ -2195,10 +2188,14 @@ inline bool kawpow_deps_changed(
     int new_period = (int)it->second;
     int new_epoch = (new_period * 3) / ETHASH_EPOCH_LENGTH;
 
-    // Epoch change → rebuild DAG (also forces period recompile via current_period = -1)
+    // Epoch change → defer to main thread via hook system
     if (new_epoch != ls.current_epoch) {
-        if (!kawpow_rebuild_dag(ls, kp, new_epoch, device_id, is_dev))
-            return false;
+        kp->pending_rebuild_epoch = new_epoch;
+        kp->pending_rebuild_is_dev = is_dev;
+        printf("[KawPow] GPU %d: %sEpoch change %d -> %d — requesting context rebuild\n",
+               device_id, is_dev ? "DEV " : "", ls.current_epoch, new_epoch);
+        fflush(stdout);
+        return false;
     }
 
     // Period change → recompile kernel
@@ -2256,7 +2253,7 @@ inline bool kawpow_execute(
     auto* kp = static_cast<KawPowAlgoData*>(ctx.algo_data);
     if (!kp) return false;
 
-    auto& ls = kp->live[ctx.is_dev ? 1 : 0];
+    auto& ls = kp->live[0];
     if (!ls.d_dag) return false;
 
     auto strategy = static_cast<KawPowStrategy>(ctx.get_tune_key("strategy", (int64_t)KawPowStrategy::Split2Way));
@@ -2275,13 +2272,22 @@ inline bool kawpow_execute(
         auto it_seed = kernels.find("kawpow_seed_kernel");
         auto it_pp   = kernels.find("kawpow_progpow_kernel_2way");
         auto it_fin  = kernels.find("kawpow_final_kernel");
-        if (it_seed == kernels.end() || it_pp == kernels.end() || it_fin == kernels.end())
+        if (it_seed == kernels.end() || it_pp == kernels.end() || it_fin == kernels.end()) {
+            fprintf(stderr, "[KawPow] GPU %d: Split2Way kernels not found in map (seed=%d pp=%d fin=%d)\n",
+                    kp->compile_device_id, it_seed != kernels.end(), it_pp != kernels.end(), it_fin != kernels.end());
             return false;
+        }
 
-        if (!kp->ensure_intermediate(batch_size)) return false;
+        if (!kp->ensure_intermediate(batch_size)) {
+            fprintf(stderr, "[KawPow] GPU %d: ensure_intermediate(%u) failed\n", kp->compile_device_id, batch_size);
+            return false;
+        }
 
         int seed_tpb  = (int)ctx.get_tune_key("seed_tpb", 128);
         int final_tpb = (int)ctx.get_tune_key("final_tpb", 128);
+        int seed_grid = ((int)batch_size + seed_tpb - 1) / seed_tpb;
+        int final_grid = ((int)batch_size + final_tpb - 1) / final_tpb;
+        size_t smem = kawpow_shared_mem_split(ctx.block_size);
 
         kawpow_launch_split(
             it_seed->second, it_pp->second, it_fin->second,
@@ -2455,6 +2461,54 @@ inline void kawpow_post_tune(const TuningResult& result,
     oroFree((oroDeviceptr)d_target);
     oroFree((oroDeviceptr)d_solutions);
     oroStreamDestroy(stream);
+
+    // Free bench-period modules — no longer needed after tuning
+    for (int i = 0; i < kp->num_period_kernels; ++i) {
+        if (kp->period_modules[i]) {
+            oroModuleUnload(kp->period_modules[i]);
+            kp->period_modules[i] = nullptr;
+        }
+        kp->period_mono_kernels[i] = nullptr;
+        kp->period_seed_kernels[i] = nullptr;
+        kp->period_progpow_2way_kernels[i] = nullptr;
+        kp->period_final_kernels[i] = nullptr;
+    }
+    kp->num_period_kernels = 0;
+
+    printf("[KawPow] GPU %d: Freed bench-period modules\n", device_id);
+    fflush(stdout);
+}
+
+// ---------------------------------------------------------------------------
+// Context rebuild predicates — used by mine_batch to detect + handle pending
+// epoch changes that require a fresh GPU context for large allocations.
+// ---------------------------------------------------------------------------
+inline bool kawpow_needs_context_rebuild(const void* algo_data)
+{
+    auto* kp = static_cast<const KawPowAlgoData*>(algo_data);
+    return kp && kp->pending_rebuild_epoch >= 0;
+}
+
+inline bool kawpow_context_rebuild(
+    KernelMap& kernels,
+    void*& algo_data,
+    int device_id,
+    bool is_dev)
+{
+    auto* kp = static_cast<KawPowAlgoData*>(algo_data);
+    if (!kp || kp->pending_rebuild_epoch < 0) return true;
+
+    int new_epoch = kp->pending_rebuild_epoch;
+    bool rebuild_is_dev = kp->pending_rebuild_is_dev;
+    kp->pending_rebuild_epoch = -1;  // consume
+
+    // Reuse the original DAG gen function from pre_tune — no module reload.
+    // Same thread, same context, original module still loaded.
+    auto& ls = kp->live[0];
+    if (!kawpow_rebuild_dag(ls, kp, new_epoch, device_id, rebuild_is_dev))
+        return false;
+
+    return true;
 }
 
 inline AlgoConfig KAWPOW_CONFIG = {
@@ -2465,11 +2519,11 @@ inline AlgoConfig KAWPOW_CONFIG = {
     .kernel_names = {"kawpow_hash_kernel", "kawpow_seed_kernel", "kawpow_progpow_kernel_2way", "kawpow_final_kernel"},
     .kernel_name = "",
 
-    .rtc_headers = {},  // kawpow.hip is self-contained
+    .rtc_headers = build_rtc_headers(hip_embedded::COMMON_HEADERS),
     .template_size = 32,
     .hash_size = 32,
     .nonce_size = 8,
-    .scratch_per_hash = 0, // DAG is shared, not per-hash scratch
+    .scratch_per_hash = 16 * sizeof(uint32_t), // intermediate buffer: 16 uint32 per hash
     .preferred_block_size = 128,
     .algo_id = ALGO_KAWPOW,
     .calc_shared_mem = kawpow_shared_mem,
@@ -2499,11 +2553,14 @@ inline AlgoConfig KAWPOW_CONFIG = {
 
     // KawPow-specific hooks
     .source_transform_fn = kawpow_source_transform,
-    // .pre_tune_fn = kawpow_pre_tune,
+    .pre_tune_fn = kawpow_pre_tune,
     .occupancy_tune_fn = kawpow_occupancy_tune,
     .post_tune_fn = kawpow_post_tune,
     .algo_data_cleanup_fn = kawpow_algo_data_cleanup,
     .deps_changed_fn = kawpow_deps_changed,
+    .main_thread_fn = kawpow_context_rebuild,
+    .needs_main_thread_fn = kawpow_needs_context_rebuild,
+    .dev_fee_session_based = true,
 };
 #endif // TNN_KAWPOW
 

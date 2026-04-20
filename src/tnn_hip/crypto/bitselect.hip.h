@@ -2,6 +2,8 @@
 
 #if !defined(__HIPCC_RTC__) && !defined(__CUDACC_RTC__)
 #include <hip/hip_runtime.h>
+#else
+#include "hiprtc_types.hip.h"
 #endif
 
 __device__ static __forceinline__ uint64_t bitselect(const uint64_t a, const uint64_t b, const uint64_t c)

@@ -175,39 +175,39 @@ int handleKawPowStratumPacket(boost::json::object packet, KawPowStratum::jobCach
   }
   else if (M.compare(KawPowStratum::s_setTarget) == 0)
   {
-    // mining.set_target: [target_hex_64chars]
-    auto params = packet["params"].as_array();
-    std::string targetHex = params[0].as_string().c_str();
+      auto params = packet["params"].as_array();
+      std::string targetHex = params[0].as_string().c_str();
 
-    // Convert 64-char hex target to difficulty
-    // Target is a 256-bit number; difficulty = max_target / target
-    // For now, store raw target and let the mining loop use it directly
-    double *d = isDev ? &doubleDiffDev : &doubleDiff;
+      boost::multiprecision::uint256_t tgt("0x" + targetHex);
 
-    // Parse target as difficulty: diff = 2^256 / target
-    // Simple approach: count leading zeros for approximate difficulty
-    boost::multiprecision::uint256_t tgt("0x" + targetHex);
-    if (tgt > 0) {
-      boost::multiprecision::uint256_t max256 = (boost::multiprecision::uint256_t(1) << 256) - 1;
-      boost::multiprecision::uint256_t diff256 = max256 / tgt;
-      *d = diff256.convert_to<double>();
-    } else {
-      *d = 1.0;
-    }
+      // Store raw target for actual mining comparison
+      cache->target = targetHex;
 
-    cache->difficulty = *d;
+      double* d = isDev ? &doubleDiffDev : &doubleDiff;
 
-    if (!beQuiet)
-    {
-      setcolor(CYAN);
-      if (isDev)
-        printf("DEV | ");
-      printf("Target set: %s (diff ~%.4f)\n", targetHex.substr(0, 16).c_str(), *d);
-      fflush(stdout);
-      setcolor(BRIGHT_WHITE);
-    }
+      if (tgt > 0) {
+          // Use protocol diff1 target here, NOT (2^256 - 1)
+          static const boost::multiprecision::uint256_t diff1_target(
+              "0x00000000ffff0000000000000000000000000000000000000000000000000000"
+          );
 
-    jobCounter++;
+          boost::multiprecision::uint256_t diff256 = diff1_target / tgt;
+          *d = diff256.convert_to<double>();
+
+          // If your stratum wants KawPoW scaled difficulty, apply it here:
+          *d *= 256.0;
+      } else {
+          *d = 1.0;
+      }
+
+      cache->difficulty = *d;
+
+      TNN_LOG_DEBUG("[KP TARGET] %sTarget set: %s (diff ~%.4f)\n",
+                    isDev ? "DEV | " : "",
+                    targetHex.substr(0, 16).c_str(),
+                    *d);
+
+      jobCounter++;
   }
   else if (M.compare(KawPowStratum::s_ping) == 0)
   {

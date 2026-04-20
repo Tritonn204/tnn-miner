@@ -468,6 +468,29 @@ struct AlgoConfig {
         bool is_dev)>;
     DepsChangedFn deps_changed_fn = nullptr;
 
+    // Main-thread work — GPU operations that must run on the init/main thread
+    // (e.g. KawPow DAG rebuild on AMD HIP Windows where worker threads cannot
+    // do large allocations or kernel launches reliably).
+    //
+    // Flow: deps_changed_fn sets a flag in algo_data and returns false →
+    // mine_batch returns skip → mine_loop signals GPUMiner → main thread
+    // calls do_main_thread_work() which dispatches main_thread_fn.
+    using MainThreadFn = std::function<bool(
+        KernelMap& kernels,
+        void*& algo_data,
+        int device_id,
+        bool is_dev)>;
+    MainThreadFn main_thread_fn = nullptr;
+
+    // Predicate: does algo_data have pending main-thread work?
+    using NeedsMainThreadFn = std::function<bool(const void* algo_data)>;
+    NeedsMainThreadFn needs_main_thread_fn = nullptr;
+
+    // Session-based dev fee: decide dev vs user once per dep change (e.g.
+    // period boundary) instead of every batch.  Use when switching modes has
+    // a high cost (e.g. KawPow DAG rebuild).
+    bool dev_fee_session_based = false;
+
     // Helper to get all kernel names (handles legacy single name)
     std::vector<std::string> get_kernel_names() const {
         if (!kernel_names.empty()) {
@@ -496,6 +519,7 @@ struct JobSnapshot {
     int algo_id;                         // Algorithm identifier (e.g., ALGO_XELISV3)
     std::string job_id_str;             // Protocol-assigned job ID (stratum)
     bool is_dev;                         // Whether this batch was mined for dev fee
+    std::array<uint8_t, 32> raw_target;
 
     JobSnapshot() : job_id(0), difficulty(0), algo_id(0), is_dev(false) {}
 
@@ -560,6 +584,18 @@ public:
     // Select which dep set (regular vs dev) mine_batch should check.
     // Called by the GPU thread before each mine_batch call.
     virtual void use_dev_deps(bool dev) = 0;
+
+    // Main-thread work delegation.
+    // Some GPU operations (large allocs, DAG gen on AMD HIP Windows) only work
+    // on the thread that created the context.  The worker thread detects the
+    // need, the main thread executes.
+    virtual bool needs_main_thread_work() const = 0;
+    virtual bool do_main_thread_work() = 0;
+
+    // Force-apply pending deps on the calling thread (before worker starts).
+    // Triggers deps_changed + main_thread_fn in-line so heavy GPU work runs
+    // on the init thread where the context is known-good.
+    virtual bool flush_deps() = 0;
 };
 
 // ============================================================================

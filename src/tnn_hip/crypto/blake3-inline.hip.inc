@@ -147,18 +147,10 @@
 #define REF_Z6E 7
 #define REF_Z6F 13
 
-#ifndef __HIPRTC__INTTYPES_DEFINED
-#define __HIPRTC__INTTYPES_DEFINED
-
-#ifdef __HIP_PLATFORM_AMD__
-using uint8_t  = __hip_internal::uint8_t;
-using uint16_t = __hip_internal::uint16_t;
-#elif defined(__CUDACC_RTC__)
-#include "stdint-jit.hip.inc"
+#if defined(__HIPCC_RTC__) || defined(__CUDACC_RTC__)
+#include "hiprtc_types.hip.h"
 #elif defined(__CUDACC__)
-#include <stdint.h> 
-#endif
-
+#include <stdint.h>
 #endif
 
 // ============================================================================
