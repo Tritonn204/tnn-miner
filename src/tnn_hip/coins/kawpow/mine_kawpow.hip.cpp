@@ -359,10 +359,10 @@ int kawpow_gpu_test()
         { 0,     1, "1111111111111111111111111111111111111111111111111111111111111111", 0x100ULL },
         { 0,     2, "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 0xdeadbeefULL },
         // Epoch 300 (blocks 2'250'000 – 2'257'499)
-        { 300, 2250000, "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", 0x0ULL },
-        { 300, 2250001, "ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100", 0x123456789abcdef0ULL },
-        { 300, 2253750, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef", 0x0f0f0f0f0f0f0f0fULL },
-        { 300, 2257499, "0000000000000000000000000000000000000000000000000000000000000001", 0xffffffffffffff00ULL },
+        { 500, 2250000, "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", 0x0ULL },
+        { 500, 2250001, "ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100", 0x123456789abcdef0ULL },
+        { 500, 2253750, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef", 0x0f0f0f0f0f0f0f0fULL },
+        { 500, 2257499, "0000000000000000000000000000000000000000000000000000000000000001", 0xffffffffffffff00ULL },
     };
     constexpr int NUM_VECS = sizeof(test_vecs) / sizeof(test_vecs[0]);
 

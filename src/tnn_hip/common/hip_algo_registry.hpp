@@ -421,7 +421,7 @@ inline bool xelis_tune_key_probe(
     uint32_t scratch_offset = 0;
     uint64_t nonce_start = 0;
 
-    for (int tpb = 32; tpb <= 1024; tpb += 32)
+    for (int tpb = 32; tpb <= 256; tpb += 32)
     {
       size_t smem = cooperative ? ((size_t)tpb * 176) : 0;
       int blks = (result.batch_size + tpb - 1) / tpb;
@@ -738,7 +738,7 @@ blake3_sweep:
         if (it_wc != kernels.end())
         {
           out.printf("[AUTOTUNE] GPU %d:   ── warp-coop (variable TPB) ──\n", device_id);
-          for (int tpb = 32; tpb <= 1024; tpb += 32)
+          for (int tpb = 32; tpb <= 512; tpb += 32)
           {
             float ms = time_b3(it_wc->second, b3_batch, tpb, 0);
             float kh = (ms > 0.001f) ? (float)b3_batch / (ms * 1e-3f) / 1e3f : 0;
@@ -758,7 +758,7 @@ blake3_sweep:
         if (it_smem != kernels.end())
         {
           out.printf("[AUTOTUNE] GPU %d:   ── smem pipelined (variable TPB) ──\n", device_id);
-          for (int tpb = 32; tpb <= 1024; tpb += 32)
+          for (int tpb = 32; tpb <= 512; tpb += 32)
           {
             oroError_t lerr = oro_safe_launch(it_smem->second, b3_batch, 1, 1,
                                                tpb, 1, 1, 0, stream, args, nullptr);
@@ -1240,8 +1240,8 @@ inline AlgoConfig XELIS_V3_CONFIG = {
     .category = AlgoCategory::MemoryHard,
     .enable_reg_tuning = true,
 
-    .amd_blocks = {32, 1024, 32},
-    .nvidia_blocks = {32, 1024, 32},
+    .amd_blocks = {32, 256, 32},
+    .nvidia_blocks = {32, 256, 32},
     .target_batch_time_ms = 1250.0,
     .max_batch_time_ms = 2000.0,
     .min_batch_time_ms = 100.0,
@@ -1250,6 +1250,7 @@ inline AlgoConfig XELIS_V3_CONFIG = {
     .autotune_iterations = 1,
     .memory_reserve_mb = 32.0,
     .memory_usage_factor = 1.0,
+    .batch_step_denom = 1,
 
     .execute_fn = xelis_v3_execute,
 

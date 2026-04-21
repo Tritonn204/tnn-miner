@@ -322,6 +322,8 @@ __device__ __forceinline__ void store_nt_u32x8(uint32_t* dst, const uint32_t* sr
 
 #define KAWPOW_DAG_AUX 0x01
 
+// TODO: Hoist
+
 // GFX11 raw buffer word 3:
 //   OOB_SELECT = 3 (disabled)          [29:28]
 //   FORMAT     = 22 (32_FLOAT, valid)  [18:12]   <-- required on gfx11
@@ -354,15 +356,48 @@ dag_bufload(__amdgpu_buffer_rsrc_t r, uint32_t voff)
 }
 
 // ---- issue macro: single-bank first; add the split after this is green ----
-#define PROGPOW_ISSUE_DAG(MIX, DG, LOOP) do {                                 \
-    uint32_t _isrc = (threadIdx.x & ~15u) | ((LOOP) & 15u);                   \
-    uint32_t _ia   = PROGPOW_BPERMUTE(_isrc, (MIX)[0]);                       \
-    uint32_t _iq   = __umulhi(_ia, KAWPOW_BARRETT_M) >> KAWPOW_BARRETT_SHIFT; \
-    _ia -= _iq * KAWPOW_DAG_NUM_ITEMS_DIV;                                    \
-    if (_ia >= KAWPOW_DAG_NUM_ITEMS_DIV) _ia -= KAWPOW_DAG_NUM_ITEMS_DIV;     \
-    uint64_t _boff = ((uint64_t)_ia << 8) + (((lane_id ^ (LOOP)) & 15u) << 4);\
-    (DG) = dag_bufload(rsrc_lo, (uint32_t)_boff);                             \
+#define PROGPOW_ISSUE_DAG(MIX, DG, LOOP) do {                                  \
+    uint32_t _isrc = (threadIdx.x & ~15u) | ((LOOP) & 15u);                    \
+    uint32_t _ia   = PROGPOW_BPERMUTE(_isrc, (MIX)[0]);                        \
+    uint32_t _iq   = __umulhi(_ia, KAWPOW_BARRETT_M) >> KAWPOW_BARRETT_SHIFT;  \
+    _ia -= _iq * KAWPOW_DAG_NUM_ITEMS_DIV;                                     \
+    if (_ia >= KAWPOW_DAG_NUM_ITEMS_DIV) _ia -= KAWPOW_DAG_NUM_ITEMS_DIV;      \
+    uint64_t _boff = ((uint64_t)_ia << 8) + (((lane_id ^ (LOOP)) & 15u) << 4); \
+    if (_boff < split) {                                                       \
+        (DG) = dag_bufload(rsrc_lo, (uint32_t)_boff);                          \
+    } else {                                                                   \
+        (DG) = dag_bufload(rsrc_hi, (uint32_t)(_boff - split));                \
+    }                                                                          \
 } while(0)
+
+
+// REFERENCE THAT WORKS
+
+// struct dag128_u64 { uint64_t lo, hi; };
+
+// __device__ __forceinline__ uint32_t dag_word0(const dag128_u64& v) { return (uint32_t)(v.lo); }
+// __device__ __forceinline__ uint32_t dag_word1(const dag128_u64& v) { return (uint32_t)(v.lo >> 32); }
+// __device__ __forceinline__ uint32_t dag_word2(const dag128_u64& v) { return (uint32_t)(v.hi); }
+// __device__ __forceinline__ uint32_t dag_word3(const dag128_u64& v) { return (uint32_t)(v.hi >> 32); }
+
+// __device__ __forceinline__ dag128_u64 load_dag128(const void* p) {
+//     dag_vec4 t = *(const dag_vec4*)p;
+//     dag128_u64 o;
+//     o.lo = (uint64_t)t[0] | ((uint64_t)t[1] << 32);
+//     o.hi = (uint64_t)t[2] | ((uint64_t)t[3] << 32);
+//     return o;
+// }
+
+// #define PROGPOW_ISSUE_DAG(MIX, DG, LOOP) do {                                 \
+//     uint32_t _isrc = (threadIdx.x & ~15u) | ((LOOP) & 15u);                   \
+//     uint32_t _ia   = PROGPOW_BPERMUTE(_isrc, (MIX)[0]);                       \
+//     uint32_t _iq   = __umulhi(_ia, KAWPOW_BARRETT_M) >> KAWPOW_BARRETT_SHIFT; \
+//     _ia -= _iq * KAWPOW_DAG_NUM_ITEMS_DIV;                                    \
+//     if (_ia >= KAWPOW_DAG_NUM_ITEMS_DIV) _ia -= KAWPOW_DAG_NUM_ITEMS_DIV;     \
+//     uint64_t _boff = ((uint64_t)_ia << 8) | (((lane_id ^ (LOOP)) & 15u) << 4);\
+//     (DG) = load_dag128((const char*)d_dag + _boff);                          \
+// } while(0)
+
 
 // ===========================================================================
 // Shared helpers: L1 cache cooperative fill + main loop + mix reduction
