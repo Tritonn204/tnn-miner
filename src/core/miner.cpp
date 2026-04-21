@@ -424,6 +424,8 @@ int tnn_main(int argc, char **argv)
 // printf("pre test\n");
 #ifdef TNN_HIP
 #ifdef WITH_OROCHI
+  putenv((char*)"HSA_XNACK=0");
+  
   setcolor(BRIGHT_YELLOW);
   fflush(stdout);
 

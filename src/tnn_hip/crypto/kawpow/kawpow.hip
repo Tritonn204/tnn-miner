@@ -29,7 +29,7 @@
 
 // ProgPoW body macro — injected by host before RTC.
 // #define PROGPOW_BODY(MIX, DG) do { ... } while(0)
-// MIX = uint32_t[32] mix array name, DG = dag128_u64 pre-loaded DAG data variable
+// MIX = uint32_t[32] mix array name, DG = dag_vec4 pre-loaded DAG data variable
 /* PROGPOW_MACROS */
 
 // ============================================================================
@@ -265,7 +265,7 @@ __device__ __forceinline__ uint32_t shfl_lane16(uint32_t val, int src_lane)
 }
 
 // ===========================================================================
-// dag128_u64 — native C type for 128-bit DAG entries
+// dag_vec4 — native C type for 128-bit DAG entries
 //
 // Replaces HIP uint4 for portability and clean inline ASM constraints.
 // Two uint64_t fields map naturally to dwordx2 registers on AMD and
@@ -273,17 +273,7 @@ __device__ __forceinline__ uint32_t shfl_lane16(uint32_t val, int src_lane)
 // loads without fighting vector-type register allocation.
 // ===========================================================================
 
-struct dag128_u64 {
-    uint64_t lo;
-    uint64_t hi;
-};
-
-__device__ __forceinline__ uint32_t dag_word0(const dag128_u64& v) { return (uint32_t)(v.lo); }
-__device__ __forceinline__ uint32_t dag_word1(const dag128_u64& v) { return (uint32_t)(v.lo >> 32); }
-__device__ __forceinline__ uint32_t dag_word2(const dag128_u64& v) { return (uint32_t)(v.hi); }
-__device__ __forceinline__ uint32_t dag_word3(const dag128_u64& v) { return (uint32_t)(v.hi >> 32); }
-
-// 128-bit DAG load into dag128_u64.
+// 128-bit DAG load into dag_vec4.
 // AMD:    plain dwordx4 via ext_vector_type(4) (true clang hardware vector)
 // NVIDIA: single ld.global.cg.v2.u64 (bypass L1, cache in L2)
 // Fallback: plain two-uint64 load
@@ -316,19 +306,10 @@ __device__ __forceinline__ void store_nt_u32x8(uint32_t* dst, const uint32_t* sr
 #endif
 }
 
-__device__ __forceinline__ dag128_u64 load_dag128(const uint64_t* p)
-{
-    dag128_u64 out;
-    dag_vec4 tmp = *(const dag_vec4*)p;
-    out.lo = (uint64_t)tmp[0] | ((uint64_t)tmp[1] << 32);
-    out.hi = (uint64_t)tmp[2] | ((uint64_t)tmp[3] << 32);
-    return out;
-}
-
 // ===========================================================================
 // Static helper macros for software-pipelined DAG loads.
 // PROGPOW_ISSUE_DAG computes the next DAG address from mix[0] via Barrett
-// reduction and issues a cache-bypass 128-bit load into a dag128_u64.
+// reduction and issues a cache-bypass 128-bit load into a dag_vec4.
 // Used with PROGPOW_BODY (generated macro injected at /* PROGPOW_MACROS */)
 // for N-way hash interleaving.
 // ===========================================================================
@@ -339,18 +320,48 @@ __device__ __forceinline__ dag128_u64 load_dag128(const uint64_t* p)
 #define PROGPOW_BPERMUTE(src, val) __shfl_sync(0xFFFFFFFF, (val), (src), 16)
 #endif
 
-// Issue a DAG load for iteration LOOP into DG (dag128_u64).
-// Reads MIX[0] via cross-lane shuffle, applies Barrett modular reduction,
-// then loads the 128-bit DAG line with cache bypass.
-// Requires: d_dag, lane_id in enclosing scope.
-#define PROGPOW_ISSUE_DAG(MIX, DG, LOOP) do { \
-    uint32_t _isrc = (threadIdx.x & ~15u) | ((LOOP) & 15u); \
-    uint32_t _ia = PROGPOW_BPERMUTE(_isrc, (MIX)[0]); \
-    uint32_t _iq = __umulhi(_ia, KAWPOW_BARRETT_M) >> KAWPOW_BARRETT_SHIFT; \
-    _ia -= _iq * KAWPOW_DAG_NUM_ITEMS_DIV; \
-    if (_ia >= KAWPOW_DAG_NUM_ITEMS_DIV) _ia -= KAWPOW_DAG_NUM_ITEMS_DIV; \
-    (DG) = load_dag128((const uint64_t*)d_dag + \
-        (_ia * 16u + ((lane_id ^ (LOOP)) & 15u)) * 2u); \
+#define KAWPOW_DAG_AUX 0x01
+
+// GFX11 raw buffer word 3:
+//   OOB_SELECT = 3 (disabled)          [29:28]
+//   FORMAT     = 22 (32_FLOAT, valid)  [18:12]   <-- required on gfx11
+//   TYPE       = 0 (buffer)            [31:30]
+#if defined(__gfx1100__) || defined(__gfx1101__) || defined(__gfx1102__) || defined(__gfx1103__)
+#  define KAWPOW_SRD_FLAGS 0x30016000u
+#elif defined(__gfx1030__) || defined(__gfx1031__) || defined(__gfx1032__) || \
+      defined(__gfx1033__) || defined(__gfx1034__) || defined(__gfx1035__) || \
+      defined(__gfx1036__) || \
+      defined(__gfx1010__) || defined(__gfx1011__) || defined(__gfx1012__)
+#  define KAWPOW_SRD_FLAGS 0x30000000u   // gfx10: OOB_SELECT=3 is sufficient
+#else
+#  define KAWPOW_SRD_FLAGS 0u            // gfx9: no OOB_SELECT field
+#endif
+
+struct dag128_u64 { uint64_t lo, hi; };
+
+__device__ __forceinline__ uint32_t dag_word0(const dag128_u64& v) { return (uint32_t)(v.lo);       }
+__device__ __forceinline__ uint32_t dag_word1(const dag128_u64& v) { return (uint32_t)(v.lo >> 32); }
+__device__ __forceinline__ uint32_t dag_word2(const dag128_u64& v) { return (uint32_t)(v.hi);       }
+__device__ __forceinline__ uint32_t dag_word3(const dag128_u64& v) { return (uint32_t)(v.hi >> 32); }
+
+// ---- buffer-intrinsic load, result bit-cast to the good storage type ----
+__device__ __forceinline__ dag128_u64
+dag_bufload(__amdgpu_buffer_rsrc_t r, uint32_t voff)
+{
+    dag_vec4 t = (dag_vec4)__builtin_amdgcn_raw_buffer_load_b128(
+                     r, (int)voff, 0, KAWPOW_DAG_AUX);
+    return __builtin_bit_cast(dag128_u64, t);   // no VGPR read → waitcnt stays deferred
+}
+
+// ---- issue macro: single-bank first; add the split after this is green ----
+#define PROGPOW_ISSUE_DAG(MIX, DG, LOOP) do {                                 \
+    uint32_t _isrc = (threadIdx.x & ~15u) | ((LOOP) & 15u);                   \
+    uint32_t _ia   = PROGPOW_BPERMUTE(_isrc, (MIX)[0]);                       \
+    uint32_t _iq   = __umulhi(_ia, KAWPOW_BARRETT_M) >> KAWPOW_BARRETT_SHIFT; \
+    _ia -= _iq * KAWPOW_DAG_NUM_ITEMS_DIV;                                    \
+    if (_ia >= KAWPOW_DAG_NUM_ITEMS_DIV) _ia -= KAWPOW_DAG_NUM_ITEMS_DIV;     \
+    uint64_t _boff = ((uint64_t)_ia << 8) + (((lane_id ^ (LOOP)) & 15u) << 4);\
+    (DG) = dag_bufload(rsrc_lo, (uint32_t)_boff);                             \
 } while(0)
 
 // ===========================================================================
@@ -376,6 +387,9 @@ __device__ __forceinline__ void progpow_main_loop(
     uint32_t* mix,
     const uint32_t* __restrict__ l1_cache,
     const uint32_t* __restrict__ d_dag,
+    __amdgpu_buffer_rsrc_t rsrc_lo,
+    __amdgpu_buffer_rsrc_t rsrc_hi,
+    uint64_t split,
     uint32_t lane_id)
 {
     dag128_u64 _dg0, _dg1;
@@ -397,6 +411,9 @@ __device__ __forceinline__ void progpow_main_loop_2way(
     uint32_t* m0, uint32_t* m1,
     const uint32_t* __restrict__ l1_cache,
     const uint32_t* __restrict__ d_dag,
+    __amdgpu_buffer_rsrc_t rsrc_lo,
+    __amdgpu_buffer_rsrc_t rsrc_hi,
+    uint64_t split,
     uint32_t lane_id)
 {
     dag128_u64 _da0, _da1;  // ping-pong buffers for hash 0
@@ -424,6 +441,9 @@ __device__ __forceinline__ void progpow_main_loop_4way(
     uint32_t* m0, uint32_t* m1, uint32_t* m2, uint32_t* m3,
     const uint32_t* __restrict__ l1_cache,
     const uint32_t* __restrict__ d_dag,
+    __amdgpu_buffer_rsrc_t rsrc_lo,
+    __amdgpu_buffer_rsrc_t rsrc_hi,
+    uint64_t split,
     uint32_t lane_id)
 {
     dag128_u64 _da0, _da1;  // ping-pong for hash 0
@@ -500,6 +520,13 @@ void kawpow_hash_kernel(
 
     cooperative_l1_fill(l1_cache, d_l1_cache);
 
+    const uint64_t dag_bytes   = (uint64_t)KAWPOW_DAG_NUM_ITEMS_DIV << 8;
+    const uint64_t split       = (dag_bytes + 255) >> 1 & ~0xFFull;      // 256-aligned midpoint
+    const __amdgpu_buffer_rsrc_t rsrc_lo =
+        __builtin_amdgcn_make_buffer_rsrc((void*)d_dag,               0, 0xFFFFFFFFu, KAWPOW_SRD_FLAGS);
+    const __amdgpu_buffer_rsrc_t rsrc_hi =
+        __builtin_amdgcn_make_buffer_rsrc((void*)((const char*)d_dag + split), 0, 0xFFFFFFFFu, KAWPOW_SRD_FLAGS);
+
     // Sandwich keccak + fill_mix between L1 fill and barrier to hide LDS write latency.
     // No early return — all threads must reach __syncthreads().
     const bool valid = (hash_id < batch_size);
@@ -545,7 +572,7 @@ void kawpow_hash_kernel(
     if (!valid) return;
 
     // ---- Phase 2–4: main loop + reduction ----
-    progpow_main_loop(mix, l1_cache, d_dag, lane_id);
+    progpow_main_loop(mix, l1_cache, d_dag, rsrc_lo, rsrc_hi, split, lane_id);
 
     uint32_t digest[8];
     progpow_reduce(mix, digest);
@@ -679,6 +706,13 @@ void kawpow_progpow_kernel(
 
     cooperative_l1_fill(l1_cache, d_l1_cache);
 
+    const uint64_t dag_bytes   = (uint64_t)KAWPOW_DAG_NUM_ITEMS_DIV << 8;
+    const uint64_t split       = (dag_bytes + 255) >> 1 & ~0xFFull;      // 256-aligned midpoint
+    const __amdgpu_buffer_rsrc_t rsrc_lo =
+        __builtin_amdgcn_make_buffer_rsrc((void*)d_dag,               0, 0xFFFFFFFFu, KAWPOW_SRD_FLAGS);
+    const __amdgpu_buffer_rsrc_t rsrc_hi =
+        __builtin_amdgcn_make_buffer_rsrc((void*)((const char*)d_dag + split), 0, 0xFFFFFFFFu, KAWPOW_SRD_FLAGS);
+
     const bool valid = (hash_id < batch_size);
     uint32_t mix[PROGPOW_REGS];
     uint32_t base = 0;
@@ -693,7 +727,7 @@ void kawpow_progpow_kernel(
 
     if (!valid) return;
 
-    progpow_main_loop(mix, l1_cache, d_dag, lane_id);
+    progpow_main_loop(mix, l1_cache, d_dag, rsrc_lo, rsrc_hi, split, lane_id);
 
     uint32_t digest[8];
     progpow_reduce(mix, digest);
@@ -725,11 +759,18 @@ void kawpow_progpow_global_kernel(
     uint32_t base = hash_id * 16u;
     uint64_t seed = (uint64_t)d_intermediate[base] | ((uint64_t)d_intermediate[base + 1] << 32);
 
+    const uint64_t dag_bytes   = (uint64_t)KAWPOW_DAG_NUM_ITEMS_DIV << 8;
+    const uint64_t split       = (dag_bytes + 255) >> 1 & ~0xFFull;      // 256-aligned midpoint
+    const __amdgpu_buffer_rsrc_t rsrc_lo =
+        __builtin_amdgcn_make_buffer_rsrc((void*)d_dag,               0, 0xFFFFFFFFu, KAWPOW_SRD_FLAGS);
+    const __amdgpu_buffer_rsrc_t rsrc_hi =
+        __builtin_amdgcn_make_buffer_rsrc((void*)((const char*)d_dag + split), 0, 0xFFFFFFFFu, KAWPOW_SRD_FLAGS);
+
     uint32_t mix[PROGPOW_REGS];
     fill_mix(seed, lane_id, mix);
 
     // Use d_l1_cache directly — no LDS, rely on hardware L1 cache
-    progpow_main_loop(mix, d_l1_cache, d_dag, lane_id);
+    progpow_main_loop(mix, d_l1_cache, d_dag, rsrc_lo, rsrc_hi, split, lane_id);
 
     uint32_t digest[8];
     progpow_reduce(mix, digest);
@@ -762,6 +803,13 @@ void kawpow_progpow_kernel_2way(
 
     cooperative_l1_fill(l1_cache, d_l1_cache);
 
+    const uint64_t dag_bytes   = (uint64_t)KAWPOW_DAG_NUM_ITEMS_DIV << 8;
+    const uint64_t split       = (dag_bytes + 255) >> 1 & ~0xFFull;      // 256-aligned midpoint
+    const __amdgpu_buffer_rsrc_t rsrc_lo =
+        __builtin_amdgcn_make_buffer_rsrc((void*)d_dag,               0, 0xFFFFFFFFu, KAWPOW_SRD_FLAGS);
+    const __amdgpu_buffer_rsrc_t rsrc_hi =
+        __builtin_amdgcn_make_buffer_rsrc((void*)((const char*)d_dag + split), 0, 0xFFFFFFFFu, KAWPOW_SRD_FLAGS);
+
     const bool valid = (hash_id_0 < batch_size);
 
     uint32_t m0[PROGPOW_REGS];
@@ -788,9 +836,9 @@ void kawpow_progpow_kernel_2way(
     if (!valid) return;
 
     if (have_h1) {
-        progpow_main_loop_2way(m0, m1, l1_cache, d_dag, lane_id);
+        progpow_main_loop_2way(m0, m1, l1_cache, d_dag, rsrc_lo, rsrc_hi, split, lane_id);
     } else {
-        progpow_main_loop(m0, l1_cache, d_dag, lane_id);
+        progpow_main_loop(m0, l1_cache, d_dag, rsrc_lo, rsrc_hi, split, lane_id);
     }
 
     // Reduce and write hash 0
@@ -833,6 +881,14 @@ void kawpow_progpow_kernel_4way(
 
     cooperative_l1_fill(l1_cache, d_l1_cache);
 
+    const uint64_t dag_bytes   = (uint64_t)KAWPOW_DAG_NUM_ITEMS_DIV << 8;
+    const uint64_t split       = (dag_bytes + 255) >> 1 & ~0xFFull;      // 256-aligned midpoint
+        
+    const __amdgpu_buffer_rsrc_t rsrc_lo =
+        __builtin_amdgcn_make_buffer_rsrc((void*)d_dag,               0, 0xFFFFFFFFu, KAWPOW_SRD_FLAGS);
+    const __amdgpu_buffer_rsrc_t rsrc_hi =
+        __builtin_amdgcn_make_buffer_rsrc((void*)((const char*)d_dag + split), 0, 0xFFFFFFFFu, KAWPOW_SRD_FLAGS);
+
     const bool valid = (hash_id_0 < batch_size);
 
     uint32_t m0[PROGPOW_REGS], m1[PROGPOW_REGS], m2[PROGPOW_REGS], m3[PROGPOW_REGS];
@@ -869,15 +925,15 @@ void kawpow_progpow_kernel_4way(
 
     // Dispatch to best N-way variant based on remaining hashes
     if (num_hashes >= 4) {
-        progpow_main_loop_4way(m0, m1, m2, m3, l1_cache, d_dag, lane_id);
+        progpow_main_loop_4way(m0, m1, m2, m3, l1_cache, d_dag, rsrc_lo, rsrc_hi, split, lane_id);
     } else if (num_hashes == 3) {
         // 2-way + 1-way — no 3-way variant to avoid code bloat
-        progpow_main_loop_2way(m0, m1, l1_cache, d_dag, lane_id);
-        progpow_main_loop(m2, l1_cache, d_dag, lane_id);
+        progpow_main_loop_2way(m0, m1, l1_cache, d_dag, rsrc_lo, rsrc_hi, split, lane_id);
+        progpow_main_loop(m2, l1_cache, d_dag, rsrc_lo, rsrc_hi, split, lane_id);
     } else if (num_hashes == 2) {
-        progpow_main_loop_2way(m0, m1, l1_cache, d_dag, lane_id);
+        progpow_main_loop_2way(m0, m1, l1_cache, d_dag, rsrc_lo, rsrc_hi, split, lane_id);
     } else {
-        progpow_main_loop(m0, l1_cache, d_dag, lane_id);
+        progpow_main_loop(m0, l1_cache, d_dag, rsrc_lo, rsrc_hi, split, lane_id);
     }
 
     // Reduce and write all hashes (non-temporal to preserve DAG in L2)
