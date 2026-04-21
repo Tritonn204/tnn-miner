@@ -499,33 +499,61 @@ __device__ __forceinline__ void store_streaming_u256(uint64_t *ptr,
 
 #if defined(__HIP_PLATFORM_AMD__)
 
-// Standard load (default caching)
-__device__ __forceinline__ uint64_t load_default(const uint64_t *ptr)
+__device__ __forceinline__ uint64_t load_default(const uint64_t* ptr)
 {
   return *ptr;
 }
 
-// GLC + SLC - Full uncached
-__device__ __forceinline__ uint64_t load_uncached(const uint64_t *ptr)
+// gfx9:   glc slc
+// gfx10+: glc slc dlc
+__device__ __forceinline__ uint64_t load_uncached(const uint64_t* ptr)
 {
   uint64_t val;
+
+#if defined(__gfx1030__) || defined(__gfx1031__) || defined(__gfx1032__) || \
+    defined(__gfx1033__) || defined(__gfx1034__) || defined(__gfx1035__) || \
+    defined(__gfx1036__) || defined(__gfx1100__) || defined(__gfx1101__) || \
+    defined(__gfx1102__) || defined(__gfx1103__) || defined(__gfx1150__) || \
+    defined(__gfx1151__)
+  asm volatile(
+      "global_load_dwordx2 %0, %1, off glc slc dlc\n\t"
+      "s_waitcnt vmcnt(0)"
+      : "=v"(val)
+      : "v"(ptr)
+      : "memory");
+#else
   asm volatile(
       "global_load_dwordx2 %0, %1, off glc slc\n\t"
       "s_waitcnt vmcnt(0)"
       : "=v"(val)
       : "v"(ptr)
       : "memory");
+#endif
+
   return val;
 }
 
-// Uncached store
-__device__ __forceinline__ void store_glc_slc(uint64_t *ptr, uint64_t val)
+// gfx9:   glc slc
+// gfx10+: glc slc dlc
+__device__ __forceinline__ void store_glc_slc(uint64_t* ptr, uint64_t val)
 {
+#if defined(__gfx1030__) || defined(__gfx1031__) || defined(__gfx1032__) || \
+    defined(__gfx1033__) || defined(__gfx1034__) || defined(__gfx1035__) || \
+    defined(__gfx1036__) || defined(__gfx1100__) || defined(__gfx1101__) || \
+    defined(__gfx1102__) || defined(__gfx1103__) || defined(__gfx1150__) || \
+    defined(__gfx1151__)
+  asm volatile(
+      "global_store_dwordx2 %0, %1, off glc slc dlc"
+      :
+      : "v"(ptr), "v"(val)
+      : "memory");
+#else
   asm volatile(
       "global_store_dwordx2 %0, %1, off glc slc"
       :
       : "v"(ptr), "v"(val)
       : "memory");
+#endif
 }
 
 #else  // NVIDIA
