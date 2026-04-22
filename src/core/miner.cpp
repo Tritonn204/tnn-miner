@@ -791,7 +791,7 @@ int tnn_main(int argc, char **argv)
 
   {
     int _kpCoin = miningProfile.coin.coinId;
-    if (_kpCoin == COIN_RVN || _kpCoin == COIN_QUAI)
+    if (_kpCoin == COIN_KAWPOW || _kpCoin == COIN_RVN || _kpCoin == COIN_QUAI)
     {
 #if defined(TNN_KAWPOW)
       initKawpowPaddingForCoin(_kpCoin, &currentKawpowPadding);

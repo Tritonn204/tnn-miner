@@ -61,8 +61,9 @@
 #define COIN_YCR32 26    // YescryptR32 (LuckyPepe etc.)
 #define COIN_RVN 27      // Ravencoin (KawPow)
 #define COIN_QUAI 28     // Quai Network (KawPow)
+#define COIN_KAWPOW 29   // For generic/arbitrary
 
-#define COIN_COUNT 29
+#define COIN_COUNT 30
 
 // Corresponding to the ALGO_POW[] array in miners.hpp
 // Also used in coins[COIN_COUNT] from tnn-common.hpp
