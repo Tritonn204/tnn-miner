@@ -39,6 +39,68 @@ extern boost::json::object devShare;
 extern bool submitting;
 extern bool submittingDev;
 
+struct KeepAliveConfig
+{
+    bool enabled = true;
+    int idle_seconds = 30;
+    int interval_seconds = 10;
+    int probe_count = 3;
+};
+
+template <typename Stream>
+inline beast::error_code enable_keepalive(
+    Stream& stream,
+    const KeepAliveConfig& cfg = {})
+{
+    beast::error_code ec;
+
+    auto& sock = beast::get_lowest_layer(stream).socket();
+
+    // Portable part
+    sock.set_option(net::socket_base::keep_alive(cfg.enabled), ec);
+    if (ec || !cfg.enabled) {
+        return ec;
+    }
+
+    // Platform-specific tuning (best effort)
+#if defined(__linux__)
+    {
+        int fd = sock.native_handle();
+        int idle = cfg.idle_seconds;
+        int interval = cfg.interval_seconds;
+        int count = cfg.probe_count;
+
+        ::setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE,  &idle,     sizeof(idle));
+        ::setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(interval));
+        ::setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT,   &count,    sizeof(count));
+    }
+#elif defined(__APPLE__)
+    {
+        int fd = sock.native_handle();
+        int idle = cfg.idle_seconds;
+
+        ::setsockopt(fd, IPPROTO_TCP, TCP_KEEPALIVE, &idle, sizeof(idle));
+    }
+#elif defined(_WIN32)
+    {
+        tcp_keepalive ka;
+        ka.onoff = 1;
+        ka.keepalivetime = static_cast<ULONG>(cfg.idle_seconds * 1000);
+        ka.keepaliveinterval = static_cast<ULONG>(cfg.interval_seconds * 1000);
+
+        DWORD bytes_returned = 0;
+        ::WSAIoctl(sock.native_handle(),
+                   SIO_KEEPALIVE_VALS,
+                   &ka, sizeof(ka),
+                   nullptr, 0,
+                   &bytes_returned,
+                   nullptr, nullptr);
+    }
+#endif
+
+    return ec;
+}
+
 // ---------------------------------------------------------------------------
 // Per-device share tracking via dynamic RPC IDs
 // ---------------------------------------------------------------------------

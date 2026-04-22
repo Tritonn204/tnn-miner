@@ -419,8 +419,7 @@ static bool kp_read_and_dispatch(
     std::atomic<bool>* abortFlag,
     const char* tag)
 {
-  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(60));
-
+  beast::get_lowest_layer(stream).expires_never();
   std::size_t n = boost::asio::async_read_until(stream, readbuf, "\n", yield[ec]);
 
   // Even on error/EOF, async_read_until may have transferred data — process it first
@@ -579,6 +578,13 @@ void kawpow_stratum_session(
     TNN_LOG_DEBUG("%s connect failed: %s\n", tag, ec.message().c_str());
     return fail(ec, "connect");
   }
+
+  if (auto ec2 = enable_keepalive(stream); ec2) {
+    TNN_LOG_DEBUG("%s keepalive failed: %s\n", tag, ec2.message().c_str());
+  } else {
+    TNN_LOG_DEBUG("%s keepalive enabled\n", tag);
+  }
+
   TNN_LOG_DEBUG("%s connected\n", tag);
 
   std::string packetBuffer;
@@ -755,6 +761,13 @@ void kawpow_stratum_session_nossl(
     TNN_LOG_DEBUG("%s connect failed: %s\n", tag, ec.message().c_str());
     return fail(ec, "connect");
   }
+
+  if (auto ec2 = enable_keepalive(stream); ec2) {
+    TNN_LOG_DEBUG("%s keepalive failed: %s\n", tag, ec2.message().c_str());
+  } else {
+    TNN_LOG_DEBUG("%s keepalive enabled\n", tag);
+  }
+
   TNN_LOG_DEBUG("%s connected\n", tag);
 
   std::string packetBuffer;

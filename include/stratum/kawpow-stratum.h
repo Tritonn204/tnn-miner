@@ -68,5 +68,5 @@ namespace KawPowStratum {
   static uint64_t lastShareSubmissionTime = 0;
 
   const int shareSubmitTimeout = 70;
-  static int jobTimeout = 120;
+  static int jobTimeout = 180;
 }

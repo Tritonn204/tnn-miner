@@ -1,6 +1,7 @@
 #include "../net.hpp"
 #include <job_safe.hpp>
 #include <hex.h>
+#include <tnn_log.hpp>
 
 #include <boost/beast/core.hpp>
 #include <boost/beast/ssl.hpp>
@@ -360,8 +361,7 @@ static bool read_and_dispatch_lines(
     bool* submittingFlag,
     std::atomic<bool>* abortFlag)
 {
-  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(60));
-
+  beast::get_lowest_layer(stream).expires_never();
   std::size_t n = boost::asio::async_read_until(stream, readbuf, "\n", yield[ec]);
   if (ec) return false;
 
@@ -537,6 +537,7 @@ void xelis_stratum_session(
     net::yield_context yield,
     bool isDev)
 {
+  const char* tag = isDev ? "[XELIS-SSL-DEV]" : "[XELIS-SSL]";
   XelisStratum::lastReceivedJobTime = 0;
   beast::error_code ec;
 
@@ -551,6 +552,12 @@ void xelis_stratum_session(
   beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
   beast::get_lowest_layer(stream).async_connect(endpoint, yield[ec]);
   if (ec) return fail(ec, "connect");
+
+  if (auto ec2 = enable_keepalive(stream); ec2) {
+    TNN_LOG_DEBUG("%s keepalive failed: %s\n", tag, ec2.message().c_str());
+  } else {
+    TNN_LOG_DEBUG("%s keepalive enabled\n", tag);
+  }
 
   if (!SSL_set_tlsext_host_name(stream.native_handle(), host.c_str())) {
     throw beast::system_error(static_cast<int>(::ERR_get_error()),
@@ -702,6 +709,7 @@ void xelis_stratum_session_nossl(
     net::yield_context yield,
     bool isDev)
 {
+  const char* tag = isDev ? "[XELIS-DEV]" : "[XELIS]";
   XelisStratum::lastReceivedJobTime = 0;
   beast::error_code ec;
 
@@ -714,6 +722,13 @@ void xelis_stratum_session_nossl(
   beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
   beast::get_lowest_layer(stream).async_connect(endpoint, yield[ec]);
   if (ec) return fail(ec, "connect");
+
+  if (auto ec2 = enable_keepalive(stream); ec2) {
+    TNN_LOG_DEBUG("%s keepalive failed: %s\n", tag, ec2.message().c_str());
+  } else {
+    TNN_LOG_DEBUG("%s keepalive enabled\n", tag);
+  }
+
 
   // Shared state
   std::string packetBuffer;

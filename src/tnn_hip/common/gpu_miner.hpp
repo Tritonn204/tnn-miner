@@ -208,6 +208,8 @@ private:
         std::mt19937 rng(rd());
         std::uniform_int_distribution<uint64_t> random_dist(0, 0x7FF);  // 11-bit random value (0-2047)
 
+        bool has_share = false; // flag to ensure first share per device goes to dev in session mode, prevent reboot spoofing
+
         uint64_t device_id_bits = ((uint64_t)(device_id_ & 0x1F)) << 59;  // Top 5 bits
         uint64_t random_bits = random_dist(rng) << 48;                     // Next 11 bits
         uint64_t nonce = device_id_bits | random_bits;                     // Counter starts at 0
@@ -241,13 +243,21 @@ private:
 
                 bool is_dev_batch;
                 if (session_dev) {
-                    // Check if user period changed → re-roll dev decision
                     int64_t cur_period = user_period_.load(std::memory_order_acquire);
-                    if (cur_period != session_period) {
+                    
+                    // First share submitted always goes to dev in session mode
+                    if (!has_share && dev_work_valid_.load(std::memory_order_acquire))
+                    {
+                        session_is_dev = true;
                         session_period = cur_period;
-                        bool dev_available = dev_work_valid_.load(std::memory_order_acquire)
-                                             && dev_fee_ > 0.0;
-                        session_is_dev = dev_available && fee_dist(rng) < dev_fee_;
+                    }
+                    else { // Check if user period changed → re-roll dev decision
+                        if (cur_period != session_period) {
+                            session_period = cur_period;
+                            bool dev_available = dev_work_valid_.load(std::memory_order_acquire)
+                                                && dev_fee_ > 0.0;
+                            session_is_dev = dev_available && fee_dist(rng) < dev_fee_;
+                        }
                     }
                     is_dev_batch = session_is_dev;
                 } else {
@@ -366,6 +376,7 @@ private:
                     if (solution_builder_) {
                         auto entry = solution_builder_(hash, winning_nonce, device_id_, job_snapshot);
                         if (entry.has_value()) {
+                            has_share = true;
                             GPUSubmitQueue::instance().push(std::move(entry.value()));
                         }
                     }
