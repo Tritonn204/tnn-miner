@@ -237,7 +237,7 @@ __global__ void astrixHash_hip(const uint64_t nonce_mask, const uint64_t nonce_f
       printf("\n");
     }
 
-  keccakf(input);
+  keccakf<true>(input);
 
   blake3_inline_hash_single(input, 32, input);
   // blake3_single_opt(input, 32, input);
@@ -246,7 +246,7 @@ __global__ void astrixHash_hip(const uint64_t nonce_mask, const uint64_t nonce_f
   input[32] = 0x06;
   input[135] = 0x80;
 
-  keccakf(input);
+  keccakf<true>(input);
 
   if constexpr (BENCH_RUNS == 1)
     if (globalId == 0) {
@@ -320,7 +320,7 @@ __global__ void astrixHash_hip(const uint64_t nonce_mask, const uint64_t nonce_f
   #pragma unroll
   for (i = 32; i < 200; i++) input[i] = heavyP[i];
 
-  keccakf(input);
+  keccakf<true>(input);
   if (LT_U256(((uint256_t*)input)[0], ((uint256_t*)target)[0]))
   {
     int index = atomicAdd(nonce_count, 1);

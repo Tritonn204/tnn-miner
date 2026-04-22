@@ -10,7 +10,7 @@ if (WITH_KAWPOW)
           "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/bitselect.hip.h"
           "${PROJECT_SOURCE_DIR}/src/tnn_hip/util/uint2ops.h"
           "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/keccak-amd.hip.inc"
-          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/keccak-tiny.hip.inc"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/keccak-nvidia.hip.inc"
       MANIFEST_NAME KAWPOW_HEADERS
   )
 

@@ -2520,7 +2520,7 @@ inline AlgoConfig KAWPOW_CONFIG = {
     .kernel_names = {"kawpow_hash_kernel", "kawpow_seed_kernel", "kawpow_progpow_kernel_2way", "kawpow_final_kernel"},
     .kernel_name = "",
 
-    .rtc_headers = build_rtc_headers(hip_embedded::COMMON_HEADERS),
+    .rtc_headers = build_rtc_headers(hip_embedded::KAWPOW_HEADERS, hip_embedded::COMMON_HEADERS),
     .template_size = 32,
     .hash_size = 32,
     .nonce_size = 8,
