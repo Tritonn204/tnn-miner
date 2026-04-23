@@ -616,7 +616,7 @@ void kawpow_hash_kernel(
 // ---------------------------------------------------------------------------
 // Split kernel A: Seed Keccak  (1 thread per hash, no LDS, no DAG)
 // ---------------------------------------------------------------------------
-extern "C" __global__ __launch_bounds__(128, 8)
+extern "C" __global__ __launch_bounds__(256, 8)
 void kawpow_seed_kernel(
     const uint32_t* __restrict__ d_header,
     uint64_t                     nonce_start,
@@ -763,7 +763,7 @@ __device__ __forceinline__ void store_digest_coop_16x8_u32(
 // Each wavefront group processes 2 hashes, interleaving their ProgPoW
 // iterations to hide DAG load latency across hashes.
 // ---------------------------------------------------------------------------
-extern "C" __global__ __launch_bounds__(256, 2)
+extern "C" __global__ __launch_bounds__(256, 1)
 void kawpow_progpow_kernel_2way(
     const uint32_t* __restrict__ d_dag,
     uint32_t                     batch_size,
@@ -858,7 +858,7 @@ __device__ __forceinline__ void store_digest_coop_32x8_u32(
 // Split kernel B-4way: ProgPoW main loop — 4-way hash interleaving
 // Each wavefront group processes 4 hashes for maximum DAG latency hiding.
 // ---------------------------------------------------------------------------
-extern "C" __global__ extern "C" __global__ __launch_bounds__(256, 2)
+extern "C" __global__ extern "C" __global__ __launch_bounds__(256, 1)
 void kawpow_progpow_kernel_4way(
     const uint32_t* __restrict__ d_dag,
     uint32_t                     batch_size,
@@ -963,7 +963,7 @@ void kawpow_progpow_kernel_4way(
 // ---------------------------------------------------------------------------
 // Split kernel C: Final Keccak + target check  (1 thread per hash, no LDS)
 // ---------------------------------------------------------------------------
-extern "C" __global__ __launch_bounds__(128, 8)
+extern "C" __global__ __launch_bounds__(256, 8)
 void kawpow_final_kernel(
     uint64_t                     nonce_start,
     uint32_t                     batch_size,

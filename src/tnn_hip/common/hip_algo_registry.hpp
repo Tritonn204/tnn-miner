@@ -1363,7 +1363,7 @@ struct KawPowAlgoData {
     size_t    intermediate_capacity = 0;
 
     // Strategy selection
-    KawPowStrategy best_strategy = KawPowStrategy::Split4Way;
+    KawPowStrategy best_strategy = KawPowStrategy::Split2Way;
 
     // Compilation state (saved during pre_tune for runtime recompilation)
     std::vector<std::string> compile_opts;
@@ -1765,7 +1765,7 @@ inline bool kawpow_occupancy_tune(TuningResult& result, const oroDeviceProp_t& p
 
     // ---- Sweep seed_tpb ----
     // Capped to 128 to match __launch_bounds__(128, 8) on seed/final kernels
-    static constexpr int bookend_tpb_candidates[] = { 32, 64, 96, 128 };
+    static constexpr int bookend_tpb_candidates[] = { 32, 64, 96, 128, 192, 256 };
     int best_seed_tpb = 128;
     {
         printf("[KawPow] GPU %d: Seed TPB sweep: ", device_id);
@@ -1992,8 +1992,8 @@ inline bool kawpow_occupancy_tune(TuningResult& result, const oroDeviceProp_t& p
     // ---- Apply winner ----
     result.tune_keys["seed_tpb"] = best_seed_tpb;
     result.tune_keys["final_tpb"] = best_final_tpb;
-    result.tune_keys["strategy"] = (int64_t)KawPowStrategy::Split4Way;
-    kp->best_strategy = KawPowStrategy::Split4Way;
+    result.tune_keys["strategy"] = (int64_t)KawPowStrategy::Split2Way;
+    kp->best_strategy = KawPowStrategy::Split2Way;
 
     pp_block = w.tpb;
     pp_bpc = w.bpc;
@@ -2008,7 +2008,7 @@ inline bool kawpow_occupancy_tune(TuningResult& result, const oroDeviceProp_t& p
     result.tune_keys["batch_mult"] = best_mult;
     kp->ensure_intermediate(final_batch);
 
-    printf("[KawPow] GPU %d: Final config: Split4Way, block=%d, %dx mult, grid=%d, batch=%u (%.2f MH/s)\n",
+    printf("[KawPow] GPU %d: Final config: Split2Way, block=%d, %dx mult, grid=%d, batch=%u (%.2f MH/s)\n",
            device_id, pp_block, best_mult, final_grid, final_batch, w.mhs);
     fflush(stdout);
 
@@ -2260,7 +2260,7 @@ inline bool kawpow_execute(
     auto& ls = kp->live[0];
     if (!ls.d_dag) return false;
 
-    auto strategy = static_cast<KawPowStrategy>(ctx.get_tune_key("strategy", (int64_t)KawPowStrategy::Split4Way));
+    auto strategy = static_cast<KawPowStrategy>(ctx.get_tune_key("strategy", (int64_t)KawPowStrategy::Split2Way));
 
     uint32_t* header = (uint32_t*)ctx.d_input;
     uint32_t* dag = ls.d_dag;
@@ -2272,12 +2272,12 @@ inline bool kawpow_execute(
     uint32_t* l1_cache = ls.d_l1_cache;
 
     switch (strategy) {
-    case KawPowStrategy::Split4Way: {
+    case KawPowStrategy::Split2Way: {
         auto it_seed = kernels.find("kawpow_seed_kernel");
         auto it_pp   = kernels.find("kawpow_progpow_kernel_2way");
         auto it_fin  = kernels.find("kawpow_final_kernel");
         if (it_seed == kernels.end() || it_pp == kernels.end() || it_fin == kernels.end()) {
-            fprintf(stderr, "[KawPow] GPU %d: Split4Way kernels not found in map (seed=%d pp=%d fin=%d)\n",
+            fprintf(stderr, "[KawPow] GPU %d: Split2Way kernels not found in map (seed=%d pp=%d fin=%d)\n",
                     kp->compile_device_id, it_seed != kernels.end(), it_pp != kernels.end(), it_fin != kernels.end());
             return false;
         }
@@ -2385,7 +2385,7 @@ inline void kawpow_post_tune(const TuningResult& result,
     int seed_tpb = result.tune_keys.count("seed_tpb") ? (int)result.tune_keys.at("seed_tpb") : 128;
     int final_tpb = result.tune_keys.count("final_tpb") ? (int)result.tune_keys.at("final_tpb") : 128;
 
-    printf("  Strategy: Split4Way\n");
+    printf("  Strategy: Split2Way\n");
     fflush(stdout);
 
     // Ensure intermediate buffer for split pipeline
