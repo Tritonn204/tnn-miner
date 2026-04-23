@@ -1,5 +1,6 @@
 #pragma once
 #include "gpu_algo_impl.hpp"
+#include "aligned_alloc.hip.hpp"
 #include "oro_seh_wrappers.hpp"
 #include <memory>
 #include <functional>
@@ -1308,8 +1309,12 @@ enum class KawPowStrategy : uint8_t {
 // Two instances live inside KawPowAlgoData so dev and regular can
 // track independent epochs/periods without ping-ponging rebuilds.
 struct KawPowLiveState {
+    AlignedDevAlloc dag_alloc{};
+    AlignedDevAlloc l1_alloc{};
+
     uint32_t* d_dag = nullptr;
     uint32_t* d_l1_cache = nullptr;
+
     uint32_t  dag_num_items = 0;
     size_t    dag_size_bytes = 0;
 
@@ -1327,18 +1332,53 @@ struct KawPowLiveState {
     oroFunction_t live_progpow_4way_kernel = nullptr;
     oroFunction_t live_final_kernel = nullptr;
 
+    bool alloc_dag(size_t bytes, size_t align = 256, int device_id = 0) {
+        oroFreeAligned(dag_alloc);
+        d_dag = nullptr;
+        dag_size_bytes = 0;
+
+        oroError_t err = oroMallocAligned(dag_alloc, bytes, align);
+        if (err != oroSuccess) return false;
+
+        d_dag = reinterpret_cast<uint32_t*>(dag_alloc.aligned);
+        dag_size_bytes = bytes;
+
+        oroMemAdvise(d_dag, dag_size_bytes, oroMemAdviseSetReadMostly, device_id);
+        (void)oroGetLastError(); // non-fatal if unsupported
+
+        return true;
+    }
+
+    bool alloc_l1_cache(size_t bytes, size_t align = 64) {
+        oroFreeAligned(l1_alloc);
+        d_l1_cache = nullptr;
+
+        oroError_t err = oroMallocAligned(l1_alloc, bytes, align);
+        if (err != oroSuccess) return false;
+
+        d_l1_cache = reinterpret_cast<uint32_t*>(l1_alloc.aligned);
+        return true;
+    }
+
     void free_dag() {
-        if (d_dag) { oroFree((oroDeviceptr)d_dag); d_dag = nullptr; }
-        if (d_l1_cache) { oroFree((oroDeviceptr)d_l1_cache); d_l1_cache = nullptr; }
+        oroFreeAligned(dag_alloc);
+        oroFreeAligned(l1_alloc);
+
+        d_dag = nullptr;
+        d_l1_cache = nullptr;
         dag_num_items = 0;
         dag_size_bytes = 0;
     }
 
     void free_module() {
-        if (live_module) { oroModuleUnload(live_module); live_module = nullptr; }
+        if (live_module) {
+            oroModuleUnload(live_module);
+            live_module = nullptr;
+        }
         live_mono_kernel = nullptr;
         live_seed_kernel = nullptr;
         live_progpow_2way_kernel = nullptr;
+        live_progpow_4way_kernel = nullptr;
         live_final_kernel = nullptr;
     }
 };
@@ -1359,6 +1399,7 @@ struct KawPowAlgoData {
     int           num_period_kernels = 0;
 
     // Split strategy: intermediate buffer (16 uint32 per hash)
+    AlignedDevAlloc intermediate_alloc{};
     uint32_t* d_intermediate = nullptr;
     size_t    intermediate_capacity = 0;
 
@@ -1377,18 +1418,31 @@ struct KawPowAlgoData {
     int  pending_rebuild_epoch = -1;
     bool pending_rebuild_is_dev = false;
 
-
-
-
     // Ensure intermediate buffer can hold at least `needed` hashes
     bool ensure_intermediate(size_t needed) {
         if (d_intermediate && intermediate_capacity >= needed) return true;
-        if (d_intermediate) oroFree((oroDeviceptr)d_intermediate);
-        size_t bytes = needed * 16 * sizeof(uint32_t);
-        oroError_t err = oroMalloc((oroDeviceptr*)&d_intermediate, bytes);
-        if (err != oroSuccess) { d_intermediate = nullptr; intermediate_capacity = 0; return false; }
+
+        oroFreeAligned(intermediate_alloc);
+        d_intermediate = nullptr;
+        intermediate_capacity = 0;
+
+        constexpr size_t kAlign = 64;  // 64 B per hash record
+        const size_t bytes = needed * 16 * sizeof(uint32_t);
+
+        oroError_t err = oroMallocAligned(intermediate_alloc, bytes, kAlign);
+        if (err != oroSuccess) {
+            return false;
+        }
+
+        d_intermediate = reinterpret_cast<uint32_t*>(intermediate_alloc.aligned);
         intermediate_capacity = needed;
         return true;
+    }
+
+    void free_intermediate() {
+        oroFreeAligned(intermediate_alloc);
+        d_intermediate = nullptr;
+        intermediate_capacity = 0;
     }
 };
 
@@ -1510,21 +1564,18 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
     fflush(stdout);
 
     // ---- Allocate DAG on GPU ----
-    oroError_t err = oroMalloc((oroDeviceptr*)&ls.d_dag, ls.dag_size_bytes);
-    if (err != oroSuccess) {
-        fprintf(stderr, "[KawPow] GPU %d: DAG alloc failed (need %.1f GB): %s\n",
-                device_id, ls.dag_size_bytes / (1024.0 * 1024.0 * 1024.0), tnn_error_string(err));
+    if (!ls.alloc_dag(ls.dag_size_bytes, 256, device_id)) {
+        fprintf(stderr, "[KawPow] GPU %d: DAG alloc failed (need %.1f GB)\n",
+                device_id, ls.dag_size_bytes / (1024.0 * 1024.0 * 1024.0));
         delete kp;
         return false;
     }
-    oroMemAdvise(ls.d_dag, ls.dag_size_bytes, oroMemAdviseSetReadMostly, device_id);
-    (void)oroGetLastError(); // not fatal if unsupported
 
     // ---- Upload light cache to GPU ----
     uint32_t num_cache_items = (uint32_t)ctx->light_cache_num_items;
     size_t cache_bytes = (size_t)num_cache_items * 64; // 16 uint32 per hash512
     uint32_t* d_light_cache = nullptr;
-    err = oroMalloc((oroDeviceptr*)&d_light_cache, cache_bytes);
+    auto err = oroMalloc((oroDeviceptr*)&d_light_cache, cache_bytes);
     if (err != oroSuccess) {
         fprintf(stderr, "[KawPow] GPU %d: Light cache alloc failed: %s\n",
                 device_id, tnn_error_string(err));
@@ -1743,13 +1794,18 @@ inline bool kawpow_occupancy_tune(TuningResult& result, const oroDeviceProp_t& p
         return true;
     }
 
-    uint8_t* bh = nullptr; uint64_t* bt = nullptr; uint64_t* bsol = nullptr;
     oroStream_t stream = nullptr;
     oroStreamCreate(&stream);
-    oroMalloc((oroDeviceptr*)&bh, 32);
-    oroMalloc((oroDeviceptr*)&bt, 32);
-    oroMalloc((oroDeviceptr*)&bsol, 8 + 1024 * 40);
-    oroMemset((oroDeviceptr)bh, 0, 32);
+    AlignedDevAlloc bh_alloc{}, bt_alloc{}, bsol_alloc{};
+
+    oroMallocAligned(bh_alloc,   32,             64);
+    oroMallocAligned(bt_alloc,   32,             64);
+    oroMallocAligned(bsol_alloc, 8 + 1024 * 40,  64);
+
+    uint8_t*  bh   = bh_alloc.aligned;
+    uint64_t* bt   = reinterpret_cast<uint64_t*>(bt_alloc.aligned);
+    uint64_t* bsol = reinterpret_cast<uint64_t*>(bsol_alloc.aligned);
+    
     uint64_t maxt[4] = {~0ULL, ~0ULL, ~0ULL, ~0ULL};
     oroMemcpy(bt, maxt, 32, oroMemcpyHostToDevice);
 
@@ -2026,16 +2082,22 @@ inline void kawpow_algo_data_cleanup(void* algo_data)
     auto* kp = static_cast<KawPowAlgoData*>(algo_data);
     if (kp) {
         oroDeviceSynchronize();
+
         for (int m = 0; m < 2; ++m) {
             kp->live[m].free_dag();
             kp->live[m].free_module();
         }
-        if (kp->d_intermediate) oroFree((oroDeviceptr)kp->d_intermediate);
+
+        kp->free_intermediate();
+
         for (int i = 0; i < kp->num_period_kernels; ++i) {
             if (kp->period_modules[i])
                 oroModuleUnload(kp->period_modules[i]);
         }
-        if (kp->dag_gen_module) oroModuleUnload(kp->dag_gen_module);
+
+        if (kp->dag_gen_module)
+            oroModuleUnload(kp->dag_gen_module);
+
         delete kp;
     }
 }
@@ -2083,20 +2145,17 @@ inline bool kawpow_rebuild_dag(KawPowLiveState& ls, KawPowAlgoData* kp, int new_
                free_mem / (1024.0 * 1024.0), total_mem / (1024.0 * 1024.0));
         fflush(stdout);
     }
-    oroError_t err = oroMalloc((oroDeviceptr*)&ls.d_dag, ls.dag_size_bytes);
-    if (err != oroSuccess || !ls.d_dag) {
-        fprintf(stderr, "[KawPow] GPU %d: %sDAG alloc failed (%.1f GB): %s\n",
-                device_id, tag, ls.dag_size_bytes / (1024.0 * 1024.0 * 1024.0), tnn_error_string(err));
+    if (!ls.alloc_dag(ls.dag_size_bytes, 256, device_id)) {
+        fprintf(stderr, "[KawPow] GPU %d: %sDAG alloc failed (%.1f GB)\n",
+                device_id, tag, ls.dag_size_bytes / (1024.0 * 1024.0 * 1024.0));
         return false;
     }
-    oroMemAdvise(ls.d_dag, ls.dag_size_bytes, oroMemAdviseSetReadMostly, device_id);
-    (void)oroGetLastError(); // not fatal if unsupported
 
     // Upload light cache
     uint32_t num_cache_items = (uint32_t)ctx->light_cache_num_items;
     size_t cache_bytes = (size_t)num_cache_items * 64;
     uint32_t* d_light_cache = nullptr;
-    err = oroMalloc((oroDeviceptr*)&d_light_cache, cache_bytes);
+    auto err = oroMalloc((oroDeviceptr*)&d_light_cache, cache_bytes);
     if (err != oroSuccess) {
         fprintf(stderr, "[KawPow] GPU %d: %sLight cache alloc failed: %s\n", device_id, tag, tnn_error_string(err));
         ls.free_dag();

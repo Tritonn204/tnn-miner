@@ -360,36 +360,27 @@ inline std::vector<BodyOp> build_body_ops(const ProgramOps& ops, const std::stri
     return out;
 }
 
-// ---------------------------------------------------------------------------
-// split_body_for_issue — backward-slice body to the minimal set required to
-// produce required_reg (currently MIX[0] for ISSUE_DAG)
-// ---------------------------------------------------------------------------
-inline BodySplit split_body_for_issue(const std::vector<BodyOp>& ops, uint32_t required_reg) {
+inline BodySplit split_body_at_last_write_to(const std::vector<BodyOp>& ops, uint32_t reg_idx) {
     BodySplit s;
     if (ops.empty()) return s;
 
-    std::vector<bool> keep(ops.size(), false);
-    uint32_t needed = bit(required_reg);
+    const uint32_t target = bit(reg_idx);
+    int cut = -1;
 
-    for (int i = (int)ops.size() - 1; i >= 0; --i) {
-        if (ops[i].writes_mask & needed) {
-            keep[i] = true;
-            needed &= ~ops[i].writes_mask;
-            needed |= ops[i].reads_mask;
+    for (int i = 0; i < (int)ops.size(); ++i) {
+        if (ops[i].writes_mask & target) {
+            cut = i;
         }
     }
 
-    for (size_t i = 0; i < ops.size(); ++i) {
-        if (!keep[i] && ops[i].writes_mask == 0 && ops[i].reads_mask == 0) {
-            keep[i] = true;
-        }
+    // No write to the target register in body: no useful split
+    if (cut < 0) {
+        s.pre = ops;
+        return s;
     }
 
-    for (size_t i = 0; i < ops.size(); ++i) {
-        if (keep[i]) s.pre.push_back(ops[i]);
-        else         s.post.push_back(ops[i]);
-    }
-
+    s.pre.insert(s.pre.end(), ops.begin(), ops.begin() + cut + 1);
+    s.post.insert(s.post.end(), ops.begin() + cut + 1, ops.end());
     return s;
 }
 
@@ -563,7 +554,7 @@ inline std::string emit_dag_merge(const ProgramOps& ops,
 inline std::string generate_program_macro(int block_number) {
     auto ops = collect_ops(block_number);
     auto body_ops = build_body_ops(ops, "MIX");
-    auto split = split_body_for_issue(body_ops, 0);  // early address depends on MIX[0]
+    auto split = split_body_at_last_write_to(body_ops, 0);  // early address depends on MIX[0]
 
     char buf[256];
     std::snprintf(buf, sizeof(buf),

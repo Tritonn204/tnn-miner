@@ -605,6 +605,80 @@ void kawpow_hash_kernel(
     }
 }
 
+#if defined(__HIP_PLATFORM_AMD__)
+  // GFX10 / RDNA1
+  #if defined(__gfx1010__) || defined(__gfx1011__) || defined(__gfx1012__) || defined(__gfx1013__)
+    #define KAWPOW_AMD_HAS_DLC 1
+  // GFX10.3 / RDNA2
+  #elif defined(__gfx1030__) || defined(__gfx1031__) || defined(__gfx1032__) || \
+        defined(__gfx1033__) || defined(__gfx1034__) || defined(__gfx1035__) || \
+        defined(__gfx1036__)
+    #define KAWPOW_AMD_HAS_DLC 1
+  // GFX11 / RDNA3+
+  #elif defined(__gfx1100__) || defined(__gfx1101__) || defined(__gfx1102__) || \
+        defined(__gfx1103__)
+    #define KAWPOW_AMD_HAS_DLC 1
+  #else
+    // gfx906 / gfx90a / older GCN/CDNA: stay conservative
+    #define KAWPOW_AMD_HAS_DLC 0
+  #endif
+#endif
+
+__device__ __forceinline__ void store_nt_u64(uint64_t* ptr, uint64_t val)
+{
+#if defined(__HIP_PLATFORM_AMD__)
+  #if KAWPOW_AMD_HAS_DLC
+    asm volatile(
+        "global_store_dwordx2 %0, %1, off glc dlc"
+        :
+        : "v"(ptr), "v"(val));
+  #else
+    asm volatile(
+        "global_store_dwordx2 %0, %1, off glc"
+        :
+        : "v"(ptr), "v"(val));
+  #endif
+#else
+    asm volatile(
+        "st.global.cg.u64 [%0], %1;"
+        :
+        : "l"(ptr), "l"(val));
+#endif
+}
+
+__device__ __forceinline__ void store_nt_u32(uint32_t* ptr, uint32_t val)
+{
+#if defined(__HIP_PLATFORM_AMD__)
+  #if KAWPOW_AMD_HAS_DLC
+    asm volatile(
+        "global_store_dword %0, %1, off glc dlc"
+        :
+        : "v"(ptr), "v"(val));
+  #else
+    asm volatile(
+        "global_store_dword %0, %1, off glc"
+        :
+        : "v"(ptr), "v"(val));
+  #endif
+#else
+    asm volatile(
+        "st.global.cg.u32 [%0], %1;"
+        :
+        : "l"(ptr), "r"(val));
+#endif
+}
+
+__device__ __forceinline__ void store_seed_u64x4(uint32_t* dst, const uint32_t state[8])
+{
+    const uint64_t* src64 = reinterpret_cast<const uint64_t*>(state);
+    uint64_t* dst64 = reinterpret_cast<uint64_t*>(dst);
+
+    store_nt_u64(&dst64[0], src64[0]);
+    store_nt_u64(&dst64[1], src64[1]);
+    store_nt_u64(&dst64[2], src64[2]);
+    store_nt_u64(&dst64[3], src64[3]);
+}
+
 // ===========================================================================
 // Strategy 1 — Split kernels
 //
@@ -616,7 +690,7 @@ void kawpow_hash_kernel(
 // ---------------------------------------------------------------------------
 // Split kernel A: Seed Keccak  (1 thread per hash, no LDS, no DAG)
 // ---------------------------------------------------------------------------
-extern "C" __global__ __launch_bounds__(256, 8)
+extern "C" __global__ __launch_bounds__(256)
 void kawpow_seed_kernel(
     const uint32_t* __restrict__ d_header,
     uint64_t                     nonce_start,
@@ -647,7 +721,7 @@ void kawpow_seed_kernel(
 
     // Write seed state to intermediate buffer (non-temporal to avoid evicting DAG from L2)
     uint32_t base = hash_id * 16u;
-    store_nt_u32x8(d_intermediate + base, state);
+    store_seed_u64x4(d_intermediate + base, state);
 }
 
 // ---------------------------------------------------------------------------
@@ -731,14 +805,6 @@ void kawpow_progpow_global_kernel(
     }
 }
 
-__device__ __forceinline__ void store_nt_u32(uint32_t* ptr, uint32_t val)
-{
-    asm volatile(
-        "global_store_dword %0, %1, off glc dlc"
-        :
-        : "v"(ptr), "v"(val));
-}
-
 __device__ __forceinline__ void store_digest_coop_16x8_u32(
     uint32_t* dst0,
     const uint32_t digest0[8],
@@ -763,7 +829,7 @@ __device__ __forceinline__ void store_digest_coop_16x8_u32(
 // Each wavefront group processes 2 hashes, interleaving their ProgPoW
 // iterations to hide DAG load latency across hashes.
 // ---------------------------------------------------------------------------
-extern "C" __global__ __launch_bounds__(256, 1)
+extern "C" __global__ __launch_bounds__(256)
 void kawpow_progpow_kernel_2way(
     const uint32_t* __restrict__ d_dag,
     uint32_t                     batch_size,
@@ -858,7 +924,7 @@ __device__ __forceinline__ void store_digest_coop_32x8_u32(
 // Split kernel B-4way: ProgPoW main loop — 4-way hash interleaving
 // Each wavefront group processes 4 hashes for maximum DAG latency hiding.
 // ---------------------------------------------------------------------------
-extern "C" __global__ extern "C" __global__ __launch_bounds__(256, 1)
+extern "C" __global__ extern "C" __global__ __launch_bounds__(256)
 void kawpow_progpow_kernel_4way(
     const uint32_t* __restrict__ d_dag,
     uint32_t                     batch_size,
@@ -963,7 +1029,7 @@ void kawpow_progpow_kernel_4way(
 // ---------------------------------------------------------------------------
 // Split kernel C: Final Keccak + target check  (1 thread per hash, no LDS)
 // ---------------------------------------------------------------------------
-extern "C" __global__ __launch_bounds__(256, 8)
+extern "C" __global__ __launch_bounds__(256)
 void kawpow_final_kernel(
     uint64_t                     nonce_start,
     uint32_t                     batch_size,
@@ -976,19 +1042,24 @@ void kawpow_final_kernel(
     if (hash_id >= batch_size) return;
 
     const uint64_t nonce = nonce_start + (uint64_t)hash_id;
-    uint32_t base = hash_id * 16u;
+    const uint32_t base = hash_id * 16u;
 
     uint32_t state[25];
 
-    // Absorb seed state (from seed kernel)
-    #pragma unroll
-    for (int i = 0; i < 8; i++)
-        state[i] = d_intermediate[base + i];
+    // Load 64-byte record as 4 x uint4
+    const uint4* rec4 = reinterpret_cast<const uint4*>(d_intermediate + base);
+    uint4 v0 = rec4[0];
+    uint4 v1 = rec4[1];
+    uint4 v2 = rec4[2];
+    uint4 v3 = rec4[3];
 
-    // Absorb digest (from progpow kernel)
-    #pragma unroll
-    for (int i = 0; i < 8; i++)
-        state[8 + i] = d_intermediate[base + 8 + i];
+    // Seed state
+    state[0] = v0.x;  state[1] = v0.y;  state[2] = v0.z;  state[3] = v0.w;
+    state[4] = v1.x;  state[5] = v1.y;  state[6] = v1.z;  state[7] = v1.w;
+
+    // Digest
+    state[8]  = v2.x; state[9]  = v2.y; state[10] = v2.z; state[11] = v2.w;
+    state[12] = v3.x; state[13] = v3.y; state[14] = v3.z; state[15] = v3.w;
 
     // Coin-specific Keccak padding
     state[16] = KPAD0;  state[17] = KPAD1;  state[18] = KPAD2;
@@ -997,19 +1068,24 @@ void kawpow_final_kernel(
 
     keccak_f800<true>(state);
 
-    // Debug output
     if (d_result_hashes != nullptr)
     {
-        #pragma unroll
-        for (int i = 0; i < 8; i++) d_result_hashes[base + i] = d_intermediate[base + 8 + i];
+        d_result_hashes[base + 0] = v2.x;
+        d_result_hashes[base + 1] = v2.y;
+        d_result_hashes[base + 2] = v2.z;
+        d_result_hashes[base + 3] = v2.w;
+        d_result_hashes[base + 4] = v3.x;
+        d_result_hashes[base + 5] = v3.y;
+        d_result_hashes[base + 6] = v3.z;
+        d_result_hashes[base + 7] = v3.w;
+
         #pragma unroll
         for (int i = 0; i < 8; i++) d_result_hashes[base + 8 + i] = state[i];
     }
 
-    // Target comparison
     {
-        const uint8_t* hash8   = (const uint8_t*)state;
-        const uint8_t* target8 = (const uint8_t*)d_target;
+        const uint8_t* hash8   = reinterpret_cast<const uint8_t*>(state);
+        const uint8_t* target8 = reinterpret_cast<const uint8_t*>(d_target);
 
         bool below = false;
         bool equal = true;
@@ -1017,7 +1093,7 @@ void kawpow_final_kernel(
         #pragma unroll
         for (int i = 31; i >= 0; i--)
         {
-            uint8_t h = hash8[31 - i]; // easiest way to make byte order match
+            uint8_t h = hash8[31 - i];
             uint8_t t = target8[i];
 
             if (equal)
@@ -1027,18 +1103,19 @@ void kawpow_final_kernel(
             }
         }
 
-        if (below || equal)  // hash <= target
+        if (below || equal)
         {
             uint32_t idx = (uint32_t)atomicAdd((unsigned long long*)&d_solutions[0], 1ULL);
             if (idx < 1024)
             {
                 d_solutions[1 + idx * 5 + 0] = nonce;
-                // mix_hash from intermediate buffer [base+8..base+15]
-                const uint64_t* mix64 = (const uint64_t*)&d_intermediate[base + 8];
-                d_solutions[1 + idx * 5 + 1] = mix64[0];
-                d_solutions[1 + idx * 5 + 2] = mix64[1];
-                d_solutions[1 + idx * 5 + 3] = mix64[2];
-                d_solutions[1 + idx * 5 + 4] = mix64[3];
+
+                const uint64_t* mix64 = reinterpret_cast<const uint64_t*>(&state[8]); // wrong source? no, use digest words separately
+                (void)mix64;
+                d_solutions[1 + idx * 5 + 1] = ((uint64_t)v2.x) | ((uint64_t)v2.y << 32);
+                d_solutions[1 + idx * 5 + 2] = ((uint64_t)v2.z) | ((uint64_t)v2.w << 32);
+                d_solutions[1 + idx * 5 + 3] = ((uint64_t)v3.x) | ((uint64_t)v3.y << 32);
+                d_solutions[1 + idx * 5 + 4] = ((uint64_t)v3.z) | ((uint64_t)v3.w << 32);
             }
         }
     }
