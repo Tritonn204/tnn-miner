@@ -218,7 +218,8 @@ int kawpow_gpu_test()
     // Launch-config constants — respect __launch_bounds__ on each kernel
     // ================================================================
     //   kawpow_seed_kernel            : __launch_bounds__(128, 8)
-    //   kawpow_progpow_kernel_2way    : __launch_bounds__(256, 2)
+    //   kawpow_progpow_kernel_2way    : __launch_bounds__(256, 8)
+    //   kawpow_progpow_kernel_4way    : __launch_bounds__(256, 6)
     //   kawpow_final_kernel           : __launch_bounds__(128, 8)
     //   kawpow_hash_kernel (mono)     : (check your source, likely 256)
 
@@ -229,6 +230,7 @@ int kawpow_gpu_test()
 
     // 2-way: each 16-lane group handles 2 hashes
     constexpr uint32_t HASHES_PER_BLOCK_2WAY = (PROGPOW_TPB / LANES_PER_HASH) * 2; // 32
+    constexpr uint32_t HASHES_PER_BLOCK_4WAY = (PROGPOW_TPB / LANES_PER_HASH) * 4; // 64
     // mono: each 16-lane group handles 1 hash
     constexpr uint32_t HASHES_PER_BLOCK_MONO = (MONO_TPB / LANES_PER_HASH);         // 16
 
@@ -496,7 +498,7 @@ int kawpow_gpu_test()
 
                 // Extract split kernels
                 oroError_t e1 = oroModuleGetFunction(&seed_fn,    split_module, "kawpow_seed_kernel");
-                oroError_t e2 = oroModuleGetFunction(&progpow_fn, split_module, "kawpow_progpow_kernel_2way");
+                oroError_t e2 = oroModuleGetFunction(&progpow_fn, split_module, "kawpow_progpow_kernel_4way");
                 oroError_t e3 = oroModuleGetFunction(&final_fn,   split_module, "kawpow_final_kernel");
 
                 if (e1 != oroSuccess || e2 != oroSuccess || e3 != oroSuccess ||

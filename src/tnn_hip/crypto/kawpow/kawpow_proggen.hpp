@@ -350,14 +350,89 @@ inline std::string emit_body(const ProgramOps& ops, const std::string& mix,
     return body;
 }
 
+inline std::string emit_dag_capture(const std::string& dg, const std::string& le) {
+    std::string c;
+    c += "    uint32_t _w0 = dag_word0(" + dg + ");" + le;
+    c += "    uint32_t _w1 = dag_word1(" + dg + ");" + le;
+    c += "    uint32_t _w2 = dag_word2(" + dg + ");" + le;
+    c += "    uint32_t _w3 = dag_word3(" + dg + ");" + le;
+    return c;
+}
+
 // ---------------------------------------------------------------------------
 // emit_dag_merge_pre — merge[0] only (finalizes mix[0] for ISSUE_DAG).
 // Only _r0 is pre-computed here; _r1/_r2/_r3 are deferred to post so
 // they execute after ISSUE_DAG, giving the new load more shadow and
 // freeing 3 VGPRs of live range across the bpermute/Barrett region.
 // ---------------------------------------------------------------------------
-inline std::string emit_dag_merge_pre(const ProgramOps& ops, const std::string& mix,
-                                       const std::string& dg, const std::string& le) {
+inline std::string emit_dag_capture_pre(const ProgramOps& ops,
+                                        const std::string& mix,
+                                        const std::string& dg,
+                                        const std::string& le) {
+    auto r = [&](uint32_t idx) -> std::string { return reg(mix, idx); };
+
+    std::string c;
+
+    // Capture word 0 only
+    c += "    uint32_t _w0 = dag_word0(" + dg + ");" + le;
+
+    // Apply merge[0] immediately because it feeds next DAG address via MIX[0]
+    uint32_t mtype0 = ops.dag_sels[0] % 4;
+    if (mtype0 == 2 || mtype0 == 3) {
+        uint32_t x = ((ops.dag_sels[0] >> 16) % 31) + 1;
+        const char* rot = (mtype0 == 2) ? "rotl32" : "rotr32";
+        c += "    " + r(ops.dag_dsts[0]) + " = " + rot + "("
+          + r(ops.dag_dsts[0]) + ", " + std::to_string(x) + "u) ^ _w0;" + le;
+    } else {
+        c += "    " + emit_merge(r(ops.dag_dsts[0]), "_w0", ops.dag_sels[0]) + le;
+    }
+
+    return c;
+}
+
+// ---------------------------------------------------------------------------
+// emit_dag_merge_post — merge[1..3] with inline rotation (no temps).
+// Rotations are computed inline with the XOR — executes after ISSUE_DAG,
+// giving the new load shadow cycles from the rot+xor instructions.
+// ---------------------------------------------------------------------------
+inline std::string emit_dag_capture_post(const std::string& dg,
+                                         const std::string& le) {
+    std::string c;
+    c += "    uint32_t _w1 = dag_word1(" + dg + ");" + le;
+    c += "    uint32_t _w2 = dag_word2(" + dg + ");" + le;
+    c += "    uint32_t _w3 = dag_word3(" + dg + ");" + le;
+    return c;
+}
+
+inline std::string emit_dag_merge_post(const ProgramOps& ops,
+                                       const std::string& mix,
+                                       const std::string& le) {
+    auto r = [&](uint32_t idx) -> std::string { return reg(mix, idx); };
+
+    std::string c;
+
+    for (uint32_t i = 1; i < NUM_WORDS_PER_LANE; ++i) {
+        std::string field = "_w" + std::to_string(i);
+        uint32_t mtype = ops.dag_sels[i] % 4;
+
+        if (mtype == 2 || mtype == 3) {
+            uint32_t x = ((ops.dag_sels[i] >> 16) % 31) + 1;
+            const char* rot = (mtype == 2) ? "rotl32" : "rotr32";
+            c += "    " + r(ops.dag_dsts[i]) + " = " + rot + "("
+              + r(ops.dag_dsts[i]) + ", " + std::to_string(x) + "u) ^ " + field + ";" + le;
+        } else {
+            c += "    " + emit_merge(r(ops.dag_dsts[i]), field, ops.dag_sels[i]) + le;
+        }
+    }
+
+    return c;
+}
+
+// Direct versions for full non-pipelined body
+inline std::string emit_dag_merge_pre_direct(const ProgramOps& ops,
+                                             const std::string& mix,
+                                             const std::string& dg,
+                                             const std::string& le) {
     auto r = [&](uint32_t idx) -> std::string { return reg(mix, idx); };
 
     std::string field0 = "dag_word0(" + dg + ")";
@@ -376,13 +451,10 @@ inline std::string emit_dag_merge_pre(const ProgramOps& ops, const std::string& 
     return c;
 }
 
-// ---------------------------------------------------------------------------
-// emit_dag_merge_post — merge[1..3] with inline rotation (no temps).
-// Rotations are computed inline with the XOR — executes after ISSUE_DAG,
-// giving the new load shadow cycles from the rot+xor instructions.
-// ---------------------------------------------------------------------------
-inline std::string emit_dag_merge_post(const ProgramOps& ops, const std::string& mix,
-                                        const std::string& dg, const std::string& le) {
+inline std::string emit_dag_merge_post_direct(const ProgramOps& ops,
+                                              const std::string& mix,
+                                              const std::string& dg,
+                                              const std::string& le) {
     auto r = [&](uint32_t idx) -> std::string { return reg(mix, idx); };
 
     std::string c;
@@ -403,10 +475,12 @@ inline std::string emit_dag_merge_post(const ProgramOps& ops, const std::string&
     return c;
 }
 
-// Full DAG merge (pre + post) — convenience wrapper
-inline std::string emit_dag_merge(const ProgramOps& ops, const std::string& mix,
-                                   const std::string& dg, const std::string& le) {
-    return emit_dag_merge_pre(ops, mix, dg, le) + emit_dag_merge_post(ops, mix, dg, le);
+inline std::string emit_dag_merge(const ProgramOps& ops,
+                                  const std::string& mix,
+                                  const std::string& dg,
+                                  const std::string& le) {
+    return emit_dag_merge_pre_direct(ops, mix, dg, le) +
+           emit_dag_merge_post_direct(ops, mix, dg, le);
 }
 
 // ---------------------------------------------------------------------------
@@ -429,22 +503,19 @@ inline std::string generate_program_macro(int block_number) {
     std::string c;
     c.reserve(8192);
     c += buf;
+
     c += "#define PROGPOW_BODY(MIX, DG) do { \\\n";
     c += emit_body(ops, "MIX", " \\\n");
     c += emit_dag_merge(ops, "MIX", "DG", " \\\n");
     c += "} while(0)\n";
     c += "\n";
 
-    // PROGPOW_BODY_PIPE — splits DAG merge so ISSUE_DAG fires between merge[0]
-    // and merge[1..3].  merge[1..3] overlaps with the next DAG load.
-    // DG_CUR  = dag128_u64 holding this iteration's pre-loaded DAG data
-    // DG_NEXT = dag128_u64 to receive the next iteration's DAG load
-    // NEXT_LOOP = loop index for the next DAG load
     c += "#define PROGPOW_BODY_PIPE(MIX, DG_CUR, DG_NEXT, NEXT_LOOP) do { \\\n";
     c += emit_body(ops, "MIX", " \\\n");
-    c += emit_dag_merge_pre(ops, "MIX", "DG_CUR", " \\\n");
+    c += emit_dag_capture_pre(ops, "MIX", "DG_CUR", " \\\n");
+    c += emit_dag_capture_post("DG_CUR", " \\\n");
     c += "    PROGPOW_ISSUE_DAG(MIX, DG_NEXT, NEXT_LOOP); \\\n";
-    c += emit_dag_merge_post(ops, "MIX", "DG_CUR", " \\\n");
+    c += emit_dag_merge_post(ops, "MIX", " \\\n");
     c += "} while(0)\n";
     c += "\n";
 

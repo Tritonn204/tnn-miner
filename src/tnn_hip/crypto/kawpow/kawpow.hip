@@ -87,6 +87,120 @@ __device__ __forceinline__ void fill_mix(uint64_t seed, uint32_t lane_id, uint32
     }
 }
 
+__device__ __forceinline__ void fill_mix_2way(
+    uint64_t seed0,
+    uint64_t seed1,
+    uint32_t lane_id,
+    uint32_t* mix0,
+    uint32_t* mix1)
+{
+    uint32_t z0     = fnv1a(FNV_OFFSET_BASIS, (uint32_t)seed0);
+    uint32_t z1     = fnv1a(FNV_OFFSET_BASIS, (uint32_t)seed1);
+
+    uint32_t w0     = fnv1a(z0, (uint32_t)(seed0 >> 32));
+    uint32_t w1     = fnv1a(z1, (uint32_t)(seed1 >> 32));
+
+    uint32_t jsr0   = fnv1a(w0, lane_id);
+    uint32_t jsr1   = fnv1a(w1, lane_id);
+
+    uint32_t jcong0 = fnv1a(jsr0, lane_id);
+    uint32_t jcong1 = fnv1a(jsr1, lane_id);
+
+    #pragma unroll
+    for (int i = 0; i < PROGPOW_REGS; i++) {
+        z0     = 36969u * (z0 & 0xffffu) + (z0 >> 16);
+        z1     = 36969u * (z1 & 0xffffu) + (z1 >> 16);
+
+        w0     = 18000u * (w0 & 0xffffu) + (w0 >> 16);
+        w1     = 18000u * (w1 & 0xffffu) + (w1 >> 16);
+
+        jsr0  ^= (jsr0 << 17);
+        jsr1  ^= (jsr1 << 17);
+
+        jsr0  ^= (jsr0 >> 13);
+        jsr1  ^= (jsr1 >> 13);
+
+        jsr0  ^= (jsr0 << 5);
+        jsr1  ^= (jsr1 << 5);
+
+        jcong0 = 69069u * jcong0 + 1234567u;
+        jcong1 = 69069u * jcong1 + 1234567u;
+
+        mix0[i] = (((z0 << 16) + w0) ^ jcong0) + jsr0;
+        mix1[i] = (((z1 << 16) + w1) ^ jcong1) + jsr1;
+    }
+}
+
+__device__ __forceinline__ void fill_mix_4way(
+    uint64_t seed0,
+    uint64_t seed1,
+    uint64_t seed2,
+    uint64_t seed3,
+    uint32_t lane_id,
+    uint32_t* mix0,
+    uint32_t* mix1,
+    uint32_t* mix2,
+    uint32_t* mix3)
+{
+    uint32_t z0     = fnv1a(FNV_OFFSET_BASIS, (uint32_t)seed0);
+    uint32_t z1     = fnv1a(FNV_OFFSET_BASIS, (uint32_t)seed1);
+    uint32_t z2     = fnv1a(FNV_OFFSET_BASIS, (uint32_t)seed2);
+    uint32_t z3     = fnv1a(FNV_OFFSET_BASIS, (uint32_t)seed3);
+
+    uint32_t w0     = fnv1a(z0, (uint32_t)(seed0 >> 32));
+    uint32_t w1     = fnv1a(z1, (uint32_t)(seed1 >> 32));
+    uint32_t w2     = fnv1a(z2, (uint32_t)(seed2 >> 32));
+    uint32_t w3     = fnv1a(z3, (uint32_t)(seed3 >> 32));
+
+    uint32_t jsr0   = fnv1a(w0, lane_id);
+    uint32_t jsr1   = fnv1a(w1, lane_id);
+    uint32_t jsr2   = fnv1a(w2, lane_id);
+    uint32_t jsr3   = fnv1a(w3, lane_id);
+
+    uint32_t jcong0 = fnv1a(jsr0, lane_id);
+    uint32_t jcong1 = fnv1a(jsr1, lane_id);
+    uint32_t jcong2 = fnv1a(jsr2, lane_id);
+    uint32_t jcong3 = fnv1a(jsr3, lane_id);
+
+    #pragma unroll
+    for (int i = 0; i < PROGPOW_REGS; i++) {
+        z0     = 36969u * (z0 & 0xffffu) + (z0 >> 16);
+        z1     = 36969u * (z1 & 0xffffu) + (z1 >> 16);
+        z2     = 36969u * (z2 & 0xffffu) + (z2 >> 16);
+        z3     = 36969u * (z3 & 0xffffu) + (z3 >> 16);
+
+        w0     = 18000u * (w0 & 0xffffu) + (w0 >> 16);
+        w1     = 18000u * (w1 & 0xffffu) + (w1 >> 16);
+        w2     = 18000u * (w2 & 0xffffu) + (w2 >> 16);
+        w3     = 18000u * (w3 & 0xffffu) + (w3 >> 16);
+
+        jsr0  ^= (jsr0 << 17);
+        jsr1  ^= (jsr1 << 17);
+        jsr2  ^= (jsr2 << 17);
+        jsr3  ^= (jsr3 << 17);
+
+        jsr0  ^= (jsr0 >> 13);
+        jsr1  ^= (jsr1 >> 13);
+        jsr2  ^= (jsr2 >> 13);
+        jsr3  ^= (jsr3 >> 13);
+
+        jsr0  ^= (jsr0 << 5);
+        jsr1  ^= (jsr1 << 5);
+        jsr2  ^= (jsr2 << 5);
+        jsr3  ^= (jsr3 << 5);
+
+        jcong0 = 69069u * jcong0 + 1234567u;
+        jcong1 = 69069u * jcong1 + 1234567u;
+        jcong2 = 69069u * jcong2 + 1234567u;
+        jcong3 = 69069u * jcong3 + 1234567u;
+
+        mix0[i] = (((z0 << 16) + w0) ^ jcong0) + jsr0;
+        mix1[i] = (((z1 << 16) + w1) ^ jcong1) + jsr1;
+        mix2[i] = (((z2 << 16) + w2) ^ jcong2) + jsr2;
+        mix3[i] = (((z3 << 16) + w3) ^ jcong3) + jsr3;
+    }
+}
+
 __device__ __forceinline__ uint32_t shfl_lane16(uint32_t val, int src_lane)
 {
 #ifdef __HIP_PLATFORM_AMD__
@@ -113,27 +227,27 @@ __device__ __forceinline__ uint32_t shfl_lane16(uint32_t val, int src_lane)
 typedef uint32_t dag_vec4 __attribute__((ext_vector_type(4)));
 typedef uint32_t dag_vec2 __attribute__((ext_vector_type(2)));
 
-// Non-temporal store — bypasses L2 (GLC+SLC on AMD, streaming on NVIDIA).
+// Non-temporal store — bypasses L2 (GLC on AMD, streaming on NVIDIA).
 // Use for write-once data (intermediate buffer) to avoid evicting DAG lines.
 __device__ __forceinline__ void store_nt_u32x8(uint32_t* dst, const uint32_t* src)
 {
 #if defined(__HIP_PLATFORM_AMD__)
-    // Two 64-bit non-temporal stores (8 bytes each = 32 bytes total)
-    dag_vec2 v0 = {src[0], src[1]};
-    dag_vec2 v1 = {src[2], src[3]};
-    dag_vec2 v2 = {src[4], src[5]};
-    dag_vec2 v3 = {src[6], src[7]};
-    __builtin_nontemporal_store(v0, (dag_vec2*)(dst));
-    __builtin_nontemporal_store(v1, (dag_vec2*)(dst + 2));
-    __builtin_nontemporal_store(v2, (dag_vec2*)(dst + 4));
+    // Two 64-bit non-temporal stores (8 bytes each = 32 bytes total) 
+    dag_vec2 v0 = {src[0], src[1]}; 
+    dag_vec2 v1 = {src[2], src[3]}; 
+    dag_vec2 v2 = {src[4], src[5]}; 
+    dag_vec2 v3 = {src[6], src[7]}; 
+    __builtin_nontemporal_store(v0, (dag_vec2*)(dst)); 
+    __builtin_nontemporal_store(v1, (dag_vec2*)(dst + 2)); 
+    __builtin_nontemporal_store(v2, (dag_vec2*)(dst + 4)); 
     __builtin_nontemporal_store(v3, (dag_vec2*)(dst + 6));
+
 #elif defined(__CUDA_ARCH__)
-    // NVIDIA: streaming store via inline PTX
-    const uint2* s = (const uint2*)src;
-    asm volatile("st.global.cs.v2.u32 [%0], {%1, %2};"     :: "l"(dst),     "r"(s[0].x), "r"(s[0].y));
-    asm volatile("st.global.cs.v2.u32 [%0], {%1, %2};"     :: "l"(dst + 2), "r"(s[1].x), "r"(s[1].y));
-    asm volatile("st.global.cs.v2.u32 [%0], {%1, %2};"     :: "l"(dst + 4), "r"(s[2].x), "r"(s[2].y));
-    asm volatile("st.global.cs.v2.u32 [%0], {%1, %2};"     :: "l"(dst + 6), "r"(s[3].x), "r"(s[3].y));
+    const uint2* s = reinterpret_cast<const uint2*>(src);
+    asm volatile("st.global.cs.v2.u32 [%0], {%1, %2};" :: "l"(dst),     "r"(s[0].x), "r"(s[0].y));
+    asm volatile("st.global.cs.v2.u32 [%0], {%1, %2};" :: "l"(dst + 2), "r"(s[1].x), "r"(s[1].y));
+    asm volatile("st.global.cs.v2.u32 [%0], {%1, %2};" :: "l"(dst + 4), "r"(s[2].x), "r"(s[2].y));
+    asm volatile("st.global.cs.v2.u32 [%0], {%1, %2};" :: "l"(dst + 6), "r"(s[3].x), "r"(s[3].y));
 #else
     for (int i = 0; i < 8; i++) dst[i] = src[i];
 #endif
@@ -181,56 +295,50 @@ __device__ __forceinline__ uint32_t dag_word3(const dag128_u64& v) { return (uin
 
 // ---- buffer-intrinsic load, result bit-cast to the good storage type ----
 __device__ __forceinline__ dag128_u64
-dag_bufload(__amdgpu_buffer_rsrc_t r, uint32_t voff)
+dag_ptrload_plain(const uint8_t* base, uint32_t byte_off)
 {
-    dag_vec4 t = (dag_vec4)__builtin_amdgcn_raw_buffer_load_b128(
-                     r, (int)voff, 0, KAWPOW_DAG_AUX);
-    return __builtin_bit_cast(dag128_u64, t);   // no VGPR read → waitcnt stays deferred
+    const uint64_t* p = reinterpret_cast<const uint64_t*>(base + byte_off);
+    dag128_u64 out;
+    out.lo = p[0];
+    out.hi = p[1];
+    return out;
+}
+
+typedef uint32_t dag_vec4 __attribute__((ext_vector_type(4)));
+
+__device__ __forceinline__ dag128_u64
+dag_ptrload_vec4_ptr(const uint8_t* ptr)
+{
+    const dag_vec4* p = reinterpret_cast<const dag_vec4*>(ptr);
+    dag_vec4 t = *p;
+    return __builtin_bit_cast(dag128_u64, t);
 }
 
 // ---- issue macro: single-bank first; add the split after this is green ----
-#define PROGPOW_ISSUE_DAG(MIX, DG, LOOP) do {                                  \
-    uint32_t _isrc = (threadIdx.x & ~15u) | ((LOOP) & 15u);                    \
-    uint32_t _ia   = PROGPOW_BPERMUTE(_isrc, (MIX)[0]);                        \
-    uint32_t _iq   = __umulhi(_ia, KAWPOW_BARRETT_M) >> KAWPOW_BARRETT_SHIFT;  \
-    _ia -= _iq * KAWPOW_DAG_NUM_ITEMS_DIV;                                     \
-    if (_ia >= KAWPOW_DAG_NUM_ITEMS_DIV) _ia -= KAWPOW_DAG_NUM_ITEMS_DIV;      \
-    uint64_t _boff = ((uint64_t)_ia << 8) + (((lane_id ^ (LOOP)) & 15u) << 4); \
-    if (_boff < split) {                                                       \
-        (DG) = dag_bufload(rsrc_lo, (uint32_t)_boff);                          \
-    } else {                                                                   \
-        (DG) = dag_bufload(rsrc_hi, (uint32_t)(_boff - split));                \
-    }                                                                          \
+#define PROGPOW_ISSUE_DAG(MIX, DG, LOOP) do {                                        \
+    uint32_t _isrc = (threadIdx.x & ~15u) | ((LOOP) & 15u);                          \
+    uint32_t _ia   = PROGPOW_BPERMUTE(_isrc, (MIX)[0]);                              \
+    uint32_t _iq   = __umulhi(_ia, KAWPOW_BARRETT_M) >> KAWPOW_BARRETT_SHIFT;        \
+    _ia -= _iq * KAWPOW_DAG_NUM_ITEMS_DIV;                                           \
+    if (_ia >= KAWPOW_DAG_NUM_ITEMS_DIV) _ia -= KAWPOW_DAG_NUM_ITEMS_DIV;            \
+    uint64_t _boff = ((uint64_t)_ia << 8) +                                          \
+                     (((uint64_t)((lane_id ^ (LOOP)) & 15u)) << 4);                  \
+    const uint8_t* _ptr = reinterpret_cast<const uint8_t*>(d_dag) + _boff;          \
+    (DG) = dag_ptrload_vec4_ptr(_ptr);                                               \
 } while(0)
 
-
-// REFERENCE THAT WORKS
-
-// struct dag128_u64 { uint64_t lo, hi; };
-
-// __device__ __forceinline__ uint32_t dag_word0(const dag128_u64& v) { return (uint32_t)(v.lo); }
-// __device__ __forceinline__ uint32_t dag_word1(const dag128_u64& v) { return (uint32_t)(v.lo >> 32); }
-// __device__ __forceinline__ uint32_t dag_word2(const dag128_u64& v) { return (uint32_t)(v.hi); }
-// __device__ __forceinline__ uint32_t dag_word3(const dag128_u64& v) { return (uint32_t)(v.hi >> 32); }
-
-// __device__ __forceinline__ dag128_u64 load_dag128(const void* p) {
-//     dag_vec4 t = *(const dag_vec4*)p;
-//     dag128_u64 o;
-//     o.lo = (uint64_t)t[0] | ((uint64_t)t[1] << 32);
-//     o.hi = (uint64_t)t[2] | ((uint64_t)t[3] << 32);
-//     return o;
-// }
-
-// #define PROGPOW_ISSUE_DAG(MIX, DG, LOOP) do {                                 \
-//     uint32_t _isrc = (threadIdx.x & ~15u) | ((LOOP) & 15u);                   \
-//     uint32_t _ia   = PROGPOW_BPERMUTE(_isrc, (MIX)[0]);                       \
-//     uint32_t _iq   = __umulhi(_ia, KAWPOW_BARRETT_M) >> KAWPOW_BARRETT_SHIFT; \
-//     _ia -= _iq * KAWPOW_DAG_NUM_ITEMS_DIV;                                    \
-//     if (_ia >= KAWPOW_DAG_NUM_ITEMS_DIV) _ia -= KAWPOW_DAG_NUM_ITEMS_DIV;     \
-//     uint64_t _boff = ((uint64_t)_ia << 8) | (((lane_id ^ (LOOP)) & 15u) << 4);\
-//     (DG) = load_dag128((const char*)d_dag + _boff);                          \
-// } while(0)
-
+#define PROGPOW_STORE_COOP(MIX, VALUE, LOOP) do {                                    \
+    uint32_t _sglane = lane_id & 15u;                                                \
+    uint32_t _isrc   = (threadIdx.x & ~15u) | ((LOOP) & 15u);                        \
+    uint32_t _seed   = PROGPOW_BPERMUTE(_isrc, (MIX)[1]);                            \
+    uint32_t _q      = __umulhi(_seed, KAWPOW_BARRETT_M) >> KAWPOW_BARRETT_SHIFT;    \
+    _seed -= _q * KAWPOW_DAG_NUM_ITEMS_DIV;                                          \
+    if (_seed >= KAWPOW_DAG_NUM_ITEMS_DIV) _seed -= KAWPOW_DAG_NUM_ITEMS_DIV;        \
+    uint64_t _base   = ((uint64_t)_seed << 8);                                       \
+    uint64_t _off    = ((uint64_t)((_sglane ^ (LOOP)) & 15u)) << 4;                  \
+    uint8_t* _ptr    = reinterpret_cast<uint8_t*>(d_dag) + _base + _off;             \
+    store_glc_slc(reinterpret_cast<uint64_t*>(_ptr), VALUE);                         \
+} while(0)
 
 // ===========================================================================
 // Shared helpers: L1 cache cooperative fill + main loop + mix reduction
@@ -255,9 +363,6 @@ __device__ __forceinline__ void progpow_main_loop(
     uint32_t* mix,
     const uint32_t* __restrict__ l1_cache,
     const uint32_t* __restrict__ d_dag,
-    __amdgpu_buffer_rsrc_t rsrc_lo,
-    __amdgpu_buffer_rsrc_t rsrc_hi,
-    uint64_t split,
     uint32_t lane_id)
 {
     dag128_u64 _dg0, _dg1;
@@ -279,9 +384,6 @@ __device__ __forceinline__ void progpow_main_loop_2way(
     uint32_t* m0, uint32_t* m1,
     const uint32_t* __restrict__ l1_cache,
     const uint32_t* __restrict__ d_dag,
-    __amdgpu_buffer_rsrc_t rsrc_lo,
-    __amdgpu_buffer_rsrc_t rsrc_hi,
-    uint64_t split,
     uint32_t lane_id)
 {
     dag128_u64 _da0, _da1;  // ping-pong buffers for hash 0
@@ -309,9 +411,6 @@ __device__ __forceinline__ void progpow_main_loop_4way(
     uint32_t* m0, uint32_t* m1, uint32_t* m2, uint32_t* m3,
     const uint32_t* __restrict__ l1_cache,
     const uint32_t* __restrict__ d_dag,
-    __amdgpu_buffer_rsrc_t rsrc_lo,
-    __amdgpu_buffer_rsrc_t rsrc_hi,
-    uint64_t split,
     uint32_t lane_id)
 {
     dag128_u64 _da0, _da1;  // ping-pong for hash 0
@@ -388,13 +487,6 @@ void kawpow_hash_kernel(
 
     cooperative_l1_fill(l1_cache, d_l1_cache);
 
-    const uint64_t dag_bytes   = (uint64_t)KAWPOW_DAG_NUM_ITEMS_DIV << 8;
-    const uint64_t split       = (dag_bytes + 255) >> 1 & ~0xFFull;      // 256-aligned midpoint
-    const __amdgpu_buffer_rsrc_t rsrc_lo =
-        __builtin_amdgcn_make_buffer_rsrc((void*)d_dag,               0, 0xFFFFFFFFu, KAWPOW_SRD_FLAGS);
-    const __amdgpu_buffer_rsrc_t rsrc_hi =
-        __builtin_amdgcn_make_buffer_rsrc((void*)((const char*)d_dag + split), 0, 0xFFFFFFFFu, KAWPOW_SRD_FLAGS);
-
     // Sandwich keccak + fill_mix between L1 fill and barrier to hide LDS write latency.
     // No early return — all threads must reach __syncthreads().
     const bool valid = (hash_id < batch_size);
@@ -440,7 +532,7 @@ void kawpow_hash_kernel(
     if (!valid) return;
 
     // ---- Phase 2–4: main loop + reduction ----
-    progpow_main_loop(mix, l1_cache, d_dag, rsrc_lo, rsrc_hi, split, lane_id);
+    progpow_main_loop(mix, l1_cache, d_dag, lane_id);
 
     uint32_t digest[8];
     progpow_reduce(mix, digest);
@@ -574,13 +666,6 @@ void kawpow_progpow_kernel(
 
     cooperative_l1_fill(l1_cache, d_l1_cache);
 
-    const uint64_t dag_bytes   = (uint64_t)KAWPOW_DAG_NUM_ITEMS_DIV << 8;
-    const uint64_t split       = (dag_bytes + 255) >> 1 & ~0xFFull;      // 256-aligned midpoint
-    const __amdgpu_buffer_rsrc_t rsrc_lo =
-        __builtin_amdgcn_make_buffer_rsrc((void*)d_dag,               0, 0xFFFFFFFFu, KAWPOW_SRD_FLAGS);
-    const __amdgpu_buffer_rsrc_t rsrc_hi =
-        __builtin_amdgcn_make_buffer_rsrc((void*)((const char*)d_dag + split), 0, 0xFFFFFFFFu, KAWPOW_SRD_FLAGS);
-
     const bool valid = (hash_id < batch_size);
     uint32_t mix[PROGPOW_REGS];
     uint32_t base = 0;
@@ -595,7 +680,7 @@ void kawpow_progpow_kernel(
 
     if (!valid) return;
 
-    progpow_main_loop(mix, l1_cache, d_dag, rsrc_lo, rsrc_hi, split, lane_id);
+    progpow_main_loop(mix, l1_cache, d_dag, lane_id);
 
     uint32_t digest[8];
     progpow_reduce(mix, digest);
@@ -627,18 +712,11 @@ void kawpow_progpow_global_kernel(
     uint32_t base = hash_id * 16u;
     uint64_t seed = (uint64_t)d_intermediate[base] | ((uint64_t)d_intermediate[base + 1] << 32);
 
-    const uint64_t dag_bytes   = (uint64_t)KAWPOW_DAG_NUM_ITEMS_DIV << 8;
-    const uint64_t split       = (dag_bytes + 255) >> 1 & ~0xFFull;      // 256-aligned midpoint
-    const __amdgpu_buffer_rsrc_t rsrc_lo =
-        __builtin_amdgcn_make_buffer_rsrc((void*)d_dag,               0, 0xFFFFFFFFu, KAWPOW_SRD_FLAGS);
-    const __amdgpu_buffer_rsrc_t rsrc_hi =
-        __builtin_amdgcn_make_buffer_rsrc((void*)((const char*)d_dag + split), 0, 0xFFFFFFFFu, KAWPOW_SRD_FLAGS);
-
     uint32_t mix[PROGPOW_REGS];
     fill_mix(seed, lane_id, mix);
 
     // Use d_l1_cache directly — no LDS, rely on hardware L1 cache
-    progpow_main_loop(mix, d_l1_cache, d_dag, rsrc_lo, rsrc_hi, split, lane_id);
+    progpow_main_loop(mix, d_l1_cache, d_dag, lane_id);
 
     uint32_t digest[8];
     progpow_reduce(mix, digest);
@@ -646,6 +724,33 @@ void kawpow_progpow_global_kernel(
     // Write digest to intermediate buffer (lane 0 only — all lanes computed same digest)
     if (lane_id == 0) {
         store_nt_u32x8(d_intermediate + base + 8, digest);
+    }
+}
+
+__device__ __forceinline__ void store_nt_u32(uint32_t* ptr, uint32_t val)
+{
+    asm volatile(
+        "global_store_dword %0, %1, off glc dlc"
+        :
+        : "v"(ptr), "v"(val));
+}
+
+__device__ __forceinline__ void store_digest_coop_16x8_u32(
+    uint32_t* dst0,
+    const uint32_t digest0[8],
+    uint32_t* dst1,
+    const uint32_t digest1[8],
+    bool have_h1)
+{
+    const uint32_t global_id = blockIdx.x * blockDim.x + threadIdx.x;
+    const uint32_t lane_id   = global_id & 0xF;
+    const uint32_t l16 = lane_id & 15u;
+
+    if (l16 < 8u) {
+        store_nt_u32(&dst0[l16], digest0[l16]);
+    } else if (have_h1) {
+        const uint32_t l8 = l16 - 8u;
+        store_nt_u32(&dst1[l8], digest1[l8]);
     }
 }
 
@@ -671,13 +776,6 @@ void kawpow_progpow_kernel_2way(
 
     cooperative_l1_fill(l1_cache, d_l1_cache);
 
-    const uint64_t dag_bytes   = (uint64_t)KAWPOW_DAG_NUM_ITEMS_DIV << 8;
-    const uint64_t split       = (dag_bytes + 255) >> 1 & ~0xFFull;      // 256-aligned midpoint
-    const __amdgpu_buffer_rsrc_t rsrc_lo =
-        __builtin_amdgcn_make_buffer_rsrc((void*)d_dag,               0, 0xFFFFFFFFu, KAWPOW_SRD_FLAGS);
-    const __amdgpu_buffer_rsrc_t rsrc_hi =
-        __builtin_amdgcn_make_buffer_rsrc((void*)((const char*)d_dag + split), 0, 0xFFFFFFFFu, KAWPOW_SRD_FLAGS);
-
     const bool valid = (hash_id_0 < batch_size);
 
     uint32_t m0[PROGPOW_REGS];
@@ -685,17 +783,19 @@ void kawpow_progpow_kernel_2way(
     bool have_h1 = false;
 
     if (valid) {
-        {
-            uint32_t base = hash_id_0 * 16u;
-            uint64_t seed = (uint64_t)d_intermediate[base] | ((uint64_t)d_intermediate[base + 1] << 32);
-            fill_mix(seed, lane_id, m0);
-        }
+        uint32_t base0 = hash_id_0 * 16u;
+        uint64_t seed0 = (uint64_t)d_intermediate[base0] |
+                        ((uint64_t)d_intermediate[base0 + 1] << 32);
 
         have_h1 = (hash_id_0 + 1 < batch_size);
         if (have_h1) {
-            uint32_t base = (hash_id_0 + 1) * 16u;
-            uint64_t seed = (uint64_t)d_intermediate[base] | ((uint64_t)d_intermediate[base + 1] << 32);
-            fill_mix(seed, lane_id, m1);
+            uint32_t base1 = (hash_id_0 + 1) * 16u;
+            uint64_t seed1 = (uint64_t)d_intermediate[base1] |
+                            ((uint64_t)d_intermediate[base1 + 1] << 32);
+
+            fill_mix_2way(seed0, seed1, lane_id, m0, m1);
+        } else {
+            fill_mix(seed0, lane_id, m0);
         }
     }
 
@@ -704,27 +804,49 @@ void kawpow_progpow_kernel_2way(
     if (!valid) return;
 
     if (have_h1) {
-        progpow_main_loop_2way(m0, m1, l1_cache, d_dag, rsrc_lo, rsrc_hi, split, lane_id);
+        progpow_main_loop_2way(m0, m1, l1_cache, d_dag, lane_id);
     } else {
-        progpow_main_loop(m0, l1_cache, d_dag, rsrc_lo, rsrc_hi, split, lane_id);
+        progpow_main_loop(m0, l1_cache, d_dag, lane_id);
     }
 
-    // Reduce and write hash 0
     {
-        uint32_t digest[8];
-        progpow_reduce(m0, digest);
-        if (lane_id == 0) {
-            store_nt_u32x8(d_intermediate + hash_id_0 * 16u + 8, digest);
-        }
-    }
+        uint32_t digest0[8];
+        progpow_reduce(m0, digest0);
 
-    // Reduce and write hash 1
-    if (have_h1) {
-        uint32_t digest[8];
-        progpow_reduce(m1, digest);
-        if (lane_id == 0) {
-            store_nt_u32x8(d_intermediate + (hash_id_0 + 1) * 16u + 8, digest);
+        uint32_t digest1[8];
+        if (have_h1) {
+            progpow_reduce(m1, digest1);
         }
+
+        store_digest_coop_16x8_u32(
+            d_intermediate + hash_id_0 * 16u + 8,
+            digest0,
+            d_intermediate + (hash_id_0 + 1) * 16u + 8,
+            digest1,
+            have_h1);
+    }
+}
+
+__device__ __forceinline__ void store_digest_coop_32x8_u32(
+    uint32_t* dst0, const uint32_t digest0[8],
+    uint32_t* dst1, const uint32_t digest1[8],
+    uint32_t* dst2, const uint32_t digest2[8],
+    uint32_t* dst3, const uint32_t digest3[8],
+    uint32_t num_hashes)
+{
+    const uint32_t lane_id = threadIdx.x & 31u;
+
+    if (lane_id < 8u) {
+        store_nt_u32(&dst0[lane_id], digest0[lane_id]);
+    } else if (lane_id < 16u && num_hashes >= 2) {
+        const uint32_t l = lane_id - 8u;
+        store_nt_u32(&dst1[l], digest1[l]);
+    } else if (lane_id < 24u && num_hashes >= 3) {
+        const uint32_t l = lane_id - 16u;
+        store_nt_u32(&dst2[l], digest2[l]);
+    } else if (lane_id < 32u && num_hashes >= 4) {
+        const uint32_t l = lane_id - 24u;
+        store_nt_u32(&dst3[l], digest3[l]);
     }
 }
 
@@ -732,7 +854,7 @@ void kawpow_progpow_kernel_2way(
 // Split kernel B-4way: ProgPoW main loop — 4-way hash interleaving
 // Each wavefront group processes 4 hashes for maximum DAG latency hiding.
 // ---------------------------------------------------------------------------
-extern "C" __global__
+extern "C" __global__ extern "C" __global__ __launch_bounds__(256, 2)
 void kawpow_progpow_kernel_4way(
     const uint32_t* __restrict__ d_dag,
     uint32_t                     batch_size,
@@ -748,14 +870,6 @@ void kawpow_progpow_kernel_4way(
     uint32_t* __restrict__ l1_cache = lds_raw;
 
     cooperative_l1_fill(l1_cache, d_l1_cache);
-
-    const uint64_t dag_bytes   = (uint64_t)KAWPOW_DAG_NUM_ITEMS_DIV << 8;
-    const uint64_t split       = (dag_bytes + 255) >> 1 & ~0xFFull;      // 256-aligned midpoint
-        
-    const __amdgpu_buffer_rsrc_t rsrc_lo =
-        __builtin_amdgcn_make_buffer_rsrc((void*)d_dag,               0, 0xFFFFFFFFu, KAWPOW_SRD_FLAGS);
-    const __amdgpu_buffer_rsrc_t rsrc_hi =
-        __builtin_amdgcn_make_buffer_rsrc((void*)((const char*)d_dag + split), 0, 0xFFFFFFFFu, KAWPOW_SRD_FLAGS);
 
     const bool valid = (hash_id_0 < batch_size);
 
@@ -793,44 +907,51 @@ void kawpow_progpow_kernel_4way(
 
     // Dispatch to best N-way variant based on remaining hashes
     if (num_hashes >= 4) {
-        progpow_main_loop_4way(m0, m1, m2, m3, l1_cache, d_dag, rsrc_lo, rsrc_hi, split, lane_id);
+        progpow_main_loop_4way(m0, m1, m2, m3, l1_cache, d_dag, lane_id);
     } else if (num_hashes == 3) {
         // 2-way + 1-way — no 3-way variant to avoid code bloat
-        progpow_main_loop_2way(m0, m1, l1_cache, d_dag, rsrc_lo, rsrc_hi, split, lane_id);
-        progpow_main_loop(m2, l1_cache, d_dag, rsrc_lo, rsrc_hi, split, lane_id);
+        progpow_main_loop_2way(m0, m1, l1_cache, d_dag, lane_id);
+        progpow_main_loop(m2, l1_cache, d_dag, lane_id);
     } else if (num_hashes == 2) {
-        progpow_main_loop_2way(m0, m1, l1_cache, d_dag, rsrc_lo, rsrc_hi, split, lane_id);
+        progpow_main_loop_2way(m0, m1, l1_cache, d_dag, lane_id);
     } else {
-        progpow_main_loop(m0, l1_cache, d_dag, rsrc_lo, rsrc_hi, split, lane_id);
+        progpow_main_loop(m0, l1_cache, d_dag, lane_id);
     }
 
-    // Reduce and write all hashes (non-temporal to preserve DAG in L2)
+    // Reduce and write all hashes
     {
-        uint32_t digest[8];
-        progpow_reduce(m0, digest);
-        if (lane_id == 0) {
-            store_nt_u32x8(d_intermediate + hash_id_0 * 16u + 8, digest);
+        uint32_t digest0[8];
+        progpow_reduce(m0, digest0);
+
+        uint32_t digest1[8];
+        if (num_hashes >= 2) {
+            progpow_reduce(m1, digest1);
         }
-    }
-    if (num_hashes >= 2) {
-        uint32_t digest[8];
-        progpow_reduce(m1, digest);
-        if (lane_id == 0) {
-            store_nt_u32x8(d_intermediate + (hash_id_0 + 1) * 16u + 8, digest);
+
+        uint32_t digest2[8];
+        if (num_hashes >= 3) {
+            progpow_reduce(m2, digest2);
         }
-    }
-    if (num_hashes >= 3) {
-        uint32_t digest[8];
-        progpow_reduce(m2, digest);
-        if (lane_id == 0) {
-            store_nt_u32x8(d_intermediate + (hash_id_0 + 2) * 16u + 8, digest);
+
+        uint32_t digest3[8];
+        if (num_hashes >= 4) {
+            progpow_reduce(m3, digest3);
         }
-    }
-    if (num_hashes >= 4) {
-        uint32_t digest[8];
-        progpow_reduce(m3, digest);
-        if (lane_id == 0) {
-            store_nt_u32x8(d_intermediate + (hash_id_0 + 3) * 16u + 8, digest);
+
+        store_digest_coop_16x8_u32(
+            d_intermediate + hash_id_0 * 16u + 8,
+            digest0,
+            d_intermediate + (hash_id_0 + 1) * 16u + 8,
+            digest1,
+            num_hashes >= 2);
+
+        if (num_hashes >= 3) {
+            store_digest_coop_16x8_u32(
+                d_intermediate + (hash_id_0 + 2) * 16u + 8,
+                digest2,
+                d_intermediate + (hash_id_0 + 3) * 16u + 8,
+                digest3,
+                num_hashes >= 4);
         }
     }
 }
