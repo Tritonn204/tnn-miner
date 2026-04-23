@@ -18,6 +18,7 @@
 #include <string>
 #include <array>
 #include <algorithm>
+#include <vector>
 
 #include <ethash/kawpow_coins.h>
 
@@ -31,6 +32,21 @@ static constexpr uint32_t CNT_MATH           = 18;
 static constexpr uint32_t NUM_WORDS_PER_LANE = 4;   // sizeof(hash2048) / (4 * 16)
 static constexpr uint32_t FNV_PRIME          = 0x01000193u;
 static constexpr uint32_t FNV_OFFSET_BASIS   = 0x811c9dc5u;
+
+// ---------------------------------------------------------------------------
+// Small bitmask helpers for dependency slicing
+// ---------------------------------------------------------------------------
+inline uint32_t bit(uint32_t r) {
+    return 1u << r;
+}
+
+inline uint32_t mask1(uint32_t a) {
+    return bit(a);
+}
+
+inline uint32_t mask2(uint32_t a, uint32_t b) {
+    return bit(a) | bit(b);
+}
 
 // ---------------------------------------------------------------------------
 // Host-side FNV-1a
@@ -57,6 +73,20 @@ struct Kiss99 {
 };
 
 // ---------------------------------------------------------------------------
+// Body op + split containers
+// ---------------------------------------------------------------------------
+struct BodyOp {
+    uint32_t reads_mask = 0;
+    uint32_t writes_mask = 0;
+    std::string code;
+};
+
+struct BodySplit {
+    std::vector<BodyOp> pre;
+    std::vector<BodyOp> post;
+};
+
+// ---------------------------------------------------------------------------
 // Host-side mix_rng_state — mirrors cpp-kawpow progpow.cpp::mix_rng_state
 //
 // CRITICAL: dst and src are shuffled in the SAME loop, interleaving RNG calls.
@@ -74,9 +104,9 @@ struct MixRngState {
         uint32_t seed_lo = static_cast<uint32_t>(period);
         uint32_t seed_hi = static_cast<uint32_t>(period >> 32);
 
-        uint32_t z    = fnv1a(FNV_OFFSET_BASIS, seed_lo);
-        uint32_t w    = fnv1a(z, seed_hi);
-        uint32_t jsr  = fnv1a(w, seed_lo);
+        uint32_t z     = fnv1a(FNV_OFFSET_BASIS, seed_lo);
+        uint32_t w     = fnv1a(z, seed_hi);
+        uint32_t jsr   = fnv1a(w, seed_lo);
         uint32_t jcong = fnv1a(jsr, seed_hi);
         rng = {z, w, jsr, jcong};
 
@@ -99,7 +129,7 @@ struct MixRngState {
 // ---------------------------------------------------------------------------
 // ProgramOps — collected RNG-derived operations for a given period.
 // Separates RNG replay from code emission, enabling multiple output formats
-// (macro, expanded, GLC) from the same operation sequence.
+// from the same operation sequence.
 // ---------------------------------------------------------------------------
 struct ProgramOps {
     struct CacheOp { uint32_t src, dst, sel; };
@@ -145,15 +175,20 @@ inline ProgramOps collect_ops(int block_number) {
 }
 
 // ---------------------------------------------------------------------------
-// Code emission helpers — inline the operations for better GPU perf
+// Code emission helpers
 // ---------------------------------------------------------------------------
 
+// Parameterized register access: (mix)[r]
+inline std::string reg(const std::string& mix, uint32_t r) {
+    return "(" + mix + ")[" + std::to_string(r) + "]";
+}
+
+// Shorthand for expanded mode with "mix" array name
+inline std::string reg(uint32_t r) {
+    return "mix[" + std::to_string(r) + "]";
+}
+
 // Emit merge: a = f(a, b, sel)
-// Must match cpp-kawpow random_merge() exactly:
-//   case 0: a = (a * 33) + b
-//   case 1: a = (a ^ b) * 33
-//   case 2: a = rotl32(a, x) ^ b    where x = (sel>>16)%31 + 1
-//   case 3: a = rotr32(a, x) ^ b
 inline std::string emit_merge(const std::string& a, const std::string& b, uint32_t sel) {
     uint32_t x = ((sel >> 16) % 31) + 1;
     switch (sel % 4) {
@@ -166,7 +201,6 @@ inline std::string emit_merge(const std::string& a, const std::string& b, uint32
 }
 
 // Emit math: result = f(a, b, sel)
-// Must match cpp-kawpow random_math() exactly
 inline std::string emit_math(const std::string& a, const std::string& b, uint32_t sel) {
     switch (sel % 11) {
     case  0: return a + " + " + b;
@@ -184,51 +218,14 @@ inline std::string emit_math(const std::string& a, const std::string& b, uint32_
     return {};
 }
 
-// Parameterized register access: (mix)[r]
-inline std::string reg(const std::string& mix, uint32_t r) {
-    return "(" + mix + ")[" + std::to_string(r) + "]";
-}
-
-// Shorthand for expanded mode with "mix" array name
-inline std::string reg(uint32_t r) { return "mix[" + std::to_string(r) + "]"; }
-
-// ---------------------------------------------------------------------------
-// Fused math+merge for compound instruction patterns.
-// Returns empty string if no fusion applies (caller falls back to _m temp).
-//
-// IMPORTANT: never strength-reduce * 33u here — the compiler does it better.
-// Only fuse when the combined expression exposes a multi-operand ISA pattern
-// that the _m temp would obscure.
-//
-// v_add3_u32 patterns (three-way add, AMD RDNA + NVIDIA):
-//   math(add:0)       + merge(mul33+add:0): (dst*33) + a + b
-//   math(clz+clz:9)   + merge(mul33+add:0): (dst*33) + __clz(a) + __clz(b)
-//   math(popc+popc:10) + merge(mul33+add:0): (dst*33) + __popc(a) + __popc(b)
-//
-// v_xor3_b32 patterns (three-way xor, AMD RDNA + NVIDIA):
-//   math(xor:8) + merge(rotl^:2):    rotl32(dst, x) ^ a ^ b
-//   math(xor:8) + merge(rotr^:3):    rotr32(dst, x) ^ a ^ b
-//   math(xor:8) + merge(xor_mul33:1): (dst ^ a ^ b) * 33
-//
-// lop3.b32 patterns (NVIDIA only — 3-input boolean in 1 instruction):
-//   math(and:6) + merge(rotl^:2/rotr^:3): rot(dst,x) ^ (a & b)  → lop3 0x78
-//   math(or:7)  + merge(rotl^:2/rotr^:3): rot(dst,x) ^ (a | b)  → lop3 0x1E
-//   math(and:6) + merge(xor_mul33:1):     (dst ^ (a & b)) * 33   → lop3 0x78
-//   math(or:7)  + merge(xor_mul33:1):     (dst ^ (a | b)) * 33   → lop3 0x1E
-// ---------------------------------------------------------------------------
-
 // Helper: emit NVIDIA lop3.b32 inline asm, guarded by #ifndef __HIP_PLATFORM_AMD__
-// lop3.b32 computes an arbitrary 3-input boolean function in 1 instruction.
-// truth_table: 8-bit LUT index (e.g. 0x78 = P^(Q&R), 0x1E = P^(Q|R))
 inline std::string emit_lop3(const std::string& dst,
-                              const std::string& a,
-                              const std::string& b,
-                              const std::string& c,
-                              uint32_t truth_table) {
+                             const std::string& a,
+                             const std::string& b,
+                             const std::string& c,
+                             uint32_t truth_table) {
     char tt[8];
     std::snprintf(tt, sizeof(tt), "0x%02x", truth_table);
-    // NVIDIA path: single lop3 instruction
-    // AMD path: expand to individual ops (compiler picks best encoding)
     return "{ uint32_t _t;\n"
            "#ifndef __HIP_PLATFORM_AMD__\n"
            "        asm(\"lop3.b32 %0, %1, %2, %3, " + std::string(tt) + ";\" "
@@ -246,41 +243,43 @@ inline std::string try_fuse_math_merge(const std::string& dst,
                                        const std::string& src2,
                                        uint32_t math_sel,
                                        uint32_t merge_sel) {
-    // No fusion — always use _m temp, let the compiler decide
+    (void)dst; (void)src1; (void)src2; (void)math_sel; (void)merge_sel;
     return {};
 }
 
 // ---------------------------------------------------------------------------
-// emit_body — generate the cache+math body for a ProgPoW iteration.
+// build_body_ops — generate structured cache+math body ops
 //
-// Parameters:
-//   ops  — collected RNG-derived operations
-//   mix  — name of the mix array (e.g. "MIX" for macro, "mix" for expanded)
-//   le   — line ending ("\n" for expanded, " \\\n" for macro continuation)
+// Important: temp producers (_c0/_c1/_m/_m1) are grouped with the merge that
+// consumes them, so the dependency slicer cannot separate them illegally.
 // ---------------------------------------------------------------------------
-inline std::string emit_body(const ProgramOps& ops, const std::string& mix,
-                              const std::string& le) {
+inline std::vector<BodyOp> build_body_ops(const ProgramOps& ops, const std::string& mix) {
     using MathOp = ProgramOps::MathOp;
+    std::vector<BodyOp> out;
+    out.reserve(CNT_CACHE + CNT_MATH + 8);
 
     auto r = [&](uint32_t idx) -> std::string { return reg(mix, idx); };
 
-    auto emit_math_block = [&](std::string& out, const MathOp& m) {
+    auto push_raw = [&](uint32_t reads, uint32_t writes, std::string code) {
+        out.push_back({reads, writes, std::move(code)});
+    };
+
+    auto emit_math_block = [&](const MathOp& m) {
         std::string fused = try_fuse_math_merge(r(m.dst), r(m.src1), r(m.src2), m.sel1, m.sel2);
         if (!fused.empty()) {
-            out += "    " + fused + le;
+            push_raw(mask1(m.dst) | mask2(m.src1, m.src2), mask1(m.dst),
+                     "    " + fused + ";");
         } else {
-            out += "    _m = " + emit_math(r(m.src1), r(m.src2), m.sel1) + ";" + le;
-            out += "    " + emit_merge(r(m.dst), "_m", m.sel2) + le;
+            std::string code;
+            code += "    _m = " + emit_math(r(m.src1), r(m.src2), m.sel1) + ";\n";
+            code += "    " + emit_merge(r(m.dst), "_m", m.sel2);
+            push_raw(mask1(m.dst) | mask2(m.src1, m.src2), mask1(m.dst), std::move(code));
         }
     };
 
-    std::string body;
-    body.reserve(6144);
     constexpr int MAX_K = 2;
     constexpr int max_ops = (CNT_CACHE > CNT_MATH) ? CNT_CACHE : CNT_MATH;
 
-    // Check if k consecutive cache reads are safe to issue back-to-back.
-    // Safe when: cache[i+j].src is NOT written by any prior cache[i+p].merge or math[i+p].
     auto can_pair_k = [&](int i, int k) -> bool {
         if (i + k > (int)CNT_CACHE) return false;
         for (int j = 1; j < k; ++j) {
@@ -293,7 +292,8 @@ inline std::string emit_body(const ProgramOps& ops, const std::string& mix,
         return true;
     };
 
-    body += "    uint32_t _c0, _c1, _m, _m1;" + le;
+    // temp decl, no deps
+    push_raw(0, 0, "    uint32_t _c0, _c1, _m, _m1;");
 
     int i = 0;
     while (i < max_ops) {
@@ -306,50 +306,124 @@ inline std::string emit_body(const ProgramOps& ops, const std::string& mix,
         }
 
         if (k >= 2) {
-            // Issue k LDS reads up front
             for (int j = 0; j < k; ++j) {
-                body += "    _c" + std::to_string(j) + " = l1_cache["
-                      + r(ops.cache_ops[i + j].src) + " & 0xFFFu];" + le;
-            }
-            // Interleave merges and maths in original order
-            for (int j = 0; j < k; ++j) {
-                body += "    " + emit_merge(r(ops.cache_ops[i + j].dst),
-                                            "_c" + std::to_string(j),
-                                            ops.cache_ops[i + j].sel) + le;
-                if (i + j < (int)CNT_MATH) emit_math_block(body, ops.math_ops[i + j]);
+                uint32_t src = ops.cache_ops[i + j].src;
+                uint32_t dst = ops.cache_ops[i + j].dst;
+
+                std::string code;
+                code += "    _c" + std::to_string(j) + " = l1_cache[" + r(src) + " & 0xFFFu];\n";
+                code += "    " + emit_merge(r(dst), "_c" + std::to_string(j), ops.cache_ops[i + j].sel);
+
+                push_raw(mask1(src) | mask1(dst), mask1(dst), std::move(code));
+
+                if (i + j < (int)CNT_MATH) emit_math_block(ops.math_ops[i + j]);
             }
             i += k;
         } else if (i >= (int)CNT_CACHE && i + 1 < (int)CNT_MATH) {
-            // Tail: pure math ops — pair adjacent ops for VOPD packing
             const auto& m0 = ops.math_ops[i];
             const auto& m1 = ops.math_ops[i + 1];
             bool can_pair = (m1.src1 != m0.dst && m1.src2 != m0.dst
                           && m0.src1 != m1.dst && m0.src2 != m1.dst
                           && m0.dst != m1.dst);
             if (can_pair) {
-                body += "    _m = " + emit_math(r(m0.src1), r(m0.src2), m0.sel1) + ";" + le;
-                body += "    _m1 = " + emit_math(r(m1.src1), r(m1.src2), m1.sel1) + ";" + le;
-                body += "    " + emit_merge(r(m0.dst), "_m", m0.sel2) + le;
-                body += "    " + emit_merge(r(m1.dst), "_m1", m1.sel2) + le;
+                std::string code0;
+                code0 += "    _m = " + emit_math(r(m0.src1), r(m0.src2), m0.sel1) + ";\n";
+                code0 += "    " + emit_merge(r(m0.dst), "_m", m0.sel2);
+                push_raw(mask1(m0.dst) | mask2(m0.src1, m0.src2), mask1(m0.dst), std::move(code0));
+
+                std::string code1;
+                code1 += "    _m1 = " + emit_math(r(m1.src1), r(m1.src2), m1.sel1) + ";\n";
+                code1 += "    " + emit_merge(r(m1.dst), "_m1", m1.sel2);
+                push_raw(mask1(m1.dst) | mask2(m1.src1, m1.src2), mask1(m1.dst), std::move(code1));
+
                 i += 2;
             } else {
-                emit_math_block(body, m0);
+                emit_math_block(m0);
                 ++i;
             }
         } else {
-            // 1-way fallback
             if (i < (int)CNT_CACHE) {
-                body += "    _c0 = l1_cache[" + r(ops.cache_ops[i].src) + " & 0xFFFu];" + le;
-                body += "    " + emit_merge(r(ops.cache_ops[i].dst), "_c0", ops.cache_ops[i].sel) + le;
+                uint32_t src = ops.cache_ops[i].src;
+                uint32_t dst = ops.cache_ops[i].dst;
+
+                std::string code;
+                code += "    _c0 = l1_cache[" + r(src) + " & 0xFFFu];\n";
+                code += "    " + emit_merge(r(dst), "_c0", ops.cache_ops[i].sel);
+
+                push_raw(mask1(src) | mask1(dst), mask1(dst), std::move(code));
             }
-            if (i < (int)CNT_MATH) emit_math_block(body, ops.math_ops[i]);
+            if (i < (int)CNT_MATH) emit_math_block(ops.math_ops[i]);
             ++i;
         }
+    }
+
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// split_body_for_issue — backward-slice body to the minimal set required to
+// produce required_reg (currently MIX[0] for ISSUE_DAG)
+// ---------------------------------------------------------------------------
+inline BodySplit split_body_for_issue(const std::vector<BodyOp>& ops, uint32_t required_reg) {
+    BodySplit s;
+    if (ops.empty()) return s;
+
+    std::vector<bool> keep(ops.size(), false);
+    uint32_t needed = bit(required_reg);
+
+    for (int i = (int)ops.size() - 1; i >= 0; --i) {
+        if (ops[i].writes_mask & needed) {
+            keep[i] = true;
+            needed &= ~ops[i].writes_mask;
+            needed |= ops[i].reads_mask;
+        }
+    }
+
+    for (size_t i = 0; i < ops.size(); ++i) {
+        if (!keep[i] && ops[i].writes_mask == 0 && ops[i].reads_mask == 0) {
+            keep[i] = true;
+        }
+    }
+
+    for (size_t i = 0; i < ops.size(); ++i) {
+        if (keep[i]) s.pre.push_back(ops[i]);
+        else         s.post.push_back(ops[i]);
+    }
+
+    return s;
+}
+
+// Emit ops into either expanded text or macro text.
+// Important: embedded newlines inside BodyOp.code must also receive the
+// requested line ending, or macro emission will break.
+inline std::string emit_body_ops(const std::vector<BodyOp>& ops, const std::string& le) {
+    std::string body;
+    body.reserve(4096);
+
+    for (const auto& op : ops) {
+        for (char ch : op.code) {
+            if (ch == '\n') body += le;
+            else            body += ch;
+        }
+        body += le;
     }
 
     return body;
 }
 
+// ---------------------------------------------------------------------------
+// emit_body — full cache+math body
+// ---------------------------------------------------------------------------
+inline std::string emit_body(const ProgramOps& ops, const std::string& mix,
+                             const std::string& le) {
+    return emit_body_ops(build_body_ops(ops, mix), le);
+}
+
+// ---------------------------------------------------------------------------
+// DAG helpers
+// ---------------------------------------------------------------------------
+
+// Full capture, mainly for experimentation / dump helpers
 inline std::string emit_dag_capture(const std::string& dg, const std::string& le) {
     std::string c;
     c += "    uint32_t _w0 = dag_word0(" + dg + ");" + le;
@@ -359,42 +433,37 @@ inline std::string emit_dag_capture(const std::string& dg, const std::string& le
     return c;
 }
 
-// ---------------------------------------------------------------------------
-// emit_dag_merge_pre — merge[0] only (finalizes mix[0] for ISSUE_DAG).
-// Only _r0 is pre-computed here; _r1/_r2/_r3 are deferred to post so
-// they execute after ISSUE_DAG, giving the new load more shadow and
-// freeing 3 VGPRs of live range across the bpermute/Barrett region.
-// ---------------------------------------------------------------------------
-inline std::string emit_dag_capture_pre(const ProgramOps& ops,
-                                        const std::string& mix,
-                                        const std::string& dg,
-                                        const std::string& le) {
+// Compute the future merge[0] result into a temp for early ISSUE_DAG_FROM.
+// This must NOT write MIX[0] yet, because later body ops may still read/write it.
+inline std::string emit_dag_prepare_issue_value(const ProgramOps& ops,
+                                                const std::string& mix,
+                                                const std::string& dg,
+                                                const std::string& le) {
     auto r = [&](uint32_t idx) -> std::string { return reg(mix, idx); };
 
     std::string c;
-
-    // Capture word 0 only
     c += "    uint32_t _w0 = dag_word0(" + dg + ");" + le;
 
-    // Apply merge[0] immediately because it feeds next DAG address via MIX[0]
-    uint32_t mtype0 = ops.dag_sels[0] % 4;
+    // In collect_ops(), dag_dsts[0] is forced to 0, so this is MIX[0]-based.
+    const std::string a = r(ops.dag_dsts[0]);
+    uint32_t sel = ops.dag_sels[0];
+    uint32_t mtype0 = sel % 4;
+
     if (mtype0 == 2 || mtype0 == 3) {
-        uint32_t x = ((ops.dag_sels[0] >> 16) % 31) + 1;
+        uint32_t x = ((sel >> 16) % 31) + 1;
         const char* rot = (mtype0 == 2) ? "rotl32" : "rotr32";
-        c += "    " + r(ops.dag_dsts[0]) + " = " + rot + "("
-          + r(ops.dag_dsts[0]) + ", " + std::to_string(x) + "u) ^ _w0;" + le;
+        c += "    uint32_t _mix0_next = " + std::string(rot) + "("
+          + a + ", " + std::to_string(x) + "u) ^ _w0;" + le;
+    } else if (mtype0 == 0) {
+        c += "    uint32_t _mix0_next = (" + a + " * 33u) + _w0;" + le;
     } else {
-        c += "    " + emit_merge(r(ops.dag_dsts[0]), "_w0", ops.dag_sels[0]) + le;
+        c += "    uint32_t _mix0_next = (" + a + " ^ _w0) * 33u;" + le;
     }
 
     return c;
 }
 
-// ---------------------------------------------------------------------------
-// emit_dag_merge_post — merge[1..3] with inline rotation (no temps).
-// Rotations are computed inline with the XOR — executes after ISSUE_DAG,
-// giving the new load shadow cycles from the rot+xor instructions.
-// ---------------------------------------------------------------------------
+// Capture remaining DAG words after issue
 inline std::string emit_dag_capture_post(const std::string& dg,
                                          const std::string& le) {
     std::string c;
@@ -404,13 +473,20 @@ inline std::string emit_dag_capture_post(const std::string& dg,
     return c;
 }
 
+// Commit the delayed merge[0] result to MIX[0] at the original semantic point
+inline std::string emit_dag_commit_pre(const ProgramOps& ops,
+                                       const std::string& mix,
+                                       const std::string& le) {
+    auto r = [&](uint32_t idx) -> std::string { return reg(mix, idx); };
+    return "    " + r(ops.dag_dsts[0]) + " = _mix0_next;" + le;
+}
+
 inline std::string emit_dag_merge_post(const ProgramOps& ops,
                                        const std::string& mix,
                                        const std::string& le) {
     auto r = [&](uint32_t idx) -> std::string { return reg(mix, idx); };
 
     std::string c;
-
     for (uint32_t i = 1; i < NUM_WORDS_PER_LANE; ++i) {
         std::string field = "_w" + std::to_string(i);
         uint32_t mtype = ops.dag_sels[i] % 4;
@@ -424,7 +500,6 @@ inline std::string emit_dag_merge_post(const ProgramOps& ops,
             c += "    " + emit_merge(r(ops.dag_dsts[i]), field, ops.dag_sels[i]) + le;
         }
     }
-
     return c;
 }
 
@@ -458,10 +533,10 @@ inline std::string emit_dag_merge_post_direct(const ProgramOps& ops,
     auto r = [&](uint32_t idx) -> std::string { return reg(mix, idx); };
 
     std::string c;
-
     for (uint32_t i = 1; i < NUM_WORDS_PER_LANE; ++i) {
         std::string field = "dag_word" + std::to_string(i) + "(" + dg + ")";
         uint32_t mtype = ops.dag_sels[i] % 4;
+
         if (mtype == 2 || mtype == 3) {
             uint32_t x = ((ops.dag_sels[i] >> 16) % 31) + 1;
             const char* rot = (mtype == 2) ? "rotl32" : "rotr32";
@@ -471,7 +546,6 @@ inline std::string emit_dag_merge_post_direct(const ProgramOps& ops,
             c += "    " + emit_merge(r(ops.dag_dsts[i]), field, ops.dag_sels[i]) + le;
         }
     }
-
     return c;
 }
 
@@ -484,19 +558,15 @@ inline std::string emit_dag_merge(const ProgramOps& ops,
 }
 
 // ---------------------------------------------------------------------------
-// generate_program_macro — emit #define PROGPOW_BODY(MIX, DG) macro
-//
-// The macro takes:
-//   MIX — name of the uint32_t[32] mix array
-//   DG  — name of a dag128_u64 variable holding pre-loaded DAG data
-//
-// All temporaries (_c0, _c1, _m, _m1) are scoped inside do{}while(0).
-// The macro references l1_cache from the enclosing function scope.
+// generate_program_macro — emit body macros
 // ---------------------------------------------------------------------------
 inline std::string generate_program_macro(int block_number) {
     auto ops = collect_ops(block_number);
+    auto body_ops = build_body_ops(ops, "MIX");
+    auto split = split_body_for_issue(body_ops, 0);  // early address depends on MIX[0]
+
     char buf[256];
-    snprintf(buf, sizeof(buf),
+    std::snprintf(buf, sizeof(buf),
         "// ProgPoW body macro for period %llu (block %d)\n",
         (unsigned long long)ops.period, block_number);
 
@@ -505,16 +575,18 @@ inline std::string generate_program_macro(int block_number) {
     c += buf;
 
     c += "#define PROGPOW_BODY(MIX, DG) do { \\\n";
-    c += emit_body(ops, "MIX", " \\\n");
+    c += emit_body_ops(body_ops, " \\\n");
     c += emit_dag_merge(ops, "MIX", "DG", " \\\n");
     c += "} while(0)\n";
     c += "\n";
 
     c += "#define PROGPOW_BODY_PIPE(MIX, DG_CUR, DG_NEXT, NEXT_LOOP) do { \\\n";
-    c += emit_body(ops, "MIX", " \\\n");
-    c += emit_dag_capture_pre(ops, "MIX", "DG_CUR", " \\\n");
+    c += emit_body_ops(split.pre, " \\\n");
+    c += emit_dag_prepare_issue_value(ops, "MIX", "DG_CUR", " \\\n");
+    c += "    PROGPOW_ISSUE_DAG_FROM(_mix0_next, DG_NEXT, NEXT_LOOP); \\\n";
+    c += emit_body_ops(split.post, " \\\n");
     c += emit_dag_capture_post("DG_CUR", " \\\n");
-    c += "    PROGPOW_ISSUE_DAG(MIX, DG_NEXT, NEXT_LOOP); \\\n";
+    c += emit_dag_commit_pre(ops, "MIX", " \\\n");
     c += emit_dag_merge_post(ops, "MIX", " \\\n");
     c += "} while(0)\n";
     c += "\n";
@@ -523,13 +595,12 @@ inline std::string generate_program_macro(int block_number) {
 }
 
 // ---------------------------------------------------------------------------
-// generate_program_expanded — expanded body for dump/diagnostic purposes.
-// Uses "mix" and "_dg" as variable names (not macro parameters).
+// generate_program_expanded — expanded body for dump/diagnostic purposes
 // ---------------------------------------------------------------------------
 inline std::string generate_program_expanded(int block_number) {
     auto ops = collect_ops(block_number);
     char buf[256];
-    snprintf(buf, sizeof(buf),
+    std::snprintf(buf, sizeof(buf),
         "    // ProgPoW program for period %llu (block %d)\n",
         (unsigned long long)ops.period, block_number);
 
@@ -538,7 +609,7 @@ inline std::string generate_program_expanded(int block_number) {
     c += buf;
     c += "\n";
     c += emit_body(ops, "mix", "\n");
-    c += "\n    // DAG merge (rotation-first split)\n";
+    c += "\n    // DAG merge (direct)\n";
     c += emit_dag_merge(ops, "mix", "_dg", "\n");
     return c;
 }
@@ -549,17 +620,14 @@ inline std::string generate_program(int block_number) {
 }
 
 // ---------------------------------------------------------------------------
-// inject_coin_padding — replaces /* KAWPOW_COIN_PADDING */ with constexpr scalars
-//
-// Using individual constexpr instead of __constant__ array lets the RTC compiler
-// embed each value as an inline immediate (s_mov_b32 imm) — zero constant-memory loads.
+// inject_coin_padding
 // ---------------------------------------------------------------------------
 inline std::string inject_coin_padding(const std::string& kernel_source,
                                        const kawpow_coin_padding_t& padding) {
     std::string decls;
     char buf[80];
     for (int i = 0; i < 15; ++i) {
-        snprintf(buf, sizeof(buf), "constexpr uint32_t KPAD%d = 0x%08xu;\n", i, padding.words[i]);
+        std::snprintf(buf, sizeof(buf), "constexpr uint32_t KPAD%d = 0x%08xu;\n", i, padding.words[i]);
         decls += buf;
     }
 
@@ -572,14 +640,14 @@ inline std::string inject_coin_padding(const std::string& kernel_source,
 }
 
 // ---------------------------------------------------------------------------
-// inject_dag_constants — replaces /* KAWPOW_DAG_CONSTS */ with compile-time defines
+// inject_dag_constants
 // ---------------------------------------------------------------------------
 inline std::string inject_dag_constants(const std::string& kernel_source,
-                                         uint32_t dag_num_items_div,
-                                         uint32_t barrett_m,
-                                         uint32_t barrett_shift) {
+                                        uint32_t dag_num_items_div,
+                                        uint32_t barrett_m,
+                                        uint32_t barrett_shift) {
     char buf[256];
-    snprintf(buf, sizeof(buf),
+    std::snprintf(buf, sizeof(buf),
         "constexpr uint32_t KAWPOW_DAG_NUM_ITEMS_DIV = %uu;\n"
         "constexpr uint32_t KAWPOW_BARRETT_M         = 0x%08xu;\n"
         "constexpr uint32_t KAWPOW_BARRETT_SHIFT     = %uu;\n",
@@ -594,7 +662,7 @@ inline std::string inject_dag_constants(const std::string& kernel_source,
 }
 
 // ---------------------------------------------------------------------------
-// inject_program — replaces /* PROGPOW_MACROS */ with generated body macros
+// inject_program
 // ---------------------------------------------------------------------------
 inline std::string inject_program(const std::string& kernel_source, int block_number) {
     std::string result = kernel_source;

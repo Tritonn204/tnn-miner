@@ -314,18 +314,20 @@ dag_ptrload_vec4_ptr(const uint8_t* ptr)
     return __builtin_bit_cast(dag128_u64, t);
 }
 
-// ---- issue macro: single-bank first; add the split after this is green ----
-#define PROGPOW_ISSUE_DAG(MIX, DG, LOOP) do {                                        \
+#define PROGPOW_ISSUE_DAG_FROM(MIX0_VAL, DG, LOOP) do {                              \
     uint32_t _isrc = (threadIdx.x & ~15u) | ((LOOP) & 15u);                          \
-    uint32_t _ia   = PROGPOW_BPERMUTE(_isrc, (MIX)[0]);                              \
+    uint32_t _ia   = PROGPOW_BPERMUTE(_isrc, (MIX0_VAL));                            \
     uint32_t _iq   = __umulhi(_ia, KAWPOW_BARRETT_M) >> KAWPOW_BARRETT_SHIFT;        \
-    _ia -= _iq * KAWPOW_DAG_NUM_ITEMS_DIV;                                           \
+    _ia -= _iq * KAWPOW_DAG_NUM_ITEMS_DIV;                                            \
     if (_ia >= KAWPOW_DAG_NUM_ITEMS_DIV) _ia -= KAWPOW_DAG_NUM_ITEMS_DIV;            \
-    uint64_t _boff = ((uint64_t)_ia << 8) +                                          \
-                     (((uint64_t)((lane_id ^ (LOOP)) & 15u)) << 4);                  \
-    const uint8_t* _ptr = reinterpret_cast<const uint8_t*>(d_dag) + _boff;          \
-    (DG) = dag_ptrload_vec4_ptr(_ptr);                                               \
+    uint64_t _boff = ((uint64_t)_ia << 8) +                                           \
+                     (((uint64_t)((lane_id ^ (LOOP)) & 15u)) << 4);                   \
+    const uint8_t* _ptr = reinterpret_cast<const uint8_t*>(d_dag) + _boff;           \
+    (DG) = dag_ptrload_vec4_ptr(_ptr);                                                \
 } while(0)
+
+#define PROGPOW_ISSUE_DAG(MIX, DG, LOOP) \
+    PROGPOW_ISSUE_DAG_FROM((MIX)[0], DG, LOOP)
 
 #define PROGPOW_STORE_COOP(MIX, VALUE, LOOP) do {                                    \
     uint32_t _sglane = lane_id & 15u;                                                \
@@ -339,6 +341,8 @@ dag_ptrload_vec4_ptr(const uint8_t* ptr)
     uint8_t* _ptr    = reinterpret_cast<uint8_t*>(d_dag) + _base + _off;             \
     store_glc_slc(reinterpret_cast<uint64_t*>(_ptr), VALUE);                         \
 } while(0)
+
+
 
 // ===========================================================================
 // Shared helpers: L1 cache cooperative fill + main loop + mix reduction
