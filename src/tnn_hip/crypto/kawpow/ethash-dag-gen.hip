@@ -90,6 +90,7 @@ static __device__ __forceinline__ void fnv1_hash512(
 // Output DAG is written to global memory.
 // ============================================================================
 
+
 extern "C" __global__ void ethash_dag_gen_kernel(
     const uint32_t* __restrict__ light_cache,   // [num_cache_items × 16] uint32
     uint32_t*       __restrict__ dag,            // [dag_items × 64] uint32

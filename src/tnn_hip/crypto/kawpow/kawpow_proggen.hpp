@@ -86,6 +86,12 @@ struct BodySplit {
     std::vector<BodyOp> post;
 };
 
+struct BodyTriSplit {
+    std::vector<BodyOp> critical;
+    std::vector<BodyOp> filler;
+    std::vector<BodyOp> post;
+};
+
 // ---------------------------------------------------------------------------
 // Host-side mix_rng_state — mirrors cpp-kawpow progpow.cpp::mix_rng_state
 //
@@ -174,6 +180,70 @@ inline ProgramOps collect_ops(int block_number) {
     return ops;
 }
 
+inline bool ops_conflict(const BodyOp& a, const BodyOp& b) {
+    return ((a.writes_mask & (b.reads_mask | b.writes_mask)) != 0) ||
+           ((b.writes_mask & (a.reads_mask | a.writes_mask)) != 0);
+}
+
+inline BodyTriSplit split_body_for_dag_issue(const std::vector<BodyOp>& ops, uint32_t reg_idx) {
+    BodyTriSplit s;
+    if (ops.empty()) return s;
+
+    const uint32_t target = bit(reg_idx);
+    int cut = -1;
+
+    for (int i = 0; i < (int)ops.size(); ++i) {
+        if (ops[i].writes_mask & target)
+            cut = i;
+    }
+
+    if (cut < 0) {
+        s.critical = ops;
+        return s;
+    }
+
+    std::vector<uint8_t> selected(cut + 1, 0);
+    uint32_t need = target;
+
+    bool changed = true;
+    while (changed) {
+        changed = false;
+
+        // Backward dependency closure: producers of needed values.
+        for (int i = cut; i >= 0; --i) {
+            if ((ops[i].writes_mask & need) && !selected[i]) {
+                selected[i] = 1;
+                need |= ops[i].reads_mask;
+                changed = true;
+            }
+        }
+
+        // Conservative ordering closure:
+        // if an unselected earlier op would not commute with a selected later op,
+        // include it too so moving selected ops earlier cannot change semantics.
+        for (int i = 0; i <= cut; ++i) {
+            if (selected[i]) continue;
+
+            for (int j = i + 1; j <= cut; ++j) {
+                if (selected[j] && ops_conflict(ops[i], ops[j])) {
+                    selected[i] = 1;
+                    need |= ops[i].reads_mask;
+                    changed = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    for (int i = 0; i <= cut; ++i) {
+        if (selected[i]) s.critical.push_back(ops[i]);
+        else             s.filler.push_back(ops[i]);
+    }
+
+    s.post.insert(s.post.end(), ops.begin() + cut + 1, ops.end());
+    return s;
+}
+
 // ---------------------------------------------------------------------------
 // Code emission helpers
 // ---------------------------------------------------------------------------
@@ -253,6 +323,7 @@ inline std::string try_fuse_math_merge(const std::string& dst,
 // Important: temp producers (_c0/_c1/_m/_m1) are grouped with the merge that
 // consumes them, so the dependency slicer cannot separate them illegally.
 // ---------------------------------------------------------------------------
+template<bool ENABLE_FUSION = false>
 inline std::vector<BodyOp> build_body_ops(const ProgramOps& ops, const std::string& mix) {
     using MathOp = ProgramOps::MathOp;
     std::vector<BodyOp> out;
@@ -265,16 +336,19 @@ inline std::vector<BodyOp> build_body_ops(const ProgramOps& ops, const std::stri
     };
 
     auto emit_math_block = [&](const MathOp& m) {
-        std::string fused = try_fuse_math_merge(r(m.dst), r(m.src1), r(m.src2), m.sel1, m.sel2);
-        if (!fused.empty()) {
-            push_raw(mask1(m.dst) | mask2(m.src1, m.src2), mask1(m.dst),
-                     "    " + fused + ";");
-        } else {
-            std::string code;
-            code += "    _m = " + emit_math(r(m.src1), r(m.src2), m.sel1) + ";\n";
-            code += "    " + emit_merge(r(m.dst), "_m", m.sel2);
-            push_raw(mask1(m.dst) | mask2(m.src1, m.src2), mask1(m.dst), std::move(code));
+        if constexpr (ENABLE_FUSION) {
+            std::string fused = try_fuse_math_merge(r(m.dst), r(m.src1), r(m.src2), m.sel1, m.sel2);
+            if (!fused.empty()) {
+                push_raw(mask1(m.dst) | mask2(m.src1, m.src2), mask1(m.dst),
+                         "    " + fused + ";");
+                return;
+            }
         }
+
+        std::string code;
+        code += "    _m = " + emit_math(r(m.src1), r(m.src2), m.sel1) + ";\n";
+        code += "    " + emit_merge(r(m.dst), "_m", m.sel2);
+        push_raw(mask1(m.dst) | mask2(m.src1, m.src2), mask1(m.dst), std::move(code));
     };
 
     constexpr int MAX_K = 2;
@@ -548,13 +622,28 @@ inline std::string emit_dag_merge(const ProgramOps& ops,
            emit_dag_merge_post_direct(ops, mix, dg, le);
 }
 
+inline std::string emit_constant_l1_table(const uint32_t* words, size_t n) {
+    std::string s;
+    s += "__device__ __constant__ uint32_t kawpow_const_l1[PROGPOW_CACHE_WORDS] = {\n";
+    for (size_t i = 0; i < n; ++i) {
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "0x%08xu", words[i]);
+        s += "    ";
+        s += buf;
+        if (i + 1 != n) s += ",";
+        s += "\n";
+    }
+    s += "};\n";
+    return s;
+}
+
 // ---------------------------------------------------------------------------
 // generate_program_macro — emit body macros
 // ---------------------------------------------------------------------------
 inline std::string generate_program_macro(int block_number) {
     auto ops = collect_ops(block_number);
     auto body_ops = build_body_ops(ops, "MIX");
-    auto split = split_body_at_last_write_to(body_ops, 0);  // early address depends on MIX[0]
+    // auto split = split_body_at_last_write_to(body_ops, 0);
 
     char buf[256];
     std::snprintf(buf, sizeof(buf),
@@ -568,19 +657,60 @@ inline std::string generate_program_macro(int block_number) {
     c += "#define PROGPOW_BODY(MIX, DG) do { \\\n";
     c += emit_body_ops(body_ops, " \\\n");
     c += emit_dag_merge(ops, "MIX", "DG", " \\\n");
-    c += "} while(0)\n";
-    c += "\n";
+    c += "} while(0)\n\n";
 
-    c += "#define PROGPOW_BODY_PIPE(MIX, DG_CUR, DG_NEXT, NEXT_LOOP) do { \\\n";
-    c += emit_body_ops(split.pre, " \\\n");
+    // c += "#define PROGPOW_BODY_PREISSUE(MIX, DG_CUR, IA_RAW_NEXT, MIX0_NEXT, NEXT_LOOP) do { \\\n";
+    // c += emit_body_ops(split.pre, " \\\n");
+    // c += emit_dag_prepare_issue_value(ops, "MIX", "DG_CUR", " \\\n");
+    // c += "    (MIX0_NEXT) = _mix0_next; \\\n";
+    // c += "    PROGPOW_BPERMUTE_STAGE((MIX0_NEXT), IA_RAW_NEXT, NEXT_LOOP); \\\n";
+    // c += "} while(0)\n\n";
+
+    // c += "#define PROGPOW_BODY_POSTISSUE(MIX, DG_CUR, MIX0_NEXT) do { \\\n";
+    // c += "    uint32_t _c0, _c1, _m, _m1; \\\n";
+    // c += emit_body_ops(split.post, " \\\n");
+    // c += emit_dag_capture_post("DG_CUR", " \\\n");
+    // c += "    " + reg("MIX", ops.dag_dsts[0]) + " = (MIX0_NEXT); \\\n";
+    // c += emit_dag_merge_post(ops, "MIX", " \\\n");
+    // c += "} while(0)\n\n";
+
+    // c += "#define PROGPOW_BODY_PIPE(MIX, DG_CUR, DG_NEXT, NEXT_LOOP) do { \\\n";
+    // c += "    uint32_t _ia_raw_next; \\\n";
+    // c += "    uint32_t _mix0_next_hold; \\\n";
+    // c += "    PROGPOW_BODY_PREISSUE(MIX, DG_CUR, _ia_raw_next, _mix0_next_hold, NEXT_LOOP); \\\n";
+    // c += "    PROGPOW_DAG_LOAD_STAGE(_ia_raw_next, DG_NEXT, NEXT_LOOP); \\\n";
+    // c += "    PROGPOW_BODY_POSTISSUE(MIX, DG_CUR, _mix0_next_hold); \\\n";
+    // c += "} while(0)\n\n";
+
+    auto split = split_body_for_dag_issue(body_ops, 0);
+
+    c += "#define PROGPOW_BODY_PRECRITICAL(MIX, DG_CUR, IA_RAW_NEXT, MIX0_NEXT, NEXT_LOOP) do { \\\n";
+    c += emit_body_ops(split.critical, " \\\n");
     c += emit_dag_prepare_issue_value(ops, "MIX", "DG_CUR", " \\\n");
-    c += "    PROGPOW_ISSUE_DAG_FROM(_mix0_next, DG_NEXT, NEXT_LOOP); \\\n";
+    c += "    (MIX0_NEXT) = _mix0_next; \\\n";
+    c += "    PROGPOW_BPERMUTE_STAGE((MIX0_NEXT), IA_RAW_NEXT, NEXT_LOOP); \\\n";
+    c += "} while(0)\n\n";
+
+    c += "#define PROGPOW_BODY_PREFILLER(MIX) do { \\\n";
+    c += emit_body_ops(split.filler, " \\\n");
+    c += "} while(0)\n\n";
+
+    c += "#define PROGPOW_BODY_POSTISSUE(MIX, DG_CUR, MIX0_NEXT) do { \\\n";
     c += emit_body_ops(split.post, " \\\n");
     c += emit_dag_capture_post("DG_CUR", " \\\n");
-    c += emit_dag_commit_pre(ops, "MIX", " \\\n");
+    c += "    " + reg("MIX", ops.dag_dsts[0]) + " = (MIX0_NEXT); \\\n";
     c += emit_dag_merge_post(ops, "MIX", " \\\n");
-    c += "} while(0)\n";
-    c += "\n";
+    c += "} while(0)\n\n";
+
+    c += "#define PROGPOW_BODY_PIPE(MIX, DG_CUR, DG_NEXT, NEXT_LOOP) do { \\\n";
+    c += "    uint32_t _c0, _c1, _m, _m1; \\\n";
+    c += "    uint32_t _ia_raw_next; \\\n";
+    c += "    uint32_t _mix0_next_hold; \\\n";
+    c += "    PROGPOW_BODY_PRECRITICAL(MIX, DG_CUR, _ia_raw_next, _mix0_next_hold, NEXT_LOOP); \\\n";
+    c += "    PROGPOW_DAG_LOAD_STAGE(_ia_raw_next, DG_NEXT, NEXT_LOOP); \\\n";
+    c += "    PROGPOW_BODY_PREFILLER(MIX); \\\n";
+    c += "    PROGPOW_BODY_POSTISSUE(MIX, DG_CUR, _mix0_next_hold); \\\n";
+    c += "} while(0)\n\n";
 
     return c;
 }
@@ -627,6 +757,42 @@ inline std::string inject_coin_padding(const std::string& kernel_source,
     auto pos = result.find(marker);
     if (pos != std::string::npos)
         result.replace(pos, marker.size(), decls);
+    return result;
+}
+
+inline std::string inject_constant_l1_table(const std::string& kernel_source,
+                                            const uint32_t* l1_words,
+                                            size_t n_words) {
+    std::string buf;
+    buf.reserve(n_words * 16 + 256);
+
+    buf += "__device__ __constant__ uint32_t kawpow_const_l1[PROGPOW_CACHE_WORDS] = {\n";
+    constexpr int PER_LINE = 8;
+
+    for (size_t i = 0; i < n_words; i += PER_LINE) {
+        buf += "    ";
+
+        for (int j = 0; j < PER_LINE && (i + j) < n_words; ++j) {
+            size_t idx = i + j;
+
+            char tmp[32];
+            std::snprintf(tmp, sizeof(tmp), "0x%08xu", l1_words[idx]);
+            buf += tmp;
+
+            if (idx + 1 != n_words)
+                buf += ", ";
+        }
+
+        buf += "\n";
+    }
+    buf += "};\n";
+    buf += "#define KAWPOW_L1_LOAD(IDX) kawpow_const_l1[(IDX)]\n";
+
+    std::string result = kernel_source;
+    const std::string marker = "/* KAWPOW_CONST_L1 */";
+    auto pos = result.find(marker);
+    if (pos != std::string::npos)
+        result.replace(pos, marker.size(), buf);
     return result;
 }
 

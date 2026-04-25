@@ -33,6 +33,117 @@
 // Barrett reduction constants for DAG address modulo — injected by host before RTC.
 /* KAWPOW_DAG_CONSTS */
 
+
+/* KAWPOW_CONST_L1 */
+// constant-memory L1 table + load binding
+#ifndef KAWPOW_L1_LOAD
+#define KAWPOW_L1_LOAD(IDX) l1_cache[(IDX)]
+#endif
+
+#define PROGPOW_BPERMUTE_STAGE(MIX0_VAL, IA_RAW, LOOP) do { \
+    uint32_t _isrc = (threadIdx.x & ~15u) | ((LOOP) & 15u); \
+    (IA_RAW) = PROGPOW_BPERMUTE(_isrc, (MIX0_VAL)); \
+} while(0)
+
+#define PROGPOW_DAG_LOAD_STAGE(IA_RAW, DG, LOOP) do { \
+    uint32_t _ia = (IA_RAW); \
+    uint32_t _iq = __umulhi(_ia, KAWPOW_BARRETT_M) >> KAWPOW_BARRETT_SHIFT; \
+    _ia -= _iq * KAWPOW_DAG_NUM_ITEMS_DIV; \
+    if (_ia >= KAWPOW_DAG_NUM_ITEMS_DIV) _ia -= KAWPOW_DAG_NUM_ITEMS_DIV; \
+    uint64_t _boff = ((uint64_t)_ia << 8) + (((uint64_t)((lane_id ^ (LOOP)) & 15u)) << 4); \
+    const uint8_t* _ptr = reinterpret_cast<const uint8_t*>(d_dag) + _boff; \
+    (DG) = dag_ptrload_vec4_ptr(_ptr); \
+} while(0)
+
+// ===========================================================================
+// Static helper macros for software-pipelined DAG loads.
+// PROGPOW_ISSUE_DAG computes the next DAG address from mix[0] via Barrett
+// reduction and issues a cache-bypass 128-bit load into a dag_vec4.
+// Used with PROGPOW_BODY (generated macro injected at **PROGPOW_MACROS**)
+// for N-way hash interleaving.
+// ===========================================================================
+
+#ifdef __HIP_PLATFORM_AMD__
+#define PROGPOW_BPERMUTE(src, val) __builtin_amdgcn_ds_bpermute((src) << 2, (val))
+#else
+#define PROGPOW_BPERMUTE(src, val) __shfl_sync(0xFFFFFFFF, (val), (src), 16)
+#endif
+
+#define KAWPOW_DAG_AUX 0x01
+
+// TODO: Hoist
+
+// GFX11 raw buffer word 3:
+//   OOB_SELECT = 3 (disabled)          [29:28]
+//   FORMAT     = 22 (32_FLOAT, valid)  [18:12]   <-- required on gfx11
+//   TYPE       = 0 (buffer)            [31:30]
+#if defined(__gfx1100__) || defined(__gfx1101__) || defined(__gfx1102__) || defined(__gfx1103__)
+#  define KAWPOW_SRD_FLAGS 0x30016000u
+#elif defined(__gfx1030__) || defined(__gfx1031__) || defined(__gfx1032__) || \
+      defined(__gfx1033__) || defined(__gfx1034__) || defined(__gfx1035__) || \
+      defined(__gfx1036__) || \
+      defined(__gfx1010__) || defined(__gfx1011__) || defined(__gfx1012__)
+#  define KAWPOW_SRD_FLAGS 0x30000000u   // gfx10: OOB_SELECT=3 is sufficient
+#else
+#  define KAWPOW_SRD_FLAGS 0u            // gfx9: no OOB_SELECT field
+#endif
+
+struct dag128_u64 { uint64_t lo, hi; };
+
+__device__ __forceinline__ uint32_t dag_word0(const dag128_u64& v) { return (uint32_t)(v.lo);       }
+__device__ __forceinline__ uint32_t dag_word1(const dag128_u64& v) { return (uint32_t)(v.lo >> 32); }
+__device__ __forceinline__ uint32_t dag_word2(const dag128_u64& v) { return (uint32_t)(v.hi);       }
+__device__ __forceinline__ uint32_t dag_word3(const dag128_u64& v) { return (uint32_t)(v.hi >> 32); }
+
+// ---- buffer-intrinsic load, result bit-cast to the good storage type ----
+__device__ __forceinline__ dag128_u64
+dag_ptrload_plain(const uint8_t* base, uint32_t byte_off)
+{
+    const uint64_t* p = reinterpret_cast<const uint64_t*>(base + byte_off);
+    dag128_u64 out;
+    out.lo = p[0];
+    out.hi = p[1];
+    return out;
+}
+
+typedef uint32_t dag_vec4 __attribute__((ext_vector_type(4)));
+
+__device__ __forceinline__ dag128_u64
+dag_ptrload_vec4_ptr(const uint8_t* ptr)
+{
+    const dag_vec4* p = reinterpret_cast<const dag_vec4*>(ptr);
+    dag_vec4 t = *p;
+    return __builtin_bit_cast(dag128_u64, t);
+}
+
+#define PROGPOW_ISSUE_DAG_FROM(MIX0_VAL, DG, LOOP) do {                              \
+    uint32_t _isrc = (threadIdx.x & ~15u) | ((LOOP) & 15u);                          \
+    uint32_t _ia   = PROGPOW_BPERMUTE(_isrc, (MIX0_VAL));                            \
+    uint32_t _iq   = __umulhi(_ia, KAWPOW_BARRETT_M) >> KAWPOW_BARRETT_SHIFT;        \
+    _ia -= _iq * KAWPOW_DAG_NUM_ITEMS_DIV;                                            \
+    if (_ia >= KAWPOW_DAG_NUM_ITEMS_DIV) _ia -= KAWPOW_DAG_NUM_ITEMS_DIV;            \
+    uint64_t _boff = ((uint64_t)_ia << 8) +                                           \
+                     (((uint64_t)((lane_id ^ (LOOP)) & 15u)) << 4);                   \
+    const uint8_t* _ptr = reinterpret_cast<const uint8_t*>(d_dag) + _boff;           \
+    (DG) = dag_ptrload_vec4_ptr(_ptr);                                                \
+} while(0)
+
+#define PROGPOW_ISSUE_DAG(MIX, DG, LOOP) \
+    PROGPOW_ISSUE_DAG_FROM((MIX)[0], DG, LOOP)
+
+#define PROGPOW_STORE_COOP(MIX, VALUE, LOOP) do {                                    \
+    uint32_t _sglane = lane_id & 15u;                                                \
+    uint32_t _isrc   = (threadIdx.x & ~15u) | ((LOOP) & 15u);                        \
+    uint32_t _seed   = PROGPOW_BPERMUTE(_isrc, (MIX)[1]);                            \
+    uint32_t _q      = __umulhi(_seed, KAWPOW_BARRETT_M) >> KAWPOW_BARRETT_SHIFT;    \
+    _seed -= _q * KAWPOW_DAG_NUM_ITEMS_DIV;                                          \
+    if (_seed >= KAWPOW_DAG_NUM_ITEMS_DIV) _seed -= KAWPOW_DAG_NUM_ITEMS_DIV;        \
+    uint64_t _base   = ((uint64_t)_seed << 8);                                       \
+    uint64_t _off    = ((uint64_t)((_sglane ^ (LOOP)) & 15u)) << 4;                  \
+    uint8_t* _ptr    = reinterpret_cast<uint8_t*>(d_dag) + _base + _off;             \
+    store_glc_slc(reinterpret_cast<uint64_t*>(_ptr), VALUE);                         \
+} while(0)
+
 // ProgPoW body macro — injected by host before RTC.
 // #define PROGPOW_BODY(MIX, DG) do { ... } while(0)
 // MIX = uint32_t[32] mix array name, DG = dag_vec4 pre-loaded DAG data variable
@@ -253,96 +364,6 @@ __device__ __forceinline__ void store_nt_u32x8(uint32_t* dst, const uint32_t* sr
 #endif
 }
 
-// ===========================================================================
-// Static helper macros for software-pipelined DAG loads.
-// PROGPOW_ISSUE_DAG computes the next DAG address from mix[0] via Barrett
-// reduction and issues a cache-bypass 128-bit load into a dag_vec4.
-// Used with PROGPOW_BODY (generated macro injected at /* PROGPOW_MACROS */)
-// for N-way hash interleaving.
-// ===========================================================================
-
-#ifdef __HIP_PLATFORM_AMD__
-#define PROGPOW_BPERMUTE(src, val) __builtin_amdgcn_ds_bpermute((src) << 2, (val))
-#else
-#define PROGPOW_BPERMUTE(src, val) __shfl_sync(0xFFFFFFFF, (val), (src), 16)
-#endif
-
-#define KAWPOW_DAG_AUX 0x01
-
-// TODO: Hoist
-
-// GFX11 raw buffer word 3:
-//   OOB_SELECT = 3 (disabled)          [29:28]
-//   FORMAT     = 22 (32_FLOAT, valid)  [18:12]   <-- required on gfx11
-//   TYPE       = 0 (buffer)            [31:30]
-#if defined(__gfx1100__) || defined(__gfx1101__) || defined(__gfx1102__) || defined(__gfx1103__)
-#  define KAWPOW_SRD_FLAGS 0x30016000u
-#elif defined(__gfx1030__) || defined(__gfx1031__) || defined(__gfx1032__) || \
-      defined(__gfx1033__) || defined(__gfx1034__) || defined(__gfx1035__) || \
-      defined(__gfx1036__) || \
-      defined(__gfx1010__) || defined(__gfx1011__) || defined(__gfx1012__)
-#  define KAWPOW_SRD_FLAGS 0x30000000u   // gfx10: OOB_SELECT=3 is sufficient
-#else
-#  define KAWPOW_SRD_FLAGS 0u            // gfx9: no OOB_SELECT field
-#endif
-
-struct dag128_u64 { uint64_t lo, hi; };
-
-__device__ __forceinline__ uint32_t dag_word0(const dag128_u64& v) { return (uint32_t)(v.lo);       }
-__device__ __forceinline__ uint32_t dag_word1(const dag128_u64& v) { return (uint32_t)(v.lo >> 32); }
-__device__ __forceinline__ uint32_t dag_word2(const dag128_u64& v) { return (uint32_t)(v.hi);       }
-__device__ __forceinline__ uint32_t dag_word3(const dag128_u64& v) { return (uint32_t)(v.hi >> 32); }
-
-// ---- buffer-intrinsic load, result bit-cast to the good storage type ----
-__device__ __forceinline__ dag128_u64
-dag_ptrload_plain(const uint8_t* base, uint32_t byte_off)
-{
-    const uint64_t* p = reinterpret_cast<const uint64_t*>(base + byte_off);
-    dag128_u64 out;
-    out.lo = p[0];
-    out.hi = p[1];
-    return out;
-}
-
-typedef uint32_t dag_vec4 __attribute__((ext_vector_type(4)));
-
-__device__ __forceinline__ dag128_u64
-dag_ptrload_vec4_ptr(const uint8_t* ptr)
-{
-    const dag_vec4* p = reinterpret_cast<const dag_vec4*>(ptr);
-    dag_vec4 t = *p;
-    return __builtin_bit_cast(dag128_u64, t);
-}
-
-#define PROGPOW_ISSUE_DAG_FROM(MIX0_VAL, DG, LOOP) do {                              \
-    uint32_t _isrc = (threadIdx.x & ~15u) | ((LOOP) & 15u);                          \
-    uint32_t _ia   = PROGPOW_BPERMUTE(_isrc, (MIX0_VAL));                            \
-    uint32_t _iq   = __umulhi(_ia, KAWPOW_BARRETT_M) >> KAWPOW_BARRETT_SHIFT;        \
-    _ia -= _iq * KAWPOW_DAG_NUM_ITEMS_DIV;                                            \
-    if (_ia >= KAWPOW_DAG_NUM_ITEMS_DIV) _ia -= KAWPOW_DAG_NUM_ITEMS_DIV;            \
-    uint64_t _boff = ((uint64_t)_ia << 8) +                                           \
-                     (((uint64_t)((lane_id ^ (LOOP)) & 15u)) << 4);                   \
-    const uint8_t* _ptr = reinterpret_cast<const uint8_t*>(d_dag) + _boff;           \
-    (DG) = dag_ptrload_vec4_ptr(_ptr);                                                \
-} while(0)
-
-#define PROGPOW_ISSUE_DAG(MIX, DG, LOOP) \
-    PROGPOW_ISSUE_DAG_FROM((MIX)[0], DG, LOOP)
-
-#define PROGPOW_STORE_COOP(MIX, VALUE, LOOP) do {                                    \
-    uint32_t _sglane = lane_id & 15u;                                                \
-    uint32_t _isrc   = (threadIdx.x & ~15u) | ((LOOP) & 15u);                        \
-    uint32_t _seed   = PROGPOW_BPERMUTE(_isrc, (MIX)[1]);                            \
-    uint32_t _q      = __umulhi(_seed, KAWPOW_BARRETT_M) >> KAWPOW_BARRETT_SHIFT;    \
-    _seed -= _q * KAWPOW_DAG_NUM_ITEMS_DIV;                                          \
-    if (_seed >= KAWPOW_DAG_NUM_ITEMS_DIV) _seed -= KAWPOW_DAG_NUM_ITEMS_DIV;        \
-    uint64_t _base   = ((uint64_t)_seed << 8);                                       \
-    uint64_t _off    = ((uint64_t)((_sglane ^ (LOOP)) & 15u)) << 4;                  \
-    uint8_t* _ptr    = reinterpret_cast<uint8_t*>(d_dag) + _base + _off;             \
-    store_glc_slc(reinterpret_cast<uint64_t*>(_ptr), VALUE);                         \
-} while(0)
-
-
 
 // ===========================================================================
 // Shared helpers: L1 cache cooperative fill + main loop + mix reduction
@@ -353,9 +374,11 @@ __device__ __forceinline__ void cooperative_l1_fill(
     const uint32_t* __restrict__ d_l1_cache)
 {
     const uint32_t tid = threadIdx.x;
-    const uint4* __restrict__ src4 = (const uint4*)d_l1_cache;
-    uint4* dst4 = (uint4*)l1_cache;
+    const uint4* __restrict__ src4 = reinterpret_cast<const uint4*>(d_l1_cache);
+    uint4* __restrict__ dst4 = reinterpret_cast<uint4*>(l1_cache);
     constexpr uint32_t CACHE_VEC4 = PROGPOW_CACHE_WORDS / 4;
+
+#pragma unroll
     for (uint32_t i = tid; i < CACHE_VEC4; i += blockDim.x)
         dst4[i] = src4[i];
 }
@@ -390,20 +413,39 @@ __device__ __forceinline__ void progpow_main_loop_2way(
     const uint32_t* __restrict__ d_dag,
     uint32_t lane_id)
 {
-    dag128_u64 _da0, _da1;  // ping-pong buffers for hash 0
-    dag128_u64 _db0, _db1;  // ping-pong buffers for hash 1
+    dag128_u64 _da0, _da1;
+    dag128_u64 _db0, _db1;
+
     PROGPOW_ISSUE_DAG(m0, _da0, 0u);
     PROGPOW_ISSUE_DAG(m1, _db0, 0u);
 
     #pragma unroll 1
     for (uint32_t loop = 0; loop < KAWPOW_MAIN_LOOPS - 2; loop += 2) {
-        PROGPOW_BODY_PIPE(m0, _da0, _da1, loop + 1);
-        PROGPOW_BODY_PIPE(m1, _db0, _db1, loop + 1);
-        PROGPOW_BODY_PIPE(m0, _da1, _da0, loop + 2);
-        PROGPOW_BODY_PIPE(m1, _db1, _db0, loop + 2);
+        uint32_t _c0, _c1, _m, _m1;
+        uint32_t ia0, ia1;
+        uint32_t mix0_next0, mix0_next1;
+
+        PROGPOW_BODY_PRECRITICAL(m0, _da0, ia0, mix0_next0, loop + 1u);
+        PROGPOW_BODY_PRECRITICAL(m1, _db0, ia1, mix0_next1, loop + 1u);
+        PROGPOW_DAG_LOAD_STAGE(ia0, _da1, loop + 1u);
+        PROGPOW_DAG_LOAD_STAGE(ia1, _db1, loop + 1u);
+        PROGPOW_BODY_PREFILLER(m0);
+        PROGPOW_BODY_PREFILLER(m1);
+        PROGPOW_BODY_POSTISSUE(m0, _da0, mix0_next0);
+        PROGPOW_BODY_POSTISSUE(m1, _db0, mix0_next1);
+
+        PROGPOW_BODY_PRECRITICAL(m0, _da1, ia0, mix0_next0, loop + 2u);
+        PROGPOW_BODY_PRECRITICAL(m1, _db1, ia1, mix0_next1, loop + 2u);
+        PROGPOW_DAG_LOAD_STAGE(ia0, _da0, loop + 2u);
+        PROGPOW_DAG_LOAD_STAGE(ia1, _db0, loop + 2u);
+        PROGPOW_BODY_PREFILLER(m0);
+        PROGPOW_BODY_PREFILLER(m1);
+        PROGPOW_BODY_POSTISSUE(m0, _da1, mix0_next0);
+        PROGPOW_BODY_POSTISSUE(m1, _db1, mix0_next1);
     }
-    PROGPOW_BODY_PIPE(m0, _da0, _da1, KAWPOW_MAIN_LOOPS - 1);
-    PROGPOW_BODY_PIPE(m1, _db0, _db1, KAWPOW_MAIN_LOOPS - 1);
+
+    PROGPOW_BODY_PIPE(m0, _da0, _da1, KAWPOW_MAIN_LOOPS - 1u);
+    PROGPOW_BODY_PIPE(m1, _db0, _db1, KAWPOW_MAIN_LOOPS - 1u);
     PROGPOW_BODY(m0, _da1);
     PROGPOW_BODY(m1, _db1);
 }
@@ -417,10 +459,11 @@ __device__ __forceinline__ void progpow_main_loop_4way(
     const uint32_t* __restrict__ d_dag,
     uint32_t lane_id)
 {
-    dag128_u64 _da0, _da1;  // ping-pong for hash 0
-    dag128_u64 _db0, _db1;  // ping-pong for hash 1
-    dag128_u64 _dc0, _dc1;  // ping-pong for hash 2
-    dag128_u64 _dd0, _dd1;  // ping-pong for hash 3
+    dag128_u64 _da0, _da1;
+    dag128_u64 _db0, _db1;
+    dag128_u64 _dc0, _dc1;
+    dag128_u64 _dd0, _dd1;
+
     PROGPOW_ISSUE_DAG(m0, _da0, 0u);
     PROGPOW_ISSUE_DAG(m1, _db0, 0u);
     PROGPOW_ISSUE_DAG(m2, _dc0, 0u);
@@ -428,19 +471,50 @@ __device__ __forceinline__ void progpow_main_loop_4way(
 
     #pragma unroll 1
     for (uint32_t loop = 0; loop < KAWPOW_MAIN_LOOPS - 2; loop += 2) {
-        PROGPOW_BODY_PIPE(m0, _da0, _da1, loop + 1);
-        PROGPOW_BODY_PIPE(m1, _db0, _db1, loop + 1);
-        PROGPOW_BODY_PIPE(m2, _dc0, _dc1, loop + 1);
-        PROGPOW_BODY_PIPE(m3, _dd0, _dd1, loop + 1);
-        PROGPOW_BODY_PIPE(m0, _da1, _da0, loop + 2);
-        PROGPOW_BODY_PIPE(m1, _db1, _db0, loop + 2);
-        PROGPOW_BODY_PIPE(m2, _dc1, _dc0, loop + 2);
-        PROGPOW_BODY_PIPE(m3, _dd1, _dd0, loop + 2);
+        uint32_t _c0, _c1, _m, _m1;
+        uint32_t ia0, ia1, ia2, ia3;
+        uint32_t mix0_next0, mix0_next1, mix0_next2, mix0_next3;
+
+        PROGPOW_BODY_PRECRITICAL(m0, _da0, ia0, mix0_next0, loop + 1u);
+        PROGPOW_BODY_PRECRITICAL(m1, _db0, ia1, mix0_next1, loop + 1u);
+        PROGPOW_BODY_PRECRITICAL(m2, _dc0, ia2, mix0_next2, loop + 1u);
+        PROGPOW_BODY_PRECRITICAL(m3, _dd0, ia3, mix0_next3, loop + 1u);
+        PROGPOW_DAG_LOAD_STAGE(ia0, _da1, loop + 1u);
+        PROGPOW_DAG_LOAD_STAGE(ia1, _db1, loop + 1u);
+        PROGPOW_DAG_LOAD_STAGE(ia2, _dc1, loop + 1u);
+        PROGPOW_DAG_LOAD_STAGE(ia3, _dd1, loop + 1u);
+        PROGPOW_BODY_PREFILLER(m0);
+        PROGPOW_BODY_PREFILLER(m1);
+        PROGPOW_BODY_PREFILLER(m2);
+        PROGPOW_BODY_PREFILLER(m3);
+        PROGPOW_BODY_POSTISSUE(m0, _da0, mix0_next0);
+        PROGPOW_BODY_POSTISSUE(m1, _db0, mix0_next1);
+        PROGPOW_BODY_POSTISSUE(m2, _dc0, mix0_next2);
+        PROGPOW_BODY_POSTISSUE(m3, _dd0, mix0_next3);
+
+        PROGPOW_BODY_PRECRITICAL(m0, _da1, ia0, mix0_next0, loop + 2u);
+        PROGPOW_BODY_PRECRITICAL(m1, _db1, ia1, mix0_next1, loop + 2u);
+        PROGPOW_BODY_PRECRITICAL(m2, _dc1, ia2, mix0_next2, loop + 2u);
+        PROGPOW_BODY_PRECRITICAL(m3, _dd1, ia3, mix0_next3, loop + 2u);
+        PROGPOW_DAG_LOAD_STAGE(ia0, _da0, loop + 2u);
+        PROGPOW_DAG_LOAD_STAGE(ia1, _db0, loop + 2u);
+        PROGPOW_DAG_LOAD_STAGE(ia2, _dc0, loop + 2u);
+        PROGPOW_DAG_LOAD_STAGE(ia3, _dd0, loop + 2u);
+        PROGPOW_BODY_PREFILLER(m0);
+        PROGPOW_BODY_PREFILLER(m1);
+        PROGPOW_BODY_PREFILLER(m2);
+        PROGPOW_BODY_PREFILLER(m3);
+        PROGPOW_BODY_POSTISSUE(m0, _da1, mix0_next0);
+        PROGPOW_BODY_POSTISSUE(m1, _db1, mix0_next1);
+        PROGPOW_BODY_POSTISSUE(m2, _dc1, mix0_next2);
+        PROGPOW_BODY_POSTISSUE(m3, _dd1, mix0_next3);
     }
-    PROGPOW_BODY_PIPE(m0, _da0, _da1, KAWPOW_MAIN_LOOPS - 1);
-    PROGPOW_BODY_PIPE(m1, _db0, _db1, KAWPOW_MAIN_LOOPS - 1);
-    PROGPOW_BODY_PIPE(m2, _dc0, _dc1, KAWPOW_MAIN_LOOPS - 1);
-    PROGPOW_BODY_PIPE(m3, _dd0, _dd1, KAWPOW_MAIN_LOOPS - 1);
+
+    PROGPOW_BODY_PIPE(m0, _da0, _da1, KAWPOW_MAIN_LOOPS - 1u);
+    PROGPOW_BODY_PIPE(m1, _db0, _db1, KAWPOW_MAIN_LOOPS - 1u);
+    PROGPOW_BODY_PIPE(m2, _dc0, _dc1, KAWPOW_MAIN_LOOPS - 1u);
+    PROGPOW_BODY_PIPE(m3, _dd0, _dd1, KAWPOW_MAIN_LOOPS - 1u);
+
     PROGPOW_BODY(m0, _da1);
     PROGPOW_BODY(m1, _db1);
     PROGPOW_BODY(m2, _dc1);
@@ -461,6 +535,42 @@ __device__ __forceinline__ void progpow_reduce(
         digest[i] = FNV_OFFSET_BASIS;
         digest[i] = fnv1a(digest[i], shfl_lane16(lane_result, i));
         digest[i] = fnv1a(digest[i], shfl_lane16(lane_result, i + 8));
+    }
+}
+
+__device__ __forceinline__ void progpow_reduce_2way(
+    const uint32_t* mix0,
+    const uint32_t* mix1,
+    uint32_t* digest0,
+    uint32_t* digest1)
+{
+    uint32_t lane_result0 = FNV_OFFSET_BASIS;
+    uint32_t lane_result1 = FNV_OFFSET_BASIS;
+
+    #pragma unroll
+    for (int i = 0; i < PROGPOW_REGS; i++) {
+        lane_result0 = fnv1a(lane_result0, mix0[i]);
+        lane_result1 = fnv1a(lane_result1, mix1[i]);
+    }
+
+    #pragma unroll
+    for (int i = 0; i < 8; i++) {
+        uint32_t a0 = shfl_lane16(lane_result0, i);
+        uint32_t b0 = shfl_lane16(lane_result0, i + 8);
+        uint32_t a1 = shfl_lane16(lane_result1, i);
+        uint32_t b1 = shfl_lane16(lane_result1, i + 8);
+
+        uint32_t d0 = FNV_OFFSET_BASIS;
+        uint32_t d1 = FNV_OFFSET_BASIS;
+
+        d0 = fnv1a(d0, a0);
+        d0 = fnv1a(d0, b0);
+
+        d1 = fnv1a(d1, a1);
+        d1 = fnv1a(d1, b1);
+
+        digest0[i] = d0;
+        digest1[i] = d1;
     }
 }
 
@@ -690,7 +800,7 @@ __device__ __forceinline__ void store_seed_u64x4(uint32_t* dst, const uint32_t s
 // ---------------------------------------------------------------------------
 // Split kernel A: Seed Keccak  (1 thread per hash, no LDS, no DAG)
 // ---------------------------------------------------------------------------
-extern "C" __global__ __launch_bounds__(256)
+extern "C" __global__ __launch_bounds__(256, 12)
 void kawpow_seed_kernel(
     const uint32_t* __restrict__ d_header,
     uint64_t                     nonce_start,
@@ -829,7 +939,7 @@ __device__ __forceinline__ void store_digest_coop_16x8_u32(
 // Each wavefront group processes 2 hashes, interleaving their ProgPoW
 // iterations to hide DAG load latency across hashes.
 // ---------------------------------------------------------------------------
-extern "C" __global__ __launch_bounds__(256)
+extern "C" __global__
 void kawpow_progpow_kernel_2way(
     const uint32_t* __restrict__ d_dag,
     uint32_t                     batch_size,
@@ -856,16 +966,14 @@ void kawpow_progpow_kernel_2way(
         uint32_t base0 = hash_id_0 * 16u;
         uint64_t seed0 = (uint64_t)d_intermediate[base0] |
                         ((uint64_t)d_intermediate[base0 + 1] << 32);
+        fill_mix(seed0, lane_id, m0);
 
         have_h1 = (hash_id_0 + 1 < batch_size);
         if (have_h1) {
             uint32_t base1 = (hash_id_0 + 1) * 16u;
             uint64_t seed1 = (uint64_t)d_intermediate[base1] |
                             ((uint64_t)d_intermediate[base1 + 1] << 32);
-
-            fill_mix_2way(seed0, seed1, lane_id, m0, m1);
-        } else {
-            fill_mix(seed0, lane_id, m0);
+            fill_mix(seed1, lane_id, m1);
         }
     }
 
@@ -924,7 +1032,7 @@ __device__ __forceinline__ void store_digest_coop_32x8_u32(
 // Split kernel B-4way: ProgPoW main loop — 4-way hash interleaving
 // Each wavefront group processes 4 hashes for maximum DAG latency hiding.
 // ---------------------------------------------------------------------------
-extern "C" __global__ extern "C" __global__ __launch_bounds__(256)
+extern "C" __global__ __launch_bounds__(256)
 void kawpow_progpow_kernel_4way(
     const uint32_t* __restrict__ d_dag,
     uint32_t                     batch_size,

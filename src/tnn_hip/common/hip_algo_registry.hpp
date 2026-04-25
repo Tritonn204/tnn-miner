@@ -1349,7 +1349,7 @@ struct KawPowLiveState {
         return true;
     }
 
-    bool alloc_l1_cache(size_t bytes, size_t align = 64) {
+    bool alloc_l1_cache(size_t bytes, size_t align = 64, int device_id = 0) {
         oroFreeAligned(l1_alloc);
         d_l1_cache = nullptr;
 
@@ -1357,6 +1357,10 @@ struct KawPowLiveState {
         if (err != oroSuccess) return false;
 
         d_l1_cache = reinterpret_cast<uint32_t*>(l1_alloc.aligned);
+
+        oroMemAdvise(d_dag, dag_size_bytes, oroMemAdviseSetReadMostly, device_id);
+        (void)oroGetLastError(); // non-fatal if unsupported
+
         return true;
     }
 
@@ -1522,6 +1526,10 @@ inline std::string kawpow_source_transform(const std::string& source, int device
     (void)device_id;
     std::string src = kawpow_proggen::inject_coin_padding(source, *currentKawpowPadding);
     src = kawpow_proggen::inject_dag_constants(src, 1, 1, 0); // placeholder — real values injected in pre_tune
+
+    static const uint32_t placeholder_l1_words[4096] = {0};
+    src = kawpow_proggen::inject_constant_l1_table(src, placeholder_l1_words, 4096);
+
     src = kawpow_proggen::inject_program(src, kawpow_bench_block());
     return src;
 }
@@ -1564,7 +1572,7 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
     fflush(stdout);
 
     // ---- Allocate DAG on GPU ----
-    if (!ls.alloc_dag(ls.dag_size_bytes, 256, device_id)) {
+    if (!ls.alloc_dag(ls.dag_size_bytes, 1 << 20, device_id)) {
         fprintf(stderr, "[KawPow] GPU %d: DAG alloc failed (need %.1f GB)\n",
                 device_id, ls.dag_size_bytes / (1024.0 * 1024.0 * 1024.0));
         delete kp;
@@ -1650,15 +1658,21 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
 
     // ---- L1 cache: first 16KB of DAG, copied to separate buffer ----
     constexpr size_t L1_CACHE_BYTES = 16384;
-    err = oroMalloc((oroDeviceptr*)&ls.d_l1_cache, L1_CACHE_BYTES);
+    if (!ls.alloc_l1_cache(L1_CACHE_BYTES, 1 << 20, device_id)) {
+        fprintf(stderr, "[KawPow] GPU %d: L1 cache alloc failed\n", device_id);
+        ls.free_dag();
+        delete kp;
+        return false;
+    }
+
+    err = oroMemcpy(ls.d_l1_cache, ls.d_dag, L1_CACHE_BYTES, oroMemcpyDeviceToDevice);
     if (err != oroSuccess) {
-        fprintf(stderr, "[KawPow] GPU %d: L1 cache alloc failed: %s\n",
+        fprintf(stderr, "[KawPow] GPU %d: L1 cache copy failed: %s\n",
                 device_id, tnn_error_string(err));
         ls.free_dag();
         delete kp;
         return false;
     }
-    oroMemcpy(ls.d_l1_cache, ls.d_dag, L1_CACHE_BYTES, oroMemcpyDeviceToDevice);
 
     // Store DAG gen kernel for reuse during epoch rebuilds on worker thread.
     // Modules compiled on init thread work cross-thread (same as mining kernels).
@@ -1673,6 +1687,11 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
         auto& opts = dag_opts;
         std::string base_src(hip_kawpow_source::SRC_TNN_HIP_CRYPTO_KAWPOW_KAWPOW_HIP_SOURCE);
         base_src = kawpow_proggen::inject_coin_padding(base_src, *currentKawpowPadding);
+        base_src = kawpow_proggen::inject_constant_l1_table(
+            base_src,
+            reinterpret_cast<const uint32_t*>(ctx->light_cache),
+            4096
+        );
         base_src = kawpow_proggen::inject_dag_constants(base_src,
             ls.dag_num_items, ls.barrett_m, ls.barrett_shift);
 
@@ -1887,6 +1906,8 @@ inline bool kawpow_occupancy_tune(TuningResult& result, const oroDeviceProp_t& p
     // ---- Build TPB candidate list (occupancy + quick ns/h estimate) ----
     oroFunction_t scan_fn = pp_fn;  // plain 2-way
 
+    constexpr size_t MAX_2D_TPB = 1024;
+
     struct TpbCandidate { int tpb; int bpc; double ns; };
     TpbCandidate tpb_candidates[32];
     int n_tpb_candidates = 0;
@@ -1894,7 +1915,7 @@ inline bool kawpow_occupancy_tune(TuningResult& result, const oroDeviceProp_t& p
         printf("[KawPow] GPU %d: TPB quick scan (2Way): ", device_id);
         fflush(stdout);
 
-        for (int tbs = 32; tbs <= 256; tbs += 32) {  // capped to __launch_bounds__(256, 2)
+        for (int tbs = 32; tbs <= MAX_2D_TPB; tbs += 32) {  // capped to __launch_bounds__(256, 2)
             int max_blocks = 0;
             oroModuleOccupancyMaxActiveBlocksPerMultiprocessor(
                 &max_blocks, scan_fn, tbs, kawpow_shared_mem_split(tbs));
@@ -1936,9 +1957,9 @@ inline bool kawpow_occupancy_tune(TuningResult& result, const oroDeviceProp_t& p
     }
 
     // ---- 2D TPB × multiplier sweep helper ----
-    static constexpr int mult_candidates[] = {8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768};
+    static constexpr int mult_candidates[] = {8, 16, 32, 64, 256, 512, 1024, 4096, 8192, 16384, 32768, 65536};
     static constexpr int n_mults = sizeof(mult_candidates) / sizeof(mult_candidates[0]);
-    constexpr double MAX_LAUNCH_SEC = 1.8;
+    constexpr double MAX_LAUNCH_SEC = 3.0;
 
     struct SweepWinner { int tpb; int bpc; int mult; double mhs; };
 
@@ -2012,7 +2033,6 @@ inline bool kawpow_occupancy_tune(TuningResult& result, const oroDeviceProp_t& p
                 oroEventCreate(&ev0); oroEventCreate(&ev1);
                 oroEventRecord(ev0, stream);
                 trial_launch();
-                trial_launch();
                 oroEventRecord(ev1, stream);
                 oroStreamSynchronize(stream);
 
@@ -2020,7 +2040,7 @@ inline bool kawpow_occupancy_tune(TuningResult& result, const oroDeviceProp_t& p
                 oroEventElapsedTime(&ms, ev0, ev1);
                 oroEventDestroy(ev0); oroEventDestroy(ev1);
 
-                double mhs = (double)(trial_batch * 2.0) / ((double)ms * 1e3);
+                double mhs = (double)(trial_batch) / ((double)ms * 1e3);
                 bool outlier = (best.mhs > 0 && mhs > best.mhs * 10.0);
                 printf(" %5.1f", mhs);
                 fflush(stdout);
@@ -2145,7 +2165,7 @@ inline bool kawpow_rebuild_dag(KawPowLiveState& ls, KawPowAlgoData* kp, int new_
                free_mem / (1024.0 * 1024.0), total_mem / (1024.0 * 1024.0));
         fflush(stdout);
     }
-    if (!ls.alloc_dag(ls.dag_size_bytes, 256, device_id)) {
+    if (!ls.alloc_dag(ls.dag_size_bytes, 1 << 20, device_id)) {
         fprintf(stderr, "[KawPow] GPU %d: %sDAG alloc failed (%.1f GB)\n",
                 device_id, tag, ls.dag_size_bytes / (1024.0 * 1024.0 * 1024.0));
         return false;
