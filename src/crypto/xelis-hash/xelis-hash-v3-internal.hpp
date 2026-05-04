@@ -184,6 +184,23 @@ static inline uint64_t map_index(uint64_t x)
     return (uint64_t)(((__uint128_t)x * XELIS_BUFFER_SIZE_V3) >> 64);
 }
 
+struct MapIndexPair {
+    uint64_t first;
+    uint64_t second;
+};
+
+static inline MapIndexPair map_index_pair(uint64_t x0, uint64_t x1)
+{
+    x0 ^= x0 >> 33;
+    x1 ^= x1 >> 33;
+    x0 *= XELIS_MURMUR_CONST1;
+    x1 *= XELIS_MURMUR_CONST1;
+    return {
+        (uint64_t)(((__uint128_t)x0 * XELIS_BUFFER_SIZE_V3) >> 64),
+        (uint64_t)(((__uint128_t)x1 * XELIS_BUFFER_SIZE_V3) >> 64)
+    };
+}
+
 static inline int pick_half(uint64_t seed)
 {
     return (murmurhash3(seed) & XELIS_PICK_HALF_BIT) != 0;
@@ -378,11 +395,9 @@ static inline uint64_t umul64_hi(uint64_t a, uint64_t b)
 #endif
 }
 
-static inline uint64_t mod128_64_fast(__uint128_t t1, uint64_t denom)
+static inline uint64_t mod128_64_fast_parts(uint64_t hi, uint64_t lo, uint64_t denom)
 {
 #if defined(__x86_64__)
-    uint64_t hi = (uint64_t)(t1 >> 64);
-    uint64_t lo = (uint64_t)t1;
     uint64_t dummy, rhi;
     /* (0:hi) / denom → rhi = hi mod denom; always < denom afterward */
     __asm__("divq %[d]" : "=a"(dummy), "=d"(rhi)
@@ -392,8 +407,14 @@ static inline uint64_t mod128_64_fast(__uint128_t t1, uint64_t denom)
             : [d]"r"(denom), "a"(lo), "d"(rhi) : "cc");
     return rem;
 #else
+    __uint128_t t1 = ((__uint128_t)hi << 64) | lo;
     return (uint64_t)(t1 % denom);
 #endif
+}
+
+static inline uint64_t mod128_64_fast(__uint128_t t1, uint64_t denom)
+{
+    return mod128_64_fast_parts((uint64_t)(t1 >> 64), (uint64_t)t1, denom);
 }
 
 static inline uint64_t hi(__uint128_t x) { return (uint64_t)(x >> 64); }
@@ -531,7 +552,7 @@ static uint64_t execute_op_heavy_switch(
     int r_next, uint64_t result, int i, int j_off)
 {
     switch (op_idx) {
-        case 7:  return mod128_64_fast(COMBINE_UINT64(a,b), c|1);
+        case 7:  return mod128_64_fast_parts(a, b, c|1);
         case 8:  { uint64_t t2_hi = ROTL(result,r_next), t2_lo = a|2;
                    if (t2_hi>b||(t2_hi==b&&t2_lo>c)) return c;
                    __uint128_t dd=COMBINE_UINT64(b,c), ds=COMBINE_UINT64(t2_hi,t2_lo);
@@ -543,9 +564,8 @@ static uint64_t execute_op_heavy_switch(
                       return a ^ b;                         /* cheap path */
                   return (a != 0) ? (rr / a) : 0;           /* div path   */
                 }
-        case 13: { __uint128_t t1 = combine_uint64(a+i, isqrt(b+j_off));
-                   uint64_t denom = murmurhash3(c^result^i^j_off)|1;
-                   return (uint64_t)(t1 % denom); }
+        case 13: { uint64_t denom = murmurhash3(c^result^i^j_off)|1;
+                   return mod128_64_fast_parts(a+i, isqrt(b+j_off), denom); }
         case 14: { uint64_t sb = isqrt(b|2), sa = isqrt(a+j_off);
                    return ROTL((c+i)%sb, i+j_off)*sa; }
         case 15: return (isqrt(a+i)*isqrt(c+j_off))^(b+i+j_off);
@@ -593,9 +613,8 @@ static inline uint64_t execute_operation_goto(
     uint64_t v;
     goto *dispatch_table[idx];
 
-op0: { __uint128_t t1 = combine_uint64(a+i, isqrt(b+j_off));
-       uint64_t denom = murmurhash3(c^result^i^j_off)|1;
-       v = (uint64_t)(t1 % denom); goto done; }
+op0: { uint64_t denom = murmurhash3(c^result^i^j_off)|1;
+       v = mod128_64_fast_parts(a+i, isqrt(b+j_off), denom); goto done; }
 op1: { uint64_t sb, sa;
        isqrt_pair(b | 2, a + j_off, &sb, &sa);
        v = ROTL((c + i) % sb, i + j_off) * sa; goto done; }
@@ -609,7 +628,7 @@ op6:   v = a-b+c;   goto done;
 op7:   v = b*c+a;   goto done;
 op8:   v = c*a+b;   goto done;
 op9:   v = a*b*c;   goto done;
-op10:  v = mod128_64_fast(COMBINE_UINT64(a,b), c|1); goto done;
+op10:  v = mod128_64_fast_parts(a, b, c|1); goto done;
 op11: { uint64_t hi = ROTL(result, r_next), lo = a | 2;
         if (hi > b || (hi == b && lo > c)) { v = c; goto done; }
         __uint128_t dd = COMBINE_UINT64(b, c), ds = COMBINE_UINT64(hi, lo);
@@ -634,58 +653,54 @@ static inline uint64_t execute_operation_hybrid(
     int r_next, uint64_t result, int i, int j_off)
 {
     __asm__ volatile ("" ::: "memory");
-    // Ops 3-8 all target &&cheap — single BTB entry for 37.5% of ops
+    // Ops 3-8 split into small setup groups, then share the final x + y - z.
     static void *const dt[] = {
-        &&op0,&&op1,&&op2,&&cheap,&&cheap,&&cheap,&&cheap,&&cheap,
-        &&cheap,&&op9,&&op10,&&op11,&&op12,&&op13,&&op14,&&op15};
+        &&op0,&&op1,&&op2,&&cheap34,&&cheap34,&&cheap56,&&cheap56,&&cheap78,
+        &&cheap78,&&op9,&&op10,&&op11,&&op12,&&op13,&&op14,&&op15};
 
-    uint64_t v;
+    uint64_t v, x, y, z;
     goto *dt[idx];
 
-cheap: {
-    // Precompute products (ILP parallel, ~3cy)
-    uint64_t ab = a * b, ac = a * c, bc = b * c;
-
-    // CMOV chains to select x, y, z for: v = x + y - z
-    //   op3: ac+bc    op4: ab-ac     op5: c+b-a
-    //   op6: a+c-b    op7: bc+a      op8: ac+b
-    uint64_t x = ac;                // op3, op8
-    x = (idx == 4) ? ab : x;
-    x = (idx == 5) ? c  : x;
-    x = (idx == 6) ? a  : x;
-    x = (idx == 7) ? bc : x;
-
-    uint64_t y = bc;                // op3
-    y = (idx == 4) ? (uint64_t)0 : y;
-    y = (idx == 5) ? b  : y;
-    y = (idx == 6) ? c  : y;
-    y = (idx == 7) ? a  : y;
-    y = (idx == 8) ? b  : y;
-
-    uint64_t z = 0;                 // op3, op7, op8
-    z = (idx == 4) ? ac : z;
-    z = (idx == 5) ? a  : z;
-    z = (idx == 6) ? b  : z;
-
+cheap34: {
+    uint64_t p3 = (a + b) * c;
+    uint64_t p4 = (b - c) * a;
+    x = (idx == 4) ? p4 : p3;
+    y = 0;
+    z = 0;
+    goto cheap_gen;
+}
+cheap56: {
+    x = (idx == 6) ? a : c;
+    y = (idx == 6) ? c : b;
+    z = (idx == 6) ? b : a;
+    goto cheap_gen;
+}
+cheap78: {
+    uint64_t p7 = b * c;
+    uint64_t p8 = c * a;
+    x = (idx == 8) ? p8 : p7;
+    y = (idx == 8) ? b  : a;
+    z = 0;
+    goto cheap_gen;
+}
+cheap_gen:
     v = x + y - z;
     goto done;
-}
 
 op9:   v = a*b*c; goto done;
 op14:  v = umul64_hi(a,c)+b*c; goto done;
 op15:  { uint64_t rr=ROTR(result,r_next);
          v=a*b+c*rr+umul64_hi(c,b); goto done; }
 
-op0: { __uint128_t t1 = combine_uint64(a+i, isqrt(b+j_off));
-       uint64_t denom = murmurhash3(c^result^i^j_off)|1;
-       v = (uint64_t)(t1 % denom); goto done; }
+op0: { uint64_t denom = murmurhash3(c^result^i^j_off)|1;
+       v = mod128_64_fast_parts(a+i, isqrt(b+j_off), denom); goto done; }
 op1: { uint64_t sb, sa;
        isqrt_pair(b | 2, a + j_off, &sb, &sa);
        v = ROTL((c + i) % sb, i + j_off) * sa; goto done; }
 op2: { uint64_t sa, sc;
        isqrt_pair(a + i, c + j_off, &sa, &sc);
        v = (sa * sc) ^ (b + i + j_off); goto done; }
-op10:  v = mod128_64_fast(COMBINE_UINT64(a,b), c|1); goto done;
+op10:  v = mod128_64_fast_parts(a, b, c|1); goto done;
 op11: { uint64_t hi = ROTL(result, r_next), lo = a | 2;
         if (hi > b || (hi == b && lo > c)) { v = c; goto done; }
         __uint128_t dd = COMBINE_UINT64(b, c), ds = COMBINE_UINT64(hi, lo);
@@ -847,11 +862,12 @@ static inline void prefetch_W(const void *p) {
             uint64_t idx_seed = v ^ result; \
             result            = ROTL(idx_seed, r); \
 \
-            next_a_idx = map_index(result); \
+            MapIndexPair read_idx = map_index_pair(result, idx_seed); \
+            next_a_idx = read_idx.first; \
             PF(&mem_buffer_a[next_a_idx]); \
 \
             int      use_b = pick_half(v); \
-            uint64_t idx_t = map_index(idx_seed); \
+            uint64_t idx_t = read_idx.second; \
             uint64_t t     = (use_b ? mem_buffer_b[idx_t] : mem_buffer_a[idx_t]) ^ result; \
 \
             uint64_t idx_a = map_index(t ^ result ^ XELIS_GOLDEN_RATIO); \
@@ -932,13 +948,14 @@ static inline void prefetch_W(const void *p) {
             result            = ROTL(idx_seed, r); \
 \
             /* ---- all deps for next iter's b-addr known HERE ---- */ \
-            next_a_idx       = map_index(result); \
+            MapIndexPair read_idx = map_index_pair(result, idx_seed); \
+            next_a_idx       = read_idx.first; \
             rot_res          = ~ROTR(result, r);                    /* next iter */ \
             uint64_t a_spec  = mem_buffer_a[next_a_idx];            /* replaces PF on a */ \
             PF(&mem_buffer_b[map_index(a_spec ^ rot_res)]);         /* next iter's b */ \
 \
             int      use_b = pick_half(v); \
-            uint64_t idx_t = map_index(idx_seed); \
+            uint64_t idx_t = read_idx.second; \
             uint64_t t     = (use_b ? mem_buffer_b[idx_t] : mem_buffer_a[idx_t]) ^ result; \
 \
             uint64_t idx_a = map_index(t ^ result ^ XELIS_GOLDEN_RATIO); \

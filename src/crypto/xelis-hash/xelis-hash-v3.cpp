@@ -101,11 +101,12 @@ uint64_t v      = execute_operation(op_raw, a, b, c, r, result, i, j);
             uint64_t idx_seed = v ^ result;
             result            = ROTL(idx_seed, r);
 
-            next_a_idx = map_index(result);
+            MapIndexPair read_idx = map_index_pair(result, idx_seed);
+            next_a_idx = read_idx.first;
             prefetch_L1(&mem_buffer_a[next_a_idx]);
 
             int      use_b = pick_half(v);
-            uint64_t idx_t = map_index(idx_seed);
+            uint64_t idx_t = read_idx.second;
             uint64_t t     = (use_b ? mem_buffer_b[idx_t] : mem_buffer_a[idx_t]) ^ result;
 
             uint64_t idx_a = map_index(t ^ result ^ XELIS_GOLDEN_RATIO);
@@ -584,15 +585,33 @@ namespace xelis_tests_v3
     {
         for (int i = 0; i < 1000000; i++) {
             uint64_t x = ((uint64_t)rand() << 32) | rand();
-            if (map_index(x) >= XELIS_BUFFER_SIZE_V3) {
+            uint64_t y = ((uint64_t)rand() << 32) | rand();
+            uint64_t idx_x = map_index(x);
+            uint64_t idx_y = map_index(y);
+            MapIndexPair pair = map_index_pair(x, y);
+
+            if (pair.first != idx_x || pair.second != idx_y) {
+                printf("FAIL test_map_index_pair: (%llu,%llu) != (%llu,%llu)\n",
+                       (unsigned long long)pair.first,
+                       (unsigned long long)pair.second,
+                       (unsigned long long)idx_x,
+                       (unsigned long long)idx_y);
+                return false;
+            }
+            if (idx_x >= XELIS_BUFFER_SIZE_V3) {
                 printf("FAIL test_map_index: %llu >= %zu\n",
-                       (unsigned long long)map_index(x), XELIS_BUFFER_SIZE_V3);
+                       (unsigned long long)idx_x, XELIS_BUFFER_SIZE_V3);
                 return false;
             }
         }
         if (map_index(0) >= XELIS_BUFFER_SIZE_V3 ||
             map_index(UINT64_MAX) >= XELIS_BUFFER_SIZE_V3) {
             std::cout << "FAIL test_map_index edge case\n"; return false;
+        }
+        MapIndexPair edge_pair = map_index_pair(0, UINT64_MAX);
+        if (edge_pair.first != map_index(0) ||
+            edge_pair.second != map_index(UINT64_MAX)) {
+            std::cout << "FAIL test_map_index_pair edge case\n"; return false;
         }
         std::cout << "PASS test_map_index\n";
         return true;
@@ -1022,7 +1041,7 @@ struct XelisTuneConfig {
 __attribute__((cold)) void xelis_tune_v3(int num_threads)
 {
     constexpr double WARMUP_SEC  = 2.0;
-    constexpr double BENCH_SEC   = 3.0;
+    constexpr double BENCH_SEC   = 5.0;
 
     unsigned phys = std::thread::hardware_concurrency();
     unsigned ht_thresh = (std::min)(phys, (unsigned)num_threads);
@@ -1040,14 +1059,14 @@ __attribute__((cold)) void xelis_tune_v3(int num_threads)
         { "pipe+goto+hyb",      s1_pipe,   s1_nt,    s3_goto,   false, false, false, true  },
         // { "pipe+switch",        s1_pipe,   nullptr,  s3_sw,     false, true,  false, false },
         // { "pipe+switch+hyb",    s1_pipe,   s1_nt,    s3_sw,     false, true,  false, true  },
-        { "pipe+merged",        s1_pipe,   nullptr,  s3_merge,  false, false, true,  false },
-        { "pipe+merged+hyb",    s1_pipe,   s1_nt,    s3_merge,  false, false, true,  true  },
+        // { "pipe+merged",        s1_pipe,   nullptr,  s3_merge,  false, false, true,  false },
+        // { "pipe+merged+hyb",    s1_pipe,   s1_nt,    s3_merge,  false, false, true,  true  },
         { "ser+goto",           s1_serial, nullptr,  s3_goto,   true,  false, false, false },
         { "ser+goto+hyb",       s1_serial, s1_nt,    s3_goto,   true,  false, false, true  },
         // { "ser+switch",         s1_serial, nullptr,  s3_sw,     true,  true,  false, false },
         // { "ser+switch+hyb",     s1_serial, s1_nt,    s3_sw,     true,  true,  false, true  },
-        { "ser+merged",         s1_serial, nullptr,  s3_merge,  true,  false, true,  false },
-        { "ser+merged+hyb",     s1_serial, s1_nt,    s3_merge,  true,  false, true,  true  },
+        // { "ser+merged",         s1_serial, nullptr,  s3_merge,  true,  false, true,  false },
+        // { "ser+merged+hyb",     s1_serial, s1_nt,    s3_merge,  true,  false, true,  true  },
     };
     constexpr size_t NUM_CONFIGS = sizeof(configs) / sizeof(configs[0]);
 
