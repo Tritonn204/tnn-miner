@@ -555,8 +555,9 @@ static uint64_t execute_op_heavy_switch(
         case 7:  return mod128_64_fast_parts(a, b, c|1);
         case 8:  { uint64_t t2_hi = ROTL(result,r_next), t2_lo = a|2;
                    if (t2_hi>b||(t2_hi==b&&t2_lo>c)) return c;
+                   __uint128_t t1=COMBINE_UINT64(b,c), t2=COMBINE_UINT64(t2_hi,t2_lo);
                    uint64_t q=(t2_hi!=0)?(b/t2_hi):0;
-                   return c - t2_lo * q; }
+                   return (uint64_t)(t1-t2*q); }
         case 9:  return udiv(c,a,b|4);
         case 10: { uint64_t rr = ROTL(result, r_next);
                   if (!(rr > a || (rr == a && b > (c | 8))))
@@ -630,8 +631,9 @@ op9:   v = a*b*c;   goto done;
 op10:  v = mod128_64_fast_parts(a, b, c|1); goto done;
 op11: { uint64_t hi = ROTL(result, r_next), lo = a | 2;
         if (hi > b || (hi == b && lo > c)) { v = c; goto done; }
+        __uint128_t dd = COMBINE_UINT64(b, c), ds = COMBINE_UINT64(hi, lo);
         uint64_t q = (hi != 0) ? (b / hi) : 0;
-        v = c - lo * q; goto done; }
+        v = (uint64_t)(dd - ds * q); goto done; }
 op12:  v = udiv(c,a,b|4); goto done;
 op13: { uint64_t rr=ROTL(result,r_next);
         v=(rr>a||(rr==a&&b>(c|8)))?((a!=0)?(rr/a):0):(a^b); goto done; }
@@ -701,8 +703,9 @@ op2: { uint64_t sa, sc;
 op10:  v = mod128_64_fast_parts(a, b, c|1); goto done;
 op11: { uint64_t hi = ROTL(result, r_next), lo = a | 2;
         if (hi > b || (hi == b && lo > c)) { v = c; goto done; }
+        __uint128_t dd = COMBINE_UINT64(b, c), ds = COMBINE_UINT64(hi, lo);
         uint64_t q = (hi != 0) ? (b / hi) : 0;
-        v = c - lo * q; goto done; }
+        v = (uint64_t)(dd - ds * q); goto done; }
 op12:  v = udiv(c,a,b|4); goto done;
 op13: { uint64_t rr=ROTL(result,r_next);
         v=(rr>a||(rr==a&&b>(c|8)))?((a!=0)?(rr/a):0):(a^b); goto done; }
@@ -944,7 +947,6 @@ static inline void prefetch_W(const void *p) {
             uint64_t idx_seed = v ^ result; \
             result            = ROTL(idx_seed, r); \
 \
-            /* ---- all deps for next iter's b-addr known HERE ---- */ \
             MapIndexPair read_idx = map_index_pair(result, idx_seed); \
             next_a_idx       = read_idx.first; \
             rot_res          = ~ROTR(result, r);                    /* next iter */ \

@@ -92,7 +92,7 @@ private:
 // Xelis V3 CPU Algorithm Implementation
 class XelisV3CPU : public ICPUAlgorithm {
 public:
-    XelisV3CPU() : worker_(nullptr), thread_id_(0) {}
+    XelisV3CPU() : worker_(nullptr), thread_id_(0), hash_fn_(xelis_hash_v3) {}
 
     ~XelisV3CPU() override {
         cleanup();
@@ -100,6 +100,7 @@ public:
 
     bool initialize(int thread_id) override {
         thread_id_ = thread_id;
+        hash_fn_ = select_hash_fn(thread_id_);
 
         // Allocate worker data with huge pages
         worker_ = (workerData_xelis_v3*)malloc_huge_pages(sizeof(workerData_xelis_v3));
@@ -123,6 +124,7 @@ public:
             return false;
         }
 
+        hash_fn_ = select_hash_fn(thread_id_);
         std::memcpy(work_buffer_, work_template, size);
         return true;
     }
@@ -139,8 +141,7 @@ public:
         // Write nonce (already encoded with thread ID)
         std::memcpy(local_work + config.nonce_offset, &nonce, config.nonce_size);
 
-        // Compute hash
-        xelis_hash_v3(local_work, *worker_, output);
+        hash_fn_(local_work, *worker_, output);
 
         // Handle endianness
         if (littleEndian()) {
@@ -165,8 +166,20 @@ public:
     }
 
 private:
+    using XelisV3HashFn = void (*)(byte*, workerData_xelis_v3&, byte*);
+
+    static XelisV3HashFn select_hash_fn(int thread_id) {
+        bool is_ht = xelis_v3_use_hybrid && (unsigned)thread_id > xelis_v3_ht_threshold;
+        if (xelis_v3_use_merged)
+            return is_ht ? xelis_hash_v3_merged_nt : xelis_hash_v3_merged;
+        if (xelis_v3_use_switch)
+            return is_ht ? xelis_hash_v3_switch_nt : xelis_hash_v3_switch;
+        return is_ht ? xelis_hash_v3_nt : xelis_hash_v3;
+    }
+
     workerData_xelis_v3* worker_;
     int thread_id_;
+    XelisV3HashFn hash_fn_;
     uint8_t work_buffer_[XELIS_TEMPLATE_SIZE];
 };
 

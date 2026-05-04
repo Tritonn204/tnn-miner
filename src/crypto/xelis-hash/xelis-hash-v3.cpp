@@ -1041,7 +1041,7 @@ struct XelisTuneConfig {
 __attribute__((cold)) void xelis_tune_v3(int num_threads)
 {
     constexpr double WARMUP_SEC  = 2.0;
-    constexpr double BENCH_SEC   = 5.0;
+    constexpr double BENCH_SEC   = 8.0;
 
     unsigned phys = std::thread::hardware_concurrency();
     unsigned ht_thresh = (std::min)(phys, (unsigned)num_threads);
@@ -1095,6 +1095,13 @@ __attribute__((cold)) void xelis_tune_v3(int num_threads)
                 for (int k = 0; k < 112; k++)
                     input[k] = (byte)((k * 17 + 31 + t * 7) & 0xFF);
 
+                auto write_nonce = [&](uint64_t nonce) {
+                    uint64_t n = ((uint64_t)t % (256 * 256))
+                               | ((nonce & 0xFFULL) << 16)
+                               | (nonce << 24);
+                    memcpy(input + 40, &n, sizeof(n));
+                };
+
                 bool is_ht = ((unsigned)t >= ht_thresh);
                 Stage1Fn s1_fn = (is_ht && cfg.s1_ht) ? cfg.s1_ht : cfg.s1;
                 Stage3Fn s3_fn = cfg.s3;
@@ -1106,21 +1113,22 @@ __attribute__((cold)) void xelis_tune_v3(int num_threads)
                 auto warmup_end = std::chrono::steady_clock::now()
                     + std::chrono::milliseconds((int)(WARMUP_SEC * 1000));
                 while (std::chrono::steady_clock::now() < warmup_end) {
+                    write_nonce(++warmup_count);
                     s1_fn(input, worker->scratchPad, 112);
                     s3_fn(worker->scratchPad, *worker);
                     blake3((uint8_t *)worker->scratchPad, XELIS_OUTPUT_SIZE_V3, hash);
-                    if ((++warmup_count & 127) == 0)
+                    if ((warmup_count & 63) == 0)
                         std::this_thread::yield();
                 }
 
                 // Bench
                 uint64_t count = 0;
                 while (!stop_flag.load(std::memory_order_relaxed)) {
+                    write_nonce(++count);
                     s1_fn(input, worker->scratchPad, 112);
                     s3_fn(worker->scratchPad, *worker);
                     blake3((uint8_t *)worker->scratchPad, XELIS_OUTPUT_SIZE_V3, hash);
-                    count++;
-                    if ((count & 127) == 0)
+                    if ((count & 63) == 0)
                         std::this_thread::yield();
                 }
                 total_hashes.fetch_add(count, std::memory_order_relaxed);
