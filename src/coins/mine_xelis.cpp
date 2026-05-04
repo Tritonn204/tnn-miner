@@ -252,6 +252,9 @@ waitForJob:
           if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
           break;
         }
+
+        if ((localCount & 63) == 0)
+          std::this_thread::yield();
       }
       if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
       if (!isConnected)
@@ -557,6 +560,9 @@ waitForJob:
           if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
           break;
         }
+
+        if ((localCount & 63) == 0)
+          std::this_thread::yield();
       }
       if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
       if (!isConnected) {

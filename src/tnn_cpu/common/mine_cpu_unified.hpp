@@ -334,6 +334,9 @@ waitForJob:
                     }
                     break;
                 }
+
+                if ((localCount & 63) == 0)
+                    std::this_thread::yield();
             }
 
             if (localCount) {
