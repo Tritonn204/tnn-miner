@@ -272,10 +272,7 @@ public:
     }
 };
 
-// XelisV3-specific profile: surgically disable L2 stream HW prefetcher
-// to prevent HWPF pollution of L2 from the sequential scratch_pad[r] access.
-// The profiling shows SRB has 0 L2 HWPF activity vs TNN's ~5.7 pti — this
-// HWPF evicts random-access data from L2, causing 22x more L3 misses.
+// XelisV3-specific profile: use the Xelis-tuned MSR bundle.
 class XelisV3OptimizationProfile : public MSROptimizationProfile {
 public:
     std::string getName() const override {
@@ -287,24 +284,19 @@ public:
 
         switch (cpuType) {
             case CPUType::INTEL:
-                // Intel: 0x1A4 bit 0 = L2 HW prefetcher disable
-                msrValues.emplace_back(0x1A4, 0x1);
+                msrValues.emplace_back(0x1A4, 0xF);
                 break;
-
+                
             case CPUType::AMD_ZEN1_ZEN2:
-                // 0xC0011022 bit 13 = disable L2 stream prefetcher
-                msrValues.emplace_back(0xC0011022, 0x2000);
+                msrValues.emplace_back(0xC0011022, 0x1510000);
                 break;
-
+                
             case CPUType::AMD_ZEN3:
-                // Zen3: bit 13 of 0xC0011022 for L2 stream PF disable
-                // Keep other bits at their defaults (0)
-                msrValues.emplace_back(0xC0011022, 0x2000);
+                msrValues.emplace_back(0xC0011022, 0x01570000);
                 break;
-
+                
             case CPUType::AMD_ZEN4_ZEN5:
-                // Zen4/5: same register, same bit
-                msrValues.emplace_back(0xC0011022, 0x2000);
+                msrValues.emplace_back(0xC0011022, 0x01570000);
                 break;
 
             default:
