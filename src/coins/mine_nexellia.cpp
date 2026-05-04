@@ -23,6 +23,7 @@ void mineNexellia(int tid)
   NxlHash::worker *devWorker = (NxlHash::worker *)malloc(sizeof(NxlHash::worker));
 
   fflush(stdout);
+  uint64_t yieldCount = 0;
 
 waitForJob:
 
@@ -299,6 +300,8 @@ waitForJob:
         if (!isConnected) {
           break;
         }
+        if ((++yieldCount & 127) == 0)
+          std::this_thread::yield();
       }
       if (!isConnected) {
         break;

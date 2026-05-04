@@ -79,6 +79,7 @@ void mineGhostRider(int tid)
   
   uint32_t targetWords[8];
   uint32_t targetWords_dev[8];
+  uint64_t yieldCount = 0;
   
   // Initialize GhostRider contexts
   memset(&gr_ctx, 0, sizeof(gr_ctx));
@@ -207,6 +208,9 @@ waitForJob:
           cv.notify_all();
           break;
         }
+        yieldCount += 2;
+        if ((yieldCount & 127) == 0)
+          std::this_thread::yield();
       }
     }
     catch (std::exception &e)

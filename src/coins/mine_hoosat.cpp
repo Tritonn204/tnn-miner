@@ -27,6 +27,7 @@ void mineHoosat(int tid)
   thread_local std::random_device rd;
   thread_local std::mt19937 rng(rd());
   thread_local std::uniform_real_distribution<double> dist(0, 10000);
+  thread_local uint64_t yieldCount = 0;
 
 waitForJob:
 
@@ -303,6 +304,8 @@ waitForJob:
         if (!isConnected) {
           break;
         }
+        if ((++yieldCount & 127) == 0)
+          std::this_thread::yield();
       }
       if (!isConnected) {
         break;

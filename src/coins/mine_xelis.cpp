@@ -253,7 +253,7 @@ waitForJob:
           break;
         }
 
-        if ((localCount & 127) == 0)
+        if ((localCount & 63) == 0)
           std::this_thread::yield();
       }
       if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }
@@ -561,7 +561,7 @@ waitForJob:
           break;
         }
 
-        if ((localCount & 127) == 0)
+        if ((localCount & 63) == 0)
           std::this_thread::yield();
       }
       if (localCount) { cpu_counter.fetch_add(localCount); localCount = 0; }

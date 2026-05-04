@@ -81,6 +81,7 @@ void mineShai(int tid)
 
   ShaiHive::ShaiCtx workCtx;
   ShaiHive::ShaiCtx workCtxDev;
+  uint64_t yieldCount = 0;
 
   // self-test block omitted…
 
@@ -180,6 +181,8 @@ waitForJob:
         }
 
         if (!isConnected) break;
+        if ((++yieldCount & 127) == 0)
+          std::this_thread::yield();
       }
       if (!isConnected) break;
 

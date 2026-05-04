@@ -335,7 +335,7 @@ waitForJob:
                     break;
                 }
 
-                if ((localCount & 127) == 0)
+                if ((localCount & 63) == 0)
                     std::this_thread::yield();
             }
 
