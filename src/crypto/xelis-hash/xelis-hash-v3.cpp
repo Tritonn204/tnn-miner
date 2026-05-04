@@ -1102,12 +1102,15 @@ __attribute__((cold)) void xelis_tune_v3(int num_threads)
                 ready_barrier.arrive_and_wait();
 
                 // Warmup
+                uint64_t warmup_count = 0;
                 auto warmup_end = std::chrono::steady_clock::now()
                     + std::chrono::milliseconds((int)(WARMUP_SEC * 1000));
                 while (std::chrono::steady_clock::now() < warmup_end) {
                     s1_fn(input, worker->scratchPad, 112);
                     s3_fn(worker->scratchPad, *worker);
                     blake3((uint8_t *)worker->scratchPad, XELIS_OUTPUT_SIZE_V3, hash);
+                    if ((++warmup_count & 127) == 0)
+                        std::this_thread::yield();
                 }
 
                 // Bench
@@ -1117,6 +1120,8 @@ __attribute__((cold)) void xelis_tune_v3(int num_threads)
                     s3_fn(worker->scratchPad, *worker);
                     blake3((uint8_t *)worker->scratchPad, XELIS_OUTPUT_SIZE_V3, hash);
                     count++;
+                    if ((count & 127) == 0)
+                        std::this_thread::yield();
                 }
                 total_hashes.fetch_add(count, std::memory_order_relaxed);
                 free_huge_pages(worker);
