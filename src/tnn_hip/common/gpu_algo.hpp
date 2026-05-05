@@ -144,6 +144,7 @@ struct KernelLaunchContext {
     uint64_t* d_scratch;
     uint64_t* d_difficulty_target;
     uint64_t* d_solutions;
+    uint32_t* d_solution_flag = nullptr;  // Optional mapped host flag, set by GPU only on rare solution hits.
 
     // Launch parameters
     uint64_t nonce_start;
@@ -352,6 +353,8 @@ struct AlgoConfig {
     size_t hash_size;
     size_t nonce_size;
     size_t scratch_per_hash;
+    bool allocate_output_buffer = true;
+    bool allocate_scratch_buffer = true;
     int preferred_block_size;
     int algo_id;
 
@@ -573,6 +576,12 @@ public:
 
     virtual TuningResult get_tuning_result() const = 0;
     virtual bool set_batch_size_override(uint32_t batch_size) = 0;
+
+    // Optional mapped host/device solution flag. Kernels may write the device
+    // pointer only on solution hits; the host can poll without synchronizing.
+    virtual bool has_mapped_solution_flag() const = 0;
+    virtual bool poll_solution_flag() const = 0;
+    virtual void clear_solution_flag() = 0;
 
     // Algo-agnostic dependency tracking.  The mining loop sets named deps
     // (e.g. "period", "epoch"); mine_batch fires the algo's deps_changed_fn

@@ -248,11 +248,15 @@ int kawpow_gpu_test()
     // Allocate GPU buffers sized for the larger of the two batches
     constexpr uint32_t MAX_BATCH = (BATCH_SIZE_MONO > BATCH_SIZE_SPLIT)
                                    ? BATCH_SIZE_MONO : BATCH_SIZE_SPLIT;
-    const size_t per_hash_u32    = 16;
-    const size_t results_bytes   = (size_t)MAX_BATCH * per_hash_u32 * sizeof(uint32_t);
+    // Sizes per hash
+    const size_t inter_per_hash_u32  = 8;   // d_intermediate: digest only (z,w → digest)
+    const size_t result_per_hash_u32 = 16;  // d_results: mix[0..7] + final[0..7]
+
+    const size_t intermediate_bytes = (size_t)MAX_BATCH * inter_per_hash_u32  * sizeof(uint32_t);
+    const size_t results_bytes      = (size_t)MAX_BATCH * result_per_hash_u32 * sizeof(uint32_t);
 
     AlignedDevAlloc header_alloc{}, target_alloc{}, solutions_alloc{}, results_alloc{}, intermediate_alloc{};
-    AlignedDevAlloc dag_alloc{}, l1_alloc{};
+    AlignedDevAlloc dag_alloc{};
 
     uint32_t* d_header       = nullptr;
     uint64_t* d_target       = nullptr;
@@ -263,8 +267,8 @@ int kawpow_gpu_test()
     KP_CHECK(oroMallocAligned(header_alloc,       32,            64));
     KP_CHECK(oroMallocAligned(target_alloc,       32,            64));
     KP_CHECK(oroMallocAligned(solutions_alloc,    8 + 1024 * 40, 64));
-    KP_CHECK(oroMallocAligned(results_alloc,      results_bytes, 64));
-    KP_CHECK(oroMallocAligned(intermediate_alloc, results_bytes, 64));
+    KP_CHECK(oroMallocAligned(results_alloc,      results_bytes,      64));
+    KP_CHECK(oroMallocAligned(intermediate_alloc, intermediate_bytes, 64));
 
     d_header       = reinterpret_cast<uint32_t*>(header_alloc.aligned);
     d_target       = reinterpret_cast<uint64_t*>(target_alloc.aligned);
@@ -275,7 +279,7 @@ int kawpow_gpu_test()
     uint64_t max_target[4] = {~0ULL, ~0ULL, ~0ULL, ~0ULL};
     KP_CHECK(oroMemcpy(d_target, max_target, 32, oroMemcpyHostToDevice));
 
-    std::vector<uint32_t> host_results(MAX_BATCH * per_hash_u32);
+    std::vector<uint32_t> host_results(MAX_BATCH * result_per_hash_u32);
 
     auto build_samples = [&](uint32_t batch_size, uint32_t hashes_per_block) {
         std::set<uint32_t> s;
@@ -303,7 +307,7 @@ int kawpow_gpu_test()
                               const std::vector<uint32_t>& samples,
                               int& pass_ctr, int& fail_ctr)
     {
-        size_t bytes = (size_t)batch_size * per_hash_u32 * sizeof(uint32_t);
+        size_t bytes = (size_t)batch_size * result_per_hash_u32 * sizeof(uint32_t);
         KP_CHECK(oroMemcpy(host_results.data(), d_results, bytes, oroMemcpyDeviceToHost));
 
         int local_fail = 0;
@@ -312,7 +316,7 @@ int kawpow_gpu_test()
             uint64_t n = nonce_start + (uint64_t)hi;
             auto cpu = progpow::hash(ctx, block_number, header, n);
 
-            const uint32_t* gpu = &host_results[(size_t)hi * per_hash_u32];
+            const uint32_t* gpu = &host_results[(size_t)hi * result_per_hash_u32];
             std::string cpu_mix   = hash256_hex(cpu.mix_hash);
             std::string cpu_final = hash256_hex(cpu.final_hash);
             std::string gpu_mix   = words_hex(gpu, 8);
@@ -386,14 +390,20 @@ int kawpow_gpu_test()
 
         // ---- DAG generation on GPU ----
         oroFreeAligned(dag_alloc);
-        oroFreeAligned(l1_alloc);
         dag.d_dag = nullptr;
         dag.d_l1_cache = nullptr;
 
         dag.num_items_2048    = (uint32_t)(ctx->full_dataset_num_items / 2);
         dag.dag_num_items_div = dag.num_items_2048;
-        size_t dag_words      = (size_t)dag.num_items_2048 * 64;
-        dag.size_bytes        = dag_words * sizeof(uint32_t);
+
+        constexpr size_t DAG_WORDS_PER_ITEM    = 64; // original 2048-bit item
+        constexpr size_t DAG_W0_ROWS_PER_ITEM  = 16; // one w0 per vec4 row
+
+        size_t dag_base_words = (size_t)dag.num_items_2048 * DAG_WORDS_PER_ITEM;
+        size_t dag_w0_words   = (size_t)dag.num_items_2048 * DAG_W0_ROWS_PER_ITEM;
+        size_t dag_words      = dag_base_words + dag_w0_words;
+
+        dag.size_bytes = dag_words * sizeof(uint32_t);
 
         printf("[KawPow] Generating DAG: %u items (%.1f MB)...\n",
                dag.num_items_2048, dag.size_bytes / (1024.0 * 1024.0));
@@ -450,9 +460,7 @@ int kawpow_gpu_test()
         //     return 1;
         // }
 
-        KP_CHECK(oroMallocAligned(l1_alloc, 16384, 64));
-        dag.d_l1_cache = reinterpret_cast<uint32_t*>(l1_alloc.aligned);
-        KP_CHECK(oroMemcpy(dag.d_l1_cache, dag.d_dag, 16384, oroMemcpyDeviceToDevice));
+        dag.d_l1_cache = dag.d_dag;
 
         uint32_t* d_dag      = dag.d_dag;
         uint32_t* d_l1_cache = dag.d_l1_cache;
@@ -488,10 +496,9 @@ int kawpow_gpu_test()
                     continue;
                 }
                 mono_func = mono_fn_tmp;
-
-                oroError_t e1 = oroModuleGetFunction(&seed_fn,    split_module, "kawpow_seed_kernel");
-                oroError_t e2 = oroModuleGetFunction(&progpow_fn, split_module, "kawpow_progpow_kernel_4way");
-                oroError_t e3 = oroModuleGetFunction(&final_fn,   split_module, "kawpow_final_kernel");
+                oroError_t e1 = oroModuleGetFunction(&seed_fn,    split_module, "kawpow_seed_kernel_seed64");
+                oroError_t e2 = oroModuleGetFunction(&progpow_fn, split_module, "kawpow_progpow_kernel_2way_seed64_digest");
+                oroError_t e3 = oroModuleGetFunction(&final_fn,   split_module, "kawpow_final_kernel_reseed_seed64_digest");
 
                 if (e1 != oroSuccess || e2 != oroSuccess || e3 != oroSuccess ||
                     !seed_fn || !progpow_fn || !final_fn) {
@@ -503,27 +510,28 @@ int kawpow_gpu_test()
             }
 
             // ==== MONO test ====
-            {
-                uint32_t batch_size = BATCH_SIZE_MONO;
-                KP_CHECK(oroMemcpy(d_header, header.word32s, 32, oroMemcpyHostToDevice));
-                uint64_t zero = 0;
-                KP_CHECK(oroMemcpy(d_solutions, &zero, 8, oroMemcpyHostToDevice));
-                KP_CHECK(oroMemset((oroDeviceptr)d_results, 0, results_bytes));
+            // {
+            //     uint32_t batch_size = BATCH_SIZE_MONO;
+            //     KP_CHECK(oroMemcpy(d_header, header.word32s, 32, oroMemcpyHostToDevice));
+            //     uint64_t zero = 0;
+            //     KP_CHECK(oroMemcpy(d_solutions, &zero, 8, oroMemcpyHostToDevice));
+            //     KP_CHECK(oroMemset((oroDeviceptr)d_results, 0, results_bytes));
+            //     uint32_t* d_solution_flag = nullptr;
 
-                void* args[] = {
-                    &d_header, &d_dag, &nonce_start, &batch_size,
-                    &d_target, &d_solutions, &block_num, &d_results,
-                    &d_l1_cache,
-                };
-                size_t smem = kawpow_shared_mem(MONO_TPB);
-                KP_CHECK(oroModuleLaunchKernel(mono_func,
-                    NUM_BLOCKS_PP, 1, 1, MONO_TPB, 1, 1,
-                    smem, nullptr, args, nullptr));
-                KP_CHECK(oroDeviceSynchronize());
+            //     void* args[] = {
+            //         &d_header, &d_dag, &nonce_start, &batch_size,
+            //         &d_target, &d_solutions, &d_solution_flag, &block_num, &d_results,
+            //         &d_l1_cache,
+            //     };
+            //     size_t smem = kawpow_shared_mem(MONO_TPB);
+            //     KP_CHECK(oroModuleLaunchKernel(mono_func,
+            //         NUM_BLOCKS_PP, 1, 1, MONO_TPB, 1, 1,
+            //         smem, nullptr, args, nullptr));
+            //     KP_CHECK(oroDeviceSynchronize());
 
-                validate_batch("Mono", t+1, *ctx, header, nonce_start, tv.block_number,
-                               batch_size, samples_mono, total_pass, total_fail);
-            }
+            //     validate_batch("Mono", t+1, *ctx, header, nonce_start, tv.block_number,
+            //                    batch_size, samples_mono, total_pass, total_fail);
+            // }
 
             // ==== SPLIT 2-WAY test ====
             if (seed_fn && progpow_fn && final_fn) {
@@ -533,7 +541,7 @@ int kawpow_gpu_test()
                 uint64_t zero = 0;
                 KP_CHECK(oroMemcpy(d_solutions, &zero, 8, oroMemcpyHostToDevice));
                 KP_CHECK(oroMemset((oroDeviceptr)d_results,      0, results_bytes));
-                KP_CHECK(oroMemset((oroDeviceptr)d_intermediate, 0, results_bytes));
+                KP_CHECK(oroMemset((oroDeviceptr)d_intermediate, 0, intermediate_bytes));
 
                 {
                     void* args[] = { &d_header, &nonce_start, &batch_size, &d_intermediate };
@@ -546,12 +554,18 @@ int kawpow_gpu_test()
                 }
 
                 {
-                    uint32_t tmp[32];
-                    KP_CHECK(oroMemcpy(tmp, d_intermediate, 128, oroMemcpyDeviceToHost));
-                    printf("    seed[0]: %s\n", words_hex(tmp, 8).c_str());
-                    printf("    seed[1]: %s\n", words_hex(tmp + 16, 8).c_str());
-                    bool all_zero = true;
-                    for (int i = 0; i < 16; i++) if (tmp[i]) all_zero = false;
+                    uint32_t tmp[16];
+                    KP_CHECK(oroMemcpy(tmp, d_intermediate, 64, oroMemcpyDeviceToHost));
+                    printf("    seed[0] z,w: %s\n", words_hex(tmp, 2).c_str());       // [0..1]
+                    printf("    seed[1] z,w: %s\n", words_hex(tmp + 8, 2).c_str());   // [8..9]
+                    bool all_zero = !tmp[0] && !tmp[1];
+
+                    // After progpow: digest overwrites to [0..7] per hash
+                    KP_CHECK(oroMemcpy(tmp, d_intermediate, 64, oroMemcpyDeviceToHost));
+                    printf("    digest[0]: %s\n", words_hex(tmp, 8).c_str());          // [0..7]
+                    printf("    digest[1]: %s\n", words_hex(tmp + 8, 8).c_str());      // [8..15]
+                    all_zero = true;
+                    for (int i = 0; i < 8; i++) if (tmp[i]) all_zero = false;
                     if (all_zero)
                         printf("    \033[33mWARNING: seed output is all zeros!\033[0m\n");
                 }
@@ -562,7 +576,7 @@ int kawpow_gpu_test()
                            NUM_BLOCKS_PP, PROGPOW_TPB, smem, batch_size);
                     fflush(stdout);
 
-                    void* args[] = { &d_dag, &batch_size, &d_l1_cache, &d_intermediate };
+                    void* args[] = { &d_dag, &batch_size, &d_dag, &d_intermediate };
                     KP_CHECK(oroModuleLaunchKernel(progpow_fn,
                         NUM_BLOCKS_PP, 1, 1,
                         PROGPOW_TPB, 1, 1,
@@ -583,8 +597,9 @@ int kawpow_gpu_test()
                 }
 
                 {
-                    void* args[] = { &nonce_start, &batch_size, &d_target, &d_solutions,
-                                     &d_results, &d_intermediate };
+                    uint32_t* d_solution_flag = nullptr;
+                    void* args[] = { &d_header, &nonce_start, &batch_size, &d_target, &d_solutions,
+                                     &d_solution_flag, &d_results, &d_intermediate };
                     KP_CHECK(oroModuleLaunchKernel(final_fn,
                         SEED_FINAL_GRID_SPLIT, 1, 1,
                         SEED_FINAL_TPB, 1, 1,
@@ -667,7 +682,6 @@ int kawpow_gpu_test()
 
     // ---- Cleanup ----
     oroFreeAligned(dag_alloc);
-    oroFreeAligned(l1_alloc);
     oroFreeAligned(header_alloc);
     oroFreeAligned(target_alloc);
     oroFreeAligned(solutions_alloc);

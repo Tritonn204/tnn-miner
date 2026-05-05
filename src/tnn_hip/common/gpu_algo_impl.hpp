@@ -129,6 +129,21 @@ public:
     }
 
     oroCtx get_ctx() const override { return ctx_; }
+
+    bool has_mapped_solution_flag() const override {
+        return h_solution_flag_ != nullptr && d_solution_flag_ != nullptr;
+    }
+
+    bool poll_solution_flag() const override {
+        return h_solution_flag_ &&
+               (*reinterpret_cast<volatile const uint32_t*>(h_solution_flag_) != 0);
+    }
+
+    void clear_solution_flag() override {
+        if (h_solution_flag_) {
+            *reinterpret_cast<volatile uint32_t*>(h_solution_flag_) = 0;
+        }
+    }
     
     bool set_batch_size_override(uint32_t batch_size) override {
         if (!initialized_) return false;
@@ -340,8 +355,10 @@ public:
             snapshot = use_dev_deps_ ? pending_dev_deps_ : pending_deps_;
         }
         auto& active = use_dev_deps_ ? active_dev_deps_ : active_deps_;
+        bool mode_changed = config_.dev_fee_session_based &&
+                            (!active_dep_mode_valid_ || active_dep_mode_is_dev_ != use_dev_deps_);
 
-        if (snapshot == active) return true;  // nothing changed
+        if (snapshot == active && !mode_changed) return true;  // nothing changed
 
         if (!config_.deps_changed_fn(snapshot, active, kernels_, algo_data_, device_id_,
                                       use_dev_deps_)) {
@@ -374,6 +391,10 @@ public:
             }
         }
         active = snapshot;
+        if (config_.dev_fee_session_based) {
+            active_dep_mode_is_dev_ = use_dev_deps_;
+            active_dep_mode_valid_ = true;
+        }
         return true;
     }
 
@@ -396,7 +417,9 @@ public:
                 snapshot = batch_is_dev ? pending_dev_deps_ : pending_deps_;
             }
             auto& active = batch_is_dev ? active_dev_deps_ : active_deps_;
-            if (snapshot != active) {
+            bool mode_changed = config_.dev_fee_session_based &&
+                                (!active_dep_mode_valid_ || active_dep_mode_is_dev_ != batch_is_dev);
+            if (snapshot != active || mode_changed) {
                 if (!config_.deps_changed_fn(snapshot, active, kernels_, algo_data_, device_id_, batch_is_dev)) {
                     // Hook said skip this batch.  If main-thread work is pending
                     // (e.g. KawPow DAG rebuild), return skip — mine_loop will
@@ -408,6 +431,10 @@ public:
                     return skip;
                 } else {
                     active = snapshot;
+                    if (config_.dev_fee_session_based) {
+                        active_dep_mode_is_dev_ = batch_is_dev;
+                        active_dep_mode_valid_ = true;
+                    }
                 }
 
                 // deps_changed may have altered GPU memory (e.g. DAG resize).
@@ -453,6 +480,7 @@ public:
         if (merr != oroSuccess)
             TNN_LOG_ERROR("[ERROR] GPU %d: mine_batch oroMemset(d_solutions_) failed: %s\n",
                           device_id_, tnn_error_string(merr));
+        clear_solution_flag();
 
         // Build launch context
         KernelLaunchContext ctx;
@@ -461,6 +489,7 @@ public:
         ctx.d_scratch = d_scratch_;
         ctx.d_difficulty_target = d_difficulty_target_;
         ctx.d_solutions = d_solutions_;
+        ctx.d_solution_flag = d_solution_flag_;
         ctx.nonce_start = nonce_start;
         ctx.batch_size = count;
         ctx.block_size = block_size_;
@@ -715,13 +744,54 @@ private:
     // ========================================================================
     // Buffer Management
     // ========================================================================
+
+    oroError_t allocate_mapped_solution_flag() {
+        if (h_solution_flag_ && d_solution_flag_)
+            return oroSuccess;
+
+        free_mapped_solution_flag();
+
+        uint32_t* host_flag = nullptr;
+        unsigned int flags = oroHostMallocMapped;
+        if (tnn_is_amd_device(device_id_))
+            flags |= oroHostMallocCoherent;
+
+        oroError_t err = oroHostMalloc((void**)&host_flag, sizeof(uint32_t), flags);
+        if (err != oroSuccess)
+            return err;
+
+        uint32_t* device_flag = nullptr;
+        err = oroHostGetDevicePointer((void**)&device_flag, host_flag, 0);
+        if (err != oroSuccess) {
+            (void)oroHostFree(host_flag);
+            return err;
+        }
+
+        *host_flag = 0;
+        h_solution_flag_ = host_flag;
+        d_solution_flag_ = device_flag;
+        return oroSuccess;
+    }
+
+    void free_mapped_solution_flag() {
+        if (h_solution_flag_) {
+            (void)oroHostFree(h_solution_flag_);
+        }
+        h_solution_flag_ = nullptr;
+        d_solution_flag_ = nullptr;
+    }
     
     bool allocate_batch_buffers() {
         oroError_t err;
 
-        size_t scratch_size = batch_size_ * config_.scratch_per_hash;
-        TNN_LOG_DEBUG("[DEBUG] GPU %d: Allocating buffers (batch=%u, scratch=%zu MB)\n",
-               device_id_, batch_size_, scratch_size / (1024*1024));
+        size_t scratch_size = config_.allocate_scratch_buffer
+            ? batch_size_ * config_.scratch_per_hash
+            : 0;
+        size_t output_size = config_.allocate_output_buffer
+            ? batch_size_ * config_.hash_size
+            : 0;
+        TNN_LOG_DEBUG("[DEBUG] GPU %d: Allocating buffers (batch=%u, scratch=%zu MB, outputs=%zu MB)\n",
+               device_id_, batch_size_, scratch_size / (1024*1024), output_size / (1024*1024));
 
         err = oro_safe_malloc((oroDeviceptr*)&d_input_, config_.template_size);
         if (err != oroSuccess) {
@@ -730,20 +800,24 @@ private:
             return false;
         }
 
-        err = oro_safe_malloc((oroDeviceptr*)&d_outputs_, batch_size_ * config_.hash_size);
-        if (err != oroSuccess) {
-            TNN_LOG_ERROR("[ERROR] GPU %d: oroMalloc d_outputs_ (%zu bytes) failed: %s\n",
-                    device_id_, batch_size_ * config_.hash_size, tnn_error_string(err));
-            cleanup_batch_buffers();
-            return false;
+        if (output_size > 0) {
+            err = oro_safe_malloc((oroDeviceptr*)&d_outputs_, output_size);
+            if (err != oroSuccess) {
+                TNN_LOG_ERROR("[ERROR] GPU %d: oroMalloc d_outputs_ (%zu bytes) failed: %s\n",
+                        device_id_, output_size, tnn_error_string(err));
+                cleanup_batch_buffers();
+                return false;
+            }
         }
 
-        err = oro_safe_malloc((oroDeviceptr*)&d_scratch_, scratch_size);
-        if (err != oroSuccess) {
-            TNN_LOG_ERROR("[ERROR] GPU %d: oroMalloc d_scratch_ (%zu MB) failed: %s\n",
-                    device_id_, scratch_size / (1024*1024), tnn_error_string(err));
-            cleanup_batch_buffers();
-            return false;
+        if (scratch_size > 0) {
+            err = oro_safe_malloc((oroDeviceptr*)&d_scratch_, scratch_size);
+            if (err != oroSuccess) {
+                TNN_LOG_ERROR("[ERROR] GPU %d: oroMalloc d_scratch_ (%zu MB) failed: %s\n",
+                        device_id_, scratch_size / (1024*1024), tnn_error_string(err));
+                cleanup_batch_buffers();
+                return false;
+            }
         }
 
         err = oro_safe_malloc((oroDeviceptr*)&d_difficulty_target_, 32);
@@ -763,13 +837,20 @@ private:
             return false;
         }
 
+        err = allocate_mapped_solution_flag();
+        if (err != oroSuccess) {
+            TNN_LOG_DEBUG("[DEBUG] GPU %d: mapped solution flag unavailable: %s\n",
+                    device_id_, tnn_error_string(err));
+        }
+
         // Zero all buffers to avoid stale data from tune iterations
         // causing rejects when mining starts immediately after tuning.
         (void)oroMemset(d_input_, 0, config_.template_size);
-        (void)oroMemset(d_outputs_, 0, batch_size_ * config_.hash_size);
-        (void)oroMemset(d_scratch_, 0, batch_size_ * config_.scratch_per_hash);
+        if (d_outputs_) (void)oroMemset(d_outputs_, 0, output_size);
+        if (d_scratch_) (void)oroMemset(d_scratch_, 0, scratch_size);
         (void)oroMemset(d_difficulty_target_, 0, 32);
         (void)oroMemset(d_solutions_, 0, 8 + 1024 * 40 + 16);
+        clear_solution_flag();
 
         TNN_LOG_DEBUG("[DEBUG] GPU %d: Buffer allocation successful\n", device_id_);
         return true;
@@ -781,6 +862,7 @@ private:
         if (d_scratch_) { (void)oro_safe_free((oroDeviceptr)d_scratch_); d_scratch_ = nullptr; }
         if (d_difficulty_target_) { (void)oro_safe_free((oroDeviceptr)d_difficulty_target_); d_difficulty_target_ = nullptr; }
         if (d_solutions_) { (void)oro_safe_free((oroDeviceptr)d_solutions_); d_solutions_ = nullptr; }
+        free_mapped_solution_flag();
     }
 
     // ========================================================================
@@ -1098,6 +1180,7 @@ private:
 
         // Zero the solutions buffer
         (void)oro_safe_memset(d_solutions_, 0, 8);
+        clear_solution_flag();
 
         // Clear any sticky errors from kernel loading (e.g. optional kernels not found)
         (void)oroGetLastError();
@@ -1109,6 +1192,7 @@ private:
             ctx.d_scratch = d_scratch_;
             ctx.d_difficulty_target = d_difficulty_target_;
             ctx.d_solutions = d_solutions_;
+            ctx.d_solution_flag = d_solution_flag_;
             ctx.nonce_start = 0;
             ctx.batch_size = trial_batch;
             ctx.block_size = block_size_;
@@ -1176,6 +1260,7 @@ private:
         ctx.d_scratch = test_scratch;
         ctx.d_difficulty_target = test_target;
         ctx.d_solutions = test_solutions;
+        ctx.d_solution_flag = nullptr;
         ctx.nonce_start = 0;
         ctx.batch_size = test_batch;
         ctx.block_size = test_block_size;
@@ -1933,6 +2018,8 @@ private:
     uint64_t *d_scratch_ = nullptr;
     uint64_t *d_difficulty_target_ = nullptr;
     uint64_t *d_solutions_ = nullptr;
+    uint32_t *h_solution_flag_ = nullptr;
+    uint32_t *d_solution_flag_ = nullptr;
 
     // Host-side copy of work template (for solution verification)
     std::vector<uint8_t> h_work_template_;
@@ -1955,4 +2042,6 @@ private:
     std::unordered_map<std::string, int64_t> active_deps_;       // last-executed regular snapshot
     std::unordered_map<std::string, int64_t> active_dev_deps_;   // last-executed dev snapshot
     bool use_dev_deps_ = false;                                  // which set mine_batch checks
+    bool active_dep_mode_is_dev_ = false;                         // mode backing shared session resources
+    bool active_dep_mode_valid_ = false;
 };

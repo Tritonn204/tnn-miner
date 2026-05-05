@@ -86,12 +86,6 @@ struct BodySplit {
     std::vector<BodyOp> post;
 };
 
-struct BodyTriSplit {
-    std::vector<BodyOp> critical;
-    std::vector<BodyOp> filler;
-    std::vector<BodyOp> post;
-};
-
 // ---------------------------------------------------------------------------
 // Host-side mix_rng_state — mirrors cpp-kawpow progpow.cpp::mix_rng_state
 //
@@ -180,70 +174,6 @@ inline ProgramOps collect_ops(int block_number) {
     return ops;
 }
 
-inline bool ops_conflict(const BodyOp& a, const BodyOp& b) {
-    return ((a.writes_mask & (b.reads_mask | b.writes_mask)) != 0) ||
-           ((b.writes_mask & (a.reads_mask | a.writes_mask)) != 0);
-}
-
-inline BodyTriSplit split_body_for_dag_issue(const std::vector<BodyOp>& ops, uint32_t reg_idx) {
-    BodyTriSplit s;
-    if (ops.empty()) return s;
-
-    const uint32_t target = bit(reg_idx);
-    int cut = -1;
-
-    for (int i = 0; i < (int)ops.size(); ++i) {
-        if (ops[i].writes_mask & target)
-            cut = i;
-    }
-
-    if (cut < 0) {
-        s.critical = ops;
-        return s;
-    }
-
-    std::vector<uint8_t> selected(cut + 1, 0);
-    uint32_t need = target;
-
-    bool changed = true;
-    while (changed) {
-        changed = false;
-
-        // Backward dependency closure: producers of needed values.
-        for (int i = cut; i >= 0; --i) {
-            if ((ops[i].writes_mask & need) && !selected[i]) {
-                selected[i] = 1;
-                need |= ops[i].reads_mask;
-                changed = true;
-            }
-        }
-
-        // Conservative ordering closure:
-        // if an unselected earlier op would not commute with a selected later op,
-        // include it too so moving selected ops earlier cannot change semantics.
-        for (int i = 0; i <= cut; ++i) {
-            if (selected[i]) continue;
-
-            for (int j = i + 1; j <= cut; ++j) {
-                if (selected[j] && ops_conflict(ops[i], ops[j])) {
-                    selected[i] = 1;
-                    need |= ops[i].reads_mask;
-                    changed = true;
-                    break;
-                }
-            }
-        }
-    }
-
-    for (int i = 0; i <= cut; ++i) {
-        if (selected[i]) s.critical.push_back(ops[i]);
-        else             s.filler.push_back(ops[i]);
-    }
-
-    s.post.insert(s.post.end(), ops.begin() + cut + 1, ops.end());
-    return s;
-}
-
 // ---------------------------------------------------------------------------
 // Code emission helpers
 // ---------------------------------------------------------------------------
@@ -318,120 +248,142 @@ inline std::string try_fuse_math_merge(const std::string& dst,
 }
 
 // ---------------------------------------------------------------------------
-// build_body_ops — generate structured cache+math body ops
+// Body IR — typed representation of generated cache/math operations.
 //
-// Important: temp producers (_c0/_c1/_m/_m1) are grouped with the merge that
-// consumes them, so the dependency slicer cannot separate them illegally.
+// This sits between RNG replay and string emission. It allows us to emit
+// fused/unfused variants and to run dependency-aware split/scheduling passes
+// without manipulating source strings directly.
 // ---------------------------------------------------------------------------
-template<bool ENABLE_FUSION = false>
-inline std::vector<BodyOp> build_body_ops(const ProgramOps& ops, const std::string& mix) {
-    using MathOp = ProgramOps::MathOp;
-    std::vector<BodyOp> out;
-    out.reserve(CNT_CACHE + CNT_MATH + 8);
+enum class NodeKind {
+    CacheMerge,
+    MathMerge
+};
 
-    auto r = [&](uint32_t idx) -> std::string { return reg(mix, idx); };
+struct BodyNode {
+    NodeKind kind = NodeKind::MathMerge;
+    uint32_t reads_mask = 0;
+    uint32_t writes_mask = 0;
 
-    auto push_raw = [&](uint32_t reads, uint32_t writes, std::string code) {
-        out.push_back({reads, writes, std::move(code)});
-    };
+    // common
+    uint32_t dst = 0;
 
-    auto emit_math_block = [&](const MathOp& m) {
-        if constexpr (ENABLE_FUSION) {
-            std::string fused = try_fuse_math_merge(r(m.dst), r(m.src1), r(m.src2), m.sel1, m.sel2);
-            if (!fused.empty()) {
-                push_raw(mask1(m.dst) | mask2(m.src1, m.src2), mask1(m.dst),
-                         "    " + fused + ";");
-                return;
-            }
-        }
+    // CacheMerge: dst = merge(dst, l1_cache[src & 0xfff], cache_sel)
+    uint32_t cache_src = 0;
+    uint32_t cache_sel = 0;
 
-        std::string code;
-        code += "    _m = " + emit_math(r(m.src1), r(m.src2), m.sel1) + ";\n";
-        code += "    " + emit_merge(r(m.dst), "_m", m.sel2);
-        push_raw(mask1(m.dst) | mask2(m.src1, m.src2), mask1(m.dst), std::move(code));
-    };
+    // MathMerge: tmp = math(src1, src2, math_sel); dst = merge(dst, tmp, merge_sel)
+    uint32_t src1 = 0;
+    uint32_t src2 = 0;
+    uint32_t math_sel = 0;
+    uint32_t merge_sel = 0;
+};
 
-    constexpr int MAX_K = 2;
+struct BodyTriSplit {
+    std::vector<BodyOp> critical;
+    std::vector<BodyOp> filler;
+    std::vector<BodyOp> post;
+};
+
+inline bool ops_conflict(const BodyOp& a, const BodyOp& b) {
+    return ((a.writes_mask & (b.reads_mask | b.writes_mask)) != 0) ||
+           ((b.writes_mask & (a.reads_mask | a.writes_mask)) != 0);
+}
+
+// ---------------------------------------------------------------------------
+// build_body_nodes — RNG-order IR nodes for cache+math body.
+//
+// Important: each node preserves the original coupled operation semantics:
+// cache/math producer plus its merge consumer remain one unit. Later passes can
+// move whole nodes, but cannot split a temp producer away from its merge.
+// ---------------------------------------------------------------------------
+inline std::vector<BodyNode> build_body_nodes(const ProgramOps& ops) {
+    std::vector<BodyNode> out;
+    out.reserve(CNT_CACHE + CNT_MATH);
+
     constexpr int max_ops = (CNT_CACHE > CNT_MATH) ? CNT_CACHE : CNT_MATH;
 
-    auto can_pair_k = [&](int i, int k) -> bool {
-        if (i + k > (int)CNT_CACHE) return false;
-        for (int j = 1; j < k; ++j) {
-            uint32_t s = ops.cache_ops[i + j].src;
-            for (int p = 0; p < j; ++p) {
-                if (s == ops.cache_ops[i + p].dst) return false;
-                if (i + p < (int)CNT_MATH && s == ops.math_ops[i + p].dst) return false;
-            }
-        }
-        return true;
-    };
-
-    // temp decl, no deps
-    push_raw(0, 0, "    uint32_t _c0, _c1, _m, _m1;");
-
-    int i = 0;
-    while (i < max_ops) {
-        int k = 1;
+    for (int i = 0; i < max_ops; ++i) {
         if (i < (int)CNT_CACHE) {
-            int kmax = std::min(MAX_K, (int)CNT_CACHE - i);
-            for (int t = kmax; t >= 2; --t) {
-                if (can_pair_k(i, t)) { k = t; break; }
-            }
+            const auto& c = ops.cache_ops[i];
+            BodyNode n;
+            n.kind = NodeKind::CacheMerge;
+            n.cache_src = c.src;
+            n.dst = c.dst;
+            n.cache_sel = c.sel;
+            n.reads_mask = mask1(c.src) | mask1(c.dst);
+            n.writes_mask = mask1(c.dst);
+            out.push_back(n);
         }
 
-        if (k >= 2) {
-            for (int j = 0; j < k; ++j) {
-                uint32_t src = ops.cache_ops[i + j].src;
-                uint32_t dst = ops.cache_ops[i + j].dst;
-
-                std::string code;
-                code += "    _c" + std::to_string(j) + " = l1_cache[" + r(src) + " & 0xFFFu];\n";
-                code += "    " + emit_merge(r(dst), "_c" + std::to_string(j), ops.cache_ops[i + j].sel);
-
-                push_raw(mask1(src) | mask1(dst), mask1(dst), std::move(code));
-
-                if (i + j < (int)CNT_MATH) emit_math_block(ops.math_ops[i + j]);
-            }
-            i += k;
-        } else if (i >= (int)CNT_CACHE && i + 1 < (int)CNT_MATH) {
-            const auto& m0 = ops.math_ops[i];
-            const auto& m1 = ops.math_ops[i + 1];
-            bool can_pair = (m1.src1 != m0.dst && m1.src2 != m0.dst
-                          && m0.src1 != m1.dst && m0.src2 != m1.dst
-                          && m0.dst != m1.dst);
-            if (can_pair) {
-                std::string code0;
-                code0 += "    _m = " + emit_math(r(m0.src1), r(m0.src2), m0.sel1) + ";\n";
-                code0 += "    " + emit_merge(r(m0.dst), "_m", m0.sel2);
-                push_raw(mask1(m0.dst) | mask2(m0.src1, m0.src2), mask1(m0.dst), std::move(code0));
-
-                std::string code1;
-                code1 += "    _m1 = " + emit_math(r(m1.src1), r(m1.src2), m1.sel1) + ";\n";
-                code1 += "    " + emit_merge(r(m1.dst), "_m1", m1.sel2);
-                push_raw(mask1(m1.dst) | mask2(m1.src1, m1.src2), mask1(m1.dst), std::move(code1));
-
-                i += 2;
-            } else {
-                emit_math_block(m0);
-                ++i;
-            }
-        } else {
-            if (i < (int)CNT_CACHE) {
-                uint32_t src = ops.cache_ops[i].src;
-                uint32_t dst = ops.cache_ops[i].dst;
-
-                std::string code;
-                code += "    _c0 = l1_cache[" + r(src) + " & 0xFFFu];\n";
-                code += "    " + emit_merge(r(dst), "_c0", ops.cache_ops[i].sel);
-
-                push_raw(mask1(src) | mask1(dst), mask1(dst), std::move(code));
-            }
-            if (i < (int)CNT_MATH) emit_math_block(ops.math_ops[i]);
-            ++i;
+        if (i < (int)CNT_MATH) {
+            const auto& m = ops.math_ops[i];
+            BodyNode n;
+            n.kind = NodeKind::MathMerge;
+            n.src1 = m.src1;
+            n.src2 = m.src2;
+            n.dst = m.dst;
+            n.math_sel = m.sel1;
+            n.merge_sel = m.sel2;
+            n.reads_mask = mask1(m.dst) | mask2(m.src1, m.src2);
+            n.writes_mask = mask1(m.dst);
+            out.push_back(n);
         }
     }
 
     return out;
+}
+
+template<bool ENABLE_FUSION = false>
+inline BodyOp emit_node_as_bodyop(const BodyNode& n, const std::string& mix) {
+    auto r = [&](uint32_t idx) -> std::string { return reg(mix, idx); };
+
+    BodyOp op;
+    op.reads_mask = n.reads_mask;
+    op.writes_mask = n.writes_mask;
+
+    if (n.kind == NodeKind::CacheMerge) {
+        std::string code;
+        code += "    _c0 = l1_cache[" + r(n.cache_src) + " & 0xFFFu];\n";
+        code += "    " + emit_merge(r(n.dst), "_c0", n.cache_sel);
+        op.code = std::move(code);
+        return op;
+    }
+
+    if constexpr (ENABLE_FUSION) {
+        std::string fused = try_fuse_math_merge(
+            r(n.dst), r(n.src1), r(n.src2), n.math_sel, n.merge_sel);
+
+        if (!fused.empty()) {
+            op.code = "    " + fused + ";";
+            return op;
+        }
+    }
+
+    std::string code;
+    code += "    _m = " + emit_math(r(n.src1), r(n.src2), n.math_sel) + ";\n";
+    code += "    " + emit_merge(r(n.dst), "_m", n.merge_sel);
+    op.code = std::move(code);
+    return op;
+}
+
+template<bool ENABLE_FUSION = false>
+inline std::vector<BodyOp> emit_body_ops_from_nodes(
+    const std::vector<BodyNode>& nodes,
+    const std::string& mix)
+{
+    std::vector<BodyOp> out;
+    out.reserve(nodes.size());
+
+    for (const auto& n : nodes)
+        out.push_back(emit_node_as_bodyop<ENABLE_FUSION>(n, mix));
+
+    return out;
+}
+
+template<bool ENABLE_FUSION = false>
+inline std::vector<BodyOp> build_body_ops(const ProgramOps& ops, const std::string& mix) {
+    auto nodes = build_body_nodes(ops);
+    return emit_body_ops_from_nodes<ENABLE_FUSION>(nodes, mix);
 }
 
 inline BodySplit split_body_at_last_write_to(const std::vector<BodyOp>& ops, uint32_t reg_idx) {
@@ -442,18 +394,81 @@ inline BodySplit split_body_at_last_write_to(const std::vector<BodyOp>& ops, uin
     int cut = -1;
 
     for (int i = 0; i < (int)ops.size(); ++i) {
-        if (ops[i].writes_mask & target) {
+        if (ops[i].writes_mask & target)
             cut = i;
-        }
     }
 
-    // No write to the target register in body: no useful split
     if (cut < 0) {
         s.pre = ops;
         return s;
     }
 
     s.pre.insert(s.pre.end(), ops.begin(), ops.begin() + cut + 1);
+    s.post.insert(s.post.end(), ops.begin() + cut + 1, ops.end());
+    return s;
+}
+
+// Conservative 3-way split for the software-pipelined DAG issue path.
+//
+// critical: ops before the original MIX[0] cut that must remain before DAG issue
+//           either because they produce values needed by MIX[0], or because they
+//           do not commute with selected critical ops.
+// filler:   pre-cut ops safe to delay until after issuing the next DAG load.
+// post:     original post-cut ops, still before delayed MIX[0] commit.
+inline BodyTriSplit split_body_for_dag_issue(const std::vector<BodyOp>& ops, uint32_t reg_idx) {
+    BodyTriSplit s;
+    if (ops.empty()) return s;
+
+    const uint32_t target = bit(reg_idx);
+    int cut = -1;
+
+    for (int i = 0; i < (int)ops.size(); ++i) {
+        if (ops[i].writes_mask & target)
+            cut = i;
+    }
+
+    if (cut < 0) {
+        s.critical = ops;
+        return s;
+    }
+
+    std::vector<uint8_t> selected(cut + 1, 0);
+    uint32_t need = target;
+
+    bool changed = true;
+    while (changed) {
+        changed = false;
+
+        // Backward dependency closure: include producers of needed registers.
+        for (int i = cut; i >= 0; --i) {
+            if ((ops[i].writes_mask & need) && !selected[i]) {
+                selected[i] = 1;
+                need |= ops[i].reads_mask;
+                changed = true;
+            }
+        }
+
+        // Conservative ordering closure: include earlier non-commuting ops so
+        // moving selected critical ops earlier cannot alter program semantics.
+        for (int i = 0; i <= cut; ++i) {
+            if (selected[i]) continue;
+
+            for (int j = i + 1; j <= cut; ++j) {
+                if (selected[j] && ops_conflict(ops[i], ops[j])) {
+                    selected[i] = 1;
+                    need |= ops[i].reads_mask;
+                    changed = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    for (int i = 0; i <= cut; ++i) {
+        if (selected[i]) s.critical.push_back(ops[i]);
+        else             s.filler.push_back(ops[i]);
+    }
+
     s.post.insert(s.post.end(), ops.begin() + cut + 1, ops.end());
     return s;
 }
@@ -481,7 +496,10 @@ inline std::string emit_body_ops(const std::vector<BodyOp>& ops, const std::stri
 // ---------------------------------------------------------------------------
 inline std::string emit_body(const ProgramOps& ops, const std::string& mix,
                              const std::string& le) {
-    return emit_body_ops(build_body_ops(ops, mix), le);
+    std::string body;
+    body += "    uint32_t _c0, _c1, _m, _m1;" + le;
+    body += emit_body_ops(build_body_ops(ops, mix), le);
+    return body;
 }
 
 // ---------------------------------------------------------------------------
@@ -640,10 +658,13 @@ inline std::string emit_constant_l1_table(const uint32_t* words, size_t n) {
 // ---------------------------------------------------------------------------
 // generate_program_macro — emit body macros
 // ---------------------------------------------------------------------------
+template<bool ENABLE_FUSION = false>
 inline std::string generate_program_macro(int block_number) {
     auto ops = collect_ops(block_number);
-    auto body_ops = build_body_ops(ops, "MIX");
-    // auto split = split_body_at_last_write_to(body_ops, 0);
+    auto nodes = build_body_nodes(ops);
+    auto body_ops = emit_body_ops_from_nodes<ENABLE_FUSION>(nodes, "MIX");
+
+    auto split = split_body_for_dag_issue(body_ops, 0);
 
     char buf[256];
     std::snprintf(buf, sizeof(buf),
@@ -654,36 +675,17 @@ inline std::string generate_program_macro(int block_number) {
     c.reserve(8192);
     c += buf;
 
+    // Full non-pipelined body. This path owns the temp declarations.
     c += "#define PROGPOW_BODY(MIX, DG) do { \\\n";
+    c += "    uint32_t _c0, _m; \\\n";
     c += emit_body_ops(body_ops, " \\\n");
     c += emit_dag_merge(ops, "MIX", "DG", " \\\n");
     c += "} while(0)\n\n";
 
-    // c += "#define PROGPOW_BODY_PREISSUE(MIX, DG_CUR, IA_RAW_NEXT, MIX0_NEXT, NEXT_LOOP) do { \\\n";
-    // c += emit_body_ops(split.pre, " \\\n");
-    // c += emit_dag_prepare_issue_value(ops, "MIX", "DG_CUR", " \\\n");
-    // c += "    (MIX0_NEXT) = _mix0_next; \\\n";
-    // c += "    PROGPOW_BPERMUTE_STAGE((MIX0_NEXT), IA_RAW_NEXT, NEXT_LOOP); \\\n";
-    // c += "} while(0)\n\n";
-
-    // c += "#define PROGPOW_BODY_POSTISSUE(MIX, DG_CUR, MIX0_NEXT) do { \\\n";
-    // c += "    uint32_t _c0, _c1, _m, _m1; \\\n";
-    // c += emit_body_ops(split.post, " \\\n");
-    // c += emit_dag_capture_post("DG_CUR", " \\\n");
-    // c += "    " + reg("MIX", ops.dag_dsts[0]) + " = (MIX0_NEXT); \\\n";
-    // c += emit_dag_merge_post(ops, "MIX", " \\\n");
-    // c += "} while(0)\n\n";
-
-    // c += "#define PROGPOW_BODY_PIPE(MIX, DG_CUR, DG_NEXT, NEXT_LOOP) do { \\\n";
-    // c += "    uint32_t _ia_raw_next; \\\n";
-    // c += "    uint32_t _mix0_next_hold; \\\n";
-    // c += "    PROGPOW_BODY_PREISSUE(MIX, DG_CUR, _ia_raw_next, _mix0_next_hold, NEXT_LOOP); \\\n";
-    // c += "    PROGPOW_DAG_LOAD_STAGE(_ia_raw_next, DG_NEXT, NEXT_LOOP); \\\n";
-    // c += "    PROGPOW_BODY_POSTISSUE(MIX, DG_CUR, _mix0_next_hold); \\\n";
-    // c += "} while(0)\n\n";
-
-    auto split = split_body_for_dag_issue(body_ops, 0);
-
+    // 3-split software-pipelined body pieces.
+    // These submacros intentionally do NOT declare _c0/_c1/_m/_m1; BODY_PIPE
+    // and N-way main loops should declare them once in the caller scope so the
+    // compiler can freely reuse the same temporaries.
     c += "#define PROGPOW_BODY_PRECRITICAL(MIX, DG_CUR, IA_RAW_NEXT, MIX0_NEXT, NEXT_LOOP) do { \\\n";
     c += emit_body_ops(split.critical, " \\\n");
     c += emit_dag_prepare_issue_value(ops, "MIX", "DG_CUR", " \\\n");
@@ -702,8 +704,9 @@ inline std::string generate_program_macro(int block_number) {
     c += emit_dag_merge_post(ops, "MIX", " \\\n");
     c += "} while(0)\n\n";
 
+    // Single-hash fallback pipe. N-way loops can call the split pieces directly.
     c += "#define PROGPOW_BODY_PIPE(MIX, DG_CUR, DG_NEXT, NEXT_LOOP) do { \\\n";
-    c += "    uint32_t _c0, _c1, _m, _m1; \\\n";
+    c += "    uint32_t _c0, _m; \\\n";
     c += "    uint32_t _ia_raw_next; \\\n";
     c += "    uint32_t _mix0_next_hold; \\\n";
     c += "    PROGPOW_BODY_PRECRITICAL(MIX, DG_CUR, _ia_raw_next, _mix0_next_hold, NEXT_LOOP); \\\n";
@@ -821,13 +824,19 @@ inline std::string inject_dag_constants(const std::string& kernel_source,
 // ---------------------------------------------------------------------------
 // inject_program
 // ---------------------------------------------------------------------------
+template<bool ENABLE_FUSION = false>
 inline std::string inject_program(const std::string& kernel_source, int block_number) {
     std::string result = kernel_source;
 
     const std::string macro_marker = "/* PROGPOW_MACROS */";
     auto pos = result.find(macro_marker);
-    if (pos != std::string::npos)
-        result.replace(pos, macro_marker.size(), generate_program_macro(block_number));
+    if (pos != std::string::npos) {
+        result.replace(
+            pos,
+            macro_marker.size(),
+            generate_program_macro<ENABLE_FUSION>(block_number)
+        );
+    }
 
     return result;
 }

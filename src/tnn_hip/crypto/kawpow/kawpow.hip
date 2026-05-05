@@ -179,6 +179,23 @@ __device__ __forceinline__ uint32_t kiss99(kiss99_state& st)
     return (((z << 16) + w) ^ jcong) + jsr;
 }
 
+__device__ __forceinline__ void fill_mix_from_zw(
+    uint32_t z, uint32_t w, uint32_t lane_id, uint32_t* __restrict__ mix)
+{
+    uint32_t jsr   = fnv1a(w, lane_id);
+    uint32_t jcong = fnv1a(jsr, lane_id);
+    #pragma unroll
+    for (int i = 0; i < PROGPOW_REGS; i++) {
+        z     = 36969u * (z & 0xffffu) + (z >> 16);
+        w     = 18000u * (w & 0xffffu) + (w >> 16);
+        jsr  ^= (jsr << 17);
+        jsr  ^= (jsr >> 13);
+        jsr  ^= (jsr << 5);
+        jcong = 69069u * jcong + 1234567u;
+        mix[i] = (((z << 16) + w) ^ jcong) + jsr;
+    }
+}
+
 __device__ __forceinline__ void fill_mix(uint64_t seed, uint32_t lane_id, uint32_t* mix)
 {
     uint32_t z     = fnv1a(FNV_OFFSET_BASIS, (uint32_t)seed);
@@ -577,7 +594,137 @@ __device__ __forceinline__ void progpow_reduce_2way(
 // ===========================================================================
 // Strategy 0 — Monolithic kernel (seed keccak + progpow + final keccak)
 // ===========================================================================
-extern "C" __global__
+__device__ __forceinline__ void kawpow_seed_keccak_lane0(
+    const uint32_t* __restrict__ d_header,
+    uint64_t nonce,
+    uint32_t* __restrict__ seed_state_out)
+{
+    uint32_t state[25];
+
+    #pragma unroll
+    for (int i = 0; i < 8; i++)
+        state[i] = d_header[i];
+
+    state[8]  = (uint32_t)(nonce);
+    state[9]  = (uint32_t)(nonce >> 32);
+
+    state[10] = KPAD0;  state[11] = KPAD1;  state[12] = KPAD2;
+    state[13] = KPAD3;  state[14] = KPAD4;  state[15] = KPAD5;
+    state[16] = KPAD6;  state[17] = KPAD7;  state[18] = KPAD8;
+    state[19] = KPAD9;  state[20] = KPAD10; state[21] = KPAD11;
+    state[22] = KPAD12; state[23] = KPAD13; state[24] = KPAD14;
+
+    keccak_f800<true>(state);
+
+    #pragma unroll
+    for (int i = 0; i < 8; i++)
+        seed_state_out[i] = state[i];
+}
+
+__device__ __forceinline__ void kawpow_final_keccak_lane0(
+    uint64_t nonce,
+    uint32_t hash_id,
+    const uint32_t* __restrict__ seed_state,
+    uint32_t digest0,
+    uint32_t digest1,
+    uint32_t digest2,
+    uint32_t digest3,
+    uint32_t digest4,
+    uint32_t digest5,
+    uint32_t digest6,
+    uint32_t digest7,
+    const uint64_t* __restrict__ d_target,
+    uint64_t* __restrict__ d_solutions,
+    uint32_t* __restrict__ d_solution_flag,
+    uint32_t* __restrict__ d_result_hashes)
+{
+    uint32_t state[25];
+
+    #pragma unroll
+    for (int i = 0; i < 8; i++)
+        state[i] = seed_state[i];
+
+    state[8]  = digest0;
+    state[9]  = digest1;
+    state[10] = digest2;
+    state[11] = digest3;
+    state[12] = digest4;
+    state[13] = digest5;
+    state[14] = digest6;
+    state[15] = digest7;
+
+    state[16] = KPAD0;  state[17] = KPAD1;  state[18] = KPAD2;
+    state[19] = KPAD3;  state[20] = KPAD4;  state[21] = KPAD5;
+    state[22] = KPAD6;  state[23] = KPAD7;  state[24] = KPAD8;
+
+    keccak_f800<true>(state);
+
+    if (d_result_hashes != nullptr)
+    {
+        uint32_t base = hash_id * 16u;
+        d_result_hashes[base + 0]  = digest0;
+        d_result_hashes[base + 1]  = digest1;
+        d_result_hashes[base + 2]  = digest2;
+        d_result_hashes[base + 3]  = digest3;
+        d_result_hashes[base + 4]  = digest4;
+        d_result_hashes[base + 5]  = digest5;
+        d_result_hashes[base + 6]  = digest6;
+        d_result_hashes[base + 7]  = digest7;
+        d_result_hashes[base + 8]  = state[0];
+        d_result_hashes[base + 9]  = state[1];
+        d_result_hashes[base + 10] = state[2];
+        d_result_hashes[base + 11] = state[3];
+        d_result_hashes[base + 12] = state[4];
+        d_result_hashes[base + 13] = state[5];
+        d_result_hashes[base + 14] = state[6];
+        d_result_hashes[base + 15] = state[7];
+    }
+
+    const uint64_t h0 = ((uint64_t)state[1] << 32) | state[0];
+    const uint64_t h1 = ((uint64_t)state[3] << 32) | state[2];
+    const uint64_t h2 = ((uint64_t)state[5] << 32) | state[4];
+    const uint64_t h3 = ((uint64_t)state[7] << 32) | state[6];
+
+    bool below = false;
+    bool equal = true;
+
+    if (equal) {
+        uint64_t t = d_target[3];
+        if (h3 < t) { below = true; equal = false; }
+        else if (h3 > t) { below = false; equal = false; }
+    }
+    if (equal) {
+        uint64_t t = d_target[2];
+        if (h2 < t) { below = true; equal = false; }
+        else if (h2 > t) { below = false; equal = false; }
+    }
+    if (equal) {
+        uint64_t t = d_target[1];
+        if (h1 < t) { below = true; equal = false; }
+        else if (h1 > t) { below = false; equal = false; }
+    }
+    if (equal) {
+        uint64_t t = d_target[0];
+        if (h0 < t) { below = true; equal = false; }
+        else if (h0 > t) { below = false; equal = false; }
+    }
+
+    if (below)
+    {
+        if (d_solution_flag) *d_solution_flag = 1;
+        uint32_t idx = (uint32_t)atomicAdd((unsigned long long*)&d_solutions[0], 1ULL);
+        if (idx < 1024)
+        {
+            d_solutions[1 + idx * 5 + 0] = nonce;
+            d_solutions[1 + idx * 5 + 1] = ((uint64_t)digest1 << 32) | digest0;
+            d_solutions[1 + idx * 5 + 2] = ((uint64_t)digest3 << 32) | digest2;
+            d_solutions[1 + idx * 5 + 3] = ((uint64_t)digest5 << 32) | digest4;
+            d_solutions[1 + idx * 5 + 4] = ((uint64_t)digest7 << 32) | digest6;
+        }
+    }
+}
+
+extern "C" __global__ __launch_bounds__(512, 6)
 void kawpow_hash_kernel(
     const uint32_t* __restrict__ d_header,        // 8 × uint32 = 32 bytes
     const uint32_t* __restrict__ d_dag,            // full DAG (uint32 array)
@@ -585,6 +732,7 @@ void kawpow_hash_kernel(
     uint32_t                     batch_size,
     const uint64_t* __restrict__ d_target,         // 4 × uint64 = 32 bytes (LE)
     uint64_t* __restrict__       d_solutions,      // [0]=count(u64), [1+i*5]=nonce(u64), [+1..4]=mix_hash(4×u64)
+    uint32_t* __restrict__       d_solution_flag,  // nullable mapped host flag, written only on solution
     uint32_t                     block_number,
     uint32_t* __restrict__       d_result_hashes,  // nullable: [hash_id*16+0..7]=mix, [+8..15]=final
     const uint32_t* __restrict__ d_l1_cache)       // first 16KB of DAG, uploaded once per epoch
@@ -601,49 +749,24 @@ void kawpow_hash_kernel(
 
     cooperative_l1_fill(l1_cache, d_l1_cache);
 
-    // Sandwich keccak + fill_mix between L1 fill and barrier to hide LDS write latency.
+    // Lane 0 writes the per-hash seed state while the block finishes L1 fill.
     // No early return — all threads must reach __syncthreads().
     const bool valid = (hash_id < batch_size);
 
-    uint32_t state[25];
     uint32_t mix[PROGPOW_REGS];
-    uint64_t seed = 0;
 
     uint32_t* lds_seed_state = &lds_raw[PROGPOW_CACHE_WORDS];
+    uint32_t* seed_state = &lds_seed_state[(threadIdx.x >> PROGPOW_LANES_LOG2) * 8u];
 
-    if (valid) {
-        // ---- Phase 1: Seed Keccak ----
-        #pragma unroll
-        for (int i = 0; i < 8; i++)
-            state[i] = d_header[i];
-
-        state[8]  = (uint32_t)(nonce);
-        state[9]  = (uint32_t)(nonce >> 32);
-
-        state[10] = KPAD0;  state[11] = KPAD1;  state[12] = KPAD2;
-        state[13] = KPAD3;  state[14] = KPAD4;  state[15] = KPAD5;
-        state[16] = KPAD6;  state[17] = KPAD7;  state[18] = KPAD8;
-        state[19] = KPAD9;  state[20] = KPAD10; state[21] = KPAD11;
-        state[22] = KPAD12; state[23] = KPAD13; state[24] = KPAD14;
-
-        keccak_f800<true>(state);
-
-        seed = (uint64_t)state[0] | ((uint64_t)state[1] << 32);
-
-        // Save state[0..7] to LDS for phase 5
-        {
-            uint32_t hwb = threadIdx.x >> PROGPOW_LANES_LOG2;
-            #pragma unroll
-            for (int i = 0; i < 8; i++)
-                lds_seed_state[hwb * 8u + i] = state[i];
-        }
-
-        fill_mix(seed, lane_id, mix);
-    }
+    if (valid && lane_id == 0)
+        kawpow_seed_keccak_lane0(d_header, nonce, seed_state);
 
     __syncthreads();  // L1 fill + seed state writes all visible
 
     if (!valid) return;
+
+    const uint64_t seed = (uint64_t)seed_state[0] | ((uint64_t)seed_state[1] << 32);
+    fill_mix(seed, lane_id, mix);
 
     // ---- Phase 2–4: main loop + reduction ----
     progpow_main_loop(mix, l1_cache, d_dag, lane_id);
@@ -651,68 +774,12 @@ void kawpow_hash_kernel(
     uint32_t digest[8];
     progpow_reduce(mix, digest);
 
-    // ---- Phase 5: Final Keccak ----
-    {
-        uint32_t hwb = threadIdx.x >> PROGPOW_LANES_LOG2;
-        #pragma unroll
-        for (int i = 0; i < 8; i++)
-            state[i] = lds_seed_state[hwb * 8u + i];
-    }
-
-    #pragma unroll
-    for (int i = 0; i < 8; i++)
-        state[8 + i] = digest[i];
-
-    state[16] = KPAD0;  state[17] = KPAD1;  state[18] = KPAD2;
-    state[19] = KPAD3;  state[20] = KPAD4;  state[21] = KPAD5;
-    state[22] = KPAD6;  state[23] = KPAD7;  state[24] = KPAD8;
-
-    keccak_f800<true>(state);
-
-    // ---- Target comparison (lane 0 only) ----
-    if (d_result_hashes != nullptr && lane_id == 0)
-    {
-        uint32_t base = hash_id * 16u;
-        #pragma unroll
-        for (int i = 0; i < 8; i++) d_result_hashes[base + i] = digest[i];
-        #pragma unroll
-        for (int i = 0; i < 8; i++) d_result_hashes[base + 8 + i] = state[i];
-    }
-
     if (lane_id == 0)
-    {
-        const uint64_t* hash64 = (const uint64_t*)state;
-
-        bool below = false;
-        bool equal = true;
-
-        #pragma unroll
-        for (int i = 3; i >= 0; i--)
-        {
-            uint64_t h = hash64[i];
-            uint64_t t = d_target[i];
-            if (equal)
-            {
-                if (h < t) { below = true; equal = false; }
-                else if (h > t) { below = false; equal = false; }
-            }
-        }
-
-        if (below)
-        {
-            uint32_t idx = (uint32_t)atomicAdd((unsigned long long*)&d_solutions[0], 1ULL);
-            if (idx < 1024)
-            {
-                d_solutions[1 + idx * 5 + 0] = nonce;
-                // mix_hash = digest[0..7] as 4 × uint64
-                const uint64_t* digest64 = (const uint64_t*)digest;
-                d_solutions[1 + idx * 5 + 1] = digest64[0];
-                d_solutions[1 + idx * 5 + 2] = digest64[1];
-                d_solutions[1 + idx * 5 + 3] = digest64[2];
-                d_solutions[1 + idx * 5 + 4] = digest64[3];
-            }
-        }
-    }
+        kawpow_final_keccak_lane0(
+            nonce, hash_id, seed_state,
+            digest[0], digest[1], digest[2], digest[3],
+            digest[4], digest[5], digest[6], digest[7],
+            d_target, d_solutions, d_solution_flag, d_result_hashes);
 }
 
 #if defined(__HIP_PLATFORM_AMD__)
@@ -787,6 +854,37 @@ __device__ __forceinline__ void store_seed_u64x4(uint32_t* dst, const uint32_t s
     store_nt_u64(&dst64[1], src64[1]);
     store_nt_u64(&dst64[2], src64[2]);
     store_nt_u64(&dst64[3], src64[3]);
+}
+
+__device__ __forceinline__ void kawpow_make_seed_state(
+    const uint32_t* __restrict__ d_header,
+    uint64_t nonce,
+    uint32_t state[25])
+{
+    #pragma unroll
+    for (int i = 0; i < 8; i++)
+        state[i] = d_header[i];
+
+    state[8]  = (uint32_t)(nonce);
+    state[9]  = (uint32_t)(nonce >> 32);
+
+    state[10] = KPAD0;  state[11] = KPAD1;  state[12] = KPAD2;
+    state[13] = KPAD3;  state[14] = KPAD4;  state[15] = KPAD5;
+    state[16] = KPAD6;  state[17] = KPAD7;  state[18] = KPAD8;
+    state[19] = KPAD9;  state[20] = KPAD10; state[21] = KPAD11;
+    state[22] = KPAD12; state[23] = KPAD13; state[24] = KPAD14;
+
+    keccak_f800<true>(state);
+}
+
+__device__ __forceinline__ uint32_t kawpow_broadcast_lane16(uint32_t val, int src_lane)
+{
+#ifdef __HIP_PLATFORM_AMD__
+    uint32_t base = __lane_id() & ~15u;
+    return PROGPOW_BPERMUTE(base + (uint32_t)src_lane, val);
+#else
+    return __shfl_sync(0xFFFFFFFF, val, src_lane, 16);
+#endif
 }
 
 // ===========================================================================
@@ -916,21 +1014,18 @@ void kawpow_progpow_global_kernel(
 }
 
 __device__ __forceinline__ void store_digest_coop_16x8_u32(
-    uint32_t* dst0,
+    uint32_t* __restrict__ dst0,
     const uint32_t digest0[8],
-    uint32_t* dst1,
+    uint32_t* __restrict__ dst1,
     const uint32_t digest1[8],
     bool have_h1)
 {
-    const uint32_t global_id = blockIdx.x * blockDim.x + threadIdx.x;
-    const uint32_t lane_id   = global_id & 0xF;
-    const uint32_t l16 = lane_id & 15u;
+    const uint32_t lane_id = (blockIdx.x * blockDim.x + threadIdx.x) & 0xF;
 
-    if (l16 < 8u) {
-        store_nt_u32(&dst0[l16], digest0[l16]);
+    if (lane_id < 8u) {
+        store_nt_u32(&dst0[lane_id], digest0[lane_id]);
     } else if (have_h1) {
-        const uint32_t l8 = l16 - 8u;
-        store_nt_u32(&dst1[l8], digest1[l8]);
+        store_nt_u32(&dst1[lane_id - 8u], digest1[lane_id - 8u]);
     }
 }
 
@@ -939,7 +1034,7 @@ __device__ __forceinline__ void store_digest_coop_16x8_u32(
 // Each wavefront group processes 2 hashes, interleaving their ProgPoW
 // iterations to hide DAG load latency across hashes.
 // ---------------------------------------------------------------------------
-extern "C" __global__
+extern "C" __global__ __launch_bounds__(256, 2)
 void kawpow_progpow_kernel_2way(
     const uint32_t* __restrict__ d_dag,
     uint32_t                     batch_size,
@@ -1000,6 +1095,136 @@ void kawpow_progpow_kernel_2way(
             d_intermediate + hash_id_0 * 16u + 8,
             digest0,
             d_intermediate + (hash_id_0 + 1) * 16u + 8,
+            digest1,
+            have_h1);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Packed split path: seed64 -> digest slot reuse.
+// Intermediate footprint is 8 uint32 per hash. Seed writes only state[0..1]
+// packed by ProgPoW block for coalesced PP reads; ProgPoW overwrites the same
+// per-hash slot with digest[0..7]; final recomputes the seed state.
+// ---------------------------------------------------------------------------
+extern "C" __global__ __launch_bounds__(256, 12)
+void kawpow_seed_kernel_seed64(
+    const uint32_t* __restrict__ d_header,
+    uint64_t                     nonce_start,
+    uint32_t                     batch_size,
+    uint32_t* __restrict__       d_seed_digest)
+{
+    const uint32_t hash_id = blockIdx.x * blockDim.x + threadIdx.x;
+    if (hash_id >= batch_size) return;
+
+    const uint64_t nonce = nonce_start + (uint64_t)hash_id;
+
+    uint32_t state[25];
+
+    #pragma unroll
+    for (int i = 0; i < 8; i++)
+        state[i] = d_header[i];
+
+    state[8]  = (uint32_t)(nonce);
+    state[9]  = (uint32_t)(nonce >> 32);
+
+    state[10] = KPAD0;  state[11] = KPAD1;  state[12] = KPAD2;
+    state[13] = KPAD3;  state[14] = KPAD4;  state[15] = KPAD5;
+    state[16] = KPAD6;  state[17] = KPAD7;  state[18] = KPAD8;
+    state[19] = KPAD9;  state[20] = KPAD10; state[21] = KPAD11;
+    state[22] = KPAD12; state[23] = KPAD13; state[24] = KPAD14;
+
+    keccak_f800<true>(state);
+
+    // Precompute lane-independent fill_mix prefix
+    const uint32_t z = fnv1a(FNV_OFFSET_BASIS, state[0]);
+    const uint32_t w = fnv1a(z, state[1]);
+
+    // Store z,w at [0..1]; PP will overwrite [0..7] with digest later.
+    // Final kernel recomputes seed keccak independently.
+    const uint32_t base = hash_id * 8u;
+    store_nt_u64(
+        reinterpret_cast<uint64_t*>(d_seed_digest + base),
+        (uint64_t)z | ((uint64_t)w << 32));
+}
+
+extern "C" __global__ __launch_bounds__(256, 2)
+void kawpow_progpow_kernel_2way_seed64_digest(
+    const uint32_t* __restrict__ d_dag,
+    uint32_t                     batch_size,
+    const uint32_t* __restrict__ d_l1_cache,
+    uint32_t* __restrict__       d_seed_digest)
+{
+    const uint32_t global_id  = blockIdx.x * blockDim.x + threadIdx.x;
+    const uint32_t lane_id    = global_id & 0xF;
+    const uint32_t group_id   = global_id >> PROGPOW_LANES_LOG2;
+    const uint32_t hash_id_0  = group_id * 2u;
+
+    extern __shared__ uint32_t lds_raw[];
+    uint32_t* __restrict__ l1_cache = lds_raw;
+
+    cooperative_l1_fill(l1_cache, d_l1_cache);
+
+    const bool valid   = (hash_id_0 < batch_size);
+    const bool have_h1 = valid && (hash_id_0 + 1 < batch_size);
+
+    // --- Read precomputed z,w from seed kernel (1 load per hash, on 1 lane) ---
+    uint32_t z0 = 0, w0 = 0;
+    uint32_t z1 = 0, w1 = 0;
+
+    if (valid && lane_id == 0) {
+        const uint32_t base0 = hash_id_0 * 8u;
+        z0 = d_seed_digest[base0];
+        w0 = d_seed_digest[base0 + 1];
+    }
+    if (have_h1 && lane_id == 1) {
+        const uint32_t base1 = (hash_id_0 + 1) * 8u;
+        z1 = d_seed_digest[base1];
+        w1 = d_seed_digest[base1 + 1];
+    }
+
+    // --- Broadcast z,w to all 16 lanes in the group ---
+    const uint32_t wave_lane  = __lane_id();
+    const uint32_t group_base = wave_lane & ~0xFu;
+
+    z0 = PROGPOW_BPERMUTE(group_base + 0, z0);
+    w0 = PROGPOW_BPERMUTE(group_base + 0, w0);
+    z1 = PROGPOW_BPERMUTE(group_base + 1, z1);
+    w1 = PROGPOW_BPERMUTE(group_base + 1, w1);
+
+    // --- Fill mix directly from z,w — no seed-to-fnv1a work on the hot path ---
+    uint32_t m0[PROGPOW_REGS];
+    uint32_t m1[PROGPOW_REGS];
+
+    fill_mix_from_zw(z0, w0, lane_id, m0);
+    if (have_h1) {
+        fill_mix_from_zw(z1, w1, lane_id, m1);
+    }
+
+    __syncthreads();  // L1 fill visibility
+
+    if (!valid) return;
+
+    // --- Main loop ---
+    if (have_h1) {
+        progpow_main_loop_2way(m0, m1, l1_cache, d_dag, lane_id);
+    } else {
+        progpow_main_loop(m0, l1_cache, d_dag, lane_id);
+    }
+
+    // --- Reduce + store digest ---
+    // Digest overwrites the z,w slot — seed data is consumed, no longer needed.
+    {
+        uint32_t digest0[8];
+        progpow_reduce(m0, digest0);
+
+        uint32_t digest1[8];
+        if (have_h1)
+            progpow_reduce(m1, digest1);
+
+        store_digest_coop_16x8_u32(
+            d_seed_digest + hash_id_0 * 8u,
+            digest0,
+            d_seed_digest + (hash_id_0 + 1) * 8u,
             digest1,
             have_h1);
     }
@@ -1143,6 +1368,7 @@ void kawpow_final_kernel(
     uint32_t                     batch_size,
     const uint64_t* __restrict__ d_target,
     uint64_t* __restrict__       d_solutions,
+    uint32_t* __restrict__       d_solution_flag,
     uint32_t* __restrict__       d_result_hashes,
     const uint32_t* __restrict__ d_intermediate)
 {
@@ -1213,6 +1439,7 @@ void kawpow_final_kernel(
 
         if (below || equal)
         {
+            if (d_solution_flag) *d_solution_flag = 1;
             uint32_t idx = (uint32_t)atomicAdd((unsigned long long*)&d_solutions[0], 1ULL);
             if (idx < 1024)
             {
@@ -1224,6 +1451,93 @@ void kawpow_final_kernel(
                 d_solutions[1 + idx * 5 + 2] = ((uint64_t)v2.z) | ((uint64_t)v2.w << 32);
                 d_solutions[1 + idx * 5 + 3] = ((uint64_t)v3.x) | ((uint64_t)v3.y << 32);
                 d_solutions[1 + idx * 5 + 4] = ((uint64_t)v3.z) | ((uint64_t)v3.w << 32);
+            }
+        }
+    }
+}
+
+extern "C" __global__ __launch_bounds__(256)
+void kawpow_final_kernel_reseed_seed64_digest(
+    const uint32_t* __restrict__ d_header,
+    uint64_t                     nonce_start,
+    uint32_t                     batch_size,
+    const uint64_t* __restrict__ d_target,
+    uint64_t* __restrict__       d_solutions,
+    uint32_t* __restrict__       d_solution_flag,
+    uint32_t* __restrict__       d_result_hashes,
+    const uint32_t* __restrict__ d_seed_digest)
+{
+    const uint32_t hash_id = blockIdx.x * blockDim.x + threadIdx.x;
+    if (hash_id >= batch_size) return;
+
+    const uint64_t nonce = nonce_start + (uint64_t)hash_id;
+    const uint32_t digest_base = hash_id * 8u;
+    const uint32_t result_base = hash_id * 16u;
+
+    uint32_t state[25];
+    kawpow_make_seed_state(d_header, nonce, state);
+
+    const uint2* dig2 = reinterpret_cast<const uint2*>(d_seed_digest + digest_base);
+    uint2 v0 = dig2[0];
+    uint2 v1 = dig2[1];
+    uint2 v2 = dig2[2];
+    uint2 v3 = dig2[3];
+
+    state[8]  = v0.x; state[9]  = v0.y; state[10] = v1.x; state[11] = v1.y;
+    state[12] = v2.x; state[13] = v2.y; state[14] = v3.x; state[15] = v3.y;
+
+    state[16] = KPAD0;  state[17] = KPAD1;  state[18] = KPAD2;
+    state[19] = KPAD3;  state[20] = KPAD4;  state[21] = KPAD5;
+    state[22] = KPAD6;  state[23] = KPAD7;  state[24] = KPAD8;
+
+    keccak_f800<true>(state);
+
+    if (d_result_hashes != nullptr)
+    {
+        d_result_hashes[result_base + 0] = v0.x;
+        d_result_hashes[result_base + 1] = v0.y;
+        d_result_hashes[result_base + 2] = v1.x;
+        d_result_hashes[result_base + 3] = v1.y;
+        d_result_hashes[result_base + 4] = v2.x;
+        d_result_hashes[result_base + 5] = v2.y;
+        d_result_hashes[result_base + 6] = v3.x;
+        d_result_hashes[result_base + 7] = v3.y;
+
+        #pragma unroll
+        for (int i = 0; i < 8; i++) d_result_hashes[result_base + 8 + i] = state[i];
+    }
+
+    {
+        const uint8_t* hash8   = reinterpret_cast<const uint8_t*>(state);
+        const uint8_t* target8 = reinterpret_cast<const uint8_t*>(d_target);
+
+        bool below = false;
+        bool equal = true;
+
+        #pragma unroll
+        for (int i = 31; i >= 0; i--)
+        {
+            uint8_t h = hash8[31 - i];
+            uint8_t t = target8[i];
+
+            if (equal)
+            {
+                if (h < t) { below = true;  equal = false; }
+                else if (h > t) { below = false; equal = false; }
+            }
+        }
+
+        if (below || equal)
+        {
+            if (d_solution_flag) *d_solution_flag = 1;
+            uint32_t idx = (uint32_t)atomicAdd((unsigned long long*)&d_solutions[0], 1ULL);
+            if (idx < 1024)
+            {
+                d_solutions[1 + idx * 5 + 0] = nonce;
+                d_solutions[1 + idx * 5 + 1] = ((uint64_t)v0.x) | ((uint64_t)v0.y << 32);
+                d_solutions[1 + idx * 5 + 2] = ((uint64_t)v1.x) | ((uint64_t)v1.y << 32);
+                d_solutions[1 + idx * 5 + 3] = ((uint64_t)v2.x) | ((uint64_t)v2.y << 32);
+                d_solutions[1 + idx * 5 + 4] = ((uint64_t)v3.x) | ((uint64_t)v3.y << 32);
             }
         }
     }

@@ -46,6 +46,10 @@ constexpr auto ORORTC_SUCCESS       = HIPRTC_SUCCESS;
 #define oroMemset               hipMemset
 #define oroMemsetAsync          hipMemsetAsync
 #define oroMemGetInfo           hipMemGetInfo
+#define oroHostMalloc           hipHostMalloc
+#define oroHostFree             hipHostFree
+#define oroHostGetDevicePointer hipHostGetDevicePointer
+#define oroHostMallocMapped     hipHostMallocMapped
 
 #define oroGetDeviceCount       hipGetDeviceCount
 #define oroGetDevice            hipGetDevice
@@ -95,6 +99,13 @@ inline oroError_t oroGetErrorString(oroError_t err, const char** pStr) {
 #define orortcDestroyProgram    hiprtcDestroyProgram
 
 #endif // WITH_OROCHI
+
+#ifndef oroHostMallocMapped
+#define oroHostMallocMapped 0x2
+#endif
+#ifndef oroHostMallocCoherent
+#define oroHostMallocCoherent 0x40000000
+#endif
 
 // ---- Device handle helper ----
 // Orochi wraps device ordinals in oroDevice (encodes backend API).
