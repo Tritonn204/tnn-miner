@@ -2135,7 +2135,7 @@ inline bool kawpow_rebuild_dag(KawPowLiveState& ls, KawPowAlgoData* kp, int new_
     // Recalculate sizes + Barrett constants
     ls.dag_num_items = (uint32_t)(ctx->full_dataset_num_items / 2);
     size_t dag_words =
-        (size_t)ls.dag_num_items * (64 + 16);  // base + w0 clone
+        (size_t)ls.dag_num_items * (64);  // base + w0 clone
 
     ls.dag_size_bytes = dag_words * sizeof(uint32_t);
     {
