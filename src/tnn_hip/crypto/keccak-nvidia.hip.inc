@@ -291,7 +291,7 @@ static __device__ __forceinline__ void keccak_f800(uint32_t* __restrict__ st)
 
     constexpr int RoundCount = SpecializeLastRound ? 21 : 22;
 
-#pragma unroll
+#pragma unroll 1
     for (int round = 0; round < RoundCount; round++)
     {
         // Theta
