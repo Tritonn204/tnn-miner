@@ -32,8 +32,8 @@ jobs:
           cuda-cudart-dev-12-9 \
           cuda-nvrtc-dev-12-9 \
           cuda-profiler-api-12-9
-        find /usr/local/cuda/lib64 /usr/local/cuda-*/lib64 /usr/lib/x86_64-linux-gnu \
-          -maxdepth 1 \( -name 'libnvrtc.so*' -o -name 'libnvrtc-builtins.so*' \) 2>/dev/null | sort -V
+        find /usr/local/cuda/lib64 /usr/local/cuda/targets/x86_64-linux/lib /usr/local/cuda-*/lib64 /usr/local/cuda-*/targets/x86_64-linux/lib /usr/lib/x86_64-linux-gnu \
+          -maxdepth 1 \( -name 'libcudart.so*' -o -name 'libnvrtc.so*' -o -name 'libnvrtc-builtins.so*' \) 2>/dev/null | sort -V
     - name: 'Build Orochi'
       run: |
         chmod +x ./scripts/build_all.sh
@@ -42,8 +42,8 @@ jobs:
       run: |
         cd hip-build/linux/orochi
         mkdir -p libs
-        for lib in libnvrtc.so libnvrtc-builtins.so; do
-          find /usr/local/cuda/lib64 /usr/local/cuda-*/lib64 /usr/lib/x86_64-linux-gnu \
+        for lib in libcudart.so libnvrtc.so libnvrtc-builtins.so; do
+          find /usr/local/cuda/lib64 /usr/local/cuda/targets/x86_64-linux/lib /usr/local/cuda-*/lib64 /usr/local/cuda-*/targets/x86_64-linux/lib /usr/lib/x86_64-linux-gnu \
             -maxdepth 1 -name "${lib}*" 2>/dev/null | sort -V | while read -r found; do
               cp -P "$found" libs/
               if [ -L "$found" ]; then

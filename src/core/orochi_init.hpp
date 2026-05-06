@@ -19,14 +19,19 @@ namespace oro
     std::string libsDir;
     std::string hipLib;
     std::string hiprtcLib;
+    std::string cudartLib;
+    std::string cudartLibVersioned;
     std::string nvrtcLib;
     std::string nvrtcLibVersioned;
+    std::string legacyCudartLib;
+    std::string legacyCudartLibVersioned;
     std::string legacyNvrtcLib;
     std::string legacyNvrtcLibVersioned;
 
     // HIP paths (bundled + system fallbacks)
     const char *hip[14];
     const char *hiprtc[14];
+    const char *cudart[32];
     const char *nvrtc[32];
 
     void build()
@@ -62,6 +67,39 @@ namespace oro
       hiprtc[11] = "/opt/rocm/lib/libhiprtc.so";
       hiprtc[12] = "libhiprtc.so";
       hiprtc[13] = nullptr;
+
+      // CUDART. CUEW treats a custom path list as a replacement for its
+      // built-in scan, so keep system locations first and use bundled copies
+      // beside the miner as the final fallback.
+      cudart[0] = "libcudart.so.13";
+      cudart[1] = "libcudart.so.12";
+      cudart[2] = "libcudart.so";
+      cudart[3] = "/usr/local/cuda/lib64/libcudart.so.13";
+      cudart[4] = "/usr/local/cuda/lib64/libcudart.so.12";
+      cudart[5] = "/usr/local/cuda/lib64/libcudart.so";
+      cudart[6] = "/usr/local/cuda/lib/libcudart.so";
+      cudart[7] = "/usr/lib/x86_64-linux-gnu/libcudart.so.13";
+      cudart[8] = "/usr/lib/x86_64-linux-gnu/libcudart.so.12";
+      cudart[9] = "/usr/lib/x86_64-linux-gnu/libcudart.so";
+      cudart[10] = "/usr/local/cuda-13.0/lib64/libcudart.so.13";
+      cudart[11] = "/usr/local/cuda-13.0/lib64/libcudart.so";
+      cudart[12] = "/usr/local/cuda-13/lib64/libcudart.so.13";
+      cudart[13] = "/usr/local/cuda-13/lib64/libcudart.so";
+      cudart[14] = "/usr/local/cuda-12.9/lib64/libcudart.so.12";
+      cudart[15] = "/usr/local/cuda-12.9/lib64/libcudart.so";
+      cudart[16] = "/usr/local/cuda-12.8/lib64/libcudart.so.12";
+      cudart[17] = "/usr/local/cuda-12.8/lib64/libcudart.so";
+      cudart[18] = "/usr/local/cuda-12.7/lib64/libcudart.so.12";
+      cudart[19] = "/usr/local/cuda-12.7/lib64/libcudart.so";
+      cudart[20] = "/usr/local/cuda-12.6/lib64/libcudart.so.12";
+      cudart[21] = "/usr/local/cuda-12.6/lib64/libcudart.so";
+      cudart[22] = "/usr/local/cuda-12/lib64/libcudart.so.12";
+      cudart[23] = "/usr/local/cuda-12/lib64/libcudart.so";
+      cudart[24] = cudartLib.c_str();
+      cudart[25] = cudartLibVersioned.c_str();
+      cudart[26] = legacyCudartLib.c_str();
+      cudart[27] = legacyCudartLibVersioned.c_str();
+      cudart[28] = nullptr;
 
       // NVRTC. CUEW treats a custom path list as a replacement for its
       // built-in scan, so keep system locations first and use bundled copies
@@ -151,14 +189,19 @@ namespace oro
     paths.libsDir = exeDir + "/libs";
     paths.hipLib = paths.libsDir + "/libamdhip64.so.6";
     paths.hiprtcLib = paths.libsDir + "/libhiprtc.so.6";
+    paths.cudartLib = paths.libsDir + "/libcudart.so.12";
+    paths.cudartLibVersioned = paths.libsDir + "/libcudart.so";
     paths.nvrtcLib = paths.libsDir + "/libnvrtc.so.12";
     paths.nvrtcLibVersioned = paths.libsDir + "/libnvrtc.so";
+    paths.legacyCudartLib = exeDir + "/nvrtc_libs/libcudart.so.12";
+    paths.legacyCudartLibVersioned = exeDir + "/nvrtc_libs/libcudart.so";
     paths.legacyNvrtcLib = exeDir + "/nvrtc_libs/libnvrtc.so.12";
     paths.legacyNvrtcLibVersioned = exeDir + "/nvrtc_libs/libnvrtc.so";
     paths.build();
 
     const char **hipPaths = paths.libsDir.empty() ? nullptr : paths.hip;
     const char **hiprtcPaths = paths.libsDir.empty() ? nullptr : paths.hiprtc;
+    const char **cudartPaths = paths.libsDir.empty() ? nullptr : paths.cudart;
     const char **nvrtcPaths = paths.libsDir.empty() ? nullptr : paths.nvrtc;
 
 // Try HIP + CUDA
@@ -169,7 +212,7 @@ namespace oro
 #else
     int err = oroInitialize((oroApi)(ORO_API_HIP | ORO_API_CUDA), 0,
                             hipPaths, hiprtcPaths,
-                            nullptr, nullptr, nvrtcPaths);
+                            nullptr, cudartPaths, nvrtcPaths);
 #endif
     // Fallback to HIP only
     if (err != 0)
@@ -190,7 +233,7 @@ namespace oro
 #else
       err = oroInitialize(ORO_API_CUDA, 0,
                           nullptr, nullptr,
-                          nullptr, nullptr, nvrtcPaths);
+                          nullptr, cudartPaths, nvrtcPaths);
 #endif
       TNN_LOG_DEBUG("  [INIT] CUDA-only result: %d, loadedAPIs: 0x%x\n", err, (int)oroLoadedAPI());
     }
