@@ -69,6 +69,7 @@ void runDivsufsortBenchmark();
 
 void mapZeroes();
 
+void ensureWolfLUT();
 int DeroTesting(int testOp, int testLen, bool useLookup);
 int runDeroOpTests(int testOp, int dataLen=15);
 int rakeDeroOpTests(int testOp, int dataLen=15);
@@ -82,7 +83,6 @@ int TestAstroBWTv3repeattest(bool quiet);
 void optest_ref(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print=true);
 void optest_branchcpu(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print=true);
 
-void optest_lookup(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print=true);
 void optest_wolf(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print=true);
 
 void optest_avx2(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print=true);

@@ -8,10 +8,14 @@
  */
 #define __STDC_WANT_LIB_EXT1__ 1
 
+#if defined(__HIPCC_RTC__) || defined(__CUDACC_RTC__)
+#include "hiprtc_types.hip.h"
+#else
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#endif
 
 #include "bitselect.hip.h"
 

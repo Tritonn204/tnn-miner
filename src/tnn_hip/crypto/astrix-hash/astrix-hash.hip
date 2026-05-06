@@ -9,6 +9,8 @@
 #include "astrix_archdef.h"
 #include "astrix-hash.hip.h"
 
+#include "hip_platform.h"
+
 #ifdef __HIP_PLATFORM_AMD__
 #include <tnn_hip/crypto/keccak-amd.hip.inc>
 // #include <tnn_hip/crypto/keccak-tiny.hip.inc>
@@ -235,7 +237,7 @@ __global__ void astrixHash_hip(const uint64_t nonce_mask, const uint64_t nonce_f
       printf("\n");
     }
 
-  keccakf(input);
+  keccakf<true>(input);
 
   blake3_inline_hash_single(input, 32, input);
   // blake3_single_opt(input, 32, input);
@@ -244,7 +246,7 @@ __global__ void astrixHash_hip(const uint64_t nonce_mask, const uint64_t nonce_f
   input[32] = 0x06;
   input[135] = 0x80;
 
-  keccakf(input);
+  keccakf<true>(input);
 
   if constexpr (BENCH_RUNS == 1)
     if (globalId == 0) {
@@ -303,7 +305,7 @@ __global__ void astrixHash_hip(const uint64_t nonce_mask, const uint64_t nonce_f
     product1 >>= 10;
     product2 >>= 10;
 
-#ifdef __HIP_PLATFORM_NVIDIA__
+#if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
     nextInput[rowId] = input[rowId] ^ ((uint8_t)(product1 << 4) | (uint8_t)(product2));
 #else
     nextInput[rowId] = input[rowId] ^ bitselect(product1 << 4, product2, 0x0000000FU);
@@ -318,7 +320,7 @@ __global__ void astrixHash_hip(const uint64_t nonce_mask, const uint64_t nonce_f
   #pragma unroll
   for (i = 32; i < 200; i++) input[i] = heavyP[i];
 
-  keccakf(input);
+  keccakf<true>(input);
   if (LT_U256(((uint256_t*)input)[0], ((uint256_t*)target)[0]))
   {
     int index = atomicAdd(nonce_count, 1);
@@ -422,7 +424,7 @@ namespace Astrix_HIP {
     hipMemcpyToSymbol(target, diff, 32, 0, hipMemcpyHostToDevice);
   }
 
-  __attribute__ ((optnone))
+TNN_OPTNONE
   void astrixHash_wrapper(
     int blocks,
     const uint64_t nonce_mask, 
@@ -441,7 +443,7 @@ namespace Astrix_HIP {
     hipEventCreate(&stop_event);
 
     if (isDev) {
-      hipLaunchKernelGGL(astrixHash_hip<true>, dim3(blocks), dim3(Astrix_HIP::THREAD_DIM), 0, 0,
+      TNN_HIP_LAUNCH_KERNEL(astrixHash_hip<true>, dim3(blocks), dim3(Astrix_HIP::THREAD_DIM), 0, 0,
                         nonce_mask, nonce_fixed, kIndex, batchSize, final_nonces, nonce_count, dataBuf);
 
       hipError_t err = hipGetLastError();
@@ -450,7 +452,7 @@ namespace Astrix_HIP {
         printf("Kernel launch failed: %s\n", hipGetErrorString(err));
       }
     } else {
-      hipLaunchKernelGGL(astrixHash_hip<false>, dim3(blocks), dim3(Astrix_HIP::THREAD_DIM), 0, 0,
+      TNN_HIP_LAUNCH_KERNEL(astrixHash_hip<false>, dim3(blocks), dim3(Astrix_HIP::THREAD_DIM), 0, 0,
                         nonce_mask, nonce_fixed, kIndex, batchSize, final_nonces, nonce_count, dataBuf);
 
       hipError_t err = hipGetLastError();
@@ -641,7 +643,7 @@ void benchAstrixHip()
   {
     hipMemset(d_nonce_count, 0, sizeof(int));
 
-    // hipLaunchKernelGGL(astrixShake_hip<false>, dim3(blocks), dim3(Astrix_HIP::THREAD_DIM), 0, 0,
+    // TNN_HIP_LAUNCH_KERNEL(astrixShake_hip<false>, dim3(blocks), dim3(Astrix_HIP::THREAD_DIM), 0, 0,
     //                    nonce_mask, nonce_fixed, i, batchSize, d_dataBuf);
 
     // hipError_t err = hipGetLastError();
@@ -651,7 +653,7 @@ void benchAstrixHip()
     //   break;
     // }
 
-    hipLaunchKernelGGL(astrixHash_hip<false>, dim3(blocks), dim3(Astrix_HIP::THREAD_DIM), 0, 0,
+    TNN_HIP_LAUNCH_KERNEL(astrixHash_hip<false>, dim3(blocks), dim3(Astrix_HIP::THREAD_DIM), 0, 0,
                        nonce_mask, nonce_fixed, i, batchSize, d_final_nonces, d_nonce_count, d_dataBuf);
 
     // Check for errors after the kernel launch

@@ -347,9 +347,8 @@ namespace randomx {
 
 	void AssemblyGeneratorX86::h_IMULH_R(Instruction& instr, int i) {
 		registerUsage[instr.dst] = i;
-		asmCode << "\tmov rax, " << regR[instr.dst] << std::endl;
-		asmCode << "\tmul " << regR[instr.src] << std::endl;
-		asmCode << "\tmov " << regR[instr.dst] << ", rdx" << std::endl;
+    asmCode << "\tmulx rdx, rax, " << regR[instr.dst] << ", " << regR[instr.src] << std::endl;
+    asmCode << "\tmov " << regR[instr.dst] << ", rdx" << std::endl;
 		traceint(instr);
 	}
 
@@ -369,11 +368,15 @@ namespace randomx {
 	}
 
 	void AssemblyGeneratorX86::h_ISMULH_R(Instruction& instr, int i) {
-		registerUsage[instr.dst] = i;
-		asmCode << "\tmov rax, " << regR[instr.dst] << std::endl;
-		asmCode << "\timul " << regR[instr.src] << std::endl;
-		asmCode << "\tmov " << regR[instr.dst] << ", rdx" << std::endl;
-		traceint(instr);
+    registerUsage[instr.dst] = i;
+    
+    asmCode << "\tmov rax, " << regR[instr.dst] << std::endl;
+    asmCode << "\timul " << regR[instr.src] << std::endl;
+    
+    if (regR[instr.dst] != "rdx") {
+      asmCode << "\tmov " << regR[instr.dst] << ", rdx" << std::endl;
+    }
+    traceint(instr);
 	}
 
 	void AssemblyGeneratorX86::h_ISMULH_M(Instruction& instr, int i) {

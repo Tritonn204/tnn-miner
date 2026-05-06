@@ -4,7 +4,9 @@
 #include "astroworker.h"
 
 #ifdef _MSC_VER
+#ifndef NOMINMAX
 #define NOMINMAX // Disable Windows macros for min and max
+#endif
 #endif
 
 #include <algorithm>
@@ -30,11 +32,15 @@
 
 #ifdef _WIN32
 #include <winsock2.h>
+#ifdef _MSC_VER
 #include <intrin.h>
+#else
+#include <x86intrin.h>
+#endif
 #else
 #include <arpa/inet.h>
 #endif
-#include "tnn-hugepages.h"
+#include "tnn-hugepages.hpp"
 
 #include <atomic>
 #include <libcubwt.cuh>
@@ -60,7 +66,7 @@
 #define TERM	((1+OVER)*sizeof(unsigned long))
 #define LCPART	8
 #define ABIT	7
-const int AMASK	= (1<<ABIT)-1;
+constexpr int AMASK	= (1<<ABIT)-1;
 
 #if defined(__AVX2__)
 #ifdef __GNUC__ 
@@ -83,7 +89,7 @@ alignas(32) inline __m256i g_maskTable[32];
 
 #define rl8(x, y) ((x << (y%8) | x >> (8-(y%8))))
 
-const int MINIBLOCK_SIZE = 48;
+constexpr int MINIBLOCK_SIZE = 48;
 
 typedef unsigned int suffix;
 typedef unsigned int t_index;
@@ -91,7 +97,7 @@ typedef unsigned char byte;
 typedef unsigned short dbyte;
 typedef unsigned long word;
 
-const int sus_op = 1;
+constexpr int sus_op = 1;
 
 const std::vector<unsigned char> branchedOps_global = {
 1,3,5,9,11,13,15,17,20,21,23,27,29,30,35,39,40,43,45,47,51,54,58,60,62,64,68,70,72,74,75,80,82,85,91,92,93,94,103,108,109,115,116,117,119,120,123,124,127,132,133,134,136,138,140,142,143,146,148,149,150,154,155,159,161,165,168,169,176,177,178,180,182,184,187,189,190,193,194,195,199,202,203,204,212,214,215,216,219,221,222,223,226,227,230,231,234,236,239,240,241,242,250,253
@@ -108,7 +114,7 @@ const std::vector<unsigned char> branchedOps_global = {
 //   0xFFFFFFFFFFFFFF00,
 // };
 
-const uint64_t maskTips[8] = {
+constexpr uint64_t maskTips[8] = {
   0x00,         // n%8 = 0 
   0xFF,         // n%8 = 1
   0xFFFF,       // n%8 = 2 
@@ -119,7 +125,7 @@ const uint64_t maskTips[8] = {
   0xFFFFFFFFFFFFFFF // n%8 = 7
 };
 
-const uint32_t sha_standard[8] = {
+constexpr uint32_t sha_standard[8] = {
     0x6a09e667, 
     0xbb67ae85, 
     0x3c6ef372,
@@ -130,21 +136,21 @@ const uint32_t sha_standard[8] = {
     0x5be0cd19
 };
 
-const int deviceAllocMB = 5;
+constexpr int deviceAllocMB = 5;
 
 #endif
 
-static const bool sInduction = true;
-static const bool sTracking = true;
+static constexpr bool sInduction = true;
+static constexpr bool sTracking = true;
 
-#if defined(__AVX2__)
+#ifndef TNN_LEGACY_AMD64
+#ifdef __x86_64__
 template <unsigned int N>
 __m256i shiftRight256(__m256i a);
 
 template <unsigned int N> 
 __m256i shiftLeft256(__m256i a);
-
-static const __m256i vec_3 = _mm256_set1_epi8(3);
+#endif
 #endif
 
 
@@ -371,18 +377,7 @@ void lookupCompute(workerData &worker, bool isTest, int wIndex);
 TNN_TARGETS
 void branchComputeCPU(workerData &worker, bool isTest, int wIndex);
 
-#ifdef __x86_64__
-#define WOLF_FMV \
-    __attribute__ ((target("default"))) \
-    __attribute__ ((target("sse2"))) \
-    __attribute__ ((target("avx2")))
-#else
-#define WOLF_FMV
-#endif
-
 void wolfPermute(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker);
-void wolfPermute_avx512(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker);
-void wolfPermute_avx2(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker);
 void wolfSame(uint8_t *in, uint8_t *out, uint16_t op, uint8_t pos1, uint8_t pos2, workerData &worker);
 uint8_t wolfSingle(uint8_t *in, uint16_t op, uint8_t idx, uint8_t pos2);
 
@@ -390,25 +385,9 @@ void wolfCompute(workerData &worker, bool isTest, int wIndex);
 
 typedef void (*wolfPerm)(uint8_t *, uint8_t *, uint16_t, uint8_t, uint8_t, workerData&);
 
-static inline wolfPerm resolve_wolfPermute() {
-  #ifdef __x86_64__
-  //if (__builtin_cpu_supports("avx512bw"))
-  //  return wolfPermute_avx512;
-  if (__builtin_cpu_supports("avx2"))
-    return wolfPermute_avx2;
-  #endif
-  return wolfPermute;
-}
-
-// Cached function pointer
-inline wolfPerm wolfPerms[1] = {resolve_wolfPermute()};
-
-#if defined(__AVX2__)
-
 void branchComputeCPU_avx2(workerData &worker, bool isTest, int wIndex);
-
 void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest, int wIndex);
-#elif defined(__aarch64__)
+#if defined(__aarch64__)
 // This is gross.  But we need to do this until 'workerData' gets pushed into it's own include file.
 void branchComputeCPU_aarch64(workerData &worker, bool isTest, int wIndex);
 #endif

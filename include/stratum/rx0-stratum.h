@@ -59,4 +59,6 @@ namespace rx0Stratum {
 
   static uint64_t lastReceivedJobTime = 0;
   static int jobTimeout = 1200;
+  static uint64_t lastShareSubmissionTime = 0;
+  const int shareSubmitTimeout = 86400;
 }

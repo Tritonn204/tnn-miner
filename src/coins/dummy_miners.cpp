@@ -9,7 +9,7 @@ blankfunc(mineSpectre);
 #endif
 
 // XelisHash v1/v2 coins
-#ifndef TNN_XELISHASH
+#if !defined(TNN_XELISHASH) || defined(TNN_HIP)
 blankfunc(mineXelis);
 #endif
 
@@ -53,8 +53,17 @@ blankfunc(mineShai);
 blankfunc(mineYespower);
 #endif
 
-#ifndef TNN_HIP
+// Rinhash
+#ifndef TNN_RINHASH
+blankfunc(mineRinhash);
+#endif
+
+#if !defined(TNN_HIP) || !defined(TNN_ASTRIXHASH)
 blankfunc(mineAstrix_hip);
+#endif
+#if !defined(TNN_HIP) || !defined(TNN_NXLHASH)
 blankfunc(mineNexellia_hip);
+#endif
+#if !defined(TNN_HIP) || !defined(TNN_WALAHASH)
 blankfunc(mineWaglayla_hip);
 #endif

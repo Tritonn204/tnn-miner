@@ -105,6 +105,40 @@ std::string buildBlockHeader(const BTCStratum::jobCache &cache)
     le32enc(blockHeader + 72, cache.nBits);
     break;
 
+  case ENDIAN_SWAP_32_BE:
+    // Bitcoin-style: swap 32-bit chunks
+    be32enc(blockHeader + 0, cache.version);
+
+    // Handle prevHash swapping if configured
+    if (current_algo_config.swap_prev_hash)
+    {
+      for (int i = 0; i < 8; i++)
+      {
+        be32enc(blockHeader + 4 + i * 4, ((uint32_t *)cache.prevHash.data())[i]);
+      }
+    }
+    else
+    {
+      memcpy(blockHeader + 4, cache.prevHash.data(), 32);
+    }
+
+    // Handle merkleRoot swapping if configured
+    if (current_algo_config.swap_merkle_root)
+    {
+      for (int i = 0; i < 8; i++)
+      {
+        be32enc(blockHeader + 36 + i * 4, ((uint32_t *)merkleRoot.data())[i]);
+      }
+    }
+    else
+    {
+      memcpy(blockHeader + 36, merkleRoot.data(), 32);
+    }
+
+    be32enc(blockHeader + 68, cache.nTime);
+    be32enc(blockHeader + 72, cache.nBits);
+    break;
+
   case ENDIAN_BIG:
     // Pure big-endian (rare, but included for completeness)
     be32enc(blockHeader + 0, cache.version);
@@ -130,7 +164,7 @@ int handleBTCStratumPacket(boost::json::object packet, BTCStratum::jobCache *cac
   if (M.compare(BTCStratum::s_notify) == 0)
   {
     // printf("%s%s\n", isDev ? "DEV: " : "USER: ", boost::json::serialize(packet).c_str());
-    std::scoped_lock<boost::mutex> lockGuard(mutex);
+    std::scoped_lock<std::mutex> lockGuard(mutex);
     boost::json::value *J = isDev ? &devJob : &job;
     int64_t *h = isDev ? &devHeight : &ourHeight;
 
@@ -220,7 +254,7 @@ int handleBTCStratumPacket(boost::json::object packet, BTCStratum::jobCache *cac
                                           .count();
 
     bool *C = isDev ? &devConnected : &isConnected;
-    if (!*C && !beQuiet)
+    if (!beQuiet)
     {
       setcolor(CYAN);
       printf("\n");
@@ -332,8 +366,10 @@ int handleBTCStratumResponse(boost::json::object packet, BTCStratum::jobCache *c
   }
   break;
 
-  case BTCStratum::submitID:
+  default:
   {
+    if (!SubmitTracker::isSubmitId(id)) break;
+    int submitDevice = submitTracker.resolve(id);
     printf("\n");
     if (isDev)
     {
@@ -344,6 +380,7 @@ int handleBTCStratumResponse(boost::json::object packet, BTCStratum::jobCache *c
     {
       if (!isDev)
         accepted++;
+      if (!isDev) recordDeviceShare(submitDevice, true);
       std::cout << "Stratum: share accepted" << std::endl;
       fflush(stdout);
       setcolor(BRIGHT_WHITE);
@@ -352,13 +389,19 @@ int handleBTCStratumResponse(boost::json::object packet, BTCStratum::jobCache *c
     {
       if (!isDev)
         rejected++;
+      if (!isDev) recordDeviceShare(submitDevice, false);
       if (!isDev)
         setcolor(RED);
 
       std::string errorMsg = "Unknown error";
-      if (packet.contains("error") && packet["error"].is_array())
+      if (packet.contains("error"))
       {
-        errorMsg = packet["error"].as_array()[1].as_string().c_str();
+        if (packet["error"].is_array())
+          errorMsg = packet["error"].as_array()[1].as_string().c_str();
+        else if (packet["error"].is_object()) {
+          if (packet["error"].as_object().contains("message"))
+            errorMsg = packet["error"].as_object()["message"].as_string().c_str();
+        }
       }
       std::cout << "Stratum: share rejected: " << errorMsg << std::endl;
 
@@ -381,6 +424,7 @@ void btc_stratum_session(
     net::yield_context yield,
     bool isDev)
 {
+  BTCStratum::lastReceivedJobTime = 0;
   beast::error_code ec;
   boost::system::error_code jsonEc;
 
@@ -395,6 +439,9 @@ void btc_stratum_session(
   std::string minerName = "tnn-miner/" + std::string(versionString);
   BTCStratum::jobCache jobCache;
 
+  // Persistent packet buffer for handling split packets
+  std::string packetBuffer;
+
   // Subscribe to Stratum
   boost::json::object packet = BTCStratum::stratumCall;
   packet["id"] = BTCStratum::subscribe.id;
@@ -408,25 +455,17 @@ void btc_stratum_session(
   if (ec)
     return fail(ec, "Stratum subscribe");
 
-  // Handle subscribe response
-  boost::asio::streambuf subRes;
-  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-  trans = boost::asio::read_until(stream, subRes, "\n");
-
-  std::string subResString = beast::buffers_to_string(subRes.data());
-  subRes.consume(trans);
-
-  boost::json::object subRPC = boost::json::parse(subResString.c_str()).as_object();
-  handleBTCStratumResponse(subRPC, &jobCache, isDev);
-
   // Authorize worker
   packet = BTCStratum::stratumCall;
   packet["id"] = BTCStratum::authorize.id;
   packet["method"] = BTCStratum::authorize.method;
-  packet["params"] = boost::json::array({wallet + "." + worker});
+  packet["params"] = boost::json::array({
+    wallet + "." + worker,
+    stratumPassword
+  });
   if (isDev)
   {
-    packet["params"] = boost::json::array({devWallet + "." + worker + "-" + tnnTargetArch});
+    packet["params"] = boost::json::array({devWallet + "." + worker + "-" + tnnTargetArch + "-tnn-dev"});
   }
 
   std::string authorization = boost::json::serialize(packet) + "\n";
@@ -440,18 +479,15 @@ void btc_stratum_session(
                                         std::chrono::steady_clock::now().time_since_epoch())
                                         .count();
 
-  // Persistent packet buffer for handling split packets
-  std::string packetBuffer;
-
   bool submitThread = false;
   bool abort = false;
 
   // Submit thread
-  boost::thread subThread([&]()
+  std::thread subThread([&]()
                           {
         submitThread = true;
         while(!abort) {
-            boost::unique_lock<boost::mutex> lock(mutex);
+            std::unique_lock<std::mutex> lock(mutex);
             bool *B = isDev ? &submittingDev : &submitting;
             cv.wait(lock, [&]{ return (data_ready && (*B)) || abort; });
             if (abort) break;
@@ -459,6 +495,7 @@ void btc_stratum_session(
             try {
                 boost::json::object *S = &share;
                 if (isDev) S = &devShare;
+                hoist_rpc_id(*S);
 
                 std::string msg = boost::json::serialize((*S)) + "\n";
                 beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(1));
@@ -479,7 +516,7 @@ void btc_stratum_session(
                 setcolor(BRIGHT_WHITE);
                 break;
             }
-            boost::this_thread::yield();
+            std::this_thread::yield();
         }
         submitThread = false; });
 
@@ -505,7 +542,7 @@ void btc_stratum_session(
         {
           if (!submitThread)
             break;
-          boost::this_thread::yield();
+          std::this_thread::yield();
         }
         stream.close();
         return fail(ec, "Stratum session timed out");
@@ -523,7 +560,7 @@ void btc_stratum_session(
         {
           if (!submitThread)
             break;
-          boost::this_thread::yield();
+          std::this_thread::yield();
         }
         stream.close();
         return fail(ec, "async_read");
@@ -593,7 +630,7 @@ void btc_stratum_session(
       {
         if (!submitThread)
           break;
-        boost::this_thread::yield();
+        std::this_thread::yield();
       }
       stream.close();
       setcolor(RED);
@@ -603,7 +640,7 @@ void btc_stratum_session(
       return;
     }
 
-    boost::this_thread::yield();
+    std::this_thread::yield();
     if (ABORT_MINER)
     {
       bool *connPtr = isDev ? &devConnected : &isConnected;
@@ -614,7 +651,6 @@ void btc_stratum_session(
   }
 
   cv.notify_all();
-  subThread.interrupt();
   subThread.join();
 }
 
@@ -628,6 +664,7 @@ void btc_stratum_session_nossl(
     net::yield_context yield,
     bool isDev)
 {
+  BTCStratum::lastReceivedJobTime = 0;
   beast::error_code ec;
   boost::system::error_code jsonEc;
 
@@ -642,6 +679,9 @@ void btc_stratum_session_nossl(
   std::string minerName = "tnn-miner/" + std::string(versionString);
   BTCStratum::jobCache jobCache;
 
+  // Persistent packet buffer for handling split packets
+  std::string packetBuffer;
+
   // Subscribe to Stratum
   boost::json::object packet = BTCStratum::stratumCall;
   packet["id"] = BTCStratum::subscribe.id;
@@ -655,22 +695,14 @@ void btc_stratum_session_nossl(
   if (ec)
     return fail(ec, "Stratum subscribe");
 
-  // Handle subscribe response
-  boost::asio::streambuf subRes;
-  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-  trans = boost::asio::read_until(stream, subRes, "\n");
-
-  std::string subResString = beast::buffers_to_string(subRes.data());
-  subRes.consume(trans);
-
-  boost::json::object subRPC = boost::json::parse(subResString.c_str()).as_object();
-  handleBTCStratumResponse(subRPC, &jobCache, isDev);
-
   // Authorize worker
   packet = BTCStratum::stratumCall;
   packet["id"] = BTCStratum::authorize.id;
   packet["method"] = BTCStratum::authorize.method;
-  packet["params"] = boost::json::array({wallet + "." + worker});
+  packet["params"] = boost::json::array({
+    wallet + "." + worker,
+    stratumPassword
+  });
   if (isDev)
   {
     packet["params"] = boost::json::array({devWallet + "." + worker + "-" + tnnTargetArch});
@@ -687,18 +719,15 @@ void btc_stratum_session_nossl(
                                         std::chrono::steady_clock::now().time_since_epoch())
                                         .count();
 
-  // Persistent packet buffer for handling split packets
-  std::string packetBuffer;
-
   bool submitThread = false;
   bool abort = false;
 
   // Submit thread
-  boost::thread subThread([&]()
+  std::thread subThread([&]()
                           {
         submitThread = true;
         while(!abort) {
-            boost::unique_lock<boost::mutex> lock(mutex);
+            std::unique_lock<std::mutex> lock(mutex);
             bool *B = isDev ? &submittingDev : &submitting;
             cv.wait(lock, [&]{ return (data_ready && (*B)) || abort; });
             if (abort) break;
@@ -706,6 +735,7 @@ void btc_stratum_session_nossl(
             try {
                 boost::json::object *S = &share;
                 if (isDev) S = &devShare;
+                hoist_rpc_id(*S);
 
                 std::string msg = boost::json::serialize((*S)) + "\n";
                 beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(1));
@@ -726,7 +756,7 @@ void btc_stratum_session_nossl(
                 setcolor(BRIGHT_WHITE);
                 break;
             }
-            boost::this_thread::yield();
+            std::this_thread::yield();
         }
         submitThread = false; });
 
@@ -752,7 +782,7 @@ void btc_stratum_session_nossl(
         {
           if (!submitThread)
             break;
-          boost::this_thread::yield();
+          std::this_thread::yield();
         }
         stream.close();
         return fail(ec, "Stratum session timed out");
@@ -770,7 +800,7 @@ void btc_stratum_session_nossl(
         {
           if (!submitThread)
             break;
-          boost::this_thread::yield();
+          std::this_thread::yield();
         }
         stream.close();
         return fail(ec, "async_read");
@@ -779,6 +809,7 @@ void btc_stratum_session_nossl(
       if (trans > 0)
       {
         std::string newData = beast::buffers_to_string(response.data());
+
         response.consume(trans);
 
         // Add new data to persistent buffer
@@ -840,7 +871,7 @@ void btc_stratum_session_nossl(
       {
         if (!submitThread)
           break;
-        boost::this_thread::yield();
+        std::this_thread::yield();
       }
       stream.close();
       setcolor(RED);
@@ -850,7 +881,7 @@ void btc_stratum_session_nossl(
       return;
     }
 
-    boost::this_thread::yield();
+    std::this_thread::yield();
     if (ABORT_MINER)
     {
       bool *connPtr = isDev ? &devConnected : &isConnected;
@@ -861,6 +892,5 @@ void btc_stratum_session_nossl(
   }
 
   cv.notify_all();
-  subThread.interrupt();
   subThread.join();
 }

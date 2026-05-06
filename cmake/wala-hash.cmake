@@ -15,8 +15,9 @@ if (WITH_ASTRIXHASH)
       src/net/wala/*.cpp
     )
     
+    # New unified CPU mining infrastructure
     list(APPEND walaHashSources
-      src/coins/mine_waglayla.cpp
+      src/tnn_cpu/mine_kas_unified.cpp
     )
 
     list(APPEND HEADERS_CRYPTO

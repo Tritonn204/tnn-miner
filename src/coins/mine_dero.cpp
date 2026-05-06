@@ -1,200 +1,226 @@
 #include "miners.hpp"
-#include "tnn-hugepages.h"
+#include "numa_optimizer.hpp"
 #include <astrobwtv3/astrobwtv3.h>
 #include <astrobwtv3/lookupcompute.h>
 
+#include <array>
+#include <atomic>
+#include <boost/json.hpp>
+#include <boost/chrono.hpp>
+#include <cstdint>
+#include <cstring>
+#include <mutex>
+#include <random>
+#include <cstdlib>
+
+static std::once_flag s_wolfLUTOnce;
+void ensureWolfLUT() { std::call_once(s_wolfLUTOnce, initWolfLUT); }
+
+// target = (2^256) / diff, stored as LE bytes
+static inline void deroTargetFromDiff(uint64_t diff, uint8_t *targetOut) {
+    static const boost::multiprecision::uint256_t kMaxU256 =
+        (boost::multiprecision::uint256_t(1) << 256) - 1;
+    if (diff == 0) { memset(targetOut, 0xFF, 32); return; }
+    boost::multiprecision::uint256_t target = kMaxU256 / diff;
+    boost::multiprecision::uint256_t rem = kMaxU256 % diff;
+    if (rem + 1 >= diff) target += 1;
+    cpp_int_to_byte_array(target, targetOut);
+}
+
+namespace {
+
+static inline void write_nonce_be(byte* WORK, uint32_t N) {
+  WORK[MINIBLOCK_SIZE - 5] = (byte)((N >> 24) & 0xFF);
+  WORK[MINIBLOCK_SIZE - 4] = (byte)((N >> 16) & 0xFF);
+  WORK[MINIBLOCK_SIZE - 3] = (byte)((N >>  8) & 0xFF);
+  WORK[MINIBLOCK_SIZE - 2] = (byte)((N      ) & 0xFF);
+}
+
+} // namespace
+
 void mineDero(int tid)
 {
-  byte random_buf[12];
   std::random_device rd;
   std::mt19937 gen(rd());
   std::uniform_int_distribution<int> dist(0, 255);
-  std::array<int, 12> buf;
-  std::generate(buf.begin(), buf.end(), [&dist, &gen]()
-                { return dist(gen); });
-  std::memcpy(random_buf, buf.data(), buf.size());
 
-  boost::this_thread::sleep_for(boost::chrono::milliseconds(125));
+  thread_local std::mt19937 gen_local(rd());
+  thread_local std::uniform_real_distribution<double> dev_dist(0, 10000);
 
+  // NUMA-aware worker context and counters
+  thread_local workerData* worker = nullptr;
+  thread_local uint64_t localCount = 0;
 
-  int64_t localJobCounter;
-  byte powHash[32];
-  // byte powHash2[32];
-  byte devWork[MINIBLOCK_SIZE*DERO_BATCH];
-  byte work[MINIBLOCK_SIZE*DERO_BATCH];
+  // Per-thread mining buffers
+  thread_local std::array<byte, MINIBLOCK_SIZE> work;
+  thread_local std::array<byte, MINIBLOCK_SIZE> devWork;
+  thread_local std::array<byte, 32> powHash;
 
-  workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
-  initWorker(*worker);
-  lookupGen(*worker, nullptr, nullptr);
+  if (!worker) {
+    worker = static_cast<workerData*>(NUMAOptimizer::allocateLocal(sizeof(workerData)));
+    if (!worker) {
+      worker = static_cast<workerData*>(std::malloc(sizeof(workerData)));
+    }
+    if (!worker) {
+      setcolor(RED);
+      std::cerr << "Failed to allocate workerData for DERO miner" << std::endl << std::flush;
+      setcolor(BRIGHT_WHITE);
+      return;
+    }
 
-  // std::cout << *worker << std::endl;
+    ensureWolfLUT();
+    NUMAOptimizer::optimizeMemoryForMining(worker, sizeof(workerData));
+    initWorker(*worker);
+    lookupGen(*worker, nullptr, nullptr);
+    localCount = 0;
+  }
+
+  byte random_tail[12];
+  for (int i = 0; i < 12; ++i) random_tail[i] = (byte)dist(gen);
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(125));
+
+  int64_t localJobCounter = -1;
+
+  alignas(8) byte diffBytesUser[32] = {0};
+  alignas(8) byte diffBytesDev[32] = {0};
+  uint64_t cachedDiffUser = 0;
+  uint64_t cachedDiffDev = 0;
 
 waitForJob:
 
-  while (!isConnected)
-  {
+  while (!isConnected) {
     CHECK_CLOSE;
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
-  while (!ABORT_MINER)
-  {
-    try
-    {
+  while (!ABORT_MINER) {
+    try {
       boost::json::value myJob;
       boost::json::value myJobDev;
+      int64_t snapshotCounter;
+      int64_t diffUserSnapshot;
+      int64_t diffDevSnapshot;
+
       {
-        std::scoped_lock<boost::mutex> lockGuard(mutex);
-        myJob = job;
-        myJobDev = devJob;
-        localJobCounter = jobCounter;
+        std::scoped_lock<std::mutex> lockGuard(mutex);
+        myJob            = job;
+        myJobDev         = devJob;
+        snapshotCounter  = jobCounter;
+        diffUserSnapshot = difficulty;
+        diffDevSnapshot  = difficultyDev;
       }
 
-      byte *b2 = new byte[MINIBLOCK_SIZE];
-      hexstrToBytes(std::string(myJob.at("blockhashing_blob").as_string()), b2);
-      for (int i = 0; i < DERO_BATCH; i++) {
-        memcpy(work + i*MINIBLOCK_SIZE, b2, MINIBLOCK_SIZE);
-      }
-      delete[] b2;
-
-      if (devConnected)
-      {
-        byte *b2d = new byte[MINIBLOCK_SIZE];
-        hexstrToBytes(std::string(myJobDev.at("blockhashing_blob").as_string()), b2d);
-        for (int i = 0; i < DERO_BATCH; i++) {
-          memcpy(devWork + i*MINIBLOCK_SIZE, b2d, MINIBLOCK_SIZE);
-        }
-        delete[] b2d;
+      hexstrToBytes(std::string(myJob.at("blockhashing_blob").as_string()), work.data());
+      if (devConnected) {
+        hexstrToBytes(std::string(myJobDev.at("blockhashing_blob").as_string()), devWork.data());
       }
 
-      for (int i = 0; i < DERO_BATCH; i++) {
-        memcpy(&work[MINIBLOCK_SIZE*i + MINIBLOCK_SIZE - 12], random_buf, 12);
-        memcpy(&devWork[MINIBLOCK_SIZE*i + MINIBLOCK_SIZE - 12], random_buf, 12);
-
-        work[MINIBLOCK_SIZE*i + MINIBLOCK_SIZE - 1] = (byte)tid;
-        devWork[MINIBLOCK_SIZE*i + MINIBLOCK_SIZE - 1] = (byte)tid;
+      std::memcpy(&work[MINIBLOCK_SIZE - 12], random_tail, 12);
+      work[MINIBLOCK_SIZE - 1] = (byte)tid;
+      if (devConnected) {
+        std::memcpy(&devWork[MINIBLOCK_SIZE - 12], random_tail, 12);
+        devWork[MINIBLOCK_SIZE - 1] = (byte)tid;
       }
 
-      if ((work[0] & 0xf) != 1)
-      { // check  version
-       //  mutex.lock();
-        std::cerr << "Unknown version, please check for updates: "
-                  << "version" << (work[0] & 0x1f) << std::endl;
-       //  mutex.unlock();
-        boost::this_thread::sleep_for(boost::chrono::milliseconds(500));
+      if ((work[0] & 0x0F) != 1) {
+        std::cerr << "Unknown version, please check for updates: version"
+                  << (work[0] & 0x1F) << std::endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
         continue;
       }
-      double which;
-      bool devMine = false;
-      bool submit = false;
-      int64_t DIFF;
-      Num cmpDiff;
-      // DIFF = 5000;
 
-      std::string hex;
-      int32_t nonce = 0;
-      while (localJobCounter == jobCounter)
-      {
-        CHECK_CLOSE;
-        which = (double)(rand() % 10000);
-        devMine = (devConnected && which < devFee * 100.0);
-        DIFF = devMine ? difficultyDev : difficulty;
-
-        // printf("Difficulty: %" PRIx64 "\n", DIFF);
-
-        cmpDiff = ConvertDifficultyToBig(DIFF, ALGO_ASTROBWTV3);
-        nonce += DERO_BATCH;
-        byte *WORK = devMine ? &devWork[0] : &work[0];
-
-        for (int i = 0; i < DERO_BATCH; i++) {
-          int N = nonce + i;
-          memcpy(&WORK[MINIBLOCK_SIZE*i + MINIBLOCK_SIZE - 5], &N, sizeof(N));
-        }
-
-        // swap endianness
-        if (littleEndian())
-        {
-          for (int i = 0; i < DERO_BATCH; i++) {
-            std::swap(WORK[MINIBLOCK_SIZE*i + MINIBLOCK_SIZE - 5], WORK[MINIBLOCK_SIZE*i + MINIBLOCK_SIZE - 2]);
-            std::swap(WORK[MINIBLOCK_SIZE*i + MINIBLOCK_SIZE - 4], WORK[MINIBLOCK_SIZE*i + MINIBLOCK_SIZE - 3]);
-          }
-        }
-
-        // for (int i = 0; i < MINIBLOCK_SIZE; i++) {
-        //   printf("%02x", WORK[i]);
-        // }
-        // printf("\n");
-        AstroBWTv3(WORK, MINIBLOCK_SIZE, powHash, *worker, useLookupMine);
-        // AstroBWTv3_batch((byte*)"b", 1, powHash, *worker, useLookupMine);
-        // for (int i = 0; i < 32; i++) {
-        //   printf("%02x", powHash[i]);
-        // }
-        // printf("\n");
-        // AstroBWTv3(&WORK[0], MINIBLOCK_SIZE, powHash, *worker, useLookupMine);
-        // AstroBWTv3((byte*)("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\0"), MINIBLOCK_SIZE, powHash, *worker, useLookupMine);
-
-        counter.fetch_add(DERO_BATCH);
-        submit = devMine ? !submittingDev : !submitting;
-
-        for (int i = 0; i < DERO_BATCH; i++) {
-          byte *currHash = &powHash[32*i];
-          if (CheckHash(currHash, cmpDiff, ALGO_ASTROBWTV3))
-          {
-            if (!submit) {
-              for(;;) {
-                submit = (devMine && devConnected) ? !submittingDev : !submitting;
-                if (submit || localJobCounter != jobCounter)
-                  break;
-                boost::this_thread::yield();
-              }
-            }
-            if (localJobCounter != jobCounter)
-                  break;
-            // printf("work: %s, hash: %s\n", hexStr(&WORK[0], MINIBLOCK_SIZE).c_str(), hexStr(powHash, 32).c_str());
-            // boost::lock_guard<boost::mutex> lock(mutex);
-            if (devMine)
-            {
-              submittingDev = true;
-              setcolor(CYAN);
-              std::cout << "\n(DEV) Thread " << tid << " found a dev share\n" << std::flush;
-              setcolor(BRIGHT_WHITE);
-              devShare = {
-                  {"jobid", myJobDev.at("jobid").as_string().c_str()},
-                  {"mbl_blob", hexStr(&WORK[MINIBLOCK_SIZE*i], MINIBLOCK_SIZE).c_str()}};
-              data_ready = true;
-            }
-            else
-            {
-              submitting = true;
-              setcolor(BRIGHT_YELLOW);
-              std::cout << "\nThread " << tid << " found a nonce!\n" << std::flush;
-              setcolor(BRIGHT_WHITE);
-              share = {
-                  {"jobid", myJob.at("jobid").as_string().c_str()},
-                  {"mbl_blob", hexStr(&WORK[MINIBLOCK_SIZE*i], MINIBLOCK_SIZE).c_str()}};
-              data_ready = true;
-            }
-            cv.notify_all();
-          }
-        }
-
-        if (!isConnected)
-          break;
+      if (diffUserSnapshot != cachedDiffUser) {
+        deroTargetFromDiff(diffUserSnapshot, diffBytesUser);
+        cachedDiffUser = diffUserSnapshot;
       }
-      if (!isConnected)
-        break;
+      if (diffDevSnapshot != cachedDiffDev) {
+        deroTargetFromDiff(diffDevSnapshot, diffBytesDev);
+        cachedDiffDev = diffDevSnapshot;
+      }
+
+      localJobCounter = snapshotCounter;
+      uint32_t nonce  = 0;
+
+      while (localJobCounter == jobCounter) {
+        CHECK_CLOSE;
+
+        const bool devMine = (devConnected && (dev_dist(gen_local) < devFee * 100.0));
+        byte*      WORK    = devMine ? devWork.data() : work.data();
+        byte*      cmpTarget = devMine ? diffBytesDev : diffBytesUser;
+
+        ++nonce;
+        write_nonce_be(WORK, nonce);
+
+        AstroBWTv3(WORK, MINIBLOCK_SIZE, powHash.data(), *worker, useLookupMine);
+
+        if (++localCount >= 512) {
+          cpu_counter.fetch_add(localCount);
+          localCount = 0;
+        }
+        // counter.fetch_add(1);
+
+        if (hashMeetsTarget_le(powHash.data(), cmpTarget)) {
+          bool submit = devMine ? !submittingDev : !submitting;
+          if (!submit) {
+            for (;;) {
+              submit = devMine ? !submittingDev : !submitting;
+              if (submit || localJobCounter != jobCounter) break;
+              std::this_thread::yield();
+            }
+          }
+          if (localJobCounter != jobCounter) break;
+
+          if (devMine) {
+            submittingDev = true;
+            setcolor(CYAN);
+            std::cout << "\n(DEV) Thread " << tid << " found a dev share\n" << std::flush;
+            setcolor(BRIGHT_WHITE);
+            devShare = {
+              {"jobid",    myJobDev.at("jobid").as_string().c_str()},
+              {"mbl_blob", hexStr(WORK, MINIBLOCK_SIZE).c_str()}
+            };
+            data_ready = true;
+          } else {
+            submitting = true;
+            setcolor(BRIGHT_YELLOW);
+            std::cout << "\nThread " << tid << " found a nonce!\n" << std::flush;
+            setcolor(BRIGHT_WHITE);
+            share = {
+              {"jobid",    myJob.at("jobid").as_string().c_str()},
+              {"mbl_blob", hexStr(WORK, MINIBLOCK_SIZE).c_str()}
+            };
+            data_ready = true;
+          }
+          cv.notify_all();
+        }
+
+        if (!isConnected) break;
+        if ((localCount & 127) == 0)
+          std::this_thread::yield();
+      }
+
+      if (localCount) {
+        cpu_counter.fetch_add(localCount);
+        localCount = 0;
+      }
+
+      if (!isConnected) break;
     }
-    catch (std::exception& e)
-    {
+    catch (const std::exception& e) {
       setcolor(RED);
-      std::cerr << "Error in POW Function" << std::endl;
-      std::cerr << e.what() << std::endl << std::flush;
+      std::cerr << "Error in POW Function\n" << e.what() << std::endl << std::flush;
       setcolor(BRIGHT_WHITE);
 
       localJobCounter = -1;
+      if (localCount) {
+        cpu_counter.fetch_add(localCount);
+        localCount = 0;
+      }
     }
-    if (!isConnected)
-      break;
+
+    if (!isConnected) break;
   }
+
   goto waitForJob;
 }

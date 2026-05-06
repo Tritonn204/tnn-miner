@@ -4,22 +4,6 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <time.h>
-
-#include "yespower.h"
-
-static uint64_t bench_time_us(void)
-{
-    struct timespec t;
-#ifdef CLOCK_MONOTONIC_RAW
-    if (clock_gettime(CLOCK_MONOTONIC_RAW, &t))
-        return 0;
-#else
-    if (clock_gettime(CLOCK_MONOTONIC, &t))
-        return 0;
-#endif
-    return 1 + (uint64_t)t.tv_sec * 1000000 + t.tv_nsec / 1000;
-}
 
 #include <thread>
 #include <atomic>
@@ -27,6 +11,15 @@ static uint64_t bench_time_us(void)
 #include <mutex>
 #include <chrono>
 #include <iostream>
+
+#include "yespower.h"
+
+static uint64_t bench_time_us(void)
+{
+    auto now = std::chrono::steady_clock::now();
+    return std::chrono::duration_cast<std::chrono::microseconds>(
+        now.time_since_epoch()).count();
+}
 
 // Thread data for benchmark
 struct BenchThreadData {

@@ -19,6 +19,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
+#include "hip_platform.h"
 #include "hello.hpp"
 
 #include <string.h>
@@ -88,7 +89,7 @@ int helloTest()
 
   hipMemcpy(inputBuffer, input, (strlength + 1) * sizeof(char), hipMemcpyHostToDevice);
 
-	hipLaunchKernelGGL(helloworld,
+	TNN_HIP_LAUNCH_KERNEL(helloworld,
                   dim3(1),
                   dim3(strlength),
                   0, 0,

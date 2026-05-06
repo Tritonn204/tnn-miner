@@ -114,10 +114,10 @@ void shai_session(
   bool submitThread = false;
   bool abort = false;
 
-  boost::thread([&](){
+  std::thread([&](){
     submitThread = true;
     while(!abort) {
-      boost::unique_lock<boost::mutex> lock(mutex);
+      std::unique_lock<std::mutex> lock(mutex);
       bool *B = isDev ? &submittingDev : &submitting;
       cv.wait(lock, [&]{ return (data_ready && (*B)) || abort; });
       if (abort) break;
@@ -126,6 +126,7 @@ void shai_session(
         boost::json::object *S = &share;
         if (isDev)
           S = &devShare;
+        hoist_rpc_id(*S);
 
         std::string msg = boost::json::serialize((*S)) + "\n";
         // std::cout << "sending in: " << msg << std::endl;
@@ -146,10 +147,10 @@ void shai_session(
         setcolor(BRIGHT_WHITE);
         break;
       }
-      boost::this_thread::yield();
+      std::this_thread::yield();
     }
     submitThread = false;
-  });
+  }).detach();
 
   while (true)
   {
@@ -291,6 +292,7 @@ void shai_session(
             std::cout << "Nonce accepted!" << std::endl << std::flush;
             setcolor(BRIGHT_WHITE);
             accepted+=!isDev;
+            if (!isDev) recordDeviceShare(submitTracker.popSoloDevice(isDev), true);
           } else if(whatType && whatType->as_string() == "rejected") {
             printf("\n");
             if (isDev) {
@@ -303,6 +305,7 @@ void shai_session(
             fflush(stdout);
             setcolor(BRIGHT_WHITE);
             rejected+=!isDev;
+            if (!isDev) recordDeviceShare(submitTracker.popSoloDevice(isDev), false);
           } else {
             // handle accept/reject
             std::cout << "Handle this!" << std::endl;
@@ -323,7 +326,7 @@ void shai_session(
           if (!submitThread) {
            break;
           }
-          boost::this_thread::yield();
+          std::this_thread::yield();
         }
         
         return fail(ec, "async_read");
@@ -336,6 +339,6 @@ void shai_session(
       fflush(stdout);
       setcolor(BRIGHT_WHITE);
     }
-    boost::this_thread::yield();
+    std::this_thread::yield();
   }
 }

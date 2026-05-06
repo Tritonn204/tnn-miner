@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(nm:*)",
+      "Bash(llvm-ar t:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(xargs cat:*)",
+      "Read(//c/openssl_msvc/**)",
+      "Bash(cd:*)",
+      "Bash(powershell:*)",
+      "Bash(ls:*)",
+      "Bash(gh api:*)",
+      "WebSearch",
+      "Bash(curl:*)",
+      "Bash(grep:*)",
+      "Read(//tmp/cpp-kawpow/lib/**)",
+      "Read(//tmp/cpp-kawpow/include/**)",
+      "Read(//tmp/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

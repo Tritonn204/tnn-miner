@@ -8,11 +8,12 @@ if (WITH_RANDOMX)
       src/crypto/randomx/argon2_ref.c
       src/crypto/randomx/argon2_ssse3.c
       src/crypto/randomx/argon2_avx2.c
+      src/crypto/randomx/argon2_avx512.c
       src/crypto/randomx/bytecode_machine.cpp
       src/crypto/randomx/cpu.cpp
       src/crypto/randomx/dataset.cpp
       src/crypto/randomx/soft_aes.cpp
-      src/crypto/randomx/virtual_memory.c
+      src/crypto/randomx/virtual_memory.cpp
       src/crypto/randomx/vm_interpreted.cpp
       src/crypto/randomx/allocator.cpp
       src/crypto/randomx/assembly_generator_x86.cpp
@@ -73,7 +74,7 @@ if (WITH_RANDOMX)
       list(APPEND randomx_sources
         src/crypto/randomx/jit_compiler_x86.cpp)
 
-      if(MSVC)
+      if(MSVC AND NOT USE_CLANG_CL)
         enable_language(ASM_MASM)
         list(APPEND randomx_sources src/crypto/randomx/jit_compiler_x86_static.asm)
 
@@ -94,7 +95,11 @@ if (WITH_RANDOMX)
         list(APPEND randomx_sources src/crypto/randomx/jit_compiler_x86_static.S)
 
         # cheat because cmake and ccache hate each other
-        set_property(SOURCE src/crypto/randomx/jit_compiler_x86_static.S PROPERTY LANGUAGE C)
+        set_source_files_properties(src/crypto/randomx/jit_compiler_x86static.S
+          PROPERTIES
+            LANGUAGE C
+            COMPILE_OPTIONS "-x;assembler-with-cpp"
+        )
         set_property(SOURCE src/crypto/randomx/jit_compiler_x86_static.S PROPERTY XCODE_EXPLICIT_FILE_TYPE sourcecode.asm)
 
         if(ARCH STREQUAL "native")
@@ -128,7 +133,11 @@ if (WITH_RANDOMX)
         src/crypto/randomx/jit_compiler_a64_static.S
         src/crypto/randomx/jit_compiler_a64.cpp)
       # cheat because cmake and ccache hate each other
-      set_property(SOURCE src/crypto/randomx/jit_compiler_a64_static.S PROPERTY LANGUAGE C)
+      set_source_files_properties(src/crypto/randomx/jit_compiler_a64_static.S
+        PROPERTIES
+          LANGUAGE C
+          COMPILE_OPTIONS "-x;assembler-with-cpp"
+      )
       set_property(SOURCE src/crypto/randomx/jit_compiler_a64_static.S PROPERTY XCODE_EXPLICIT_FILE_TYPE sourcecode.asm)
 
       # not sure if this check is needed
@@ -152,7 +161,11 @@ if (WITH_RANDOMX)
         src/crypto/randomx/jit_compiler_rv64_static.S
         src/crypto/randomx/jit_compiler_rv64.cpp)
       # cheat because cmake and ccache hate each other
-      set_property(SOURCE src/crypto/randomx/jit_compiler_rv64_static.S PROPERTY LANGUAGE C)
+      set_source_files_properties(src/crypto/randomx/jit_compiler_rv64_static.S
+        PROPERTIES
+          LANGUAGE C
+          COMPILE_OPTIONS "-x;assembler-with-cpp"
+      )
       set_property(SOURCE src/crypto/randomx/jit_compiler_rv64_static.S PROPERTY XCODE_EXPLICIT_FILE_TYPE sourcecode.asm)
 
       # default build uses the RV64GC baseline
@@ -192,6 +205,12 @@ if (WITH_RANDOMX)
     set_property(SOURCE src/crypto/randomx/tests/randomx_test.cpp PROPERTY CXX_STANDARD 11)
 
     add_library(randomx STATIC ${randomx_sources})
+
+    # Clang 20 crashes on 'Debug Variable Analysis' pass for ifunc resolvers
+    # with debug info enabled. Disable debug info for all randomx sources.
+    if (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo" OR CMAKE_BUILD_TYPE STREQUAL "Debug")
+      target_compile_options(randomx PRIVATE -g0)
+    endif()
 
     if(TARGET generate-asm)
       add_dependencies(randomx generate-asm)

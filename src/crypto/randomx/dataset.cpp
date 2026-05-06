@@ -42,13 +42,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "common.hpp"
 #include "dataset.hpp"
-#include "virtual_memory.h"
+#include "virtual_memory.hpp"
 #include "superscalar.hpp"
 #include "blake2_generator.hpp"
 #include "reciprocal.h"
 #include "blake2/endian.h"
-#include "argon2.h"
-#include "argon2_core.h"
+#include "argon2/argon2.h"
+#include "argon2/argon2_core.h"
 #include "jit_compiler.hpp"
 #include "intrin_portable.h"
 

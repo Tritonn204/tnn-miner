@@ -194,6 +194,7 @@ extern int yespower_tnn_tls(const uint8_t *src, size_t srclen,
 
 #include <vector>
 void runYespowerTests(std::vector<YespowerTestResult>& results);
+int runYespowerKnownVectorTests();
 #endif
 
 void print_yespower_benchmark_results(const yespower_bench_result_t *results, size_t num_results);

@@ -159,8 +159,16 @@ int DeroTesting(int testOp, int testLen, bool useLookup) {
   failedTests += TestAstroBWTv3(false);
   for(int x = 0; x < numAstroFuncs; x++) {
     astroCompFunc = allAstroFuncs[x].funcPtr;
-    printf("Testing %s\n", allAstroFuncs[x].funcName.c_str());
-    failedTests += TestAstroBWTv3(true);
+    printf("Testing %s... ", allAstroFuncs[x].funcName.c_str());
+    fflush(stdout);
+    int rc = TestAstroBWTv3(true);
+    if (rc == 0) {
+      printf("PASSED\n");
+    } else {
+      printf("FAILED (%d errors)\n", rc);
+    }
+    fflush(stdout);
+    failedTests += rc;
   }
   
   // TestAstroBWTv3_cuda();
@@ -274,7 +282,6 @@ int runDeroOpTests(int testOp, int dataLen) {
   benchmarkLoadCompare();
 #endif
 
-  bool useLookup = false;
   int numOpsFailed = 0;
 
   workerData *controlWorker = (workerData*)malloc_huge_pages(sizeof(workerData));
@@ -297,11 +304,10 @@ int runDeroOpTests(int testOp, int dataLen) {
   z_testWorker->isSame = true;
 
   byte test[32];
-  //byte test2[32];
   std::srand(time(NULL));
   generateInitVector<32>(test);
   memset(test, rand()%256, dataLen);
-  
+
   printf("Initial Input\n");
   for (int i = 0; i < 32; i++) {
     printf("%02x", test[i]);
@@ -313,38 +319,26 @@ int runDeroOpTests(int testOp, int dataLen) {
   std::string z_resultText = std::string("Undefined");
   void (*testFunc)(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print);
   void (*z_testFunc)(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print);
-  resultText = std::string("Wolf");
+
+  #if defined(__AVX2__)
+  archText = "AVX2";
+  resultText = "AVX2";
+  testFunc = &optest_avx2;
+  z_resultText = "Wolf";
+  z_testFunc = &optest_wolf;
+  #elif defined(__aarch64__)
+  archText = "A64";
+  resultText = "AA64";
+  testFunc = &optest_aarch64;
+  z_resultText = "Wolf";
+  z_testFunc = &optest_wolf;
+  #else
+  archText = "Wolf";
+  resultText = "Wolf";
   testFunc = &optest_wolf;
-  // the ampersand is actually optional
-  //testFunc = &optest_branchcpu;
-  if(useLookup) {
-    resultText = "Lookup";
-    testFunc = &optest_lookup;
-  } else {
-    #if defined(__AVX2__)
-    archText = "AVX2";
-    resultText = "AVX2";
-    testFunc = &optest_avx2;
-
-    z_resultText = "Wolf";
-    z_testFunc = &optest_wolf;
-    #elif defined(__x86_64__)
-    archText = "AMD";
-    resultText = "Lookup";
-    testFunc = &optest_lookup;
-
-    z_resultText = "Wolf";
-    z_testFunc = &optest_wolf;
-    #endif
-    #if defined(__aarch64__)
-    archText = "A64";
-    resultText = "AA64";
-    testFunc = &optest_aarch64;
-
-    z_resultText = "Wolf";
-    z_testFunc = &optest_wolf;
-    #endif
-  }
+  z_resultText = "Wolf";
+  z_testFunc = &optest_wolf;
+  #endif
 
   int startOp = 0;
   int maxOp = 255;
@@ -435,7 +429,6 @@ int runDeroOpTests(int testOp, int dataLen) {
 }
 
 int rakeDeroOpTests(int testOp, int dataLen) {
-  bool useLookup = false;
   int numOpsFailed = 0;
 
   workerData *controlWorker = (workerData*)malloc_huge_pages(sizeof(workerData));
@@ -452,7 +445,6 @@ int rakeDeroOpTests(int testOp, int dataLen) {
   byte test[32];
 
   for (int o = 0; o < 256; o++) {
-    //byte test2[32];
     std::srand(time(NULL));
     generateInitVector<32>(test);
     memset(test, o, dataLen);
@@ -463,25 +455,18 @@ int rakeDeroOpTests(int testOp, int dataLen) {
     }
     printf("\n");
 
-    std::string resultText = std::string("Lookup");
+    std::string resultText;
     void (*testFunc)(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print);
-    // the ampersand is actually optional
-    testFunc = &optest_branchcpu;
-    if(useLookup) {
-      testFunc = &optest_lookup;
-    } else {
-      #if defined(__AVX2__)
-      resultText = "AVX2";
-      testFunc = &optest_avx2;
-      #elif defined(__x86_64__)
-      resultText = "Branch";
-      testFunc = &optest_branchcpu;
-      #endif
-      #if defined(__aarch64__)
-      resultText = "AA64";
-      testFunc = &optest_aarch64;
-      #endif
-    }
+    #if defined(__AVX2__)
+    resultText = "AVX2";
+    testFunc = &optest_avx2;
+    #elif defined(__aarch64__)
+    resultText = "AA64";
+    testFunc = &optest_aarch64;
+    #else
+    resultText = "Wolf";
+    testFunc = &optest_wolf;
+    #endif
 
     int startOp = 0;
     int maxOp = 255;
@@ -3830,47 +3815,6 @@ void optest_branchcpu(int op, workerData &worker, byte testData[32], OpTestResul
   return; 
 }
 
-// void optest_lookup(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print) {
-//   // Set us up the bomb
-//   memset(worker.step_3, 0, 256);
-//   memcpy(worker.step_3, testData, 32);
-
-//   // Because lookupCompute references .chunk (which is a pointer)
-//   worker.chunk = &worker.step_3[0];
-//   worker.prev_chunk = worker.chunk;
-//   if (print){
-//     printf("Lookup\n");
-//     printf("LT Input %3d  : ", op);
-//     for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
-//       printf("%02X ", worker.chunk[i]);
-//     }
-//     printf("\n");
-//   }
-
-//   auto start = std::chrono::steady_clock::now();
-//   for(int x = 0; x < 256; x++) {
-//     worker.op = op;
-//     //worker.pos1 = 0; worker.pos2 = 32;
-//     worker.chunk = worker.step_3;
-//     worker.prev_chunk = worker.chunk;
-//     lookupCompute(worker, true, 0);
-//   }
-
-//   auto test_end = std::chrono::steady_clock::now();
-//   auto test_time = std::chrono::duration_cast<std::chrono::nanoseconds>(test_end-start);
-//   testRes.duration_ns = test_time;
-//   memcpy(testRes.result, worker.chunk, 256);
-//   //memcpy(testRes.result, worker.salsaInput, 256);
-//   if (print){
-//     printf("LT result     : ");
-//     for (int i = worker.pos1; i < worker.pos1 + 32; i++) {
-//       printf("%02x ", worker.chunk[i]);
-//     }
-//     printf("\n took %lld ns\n---------------\n", test_time.count());
-//   }
-//   return; 
-// }
-
 void optest_wolf(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print) {
   // Set us up the bomb
   memset(worker.step_3, 0, 256);
@@ -3912,7 +3856,7 @@ void optest_wolf(int op, workerData &worker, byte testData[32], OpTestResult &te
   return; 
 }
 
-#if defined(__AVX2__)
+#ifndef TNN_LEGACY_AMD64
 void optest_avx2(int op, workerData &worker, byte testData[32], OpTestResult &testRes, bool print) {
   // Set us up the bomb
   memset(worker.step_3, 0, 256);

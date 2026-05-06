@@ -1,5 +1,5 @@
 #include "miners.hpp"
-#include "tnn-hugepages.h"
+#include "tnn-hugepages.hpp"
 #include <hoohash/hoohash.h>
 #include <stratum/stratum.h>
 
@@ -9,27 +9,32 @@ void mineHoosat(int tid)
   int64_t localOurHeight = 0;
   int64_t localDevHeight = 0;
 
-  byte powHash[32];
-  byte work[HooHash::INPUT_SIZE] = {0};
-  byte devWork[HooHash::INPUT_SIZE] = {0};
+  thread_local byte powHash[32];
+  thread_local byte work[HooHash::INPUT_SIZE] = {0};
+  thread_local byte devWork[HooHash::INPUT_SIZE] = {0};
 
-  std::string diffHex;
-  std::string diffHex_dev;
+  thread_local std::string diffHex;
+  thread_local std::string diffHex_dev;
 
-  byte diffBytes[32];
-  byte diffBytes_dev[32];
+  thread_local byte diffBytes[32];
+  thread_local byte diffBytes_dev[32];
 
-  HooHash::worker *worker = (HooHash::worker *)malloc(sizeof(HooHash::worker));
-  HooHash::worker *devWorker = (HooHash::worker *)malloc(sizeof(HooHash::worker));
+  thread_local HooHash::worker *worker = (HooHash::worker *)malloc(sizeof(HooHash::worker));
+  thread_local HooHash::worker *devWorker = (HooHash::worker *)malloc(sizeof(HooHash::worker));
 
   fflush(stdout);
+
+  thread_local std::random_device rd;
+  thread_local std::mt19937 rng(rd());
+  thread_local std::uniform_real_distribution<double> dist(0, 10000);
+  thread_local uint64_t yieldCount = 0;
 
 waitForJob:
 
   while (!isConnected)
   {
     CHECK_CLOSE;
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
   while (!ABORT_MINER)
@@ -40,7 +45,7 @@ waitForJob:
       boost::json::value myJob;
       boost::json::value myJobDev;
       {
-        std::scoped_lock<boost::mutex> lockGuard(mutex);
+        std::scoped_lock<std::mutex> lockGuard(mutex);
         myJob = job;
         myJobDev = devJob;
         localJobCounter = jobCounter;
@@ -118,7 +123,7 @@ waitForJob:
       while (localJobCounter == jobCounter)
       {
         CHECK_CLOSE;
-        which = (double)(rand() % 10000);
+        which = dist(rng);
         devMine = (devConnected && devHeight > 0 && which < devFee * 100.0);
         DIFF = devMine ? doubleDiffDev : doubleDiff;
         if (DIFF == 0)
@@ -168,7 +173,7 @@ waitForJob:
         //   std::reverse(usedWorker.scratchData, usedWorker.scratchData + 32);
         // }
 
-        counter.fetch_add(1);
+        cpu_counter.fetch_add(1);
         submit = (devMine && devConnected) ? !submittingDev : !submitting;
 
         if (localJobCounter != jobCounter || localOurHeight != ourHeight) {
@@ -198,7 +203,7 @@ waitForJob:
               int64_t &oH = devMine ? localDevHeight : localOurHeight;
               if (submit || localJobCounter != jobCounter || rH != oH)
                 break;
-              boost::this_thread::yield();
+              std::this_thread::yield();
             }
           }
 
@@ -213,11 +218,11 @@ waitForJob:
           //   std::reverse(powHash, powHash + 32);
           // }
         //   std::string b64 = base64::to_base64(std::string((char *)&WORK[0], XELIS_TEMPLATE_SIZE));
-          // boost::lock_guard<boost::mutex> lock(mutex);
+          // std::lock_guard<std::mutex> lock(mutex);
           if (devMine)
           {
             submittingDev = true;
-            // std::scoped_lock<boost::mutex> lockGuard(devMutex);
+            // std::scoped_lock<std::mutex> lockGuard(devMutex);
             // if (localJobCounter != jobCounter || localDevHeight != devHeight)
             // {
             //   break;
@@ -228,13 +233,14 @@ waitForJob:
             switch (devMiningProfile.protocol)
             {
             case PROTO_KAS_SOLO:
+              submitTracker.pushSoloDevice(-1, true);
               devShare = {{"block_template", hexStr(&WORK[0], HooHash::INPUT_SIZE).c_str()}};
               break;
             case PROTO_KAS_STRATUM:
               std::vector<char> nonceStr;
               // Num(std::to_string((n << enLen*8) >> enLen*8).c_str(),10).print(nonceStr, 16);
               Num(std::to_string(n).c_str(),10).print(nonceStr, 16);
-              devShare = {{{"id", KasStratum::submitID},
+              devShare = {{{"rpc_id", submitTracker.nextId(-1)},
                         {"method", KasStratum::submit.method.c_str()},
                         {"params", {devWorkerName,                                   // WORKER
                                     myJobDev.at("jobId").as_string().c_str(), // JOB ID
@@ -249,7 +255,7 @@ waitForJob:
           else
           {
             submitting = true;
-            // std::scoped_lock<boost::mutex> lockGuard(userMutex);
+            // std::scoped_lock<std::mutex> lockGuard(userMutex);
             // if (localJobCounter != jobCounter || localOurHeight != ourHeight)
             // {
             //   break;
@@ -260,13 +266,14 @@ waitForJob:
             switch (miningProfile.protocol)
             {
             case PROTO_KAS_SOLO:
+              submitTracker.pushSoloDevice(-1, false);
               share = {{"block_template", hexStr(&WORK[0], HooHash::INPUT_SIZE).c_str()}};
               break;
             case PROTO_KAS_STRATUM:
               std::vector<char> nonceStr;
               // Num(std::to_string((n << enLen*8) >> enLen*8).c_str(),10).print(nonceStr, 16);
               Num(std::to_string(n).c_str(),10).print(nonceStr, 16);
-              share = {{{"id", KasStratum::submitID},
+              share = {{{"rpc_id", submitTracker.nextId(-1)},
                         {"method", KasStratum::submit.method.c_str()},
                         {"params", {workerName,                                   // WORKER
                                     myJob.at("jobId").as_string().c_str(), // JOB ID
@@ -297,6 +304,8 @@ waitForJob:
         if (!isConnected) {
           break;
         }
+        if ((++yieldCount & 127) == 0)
+          std::this_thread::yield();
       }
       if (!isConnected) {
         break;

@@ -3,11 +3,12 @@ if (WITH_CHACHA)
 
     if (TNN_ARM)
       file(GLOB chacha_sources
-        "src/crypto/chacha/chacha20.c"
+        "src/crypto/chacha/chacha20.cpp"
       )
     else()
       file(GLOB chacha_sources
         "src/crypto/chacha/*.c"
+        "src/crypto/chacha/*.cpp"
       )
     endif()
 

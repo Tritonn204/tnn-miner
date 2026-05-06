@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <assert.h>
 
+#include "hip_platform.h"
 #include <hip/hip_runtime.h>
 
 #include <thread>
@@ -212,7 +213,7 @@ __global__ void walaHash_hip(const uint64_t nonce_mask, const uint64_t nonce_fix
     product1 = (product1 & 0xF) ^ ((product1 >> 4) & 0xF) ^ ((product1 >> 8) & 0xF);
     product2 = (product2 & 0xF) ^ ((product2 >> 4) & 0xF) ^ ((product2 >> 8) & 0xF);
 
-#ifdef __HIP_PLATFORM_NVIDIA__
+#if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
     nextInput[rowId] = input[rowId] ^ ((uint8_t)(product1 << 4) | (uint8_t)(product2));
 #else
     nextInput[rowId] = input[rowId] ^ bitselect(product1 << 4, product2, 0x0000000FU);
@@ -333,7 +334,7 @@ namespace Wala_HIP {
     hipMemcpyToSymbol(target, diff, 32, 0, hipMemcpyHostToDevice);
   }
 
-  __attribute__ ((optnone))
+TNN_OPTNONE
   void walaHash_wrapper(
     int blocks,
     const uint64_t nonce_mask, 
@@ -352,7 +353,7 @@ namespace Wala_HIP {
     hipEventCreate(&stop_event);
 
     if (isDev) {
-      hipLaunchKernelGGL(walaHash_hip<true>, dim3(blocks), dim3(Wala_HIP::THREAD_DIM), 0, 0,
+      TNN_HIP_LAUNCH_KERNEL(walaHash_hip<true>, dim3(blocks), dim3(Wala_HIP::THREAD_DIM), 0, 0,
                         nonce_mask, nonce_fixed, kIndex, batchSize, final_nonces, nonce_count, dataBuf);
 
       hipError_t err = hipGetLastError();
@@ -361,7 +362,7 @@ namespace Wala_HIP {
         printf("Kernel launch failed: %s\n", hipGetErrorString(err));
       }
     } else {
-      hipLaunchKernelGGL(walaHash_hip<false>, dim3(blocks), dim3(Wala_HIP::THREAD_DIM), 0, 0,
+      TNN_HIP_LAUNCH_KERNEL(walaHash_hip<false>, dim3(blocks), dim3(Wala_HIP::THREAD_DIM), 0, 0,
                         nonce_mask, nonce_fixed, kIndex, batchSize, final_nonces, nonce_count, dataBuf);
 
       hipError_t err = hipGetLastError();
@@ -549,7 +550,7 @@ void benchWalaHip()
   {
     hipMemset(d_nonce_count, 0, sizeof(int));
 
-    // hipLaunchKernelGGL(walaShake_hip<false>, dim3(blocks), dim3(Wala_HIP::THREAD_DIM), 0, 0,
+    // TNN_HIP_LAUNCH_KERNEL(walaShake_hip<false>, dim3(blocks), dim3(Wala_HIP::THREAD_DIM), 0, 0,
     //                    nonce_mask, nonce_fixed, i, batchSize, d_dataBuf);
 
     // hipError_t err = hipGetLastError();
@@ -559,7 +560,7 @@ void benchWalaHip()
     //   break;
     // }
 
-    hipLaunchKernelGGL(walaHash_hip<false>, dim3(blocks), dim3(Wala_HIP::THREAD_DIM), 0, 0,
+    TNN_HIP_LAUNCH_KERNEL(walaHash_hip<false>, dim3(blocks), dim3(Wala_HIP::THREAD_DIM), 0, 0,
                        nonce_mask, nonce_fixed, i, batchSize, d_final_nonces, d_nonce_count, d_dataBuf);
 
     // Check for errors after the kernel launch

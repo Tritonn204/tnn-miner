@@ -1,6 +1,10 @@
 #pragma once
 
+#if !defined(__HIPCC_RTC__) && !defined(__CUDACC_RTC__)
 #include <hip/hip_runtime.h>
+#else
+#include "hiprtc_types.hip.h"
+#endif
 static __device__ __forceinline__ uint2 rol64(const uint2 a, const uint8_t r)
 {
   uint2 result;

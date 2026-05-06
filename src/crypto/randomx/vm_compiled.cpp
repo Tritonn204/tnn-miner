@@ -53,7 +53,7 @@ namespace randomx {
 		if (secureJit) {
 			compiler.enableWriting();
 		}
-		compiler.generateProgram(program, config);
+		compiler.generateProgram(program, config, this->vm_flags);
 		if (secureJit) {
 			compiler.enableExecution();
 		}

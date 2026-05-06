@@ -13,14 +13,24 @@ if (WITH_XELISHASH)
     file(GLOB_RECURSE xelisSources
       src/crypto/xelis-hash/*.cpp
       src/crypto/xelis-hash/*.c
-      src/net/xelis/*.cpp
     )
 
+    # New unified CPU mining infrastructure
     list(APPEND xelisSources
-      src/coins/mine_xelis.cpp
+      src/tnn_cpu/mine_xelis_unified.cpp
     )
 
     list(FILTER xelisSources EXCLUDE REGEX src/xelis-hash/target/*)
+    list(FILTER xelisSources EXCLUDE REGEX "\\.spec\\.cpp$")
+
+    # Generate per-SIMD-tier TUs from spec files (SimdTiers from tnn-prism CPM)
+    set(xelis_simd_generated "")
+    simd_tiers_generate(
+      SPEC   src/crypto/xelis-hash/xelis-hash-v3-fmv.spec.cpp
+      OUTDIR src/crypto/xelis-hash/simd_sources
+      OUTPUT_SOURCES xelis_simd_generated
+    )
+    include_directories("${PROJECT_SOURCE_DIR}/src/crypto/xelis-hash/simd_sources")
 
     list(APPEND HEADERS_CRYPTO
       ${xelisHeaders}
@@ -28,6 +38,7 @@ if (WITH_XELISHASH)
 
     list(APPEND SOURCES_CRYPTO
       ${xelisSources}
+      ${xelis_simd_generated}
     )
 else()
     remove_definitions(/DTNN_XELISHASH)

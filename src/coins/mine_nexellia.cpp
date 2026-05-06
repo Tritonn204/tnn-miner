@@ -1,5 +1,5 @@
 #include "miners.hpp"
-#include "tnn-hugepages.h"
+#include "tnn-hugepages.hpp"
 #include <nxl-hash/nxl-hash.h>
 #include <stratum/stratum.h>
 
@@ -23,13 +23,14 @@ void mineNexellia(int tid)
   NxlHash::worker *devWorker = (NxlHash::worker *)malloc(sizeof(NxlHash::worker));
 
   fflush(stdout);
+  uint64_t yieldCount = 0;
 
 waitForJob:
 
   while (!isConnected)
   {
     CHECK_CLOSE;
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
   while (!ABORT_MINER)
@@ -40,7 +41,7 @@ waitForJob:
       boost::json::value myJob;
       boost::json::value myJobDev;
       {
-        std::scoped_lock<boost::mutex> lockGuard(mutex);
+        std::scoped_lock<std::mutex> lockGuard(mutex);
         myJob = job;
         myJobDev = devJob;
         localJobCounter = jobCounter;
@@ -168,7 +169,7 @@ waitForJob:
         //   std::reverse(usedWorker.scratchData, usedWorker.scratchData + 32);
         // }
 
-        counter.fetch_add(1);
+        cpu_counter.fetch_add(1);
         submit = (devMine && devConnected) ? !submittingDev : !submitting;
 
         if (localJobCounter != jobCounter || localOurHeight != ourHeight) {
@@ -198,7 +199,7 @@ waitForJob:
               int64_t &oH = devMine ? localDevHeight : localOurHeight;
               if (submit || localJobCounter != jobCounter || rH != oH)
                 break;
-              boost::this_thread::yield();
+              std::this_thread::yield();
             }
           }
 
@@ -213,11 +214,11 @@ waitForJob:
           //   std::reverse(powHash, powHash + 32);
           // }
         //   std::string b64 = base64::to_base64(std::string((char *)&WORK[0], XELIS_TEMPLATE_SIZE));
-          // boost::lock_guard<boost::mutex> lock(mutex);
+          // std::lock_guard<std::mutex> lock(mutex);
           if (devMine)
           {
             submittingDev = true;
-            // std::scoped_lock<boost::mutex> lockGuard(devMutex);
+            // std::scoped_lock<std::mutex> lockGuard(devMutex);
             // if (localJobCounter != jobCounter || localDevHeight != devHeight)
             // {
             //   break;
@@ -228,13 +229,14 @@ waitForJob:
             switch (devMiningProfile.protocol)
             {
             case PROTO_KAS_SOLO:
+              submitTracker.pushSoloDevice(-1, true);
               devShare = {{"block_template", hexStr(&WORK[0], NxlHash::INPUT_SIZE).c_str()}};
               break;
             case PROTO_KAS_STRATUM:
               std::vector<char> nonceStr;
               // Num(std::to_string((n << enLen*8) >> enLen*8).c_str(),10).print(nonceStr, 16);
               Num(std::to_string(n).c_str(),10).print(nonceStr, 16);
-              devShare = {{{"id", KasStratum::submitID},
+              devShare = {{{"rpc_id", submitTracker.nextId(-1)},
                         {"method", KasStratum::submit.method.c_str()},
                         {"params", {devWorkerName,                                   // WORKER
                                     myJobDev.at("jobId").as_string().c_str(), // JOB ID
@@ -249,7 +251,7 @@ waitForJob:
           else
           {
             submitting = true;
-            // std::scoped_lock<boost::mutex> lockGuard(userMutex);
+            // std::scoped_lock<std::mutex> lockGuard(userMutex);
             // if (localJobCounter != jobCounter || localOurHeight != ourHeight)
             // {
             //   break;
@@ -260,13 +262,14 @@ waitForJob:
             switch (miningProfile.protocol)
             {
             case PROTO_KAS_SOLO:
+              submitTracker.pushSoloDevice(-1, false);
               share = {{"block_template", hexStr(&WORK[0], NxlHash::INPUT_SIZE).c_str()}};
               break;
             case PROTO_KAS_STRATUM:
               std::vector<char> nonceStr;
               // Num(std::to_string((n << enLen*8) >> enLen*8).c_str(),10).print(nonceStr, 16);
               Num(std::to_string(n).c_str(),10).print(nonceStr, 16);
-              share = {{{"id", KasStratum::submitID},
+              share = {{{"rpc_id", submitTracker.nextId(-1)},
                         {"method", KasStratum::submit.method.c_str()},
                         {"params", {workerName,                                   // WORKER
                                     myJob.at("jobId").as_string().c_str(), // JOB ID
@@ -297,6 +300,8 @@ waitForJob:
         if (!isConnected) {
           break;
         }
+        if ((++yieldCount & 127) == 0)
+          std::this_thread::yield();
       }
       if (!isConnected) {
         break;

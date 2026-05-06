@@ -34,7 +34,6 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <assert.h>
-//#include <boost/thread.hpp>
 
 #ifdef __cplusplus
 extern "C" {

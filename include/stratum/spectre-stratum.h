@@ -70,7 +70,5 @@ namespace SpectreStratum {
   static uint64_t lastReceivedJobTime = 0;
   static uint64_t lastShareSubmissionTime = 0;
 
-  const int shareSubmitTimeout = 70;
-
   static int jobTimeout = 30;
 }

@@ -35,7 +35,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "superscalar.hpp"
 #include "program.hpp"
 #include "reciprocal.h"
-#include "virtual_memory.h"
+#include "virtual_memory.hpp"
 
 
 namespace {
@@ -623,7 +623,7 @@ namespace randomx {
 		setPagesRX(entryDataInit, ExecutableSize);
 	}
 
-	void JitCompilerRV64::generateProgram(Program& prog, ProgramConfiguration& pcfg) {
+	void JitCompilerRV64::generateProgram(Program& prog, ProgramConfiguration& pcfg, uint32_t) {
 		emitProgramPrefix(state, prog, pcfg);
 		int32_t fixPos = state.codePos;
 		state.emit(codeDataRead, sizeDataRead);
@@ -633,7 +633,7 @@ namespace randomx {
 		clearCache(state);
 	}
 
-	void JitCompilerRV64::generateProgramLight(Program& prog, ProgramConfiguration& pcfg, uint32_t datasetOffset) {
+	void JitCompilerRV64::generateProgramLight(Program& prog, ProgramConfiguration& pcfg, uint32_t datasetOffset, uint32_t) {
 		emitProgramPrefix(state, prog, pcfg);
 		int32_t fixPos = state.codePos;
 		state.emit(codeDataReadLight, sizeDataReadLight);

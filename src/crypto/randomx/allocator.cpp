@@ -29,7 +29,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <new>
 #include "allocator.hpp"
 #include "intrin_portable.h"
-#include "virtual_memory.h"
+#include "virtual_memory.hpp"
 #include "common.hpp"
 
 namespace randomx {

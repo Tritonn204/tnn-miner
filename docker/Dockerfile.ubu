@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.4
 
 ARG BUILDER_BASE=amd64
-FROM docker.io/dirkerdero/tnn-builder-${BUILDER_BASE}:latest AS base
+FROM docker.io/tritonn204/tnn-builder-${BUILDER_BASE}:latest AS base
 #FROM tnn-builder-${BUILDER_BASE}:latest AS base
 
 # Set environment variable to avoid interactive prompts
@@ -13,7 +13,12 @@ WORKDIR /src
 #RUN chmod +x ./scripts/prereqs.sh && ./scripts/prereqs.sh
 
 FROM base AS build
+
+# HIP/ROCm/CUDA env vars (set by base image, repeated here for clarity)
+ENV HIP_PATH=/opt/rocm
+ENV ROCM_PATH=/opt/rocm
 ARG  CMAKE_ARGS=
+ARG  CUDA_VER=12-9
 ARG  PACKAGE_VERSION=0.0.1
 ARG  TARGZ_FILE=miner.tar.gz
 RUN pwd
@@ -24,13 +29,102 @@ COPY . .
 
 RUN ls -la .
 
+RUN chmod +x ./scripts/*.sh
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if echo "$CMAKE_ARGS" | grep -Eq "WITH_OROCHI=ON|HIP_PLATFORM=nvidia"; then \
+      cuda_lib_dirs="/usr/local/cuda/lib64 /usr/local/cuda/targets/x86_64-linux/lib /usr/local/cuda-*/lib64 /usr/local/cuda-*/targets/x86_64-linux/lib /usr/lib/x86_64-linux-gnu"; \
+      if ! command -v patchelf >/dev/null 2>&1 || ! for dir in $cuda_lib_dirs; do [ -d "$dir" ] && find "$dir" -maxdepth 1 \( -name 'libnvrtc.so*' -o -name 'libcudart.so*' \) 2>/dev/null; done | grep -q .; then \
+        echo "Installing required CUDA packaging dependencies..." && \
+        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb \
+          -o /tmp/cuda-keyring.deb && \
+        dpkg -i /tmp/cuda-keyring.deb && \
+        rm /tmp/cuda-keyring.deb && \
+        apt-get update && \
+        apt-get install -y --no-install-recommends \
+          patchelf \
+          cuda-compiler-${CUDA_VER} \
+          cuda-cudart-dev-${CUDA_VER} \
+          cuda-nvrtc-dev-${CUDA_VER} \
+          cuda-profiler-api-${CUDA_VER} && \
+        rm -rf /var/lib/apt/lists/*; \
+      fi; \
+      for dir in $cuda_lib_dirs; do \
+        [ -d "$dir" ] && find "$dir" -maxdepth 1 \( -name 'libcudart.so*' -o -name 'libnvrtc.so*' -o -name 'libnvrtc-builtins.so*' \) 2>/dev/null; \
+      done | sort -V; \
+    fi
 RUN --mount=type=cache,target=/src/_deps ./scripts/prereqs.sh
 RUN --mount=type=cache,target=/src/_deps mkdir ./build && cd ./build && cmake $CMAKE_ARGS -DTNN_VERSION=$PACKAGE_VERSION ..
 RUN --mount=type=cache,target=/src/_deps cd ./build && make -j$(nproc)
-RUN mv ./build/bin/tnn-miner-* ./
+RUN ls -la ./build/bin/ ./build/ && mv ./build/bin/tnn-miner* ./ || mv ./build/tnn-miner* ./
+# Copy tunes directory (created by CMake post-build from default-tunes)
+RUN mkdir -p ./tunes ./libs
+RUN if [ -d ./build/bin/tunes ]; then \
+      cp -r ./build/bin/tunes/. ./tunes/; \
+    elif [ -d ./build/tunes ]; then \
+      cp -r ./build/tunes/. ./tunes/; \
+    fi
 #RUN ./tnn-miner-* --test-spectre
+
+# Collect GPU runtime libs for HiveOS/mmpOS wrapper bundling
+ARG CMAKE_ARGS
+RUN mkdir -p ./libs && \
+    if echo "$CMAKE_ARGS" | grep -q "WITH_OROCHI=ON"; then \
+      echo "Collecting GPU runtime libs for Orochi bundle..." && \
+      # ROCm/HIP runtime chain
+      for lib in libamdhip64.so libhiprtc.so libamd_comgr.so \
+                 libhsa-runtime64.so librocm_smi64.so \
+                 librocprofiler-register.so \
+                 libdrm.so libdrm_amdgpu.so; do \
+        found=$(find /opt/rocm/lib /usr/lib/x86_64-linux-gnu -maxdepth 1 \
+                     -name "${lib}*" 2>/dev/null | head -1); \
+        if [ -n "$found" ]; then \
+          # Copy the actual file, name it as the unversioned soname
+          soname=$(objdump -p "$found" 2>/dev/null | grep SONAME | awk '{print $2}') || true; \
+          if [ -n "$soname" ]; then \
+            cp "$found" "./libs/$soname"; \
+          else \
+            cp "$found" "./libs/$(basename "$found")"; \
+          fi; \
+          echo "  bundled: $(basename "$found") -> libs/"; \
+        fi; \
+      done && \
+      find ./libs -maxdepth 1 -type f \( -name 'libamdhip64.so*' -o -name 'libhiprtc.so*' -o -name 'libamd_comgr.so*' -o -name 'libhsa-runtime64.so*' -o -name 'librocm_smi64.so*' -o -name 'librocprofiler-register.so*' -o -name 'libdrm.so*' -o -name 'libdrm_amdgpu.so*' \) -exec patchelf --set-rpath '$ORIGIN' {} \; && \
+      ls -la ./libs/; \
+    fi
+
+# Collect NVIDIA RTC libs from the Linux build image into the same bundle
+# directory used for other GPU runtime libraries.
+RUN mkdir -p ./libs && \
+    if echo "$CMAKE_ARGS" | grep -Eq "WITH_OROCHI=ON|HIP_PLATFORM=nvidia"; then \
+      echo "Collecting NVIDIA CUDA libs for bundle..." && \
+      cuda_lib_dirs="/usr/local/cuda/lib64 /usr/local/cuda/targets/x86_64-linux/lib /usr/local/cuda-*/lib64 /usr/local/cuda-*/targets/x86_64-linux/lib /usr/lib/x86_64-linux-gnu"; \
+      for lib in libcudart.so libnvrtc.so libnvrtc-builtins.so; do \
+        for dir in $cuda_lib_dirs; do \
+          [ -d "$dir" ] && find "$dir" -maxdepth 1 -name "${lib}*" 2>/dev/null; \
+        done | sort -V | while read -r found; do \
+          cp -P "$found" ./libs/; \
+          if [ -L "$found" ]; then \
+            real="$(readlink -f "$found")"; \
+            [ -f "$real" ] && cp -P "$real" ./libs/; \
+          fi; \
+          echo "  bundled: $(basename "$found") -> libs/"; \
+        done; \
+      done && \
+      find ./libs -maxdepth 1 -type f \( -name 'libcudart.so*' -o -name 'libnvrtc.so*' -o -name 'libnvrtc-builtins.so*' \) -exec patchelf --set-rpath '$ORIGIN' {} \; && \
+      [ -e ./libs/libcudart.so ] || find ./libs -maxdepth 1 -name 'libcudart.so.*' | grep -q . || \
+        (echo "ERROR: WITH_OROCHI/HIP_PLATFORM=nvidia build did not bundle libcudart.so*" >&2; exit 1); \
+      [ -e ./libs/libnvrtc.so ] || find ./libs -maxdepth 1 -name 'libnvrtc.so.*' | grep -q . || \
+        (echo "ERROR: WITH_OROCHI/HIP_PLATFORM=nvidia build did not bundle libnvrtc.so*" >&2; exit 1); \
+      ls -la ./libs/; \
+    fi
+
 RUN ls -la ./
-RUN tar -czvf ${TARGZ_FILE} ./tnn-miner*
+RUN set -e; \
+    files="$(find . -maxdepth 1 -type f -name 'tnn-miner*' -print)"; \
+    [ -d ./tunes ] && [ "$(ls -A ./tunes 2>/dev/null)" ] && files="$files ./tunes"; \
+    [ -d ./libs ] && [ "$(ls -A ./libs 2>/dev/null)" ] && files="$files ./libs"; \
+    tar -czvf "${TARGZ_FILE}" $files
 RUN md5sum ./${TARGZ_FILE}
 
 FROM scratch
@@ -38,3 +132,5 @@ ARG  PACKAGE_VERSION
 ARG  TARGZ_FILE=miner.tar.gz
 COPY --from=build /src/${TARGZ_FILE} /
 COPY --from=build /src/tnn-miner* /
+COPY --from=build /src/tunes/ /tunes/
+COPY --from=build /src/libs/ /libs/

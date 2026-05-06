@@ -7,7 +7,7 @@ stages:
 variables:
   RUNNER_SCRIPT_TIMEOUT: 40m
   DOCKER_TLS_CERTDIR: "/certs"
-  TNN_BUILD_MAC: false
+  TNN_BUILD_MAC: true
   TNN_BUILD_WIN: true
   PACKAGE_VERSION: "0.0.1"
   CMAKE_ARGS: "-DWITH_HIP=OFF"
@@ -16,6 +16,12 @@ variables:
   MACOS_ARM64_TGZ: "Tnn-miner-macos-arm64-${PACKAGE_VERSION}.tar.gz"
   WRAPPER_TEMP: "wrapper.tar.gz"
   WIN_AMD64_ZIP: "Tnn-miner-win64-${PACKAGE_VERSION}.zip"
+  # WIN_HIP_AMD_ZIP: "Tnn-miner-rocm-win64-${PACKAGE_VERSION}.zip"
+  # WIN_HIP_NVIDIA_ZIP: "Tnn-miner-cuda-win64-${PACKAGE_VERSION}.zip"
+  # LINUX_HIP_AMD_TGZ: "Tnn-miner-rocm-amd64-${PACKAGE_VERSION}.tar.gz"
+  # LINUX_HIP_NVIDIA_TGZ: "Tnn-miner-cuda-amd64-${PACKAGE_VERSION}.tar.gz"
+  # HIVEOS_MMPOS_HIP_AMD_TGZ: "tnn-miner-rocm-${PACKAGE_VERSION}.hiveos_mmpos.amd64.tar.gz"
+  # HIVEOS_MMPOS_HIP_NVIDIA_TGZ: "tnn-miner-cuda-${PACKAGE_VERSION}.hiveos_mmpos.amd64.tar.gz"
   # https://docs.gitlab.com/ee/ci/runners/hosted_runners/macos.html#optimizing-homebrew
   HOMEBREW_NO_AUTO_UPDATE: 1
   #CI_DEBUG_TRACE: "true"
@@ -35,17 +41,23 @@ workflow:
         MACOS_ARM64_TGZ: "Tnn-miner-macos-arm64-${PACKAGE_VERSION}.tar.gz"
         WRAPPER_TEMP: "wrapper.tar.gz"
         WIN_AMD64_ZIP: "Tnn-miner-win64-${PACKAGE_VERSION}.zip"
+        # WIN_HIP_AMD_ZIP: "Tnn-miner-rocm-win64-${PACKAGE_VERSION}.zip"
+        # WIN_HIP_NVIDIA_ZIP: "Tnn-miner-cuda-win64-${PACKAGE_VERSION}.zip"
+        # LINUX_HIP_AMD_TGZ: "Tnn-miner-rocm-amd64-${PACKAGE_VERSION}.tar.gz"
+        # LINUX_HIP_NVIDIA_TGZ: "Tnn-miner-cuda-amd64-${PACKAGE_VERSION}.tar.gz"
+        # HIVEOS_MMPOS_HIP_AMD_TGZ: "tnn-miner-rocm-${PACKAGE_VERSION}.hiveos_mmpos.amd64.tar.gz"
+        # HIVEOS_MMPOS_HIP_NVIDIA_TGZ: "tnn-miner-cuda-${PACKAGE_VERSION}.hiveos_mmpos.amd64.tar.gz"
 
 .macos_saas_runners:
   tags:
-    - saas-macos-medium-m1
-  image: macos-14-xcode-15
+    - macos-aarch64
+  image: macos-15-xcode-16
   before_script:
     - echo "started by ${GITLAB_USER_NAME} / @${GITLAB_USER_LOGIN}"
+    - brew install llvm@18
+    - export PATH="/opt/homebrew/opt/llvm@18/bin:$PATH"
     - which clang
-    #- brew install clang
-    #- brew install fmt
-    - brew install cmake
+    - clang --version
 
 .windows_job:
   tags:
@@ -71,8 +83,8 @@ build-linux-amd64:
     - apk add bash
   script:
     #- docker buildx build --platform=linux/amd64 --build-arg PACKAGE_VERSION=${PACKAGE_VERSION} --build-arg TARGZ_FILE=${LINUX_AMD64_TGZ} --build-arg CMAKE_ARGS=${CMAKE_ARGS} -f docker/Dockerfile.ubu . --output ./
-    - bash -c "./go-docker.sh amd64"
-    - export HIVEOS_MMPOS_AMD64_TGZ="tnn-miner-hiveos_mmpos_amd64_${PACKAGE_VERSION//-/.}.tar.gz"
+    - bash -c "./go-docker.sh orochi"
+    - export HIVEOS_MMPOS_AMD64_TGZ="tnn-miner-${PACKAGE_VERSION//-/.}.hiveos_mmpos.amd64.tar.gz"
     - echo "HIVEOS_MMPOS_AMD64_TGZ=$HIVEOS_MMPOS_AMD64_TGZ" >> linux-amd64-job.env
   after_script:
     - echo "LINUX_AMD64_BUILD_JOB_ID=$CI_JOB_ID" >> linux-amd64-job.env
@@ -85,18 +97,76 @@ build-linux-amd64:
   services:
     - name: docker:24.0.5-dind
 
+# ---- Legacy HIP-specific builds (replaced by Orochi unified GPU) ----
+# build-linux-amd64-hip-amd:
+#   rules:
+#     - if: $CI_COMMIT_TAG || $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"
+#   image: docker:28
+#   stage: build
+#   tags:
+#     - linux
+#     - amd64
+#   variables:
+#     TARGZ_FILE: "${LINUX_HIP_AMD_TGZ}"
+#   before_script:
+#     - until docker info; do sleep 1; done
+#     - chmod +x *.sh
+#     - apk add bash
+#   script:
+#     - bash -c "./go-docker.sh amd"
+#   after_script:
+#     - echo "LINUX_HIP_AMD_BUILD_JOB_ID=$CI_JOB_ID" >> linux-hip-amd-job.env
+#   artifacts:
+#     name: ${LINUX_HIP_AMD_TGZ}
+#     paths:
+#       - ${LINUX_HIP_AMD_TGZ}
+#     reports:
+#       dotenv: linux-hip-amd-job.env
+#   services:
+#     - name: docker:24.0.5-dind
+#
+# build-linux-amd64-hip-nvidia:
+#   rules:
+#     - if: $CI_COMMIT_TAG || $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"
+#   image: docker:28
+#   stage: build
+#   tags:
+#     - linux
+#     - amd64
+#   variables:
+#     TARGZ_FILE: "${LINUX_HIP_NVIDIA_TGZ}"
+#   before_script:
+#     - until docker info; do sleep 1; done
+#     - chmod +x *.sh
+#     - apk add bash
+#   script:
+#     - bash -c "./go-docker.sh nvidia"
+#   after_script:
+#     - echo "LINUX_HIP_NVIDIA_BUILD_JOB_ID=$CI_JOB_ID" >> linux-hip-nvidia-job.env
+#   artifacts:
+#     name: ${LINUX_HIP_NVIDIA_TGZ}
+#     paths:
+#       - ${LINUX_HIP_NVIDIA_TGZ}
+#     reports:
+#       dotenv: linux-hip-nvidia-job.env
+#   services:
+#     - name: docker:24.0.5-dind
+
 build-hiveos-mmpos:
   needs:
     - build-linux-amd64
   stage: wrap
   script:
     - tar -xvf ${LINUX_AMD64_TGZ}
-    - mv ./tnn-miner-cpu ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
+    - mv ./tnn-miner ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
+    - "[ -d ./tunes ] && cp -r ./tunes ./wrappers/hiveos+mmpos/tnn-miner/tunes || true"
+    - "[ -d ./libs ] && cp -r ./libs ./wrappers/hiveos+mmpos/tnn-miner/libs || true"
     - sed "s/^EXTERNAL_VERSION=custom/EXTERNAL_VERSION=$PACKAGE_VERSION/g" -i ./wrappers/hiveos+mmpos/tnn-miner/mmp-external.conf
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/tnn-miner
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/h-run.sh
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/h-stats.sh
     - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/mmp-stats.sh
+    - chmod +x ./wrappers/hiveos+mmpos/tnn-miner/mmp-launch.sh
     - tar -czvf ${HIVEOS_MMPOS_AMD64_TGZ} -C ./wrappers/hiveos+mmpos/ tnn-miner
   after_script:
     - echo "HIVEOS_MMPOS_BUILD_JOB_ID=$CI_JOB_ID" >> hiveos-job.env
@@ -110,33 +180,60 @@ build-hiveos-mmpos:
     reports:
       dotenv: hiveos-job.env
 
-build-macos:
-  rules:
-    - if: $CI_COMMIT_TAG && $TNN_BUILD_MAC == "true"                 # Run this job when a tag is created
-  extends:
-    - .macos_saas_runners
-  stage: build
-  script:
-    - export
-    - mkdir ./build
-    - cd ./build
-    - cmake -DTNN_VERSION=$PACKAGE_VERSION ..
-    - make -j$(nproc)
-    - cd ../
-    - mv ./build/Tnn-miner-cpu ./Tnn-miner
-    - ls -la ./
-    - ls -la ./build/
-    - tar -czvf Tnn-miner-macos-arm64.tar.gz ./Tnn-miner
-  after_script:
-    - pwd
-    - ls -la ./
-    - echo "MACOS_BUILD_JOB_ID=$CI_JOB_ID" >> macos-job.env
-  artifacts:
-    name: Tnn-miner-macos-arm64.tar.gz
-    paths:
-      - Tnn-miner-macos-arm64.tar.gz
-    reports:
-      dotenv: macos-job.env
+# ---- Legacy HIP-specific wrappers (replaced by single Orochi wrapper) ----
+# build-hiveos-mmpos-amd:
+#   rules:
+#     - if: $CI_COMMIT_TAG || $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"
+#   needs:
+#     - build-linux-amd64-hip-amd
+#   stage: wrap
+#   script:
+#     - tar -xvf ${LINUX_HIP_AMD_TGZ}
+#     - mv ./tnn-miner-rocm ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/tnn-miner-rocm
+#     - "[ -d ./tunes ] && cp -r ./tunes ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/tunes || true"
+#     - "[ -d ./hip_libs ] && cp -r ./hip_libs ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/hip_libs || true"
+#     - sed "s/^EXTERNAL_VERSION=custom/EXTERNAL_VERSION=$PACKAGE_VERSION/g" -i ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/mmp-external.conf
+#     - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/tnn-miner-rocm
+#     - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/h-run.sh
+#     - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/h-stats.sh
+#     - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/mmp-stats.sh
+#     - chmod +x ./wrappers/hiveos+mmpos-amd/tnn-miner-rocm/mmp-launch.sh
+#     - tar -czvf ${HIVEOS_MMPOS_HIP_AMD_TGZ} -C ./wrappers/hiveos+mmpos-amd/ tnn-miner-rocm
+#   after_script:
+#     - echo "HIVEOS_MMPOS_HIP_AMD_BUILD_JOB_ID=$CI_JOB_ID" >> hiveos-hip-amd-job.env
+#   artifacts:
+#     name: ${HIVEOS_MMPOS_HIP_AMD_TGZ}
+#     paths:
+#       - ${HIVEOS_MMPOS_HIP_AMD_TGZ}
+#     reports:
+#       dotenv: hiveos-hip-amd-job.env
+#
+# build-hiveos-mmpos-nvidia:
+#   rules:
+#     - if: $CI_COMMIT_TAG || $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"
+#   needs:
+#     - build-linux-amd64-hip-nvidia
+#   stage: wrap
+#   script:
+#     - tar -xvf ${LINUX_HIP_NVIDIA_TGZ}
+#     - mv ./tnn-miner-cuda ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/tnn-miner-cuda
+#     - "[ -d ./tunes ] && cp -r ./tunes ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/tunes || true"
+#     - "[ -d ./nvrtc_libs ] && cp -r ./nvrtc_libs ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/nvrtc_libs || true"
+#     - sed "s/^EXTERNAL_VERSION=custom/EXTERNAL_VERSION=$PACKAGE_VERSION/g" -i ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/mmp-external.conf
+#     - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/tnn-miner-cuda
+#     - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/h-run.sh
+#     - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/h-stats.sh
+#     - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/mmp-stats.sh
+#     - chmod +x ./wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/mmp-launch.sh
+#     - tar -czvf ${HIVEOS_MMPOS_HIP_NVIDIA_TGZ} -C ./wrappers/hiveos+mmpos-nvidia/ tnn-miner-cuda
+#   after_script:
+#     - echo "HIVEOS_MMPOS_HIP_NVIDIA_BUILD_JOB_ID=$CI_JOB_ID" >> hiveos-hip-nvidia-job.env
+#   artifacts:
+#     name: ${HIVEOS_MMPOS_HIP_NVIDIA_TGZ}
+#     paths:
+#       - ${HIVEOS_MMPOS_HIP_NVIDIA_TGZ}
+#     reports:
+#       dotenv: hiveos-hip-nvidia-job.env
 
 build-windows:
   rules:
@@ -148,11 +245,13 @@ build-windows:
     - echo "running scripts in the build job"
     - $PSVersionTable.PSVersion
     - .\scripts\prereqs.bat ci
-    - .\scripts\build.ps1 $PACKAGE_VERSION
-    - dir .\build\
-    - dir .\build\bin\
-    - move build\bin\tnn-miner-cpu.exe .\
-    - Compress-Archive -Path tnn-miner-cpu.exe -DestinationPath ${WIN_AMD64_ZIP}
+    - .\scripts\build_all.ps1 $PACKAGE_VERSION orochi
+    - dir .\hip-build\win32\orochi\
+    - move hip-build\win32\orochi\bin\tnn-miner.exe .\
+    - if (Test-Path .\hip-build\win32\orochi\bin\WinRing0x64.sys) { copy hip-build\win32\orochi\bin\WinRing0x64.sys .\ }
+    - if (Test-Path .\hip-build\win32\orochi\bin\tunes) { Copy-Item -Recurse .\hip-build\win32\orochi\bin\tunes .\tunes }
+    - Get-ChildItem .\hip-build\win32\orochi\bin\*.dll | ForEach-Object { copy $_.FullName .\ }
+    - $items = @('tnn-miner.exe'); Get-ChildItem .\*.dll | ForEach-Object { $items += $_.Name }; if (Test-Path WinRing0x64.sys) { $items += 'WinRing0x64.sys' }; if (Test-Path tunes) { $items += 'tunes' }; Compress-Archive -Path $items -DestinationPath ${WIN_AMD64_ZIP}
     #- 7z.exe a ${WIN_AMD64_ZIP} tnn-miner-cpu.exe
   after_script:
     - echo "WIN_BUILD_JOB_ID=$CI_JOB_ID" >> win-job.env
@@ -164,6 +263,49 @@ build-windows:
       dotenv: win-job.env
 
 
+# TODO: Windows GPU CI jobs need a self-hosted runner with ROCm/CUDA installed.
+# For now, build manually with: .\scripts\build_all.ps1 <version> amd|nvidia
+#
+# build-windows-hip-amd:
+#   rules:
+#     - if: $CI_COMMIT_TAG || $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"
+#   extends:
+#     - .windows_job
+#   stage: build
+#   script:
+#     - .\scripts\prereqs.bat ci
+#     - .\scripts\build_all.ps1 $PACKAGE_VERSION amd
+#     - move hip-build\win32\amd\bin\tnn-miner-hip.exe .\
+#     - Compress-Archive -Path tnn-miner-hip.exe -DestinationPath ${WIN_HIP_AMD_ZIP}
+#   after_script:
+#     - echo "WIN_HIP_AMD_BUILD_JOB_ID=$CI_JOB_ID" >> win-hip-amd-job.env
+#   artifacts:
+#     name: ${WIN_HIP_AMD_ZIP}
+#     paths:
+#       - ${WIN_HIP_AMD_ZIP}
+#     reports:
+#       dotenv: win-hip-amd-job.env
+#
+# build-windows-hip-nvidia:
+#   rules:
+#     - if: $CI_COMMIT_TAG || $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"
+#   extends:
+#     - .windows_job
+#   stage: build
+#   script:
+#     - .\scripts\prereqs.bat ci
+#     - .\scripts\build_all.ps1 $PACKAGE_VERSION nvidia
+#     - move hip-build\win32\nvidia\bin\tnn-miner-hip.exe .\
+#     - Compress-Archive -Path tnn-miner-hip.exe -DestinationPath ${WIN_HIP_NVIDIA_ZIP}
+#   after_script:
+#     - echo "WIN_HIP_NVIDIA_BUILD_JOB_ID=$CI_JOB_ID" >> win-hip-nvidia-job.env
+#   artifacts:
+#     name: ${WIN_HIP_NVIDIA_ZIP}
+#     paths:
+#       - ${WIN_HIP_NVIDIA_ZIP}
+#     reports:
+#       dotenv: win-hip-nvidia-job.env
+
 build-linux-aarch64:
   image: docker:28
   stage: build
@@ -173,6 +315,7 @@ build-linux-aarch64:
   variables:
     CMAKE_ARGS: "${CMAKE_ARGS}"
     TARGZ_FILE: "${LINUX_ARM64_TGZ}"
+    CPU_ARCHTARGET: "armv8-a+crypto"
   before_script:
     - until docker info; do sleep 1; done
     - chmod +x *.sh
@@ -193,11 +336,38 @@ build-linux-aarch64:
   services:
     - name: docker:24.0.5-dind
 
+build-macos-aarch64:
+  extends:
+    - .macos_saas_runners
+  stage: build
+  rules:
+    - if: $CI_COMMIT_TAG || $TNN_BUILD_MAC == "true" 
+  variables:
+    TARGZ_FILE: "${MACOS_ARM64_TGZ}"
+  script:
+    - mkdir -p build
+    - cd build
+    - cmake -DTNN_VERSION=${PACKAGE_VERSION} ${CMAKE_ARGS} ..
+    - make -j$(sysctl -n hw.logicalcpu)
+    - cd ..
+    - mv ./build/bin/tnn-miner-cpu ./tnn-miner
+    - "[ -d ./build/bin/tunes ] && cp -r ./build/bin/tunes ./tunes || true"
+    - TAR_ITEMS="./tnn-miner"; [ -d ./tunes ] && TAR_ITEMS="$TAR_ITEMS ./tunes"; tar -czvf ${TARGZ_FILE} $TAR_ITEMS
+  after_script:
+    - echo "MACOS_BUILD_JOB_ID=$CI_JOB_ID" >> macos-arm64-job.env
+  artifacts:
+    name: ${MACOS_ARM64_TGZ}
+    paths:
+      - ${MACOS_ARM64_TGZ}
+    reports:
+      dotenv: macos-arm64-job.env
+
 # run tests using the binary built before
 test-linux-amd64:
   #rules:
   #  - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
   stage: test
+  image: ubuntu:22.04
   needs:
     - job: build-linux-amd64
       artifacts: true
@@ -208,10 +378,10 @@ test-linux-amd64:
     - ls -la ./
   script:
     - tar -xvf ./${LINUX_AMD64_TGZ}
-    - ./tnn-miner-cpu --test-dero --quiet
-    - ./tnn-miner-cpu --test-spectre --quiet
-    - ./tnn-miner-cpu --test-xelis --quiet
-    
+    - ./tnn-miner --test-dero --quiet
+    - ./tnn-miner --test-spectre --quiet
+    - ./tnn-miner --test-xelis --quiet
+
 # run tests using the binary built before
 test-linux-aarch64:
   #rules:
@@ -230,6 +400,76 @@ test-linux-aarch64:
     - ./tnn-miner-cpu --test-dero --quiet
     - ./tnn-miner-cpu --test-spectre --quiet
     - ./tnn-miner-cpu --test-xelis --quiet
+
+# run tests using the binary built before
+test-macos-aarch64:
+  extends:
+    - .macos_saas_runners
+  stage: test
+  rules:
+    - if: $CI_COMMIT_TAG || $TNN_BUILD_MAC == "true"
+  needs:
+    - job: build-macos-aarch64
+      artifacts: true
+  script:
+    - tar -xvf ./${MACOS_ARM64_TGZ}
+    - ./tnn-miner --test-dero --quiet
+    - ./tnn-miner --test-spectre --quiet
+    - ./tnn-miner --test-xelis --quiet
+
+# shellcheck + structural validation for mining OS wrappers
+test-wrappers:
+  stage: test
+  needs: []
+  tags:
+    - linux
+    - amd64
+  image: docker:28
+  before_script:
+    - apk add --no-cache bash shellcheck
+  script:
+    - echo "=== Shellcheck ==="
+    - shellcheck -s bash wrappers/hiveos+mmpos/tnn-miner/*.sh
+    # - shellcheck -s bash wrappers/hiveos+mmpos-amd/tnn-miner-rocm/*.sh
+    # - shellcheck -s bash wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/*.sh
+    - echo "=== Structure checks ==="
+    - |
+      fail=0
+      for variant in \
+        "hiveos+mmpos:tnn-miner:tnn-miner"; do
+        dir=$(echo "$variant" | cut -d: -f1)
+        sub=$(echo "$variant" | cut -d: -f2)
+        miner=$(echo "$variant" | cut -d: -f3)
+        base="wrappers/$dir/$sub"
+        echo "--- Checking $base ---"
+        for f in h-run.sh h-config.sh h-stats.sh h-manifest.conf mmp-launch.sh mmp-stats.sh mmp-external.conf; do
+          if [ ! -f "$base/$f" ]; then
+            echo "MISSING: $base/$f"
+            fail=1
+          fi
+        done
+        if ! grep -q "$miner" "$base/mmp-launch.sh"; then
+          echo "FAIL: mmp-launch.sh does not reference $miner"
+          fail=1
+        fi
+        if ! grep -q "^MINER_NAME=" "$base/h-manifest.conf"; then
+          echo "FAIL: h-manifest.conf missing MINER_NAME"
+          fail=1
+        fi
+        if ! grep -q "^EXTERNAL_NAME=" "$base/mmp-external.conf"; then
+          echo "FAIL: mmp-external.conf missing EXTERNAL_NAME"
+          fail=1
+        fi
+        if ! grep -q "^EXTERNAL_VERSION=" "$base/mmp-external.conf"; then
+          echo "FAIL: mmp-external.conf missing EXTERNAL_VERSION"
+          fail=1
+        fi
+      done
+      if [ $fail -ne 0 ]; then
+        echo "Wrapper validation FAILED"
+        exit 1
+      fi
+      echo "All wrapper checks passed"
 
 # TODO install gdb instead of running prereqs
 # test-windows:
@@ -274,10 +514,30 @@ release_job:
       artifacts: true
     - job: build-linux-aarch64
       artifacts: true
+    - job: build-macos-aarch64
+      artifacts: true
     - job: build-hiveos-mmpos
       artifacts: true
     - job: build-windows
       artifacts: true
+    # - job: build-linux-amd64-hip-amd
+    #   artifacts: true
+    #   optional: true
+    # - job: build-linux-amd64-hip-nvidia
+    #   artifacts: true
+    #   optional: true
+    # - job: build-hiveos-mmpos-amd
+    #   artifacts: true
+    #   optional: true
+    # - job: build-hiveos-mmpos-nvidia
+    #   artifacts: true
+    #   optional: true
+    #- job: build-windows-hip-amd
+    #  artifacts: true
+    #  optional: true
+    #- job: build-windows-hip-nvidia
+    #  artifacts: true
+    #  optional: true
     #- job: build-macos
     #  artifacts: true
   rules:
@@ -311,6 +571,24 @@ release_job:
         - name: "${WIN_AMD64_ZIP}"
           url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${WIN_BUILD_JOB_ID}/artifacts/raw/${WIN_AMD64_ZIP}"
           filepath: "/${WIN_AMD64_ZIP}"
-        #- name: "${MACOS_ARM64_TGZ}"
-        #  url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${MACOS_BUILD_JOB_ID}/artifacts/raw/${MACOS_ARM64_TGZ}"
-        #  filepath: "/${MACOS_ARM64_TGZ}"
+        - name: "${MACOS_ARM64_TGZ}"
+          url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${MACOS_BUILD_JOB_ID}/artifacts/raw/${MACOS_ARM64_TGZ}"
+          filepath: "/${MACOS_ARM64_TGZ}"
+        # - name: "${LINUX_HIP_AMD_TGZ}"
+        #   url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${LINUX_HIP_AMD_BUILD_JOB_ID}/artifacts/raw/${LINUX_HIP_AMD_TGZ}"
+        #   filepath: "/${LINUX_HIP_AMD_TGZ}"
+        # - name: "${LINUX_HIP_NVIDIA_TGZ}"
+        #   url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${LINUX_HIP_NVIDIA_BUILD_JOB_ID}/artifacts/raw/${LINUX_HIP_NVIDIA_TGZ}"
+        #   filepath: "/${LINUX_HIP_NVIDIA_TGZ}"
+        # - name: "${WIN_HIP_AMD_ZIP}"
+        #   url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${WIN_HIP_AMD_BUILD_JOB_ID}/artifacts/raw/${WIN_HIP_AMD_ZIP}"
+        #   filepath: "/${WIN_HIP_AMD_ZIP}"
+        # - name: "${WIN_HIP_NVIDIA_ZIP}"
+        #   url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${WIN_HIP_NVIDIA_BUILD_JOB_ID}/artifacts/raw/${WIN_HIP_NVIDIA_ZIP}"
+        #   filepath: "/${WIN_HIP_NVIDIA_ZIP}"
+        # - name: "${HIVEOS_MMPOS_HIP_AMD_TGZ}"
+        #   url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${HIVEOS_MMPOS_HIP_AMD_BUILD_JOB_ID}/artifacts/raw/${HIVEOS_MMPOS_HIP_AMD_TGZ}"
+        #   filepath: "/${HIVEOS_MMPOS_HIP_AMD_TGZ}"
+        # - name: "${HIVEOS_MMPOS_HIP_NVIDIA_TGZ}"
+        #   url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${HIVEOS_MMPOS_HIP_NVIDIA_BUILD_JOB_ID}/artifacts/raw/${HIVEOS_MMPOS_HIP_NVIDIA_TGZ}"
+        #   filepath: "/${HIVEOS_MMPOS_HIP_NVIDIA_TGZ}"

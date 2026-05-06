@@ -16,12 +16,15 @@
 #include <xatum.h>
 #include <xelis-hash/xelis-hash.hpp>
 
-namespace beast = boost::beast;         // from <boost/beast.hpp>
-namespace http = beast::http;           // from <boost/beast/http.hpp>
-namespace websocket = beast::websocket; // from <boost/beast/websocket.hpp>
-namespace net = boost::asio;            // from <boost/asio.hpp>
-namespace ssl = boost::asio::ssl;       // from <boost/asio/ssl.hpp>
-using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
+#include <atomic>
+#include <queue>
+
+namespace beast = boost::beast;
+namespace http = beast::http;
+namespace websocket = beast::websocket;
+namespace net = boost::asio;
+namespace ssl = boost::asio::ssl;
+using tcp = boost::asio::ip::tcp;
 
 void xatumFailure(bool isDev) noexcept
 {
@@ -36,16 +39,23 @@ void xatumFailure(bool isDev) noexcept
 int handleXatumPacket(Xatum::packet xPacket, bool isDev)
 {
   std::string command = xPacket.command;
-    boost::json::value data = xPacket.data;
+  boost::json::value data = xPacket.data;
   int res = 0;
 
   if (command == Xatum::print)
   {
-    if (Xatum::accepted_msg.compare(data.at("msg").as_string()) == 0)
-      accepted++;
+    // Safely compare strings
+    std::string msgStr = std::string(data.at("msg").as_string());
+    
+    if (Xatum::accepted_msg == msgStr) {
+      accepted += !isDev;
+      if (!isDev) recordDeviceShare(submitTracker.popSoloDevice(isDev), true);
+    }
 
-    if (Xatum::stale_msg.compare(data.at("msg").as_string()) == 0)
-      rejected++;
+    if (Xatum::stale_msg == msgStr) {
+      rejected += !isDev;
+      if (!isDev) recordDeviceShare(submitTracker.popSoloDevice(isDev), false);
+    }
 
     int msgLevel = data.at("lvl").to_number<int64_t>();
     if (msgLevel < Xatum::logLevel)
@@ -58,7 +68,6 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
       printf("DEV | ");
     }
 
-    // mutex.lock();
     switch (msgLevel)
     {
     case Xatum::ERROR_MSG:
@@ -84,29 +93,32 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
       break;
     }
 
-    printf("%s\n", data.at("msg").as_string().c_str());
+    printf("%s\n", msgStr.c_str());
 
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
-    // mutex.unlock();
   }
 
   else if (command == Xatum::newJob)
   {
-    std::scoped_lock<boost::mutex> lockGuard(mutex);
+    std::scoped_lock<std::mutex> lockGuard(mutex);
     int64_t *diff = isDev ? &difficultyDev : &difficulty;
     boost::json::value *J = isDev ? &devJob : &job;
     int64_t *h = isDev ? &devHeight : &ourHeight;
 
     std::string *B = isDev ? &devBlob : &currentBlob;
 
-    if (data.at("blob").as_string().compare(*B) == 0)
+    // Safely extract blob string
+    std::string newBlob = std::string(data.at("blob").as_string());
+    
+    if (newBlob == *B)
       return 0;
-    *B = data.at("blob").as_string();
+    
+    *B = newBlob;
 
-    Xatum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    Xatum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
 
-    // std::cout << data << std::endl;
     if (!isDev)
     {
       setcolor(CYAN);
@@ -116,7 +128,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
     }
     *diff = data.at("diff").to_number<uint64_t>();
 
-    (*J).as_object().emplace("miner_work", (*B).c_str());
+    (*J).as_object().emplace("miner_work", *B);
 
     bool *C = isDev ? &devConnected : &isConnected;
 
@@ -124,25 +136,20 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
     {
       if (!isDev)
       {
-        // mutex.lock();
         setcolor(BRIGHT_YELLOW);
         printf("Mining at: %s to wallet %s\n", miningProfile.host.c_str(), miningProfile.wallet.c_str());
         fflush(stdout);
         setcolor(CYAN);
         printf("Dev fee: %.2f%% of your total hashrate\n", devFee);
-
         fflush(stdout);
         setcolor(BRIGHT_WHITE);
-        // mutex.unlock();
       }
       else
       {
-        // mutex.lock();
         setcolor(CYAN);
         printf("Connected to dev node: %s\n", devMiningProfile.host.c_str());
         fflush(stdout);
         setcolor(BRIGHT_WHITE);
-        // mutex.unlock();
       }
     }
 
@@ -154,18 +161,20 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
 
   else if (!isDev && command == Xatum::success)
   {
-    // std::cout << data << std::endl;
-    if (data.at("msg").as_string() == "ok")
+    std::string msgStr = std::string(data.at("msg").as_string());
+    if (msgStr == "ok")
     {
-      printf("Xatum: share accepted!");
+      printf("\nXatum: share accepted!\n");
       fflush(stdout);
       accepted++;
+      recordDeviceShare(submitTracker.popSoloDevice(isDev), true);
     }
     else
     {
       rejected++;
+      recordDeviceShare(submitTracker.popSoloDevice(isDev), false);
       setcolor(RED);
-      printf("\nXatum Share Rejected: %s\n", data.at("msg").as_string().c_str());
+      printf("\nXatum Share Rejected: %s\n", msgStr.c_str());
       fflush(stdout);
       setcolor(BRIGHT_WHITE);
     }
@@ -173,6 +182,7 @@ int handleXatumPacket(Xatum::packet xPacket, bool isDev)
   else
   {
     printf("unknown command: %s\n", command.c_str());
+    fflush(stdout);
   }
 
   return res;
@@ -188,6 +198,7 @@ void xatum_session(
     net::yield_context yield,
     bool isDev)
 {
+  Xatum::lastReceivedJobTime = 0;
   ctx.set_options(boost::asio::ssl::context::default_workarounds |
                   boost::asio::ssl::context::no_sslv2 |
                   boost::asio::ssl::context::no_sslv3 |
@@ -196,16 +207,19 @@ void xatum_session(
 
   beast::error_code ec;
   ctx.set_verify_mode(ssl::verify_none); // Accept self-signed certificates
-  tcp::socket socket(ioc);
-  boost::beast::ssl_stream<boost::beast::tcp_stream> stream(ioc, ctx);
+  
+  // Create strand for thread-safe operations
+  auto strand = net::make_strand(ioc);
+  boost::beast::ssl_stream<boost::beast::tcp_stream> stream(strand, ctx);
 
   auto endpoint = resolve_host(wsMutex, ioc, yield, host, port);
+  
   // Set a timeout on the operation
   beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
   // Make the connection on the IP address we get from a lookup
   beast::get_lowest_layer(stream).async_connect(endpoint, yield[ec]);
   if (ec)
-    return fail(ec, "connect");
+    return fail(ec, "connect-xatum");
 
   // Set the SNI hostname
   if (!SSL_set_tlsext_host_name(stream.native_handle(), host.c_str()))
@@ -216,67 +230,85 @@ void xatum_session(
   }
 
   // Perform the SSL handshake
-  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(300));
+  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
   stream.async_handshake(ssl::stream_base::client, yield[ec]);
   if (ec)
     return fail(ec, "handshake-xatum");
 
   boost::json::object handshake_packet = {
-      {"addr", wallet.c_str()},
-      {"work", worker.c_str()},
-      {"agent", (std::string("tnn-miner ") + versionString).c_str()},
-      {"algos", boost::json::array{
-                    "xel/1",
-                }}};
+      {"addr", wallet},
+      {"work", worker},
+      {"agent", std::string("tnn-miner ") + versionString},
+      {"algos", boost::json::array{"xel/1"}}};
 
-  // std::string handshakeStr = handshake_packet.serialize();
   std::string handshakeStr = "shake~" + boost::json::serialize(handshake_packet) + "\n";
 
   beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
-  // stream.async_write_some(boost::asio::buffer(handshakeStr, 1024), yield[ec]);
-  // if (ec)
-  //     return fail(ec, "write");
-
   size_t trans = boost::asio::async_write(stream, boost::asio::buffer(handshakeStr), yield[ec]);
   if (ec)
     return fail(ec, "Xatum C2S handshake");
 
-  // This buffer will hold the incoming message
-  beast::flat_buffer buffer;
-  std::stringstream workInfo;
+  Xatum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count();
 
-  Xatum::lastReceivedJobTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+  // Thread-safe queue for submissions
+  std::queue<std::string> submitQueue;
+  std::mutex submitMutex;
+  std::atomic<bool> abort{false};
 
-  bool submitThread = false;
-  bool abort = false;
-
-  boost::thread subThread([&](){
-    submitThread = true;
-    while(!abort) {
-      boost::unique_lock<boost::mutex> lock(mutex);
-      bool *B = isDev ? &submittingDev : &submitting;
-      cv.wait(lock, [&]{ return (data_ready && (*B)) || abort; });
-      if (abort) break;
-      try {
-        boost::json::object *S = &share;
-        if (isDev)
-          S = &devShare;
-
-        boost::system::error_code ec;
-        std::string msg = boost::json::serialize((*S)) + "\n";
-        // std::cout << "sending in: " << msg << std::endl;
-        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(1));
-        boost::asio::async_write(stream, boost::asio::buffer(msg), [&](const boost::system::error_code& error, std::size_t bytes_transferred) {
-          if (error) {
-            printf("error on write: %s\n", error.message().c_str());
-            fflush(stdout);
-            abort = true;
+  auto process_write_queue = [&]() {
+    // Post to strand to process entire queue
+    net::post(strand, [&]() {
+      while (!abort.load()) {
+        std::string msg;
+        
+        // Get next message
+        {
+          std::lock_guard<std::mutex> qlock(submitMutex);
+          if (submitQueue.empty()) {
+            return;
           }
-          // (*B) = false;
-          // data_ready = false;
-        });
-        (*B) = false;
-        data_ready = false;
+          msg = std::move(submitQueue.front());
+          submitQueue.pop();
+        }
+        
+        // Synchronous write (safe because we're in the strand)
+        beast::error_code wec;
+        beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
+        boost::asio::write(stream, boost::asio::buffer(msg), wec);
+        
+        if (wec) {
+          printf("error on write: %s\n", wec.message().c_str());
+          fflush(stdout);
+          abort = true;
+          return;
+        }
+      }
+    });
+  };
+
+  bool submitThreadRunning = true;
+
+  std::thread subThread([&](){
+    while(!abort.load()) {
+      std::unique_lock<std::mutex> lock(mutex);
+      bool *B = isDev ? &submittingDev : &submitting;
+      cv.wait(lock, [&]{ return (data_ready && (*B)) || abort.load(); });
+      if (abort.load()) break;
+
+      try {
+        boost::json::object &S = isDev ? devShare : share;
+        std::string msg = boost::json::serialize(S) + "\n";
+        
+        // Queue the message for thread-safe sending
+        {
+          std::lock_guard<std::mutex> qlock(submitMutex);
+          submitQueue.push(std::move(msg));
+        }
+        
+        // Trigger write processing
+        process_write_queue();
+        
       } catch (const std::exception &e) {
         setcolor(RED);
         printf("\nSubmit thread error: %s\n", e.what());
@@ -284,89 +316,136 @@ void xatum_session(
         setcolor(BRIGHT_WHITE);
         break;
       }
-      //boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
-      boost::this_thread::yield();
+      *B = false;
+      data_ready = false;
+      std::this_thread::yield();
     }
-    submitThread = false;
+    submitThreadRunning = false;
   });
 
-  while (!ABORT_MINER)
+  // Buffer for receiving data
+  std::string packetBuffer;
+
+  while (!ABORT_MINER && !abort.load())
   {
     bool *B = isDev ? &submittingDev : &submitting;
     try
     {
-      if (
-          Xatum::lastReceivedJobTime > 0 &&
-          std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count() - Xatum::lastReceivedJobTime > Xatum::jobTimeout)
+      if (Xatum::lastReceivedJobTime > 0 &&
+          std::chrono::duration_cast<std::chrono::seconds>(
+              std::chrono::steady_clock::now().time_since_epoch()).count() - 
+          Xatum::lastReceivedJobTime > Xatum::jobTimeout)
       {
+        setcolor(RED);
+        printf("\nXatum session timed out\n");
+        setcolor(BRIGHT_WHITE);
+        fflush(stdout);
+        
         bool *C = isDev ? &devConnected : &isConnected;
         setForDisconnected(C, B, &abort, &data_ready, &cv);
-
-        for (;;) {
-          if (!submitThread) break;
-          boost::this_thread::yield();
-        }
-        
-        stream.shutdown();
-        return fail(ec, "Xatum session timed out");
+        break;
       }
+
       boost::asio::streambuf response;
-      std::stringstream workInfo;
-      beast::get_lowest_layer(stream).expires_after(std::chrono::milliseconds(45000));
+      beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(60));
 
-      trans = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
-      // if (ec && trans > 0)
-      //   return fail(ec, "Xatum async_read_until");
+      size_t bytes = boost::asio::async_read_until(stream, response, "\n", yield[ec]);
+      if (ec) {
+        bool *C = isDev ? &devConnected : &isConnected;
+        setForDisconnected(C, B, &abort, &data_ready, &cv);
+        break;
+      }
 
-      if (trans > 0)
+      if (bytes > 0)
       {
-        std::string data = beast::buffers_to_string(response.data());
-        // Consume the data from the buffer after processing it
-        response.consume(trans);
+        // Extract exactly the bytes read
+        std::string data(
+            boost::asio::buffers_begin(response.data()),
+            boost::asio::buffers_begin(response.data()) + bytes
+        );
+        response.consume(bytes);
 
-        if (data.compare(Xatum::pingPacket) == 0)
-        {
-          // printf("pinged\n");
-          boost::asio::async_write(stream, boost::asio::buffer(Xatum::pongPacket), yield[ec]);
+        // Add to packet buffer
+        packetBuffer += data;
+
+        // Prevent unbounded buffer growth
+        if (packetBuffer.size() > 1024 * 1024) {  // 1MB limit
+          setcolor(RED);
+          printf("\nPacket buffer overflow in xatum_session, disconnecting\n");
+          setcolor(BRIGHT_WHITE);
+          fflush(stdout);
+          bool *C = isDev ? &devConnected : &isConnected;
+          setForDisconnected(C, B, &abort, &data_ready, &cv);
+          break;
         }
-        else
-        {
-          Xatum::packet xPacket = Xatum::parsePacket(data, "~");
-          int r = handleXatumPacket(xPacket, isDev);
-          // if (r == -1) {
-          //   bool *B = isDev ? &devConnected : &isConnected;
-          //   (*B) = false;
-          //   // return xatumFailure(isDev);
-          // }
+
+        // Process all complete lines
+        size_t pos;
+        while ((pos = packetBuffer.find('\n')) != std::string::npos) {
+          std::string line = packetBuffer.substr(0, pos);
+          packetBuffer.erase(0, pos + 1);
+
+          if (line.empty()) continue;
+
+          // Remove trailing carriage return if present
+          if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+          }
+
+          if (line == Xatum::pingPacket)
+          {
+            std::string pongMsg = Xatum::pongPacket;
+            boost::asio::async_write(stream, boost::asio::buffer(pongMsg), yield[ec]);
+            if (ec) {
+              bool *C = isDev ? &devConnected : &isConnected;
+              setForDisconnected(C, B, &abort, &data_ready, &cv);
+              break;
+            }
+          }
+          else
+          {
+            try {
+              Xatum::packet xPacket = Xatum::parsePacket(line, "~");
+              int r = handleXatumPacket(xPacket, isDev);
+              // Error handling could go here if needed
+            } catch (const std::exception &e) {
+              setcolor(RED);
+              printf("\nError parsing Xatum packet: %s\n", e.what());
+              setcolor(BRIGHT_WHITE);
+              fflush(stdout);
+            }
+          }
         }
       }
     }
     catch (const std::exception &e)
     {
+      setcolor(RED);
+      printf("\nXatum session error: %s\n", e.what());
+      setcolor(BRIGHT_WHITE);
+      fflush(stdout);
+      
       bool *C = isDev ? &devConnected : &isConnected;
       setForDisconnected(C, B, &abort, &data_ready, &cv);
-
-      for (;;) {
-        if (!submitThread) break;
-        boost::this_thread::yield();
-      }
-      
-      stream.shutdown();
-      return fail(ec, "Xatum session error");
+      break;
     }
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
-    if(ABORT_MINER) {
-      bool *connPtr = isDev ? &devConnected : &isConnected;
-      bool *submitPtr = isDev ? &submittingDev : &submitting;
-      setForDisconnected(connPtr, submitPtr, &abort, &data_ready, &cv);
-      ioc.stop();
+    
+    std::this_thread::yield();
+  }
+
+  // Clean shutdown
+  abort = true;
+  cv.notify_all();
+  
+  if (submitThreadRunning) {
+    if (subThread.joinable()) {
+      subThread.join();
     }
   }
-  cv.notify_all();
 
-  subThread.interrupt();
-  subThread.join();
-
-  // submission_thread.interrupt();
-  stream.async_shutdown(yield[ec]);
+  // Graceful shutdown
+  beast::error_code shutdown_ec;
+  beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(5));
+  stream.async_shutdown(yield[shutdown_ec]);
+  // Ignore shutdown errors
 }

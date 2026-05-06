@@ -5,17 +5,18 @@
 
 #include <tnn-common.hpp>
 
-#include <bigint.h>
+// #include <bigint.h>
 #include <stdint.h>
 #include <chrono>
 #include <inttypes.h>
 #include <hex.h>
 #include <endian.hpp>
-#include <boost/thread.hpp>
+#include <thread>
 #include <vector>
-#include <terminal.h>
+#include <terminal.hpp>
 #include <string>
 #include <num.h>
+#include "sha_detect.h"
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -40,6 +41,7 @@ int testOp = -1;
 int testLen = -1;
 int processPriority = 0;
 bool broadcastStats = false;
+bool mmposMode = false;
 bool checkWallet = true;
 
 int tuneWarmupSec;
@@ -58,7 +60,7 @@ void cudaMine();
 void benchmark(int i);
 void logSeconds(std::chrono::steady_clock::time_point start_time, int duration, bool *stop);
 
-Num CompactToBig(uint32_t compact) {
+inline Num CompactToBig(uint32_t compact) {
     // Extract the mantissa, sign bit, and exponent
     uint32_t mantissa = compact & 0x007fffff;
     bool isNegative = (compact & 0x00800000) != 0;
@@ -88,6 +90,7 @@ inline Num ConvertDifficultyToBig(int64_t d, int algo)
     case ALGO_ASTROBWTV3:
       return oneLsh256 / difficulty;
     case ALGO_XELISV2:
+    case ALGO_XELISV3:
       return maxU256 / difficulty;
     case ALGO_SPECTRE_X:
       return (oneLsh256-1) / difficulty;
@@ -96,7 +99,7 @@ inline Num ConvertDifficultyToBig(int64_t d, int algo)
   }
 }
 
-std::vector<std::string> supportCheck = {
+inline std::vector<std::string> supportCheck = {
   "sse","sse2","sse3","avx","avx2","avx512f"
 };
 
@@ -123,21 +126,15 @@ inline void printSupported()
   pSupport(" AVX", __builtin_cpu_supports("avx"));
   pSupport(" AVX2", __builtin_cpu_supports("avx2"));
   pSupport(" AVX512", __builtin_cpu_supports("avx512f"));
-  bool sha = false;
-  #if defined(__SHA__)
-  sha = true;
-  #endif
-  pSupport(" SHA", sha);
+  pSupport(" SHA", has_sha_ni_support_cached());
   setcolor(BRIGHT_WHITE);
   printf("\n");
 #endif
 }
 
-void setPriorityClass(boost::thread::native_handle_type t, int priority);
+#include <tnn_affinity.h>
 
-void setPriority(boost::thread::native_handle_type t, int priority);
-
-void setAffinity(boost::thread::native_handle_type t, uint64_t core);
+void setPriorityClass(std::thread::native_handle_type t, int priority);
 
 void update(std::chrono::steady_clock::time_point startTime);
 

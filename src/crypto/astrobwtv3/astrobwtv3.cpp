@@ -7,17 +7,17 @@
 #include <unistd.h>
 #endif
 
-#include <boost/thread.hpp>
 #include <algorithm>
 #include <bitset>
 #include <iostream>
 #include <fstream>
 #include <thread>
+#include <mutex>
 
 #include <fnv1a.h>
 #include <xxhash64.h>
 #include "astrobwtv3.h"
-#include "tnn-hugepages.h"
+#include "tnn-hugepages.hpp"
 #include "astrotest.hpp"
 // #include "branched_AVX2.h"
 
@@ -35,7 +35,7 @@
 #include <random>
 #include <chrono>
 
-#include <sodium.h>
+// #include <sodium.h>
 #include <Salsa20.h>
 
 // #include <alcp/digest.h>
@@ -72,6 +72,7 @@ extern "C"
   #include <immintrin.h>
   #include <emmintrin.h>
 #endif
+
 
 using byte = unsigned char;
 
@@ -169,10 +170,10 @@ void astroTune(int num_threads, int tuneWarmupSec, int tuneDurationSec) {
   printf("Tuning %zu AstroBWTv3 algos for %d seconds in total\n", numAstroFuncs, totalTuneTime);
   fflush(stdout);
 
-  boost::mutex durLock;
+  std::mutex durLock;
   std::vector<int64_t> durations[numAstroFuncs];
   
-  boost::mutex hashLock;
+  std::mutex hashLock;
   int64_t numHashes[numAstroFuncs];
   for(int x = 0; x < numAstroFuncs; x++) {
     numHashes[x] = 0;
@@ -186,14 +187,14 @@ void astroTune(int num_threads, int tuneWarmupSec, int tuneDurationSec) {
     generateRandomBytesForTune<48>(random_buffer);
     byte res[32];
 
-    boost::thread tune_threads[num_threads];
+    std::vector<std::thread> tune_threads(num_threads);
     for (int x = 0; x < numAstroFuncs; x++)
     {
       astroCompFunc = allAstroFuncs[x].funcPtr;
 
       // Start each thread with an inline lambda function
       for (int i = 0; i < num_threads; ++i) {
-        tune_threads[i] = boost::thread([&]() {
+        tune_threads[i] = std::thread([&]() {
           int tid = i;
           workerData *worker = (workerData *)malloc_huge_pages(sizeof(workerData));
           initWorker(*worker);
@@ -8289,295 +8290,36 @@ void branchComputeCPU_avx2_zOptimized(workerData &worker, bool isTest, int wInde
 
 // #endif
 
-// SIMD chunk copy
-
-#if defined(__x86_64__)
-
-    //     __builtin_prefetch(worker.prev_chunk,0,3);
-    //     __builtin_prefetch(worker.prev_chunk+64,0,3);
-    //     __builtin_prefetch(worker.prev_chunk+128,0,3);
-    //     __builtin_prefetch(worker.prev_chunk+192,0,3);
-
-    //     // Calculate the start and end blocks
-    //     int start_block = 0;
-    //     int end_block = worker.pos1 / 16;
-
-    //     // Copy the blocks before worker.pos1
-    //     for (int i = start_block; i < end_block; i++) {
-    //         __m128i prev_data = _mm_loadu_si128((__m128i*)&worker.prev_chunk[i * 16]);
-    //         _mm_storeu_si128((__m128i*)&worker.chunk[i * 16], prev_data);
-    //     }
-
-    //     // Copy the remaining bytes before worker.pos1
-    //     for (int i = end_block * 16; i < worker.pos1; i++) {
-    //         worker.chunk[i] = worker.prev_chunk[i];
-    //     }
-
-    //     // Calculate the start and end blocks
-    //     start_block = (worker.pos2 + 15) / 16;
-    //     end_block = 16;
-
-    //     // Copy the blocks after worker.pos2
-    //     for (int i = start_block; i < end_block; i++) {
-    //         __m128i prev_data = _mm_loadu_si128((__m128i*)&worker.prev_chunk[i * 16]);
-    //         _mm_storeu_si128((__m128i*)&worker.chunk[i * 16], prev_data);
-    //     }
-
-    //     // Copy the remaining bytes after worker.pos2
-    //     for (int i = worker.pos2; i < start_block * 16; i++) {
-    //       worker.chunk[i] = worker.prev_chunk[i];
-    //     }
-    //   }
-    // }
-
-__attribute__ ((target("avx512f")))
-// // Copy prev_chunk between start -> end to chunk (inclusive)
-inline void copyChunkData(workerData &worker, uint8_t start, uint8_t end) {
-  for (int i = start; i + 63 < end; i += 64) {
-    __m512i prev_data = _mm512_loadu_si512((__m512i*)&worker.prev_chunk[i]);
-    _mm512_storeu_si512((__m512i*)&worker.chunk[i], prev_data);
-  }
-}
-
-__attribute__ ((target("avx2")))
-// Copy prev_chunk between start -> end to chunk (inclusive)
-void copyChunkData(workerData &worker, int start, int end) {
-  for (int i = start; i < end; i += 32) {
-    __m256i prev_data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[i]);
-    _mm256_storeu_si256((__m256i*)&worker.chunk[i], prev_data);
-  }
-}
-__attribute__ ((target("sse2")))
-// Copy prev_chunk between start -> end to chunk (inclusive)
-void copyChunkData(workerData &worker, int start, int end) {
-  for (int i = start; i < end; i += 16) {
-    __m128i prev_data = _mm_loadu_si128((__m128i*)&worker.prev_chunk[i]);
-    _mm_storeu_si128((__m128i*)&worker.chunk[i], prev_data);
-  }
-}
-__attribute__ ((target("default")))
-#endif
-
-// Copy prev_chunk between start -> end to chunk (inclusive)
+// copyChunkData: on x86, lives in the spec TUs (per-tier SIMD).
+// On non-x86, plain scalar version.
+#if !defined(__x86_64__)
 void copyChunkData(workerData &worker, int start, int end) {
   std::copy_n(&worker.prev_chunk[start], end - start, &worker.chunk[start]);
 }
+#endif
 
 // WOLF CODE
 
+#if defined(__x86_64__)
+// On x86, wolfCompute dispatches to the spec-generated tier-local variant
+// (avx2 / avx512 / avx512bitalg / fallback) selected at runtime.
+#include "wolf_compute.gen.h"
+
 void wolfCompute(workerData &worker, bool isTest, int wIndex)
 {
-  byte prevOp;
-  int changeCount = 0;
-
-  worker.templateIdx = 0;
-  uint8_t chunkCount = 1;
-  int firstChunk = 0;
-
-  uint8_t lp1 = 0;
-  uint8_t lp2 = 255;
-
-  worker.tries[wIndex] = 0;
-  for (int it = 0; it < 278; ++it)
-  {
-      // TODO prefetch next chunk into L2
-      worker.tries[wIndex]++;
-      worker.random_switcher = worker.prev_lhash ^ worker.lhash ^ worker.tries[wIndex];
-
-      prevOp = worker.op;
-      worker.op = static_cast<byte>(worker.random_switcher);
-
-      byte p1 = static_cast<byte>(worker.random_switcher >> 8);
-      byte p2 = static_cast<byte>(worker.random_switcher >> 16);
-
-      if (p1 > p2)
-      {
-        std::swap(p1, p2);
-      }
-
-      if (p2 - p1 > 32)
-      {
-        p2 = p1 + ((p2 - p1) & 0x1f);
-      }
-
-      if (worker.tries[wIndex] > 0) {
-        lp1 = std::min(lp1, p1);
-        lp2 = std::max(lp2, p2);
-      }
-
-      if (p1 < worker.pos1 || p2 > worker.pos2) {worker.isSame = false; changeCount++;}
-
-      worker.pos1 = p1;
-      worker.pos2 = p2;
-
-      worker.chunk = &worker.sData[wIndex * ASTRO_SCRATCH_SIZE + (worker.tries[wIndex] - 1) * 256];
-
-      if (worker.tries[wIndex] == 1) {
-        worker.prev_chunk = worker.chunk;
-      } else {
-        worker.prev_chunk = &worker.sData[wIndex * ASTRO_SCRATCH_SIZE + (worker.tries[wIndex] - 2) * 256];
-  
-        memcpy(worker.chunk, worker.prev_chunk, 256);
-      }
-    // }
-
-    // TODO: Make below in all SIMD variants in a function, using FMV for architecture-agnostic calling
-    // if FMV causes slowdown from overhead, use a live cached dispatch similar to wolfPermute
-    #if defined(__AVX2__)
-    __m256i data = _mm256_loadu_si256((__m256i*)&worker.prev_chunk[worker.pos1]);
-    #endif
-
-    if (worker.op == 253)
-    {
-      copyChunkData(worker, worker.pos1, worker.pos2);
-      for (int i = worker.pos1; i < worker.pos2; i++)
-      {
-
-        // INSERT_RANDOM_CODE_START
-        worker.chunk[i] = rl8(worker.chunk[i], 3);  // rotate  bits by 3
-        worker.chunk[i] ^= rl8(worker.chunk[i], 2); // rotate  bits by 2
-        worker.chunk[i] ^= worker.prev_chunk[worker.pos2];     // XOR
-        worker.chunk[i] = rl8(worker.chunk[i], 3);  // rotate  bits by 3
-        // INSERT_RANDOM_CODE_END
-
-        worker.prev_lhash = worker.lhash + worker.prev_lhash;
-        worker.lhash = XXHash64::hash(worker.chunk, worker.pos2,0);
-      }
-
-      goto after;
-    }
-    if (worker.op >= 254) {
-      RC4_set_key(&worker.key[wIndex], 256,  worker.prev_chunk);
-    }
-    wolfPerms[0](worker.prev_chunk, worker.chunk, worker.op, worker.pos1, worker.pos2, worker);
-
-    if (!worker.op) {
-      if ((worker.pos2-worker.pos1)%2 == 1) {
-        worker.t1 = worker.chunk[worker.pos1];
-        worker.t2 = worker.chunk[worker.pos2];
-        worker.chunk[worker.pos1] = reverse8(worker.t2);
-        worker.chunk[worker.pos2] = reverse8(worker.t1);
-        worker.isSame = false;
-      }
-    }
-
-after:
-    uint8_t pushPos1 = lp1;
-    uint8_t pushPos2 = lp2;
-
-    if (worker.pos1 == worker.pos2) {
-      pushPos1 = -1;
-      pushPos2 = -1;
-    }
-
-    worker.A = (worker.chunk[worker.pos1] - worker.chunk[worker.pos2]);
-    worker.A = (256 + (worker.A % 256)) % 256;
-
-    if (worker.A < 0x10)
-    { // 6.25 % probability
-      worker.prev_lhash = worker.lhash + worker.prev_lhash;
-      worker.lhash = XXHash64::hash(worker.chunk, worker.pos2, 0);
-
-      #ifdef DEBUG_OP_ORDER
-      if (worker.op == sus_op && debugOpOrder)  printf("Wolf: A: new worker.lhash: %08jx\n", worker.lhash);
-      #endif
-    }
-
-    if (worker.A < 0x20)
-    { // 12.5 % probability
-      worker.prev_lhash = worker.lhash + worker.prev_lhash;
-      worker.lhash = hash_64_fnv1a(worker.chunk, worker.pos2);
-
-      #ifdef DEBUG_OP_ORDER
-      if (worker.op == sus_op && debugOpOrder)  printf("Wolf: B: new worker.lhash: %08jx\n", worker.lhash);
-      #endif
-    }
-
-    if (worker.A < 0x30)
-    { // 18.75 % probability
-      worker.prev_lhash = worker.lhash + worker.prev_lhash;
-      HH_ALIGNAS(16)
-      const highwayhash::HH_U64 key2[2] = {worker.tries[wIndex], worker.prev_lhash};
-      worker.lhash = highwayhash::SipHash(key2, (char*)worker.chunk, worker.pos2); // more deviations
-
-      #ifdef DEBUG_OP_ORDER
-      if (worker.op == sus_op && debugOpOrder)  printf("Wolf: C: new worker.lhash: %08jx\n", worker.lhash);
-      #endif
-    }
-
-    if (worker.A <= 0x40)
-    { // 25% probablility
-      RC4(&worker.key[wIndex], 256, worker.chunk,  worker.chunk);
-      worker.isSame = false;
-      if (255 - pushPos2 < MINPREFLEN)
-        pushPos2 = 255;
-      if (pushPos1 < MINPREFLEN)
-        pushPos1 = 0;
-
-
-      if (pushPos1 == 255) pushPos1 = 0;
-      
-      worker.astroTemplate[worker.templateIdx] = templateMarker{
-        (uint8_t)(chunkCount > 1 ? pushPos1 : 0),
-        (uint8_t)(chunkCount > 1 ? pushPos2 : 255),
-        (uint16_t)0,
-        (uint16_t)0,
-        (uint16_t)((firstChunk << 7) | chunkCount)
-      };
-
-      pushPos1 = 0;
-      pushPos2 = 255;
-      worker.templateIdx += (worker.tries[wIndex] > 1);
-      firstChunk = worker.tries[wIndex]-1;
-      lp1 = 255;
-      lp2 = 0;
-      chunkCount = 1;
-    } else {
-      chunkCount++;
-    }
-
-    worker.chunk[255] = worker.chunk[255] ^ worker.chunk[worker.pos1] ^ worker.chunk[worker.pos2];
-
-    if (255 - pushPos2 < MINPREFLEN)
-      pushPos2 = 255;
-    if (pushPos1 < MINPREFLEN)
-      pushPos1 = 0;
-
-    #ifdef DEBUG_OP_ORDER
-    if (debugOpOrder && worker.op == sus_op) {
-      printf("Wolf op %d result:\n", worker.op);
-      for (int i = 0; i < 256; i++) {
-        printf("%02X ", worker.chunk[i]);
-      } 
-      printf("\n");
-    }
-    #endif
-
-    if (worker.tries[wIndex] > 260 + 16 || (worker.sData[(worker.tries[wIndex]-1)*256+255] >= 0xf0 && worker.tries[wIndex] > 260))
-    {
-      break;
-    }
-  }
-
-  if (chunkCount > 0) {
-    if (255 - lp2 < MINPREFLEN)
-      lp2 = 255;
-    if (lp1 < MINPREFLEN)
-      lp1 = 0;
-    worker.astroTemplate[worker.templateIdx] = templateMarker{
-      (uint8_t)(chunkCount > 1 ? lp1 : 0),
-      (uint8_t)(chunkCount > 1 ? lp2 : 255),
-      (uint16_t)0,
-      (uint16_t)0,
-      (uint16_t)((firstChunk << 7) | chunkCount)
-    };
-
-    worker.templateIdx++;
-  }
-
-  // printf("%dc\n", changeCount);
-  worker.data_len = static_cast<uint32_t>((worker.tries[wIndex] - 4) * 256 + (((static_cast<uint64_t>(worker.chunk[253]) << 8) | static_cast<uint64_t>(worker.chunk[254])) & 0x3ff));
+  get_wolfCompute()(worker, isTest, wIndex);
 }
+
+#else
+// Non-x86 (ARM, etc.): keep the original scalar wolfCompute body.
+#include "astrobwtv3/wolfbranching_internal.hpp"
+
+void wolfCompute(workerData &worker, bool isTest, int wIndex)
+{
+  WOLF_COMPUTE_BODY(wolfPermute, copyChunkData)
+}
+
+#endif /* __x86_64__ */
 
 
 // Compute the new values for worker.chunk using layered lookup tables instead of

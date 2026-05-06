@@ -2,6 +2,8 @@
 #include <assert.h>
 
 #include <hip/hip_runtime.h>
+
+#include "hip_platform.h"
 #include "nxl_archdef.h"
 #include "nxl-hash.hip.h"
 
@@ -142,7 +144,7 @@ __global__ void nxlHash_hip(const uint64_t nonce_mask, const uint64_t nonce_fixe
       printf("\n");
     }
 
-  blake3_inline_hash_80(input, input);
+  blake3_inline_hash(input, 80, input);
 
   // SKEIN GOES HERE
   skein_hash(256, input, 256, input);
@@ -204,7 +206,7 @@ __global__ void nxlHash_hip(const uint64_t nonce_mask, const uint64_t nonce_fixe
     product1 >>= 10;
     product2 >>= 10;
 
-#ifdef __HIP_PLATFORM_NVIDIA__
+#if defined(__HIP_PLATFORM_NVIDIA__) || defined(__CUDACC_RTC__)
     nextInput[rowId] = input[rowId] ^ ((uint8_t)(product1 << 4) | (uint8_t)(product2));
 #else
     nextInput[rowId] = input[rowId] ^ bitselect(product1 << 4, product2, 0x0000000FU);
@@ -341,7 +343,7 @@ namespace Nxl_HIP {
     hipEventCreate(&stop_event);
 
     if (isDev) {
-      hipLaunchKernelGGL(nxlHash_hip<true>, dim3(blocks), dim3(Nxl_HIP::THREAD_DIM), 0, 0,
+      TNN_HIP_LAUNCH_KERNEL(nxlHash_hip<true>, dim3(blocks), dim3(Nxl_HIP::THREAD_DIM), 0, 0,
                         nonce_mask, nonce_fixed, kIndex, batchSize, final_nonces, nonce_count, dataBuf);
 
       hipError_t err = hipGetLastError();
@@ -350,7 +352,7 @@ namespace Nxl_HIP {
         printf("Kernel launch failed: %s\n", hipGetErrorString(err));
       }
     } else {
-      hipLaunchKernelGGL(nxlHash_hip<false>, dim3(blocks), dim3(Nxl_HIP::THREAD_DIM), 0, 0,
+      TNN_HIP_LAUNCH_KERNEL(nxlHash_hip<false>, dim3(blocks), dim3(Nxl_HIP::THREAD_DIM), 0, 0,
                         nonce_mask, nonce_fixed, kIndex, batchSize, final_nonces, nonce_count, dataBuf);
 
       hipError_t err = hipGetLastError();
@@ -561,7 +563,7 @@ void benchNxlHip()
   {
     hipMemset(d_nonce_count, 0, sizeof(int));
 
-    // hipLaunchKernelGGL(nxlShake_hip<false>, dim3(blocks), dim3(Nxl_HIP::THREAD_DIM), 0, 0,
+    // TNN_HIP_LAUNCH_KERNEL(nxlShake_hip<false>, dim3(blocks), dim3(Nxl_HIP::THREAD_DIM), 0, 0,
     //                    nonce_mask, nonce_fixed, i, batchSize, d_dataBuf);
 
     // hipError_t err = hipGetLastError();
@@ -571,7 +573,7 @@ void benchNxlHip()
     //   break;
     // }
 
-    hipLaunchKernelGGL(nxlHash_hip<false>, dim3(blocks), dim3(Nxl_HIP::THREAD_DIM), 0, 0,
+    TNN_HIP_LAUNCH_KERNEL(nxlHash_hip<false>, dim3(blocks), dim3(Nxl_HIP::THREAD_DIM), 0, 0,
                        nonce_mask, nonce_fixed, i, batchSize, d_final_nonces, d_nonce_count, d_dataBuf);
 
     // Check for errors after the kernel launch

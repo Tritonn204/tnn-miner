@@ -1,6 +1,10 @@
 #pragma once
 
+#if !defined(__HIPCC_RTC__) && !defined(__CUDACC_RTC__)
 #include <hip/hip_runtime.h>
+#else
+#include "hiprtc_types.hip.h"
+#endif
 
 __device__ static __forceinline__ uint64_t bitselect(const uint64_t a, const uint64_t b, const uint64_t c)
 {
@@ -34,7 +38,7 @@ __device__ static __forceinline__ uint64_t bitselect(const uint64_t a, const uin
 
 __device__ static __forceinline__ uint2 bitselect(const uint2 a, const uint2 b, const uint2 c)
 {
-#ifdef __HIP_PLATFORM_AMD__
+#ifndef __HIP_PLATFORM_AMD__
   return make_uint2((a.x & ~c.x) | (b.x & c.x), (a.y & ~c.y) | (b.y & c.y));
 #else
   uint2 result;
@@ -64,3 +68,21 @@ __device__ static __forceinline__ void bitselect(const uint2 a, const uint2 b, c
         "r"(a.y), "r"(b.y), "r"(c.y)); // 0x96 = 0xF0 ^ ((~0xCC) & 0xAA)
 #endif
 }
+
+#ifndef BITSELECT32_DEFINED
+#define BITSELECT32_DEFINED
+static __device__ __forceinline__ void bitselect32(
+    uint32_t xorc, uint32_t a, uint32_t b, uint32_t &result)
+{
+    #ifdef __HIP_PLATFORM_AMD__
+    // result = xorc ^ (a & (b ^ xorc))  ≡  (b & a) | (~a & xorc)
+    // Maps to v_bfi_b32 on AMD GCN/RDNA
+    asm volatile("v_bfi_b32 %0, %1, %2, %3"
+                 : "=v"(result)
+                 : "v"(b), "v"(a), "v"(xorc));
+    #else
+    // TODO: NVidia asm
+    result = xorc ^ (a & (b ^ xorc));
+    #endif
+}
+#endif

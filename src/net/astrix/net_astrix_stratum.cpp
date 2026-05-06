@@ -29,7 +29,7 @@ int handleAstrixStratumPacket(boost::json::object packet, AstrixStratum::jobCach
   // std::cout << "Stratum packet: " << boost::json::serialize(packet).c_str() << std::endl;
   if (M.compare(AstrixStratum::s_notify) == 0)
   {
-    std::scoped_lock<boost::mutex> lockGuard(mutex);
+    std::scoped_lock<std::mutex> lockGuard(mutex);
     boost::json::value *J = isDev ? &devJob : &job;
     int64_t *h = isDev ? &devHeight : &ourHeight;
 
@@ -129,7 +129,7 @@ int handleAstrixStratumPacket(boost::json::object packet, AstrixStratum::jobCach
   }
   else if (M.compare(AstrixStratum::s_setExtraNonce) == 0)
   {
-    std::scoped_lock<boost::mutex> lockGuard(mutex);
+    std::scoped_lock<std::mutex> lockGuard(mutex);
     boost::json::value *J = isDev ? &devJob : &job;
     // uint64_t *h = isDev ? &devHeight : &ourHeight;
 
@@ -224,8 +224,10 @@ int handleAstrixStratumResponse(boost::json::object packet, bool isDev)
       }
     }
     break;
-    case AstrixStratum::submitID:
+    default:
     {
+      if (!SubmitTracker::isSubmitId(id)) break;
+      int submitDevice = submitTracker.resolve(id);
       printf("\n");
       if (isDev)
       {
@@ -235,6 +237,7 @@ int handleAstrixStratumResponse(boost::json::object packet, bool isDev)
       if (!packet["result"].is_null() && packet.at("result").get_bool())
       {
         if (!isDev) accepted++;
+        if (!isDev) recordDeviceShare(submitDevice, true);
         std::cout << "Stratum: share accepted" << std::endl;
         fflush(stdout);
         setcolor(BRIGHT_WHITE);
@@ -242,6 +245,7 @@ int handleAstrixStratumResponse(boost::json::object packet, bool isDev)
       else
       {
         if (!isDev) rejected++;
+        if (!isDev) recordDeviceShare(submitDevice, false);
         if (!isDev)
           setcolor(RED);
 
@@ -272,6 +276,7 @@ void astrix_stratum_session(
     net::yield_context yield,
     bool isDev)
 {
+  AstrixStratum::lastReceivedJobTime = 0;
   ctx.set_options(boost::asio::ssl::context::default_workarounds |
                   boost::asio::ssl::context::no_sslv2 |
                   boost::asio::ssl::context::no_sslv3 |
@@ -438,10 +443,10 @@ void astrix_stratum_session(
   bool submitThread = false;
   bool abort = false;
 
-  boost::thread subThread([&](){
+  std::thread subThread([&](){
     submitThread = true;
     while(!abort) {
-      boost::unique_lock<boost::mutex> lock(mutex);
+      std::unique_lock<std::mutex> lock(mutex);
       bool *B = isDev ? &submittingDev : &submitting;
       cv.wait(lock, [&]{ return (data_ready && (*B)) || abort; });
       if (abort) break;
@@ -449,6 +454,7 @@ void astrix_stratum_session(
         boost::json::object *S = &share;
         if (isDev)
           S = &devShare;
+        hoist_rpc_id(*S);
 
         boost::system::error_code ec;
         std::string msg = boost::json::serialize((*S)) + "\n";
@@ -473,7 +479,7 @@ void astrix_stratum_session(
         setcolor(BRIGHT_WHITE);
         break;
       }
-      boost::this_thread::yield();
+      std::this_thread::yield();
     }
     submitThread = false;
   });
@@ -496,7 +502,7 @@ void astrix_stratum_session(
 
         for (;;) {
           if (!submitThread) break;
-          boost::this_thread::yield();
+          std::this_thread::yield();
         }
         stream.close();
         return fail(ec, "Stratum session timed out");
@@ -513,14 +519,14 @@ void astrix_stratum_session(
         fflush(stdout);
         setcolor(BRIGHT_WHITE);
         setForDisconnected(C, B, &abort, &data_ready, &cv);
-        boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
         cv.notify_all();
 
         for (;;) {
           if (!submitThread) {
             break;
           }
-          boost::this_thread::yield();
+          std::this_thread::yield();
         }
         
         stream.close();
@@ -529,7 +535,7 @@ void astrix_stratum_session(
 
       if (trans > 0)
       {
-        // std::scoped_lock<boost::mutex> lockGuard(wsMutex);
+        // std::scoped_lock<std::mutex> lockGuard(wsMutex);
         std::vector<std::string> packets;
         std::string data = beast::buffers_to_string(response.data());
         // Consume the data from the buffer after processing it
@@ -576,7 +582,7 @@ void astrix_stratum_session(
                   {
                     if (!submitThread)
                       break;
-                    boost::this_thread::yield();
+                    std::this_thread::yield();
                   }
                   stream.close();
                   return fail(ec, "Stratum pong");
@@ -631,7 +637,7 @@ void astrix_stratum_session(
                         if (!submitThread) {
                           break;
                         }
-                        boost::this_thread::yield();
+                        std::this_thread::yield();
                       }
                       stream.close();
                       return fail(ec, "Stratum pong");
@@ -674,7 +680,7 @@ void astrix_stratum_session(
 
       for (;;) {
         if (!submitThread) break;
-        boost::this_thread::yield();
+        std::this_thread::yield();
       }
       stream.close();
       setcolor(RED);
@@ -683,7 +689,7 @@ void astrix_stratum_session(
       setcolor(BRIGHT_WHITE);
       return fail(ec, "Stratum session error");
     }
-    boost::this_thread::yield();
+    std::this_thread::yield();
     if(ABORT_MINER) {
       bool *connPtr = isDev ? &devConnected : &isConnected;
       bool *submitPtr = isDev ? &submittingDev : &submitting;
@@ -693,10 +699,8 @@ void astrix_stratum_session(
   }
   cv.notify_all();
 
-  subThread.interrupt();
   subThread.join();
 
-  // submission_thread.interrupt();
   // printf("\n\n\nflagged connection loss\n");
   // stream.close();
 }

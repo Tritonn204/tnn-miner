@@ -28,6 +28,9 @@
 // BTC family
 #define PROTO_BTC_STRATUM 70
 
+// KawPow family
+#define PROTO_KAWPOW_STRATUM 80
+
 #define COIN_UNKNOWN -1
 #define COIN_DERO 0
 #define COIN_XELIS 1
@@ -44,14 +47,30 @@
 #define COIN_SHAI 12
 #define COIN_YESPOWER 13 // for generic/manual configs
 #define COIN_ADVC 14
+#define COIN_TARI 15
+#define COIN_RIN 16
+#define COIN_TIDE 17     // YespowerTIDE (Tidecoin)
+#define COIN_YPR16 18    // YespowerR16 (Yenten etc.)
+#define COIN_YCR16 19    // YescryptR16 (Goldcash etc.)
+#define COIN_YCR8 20     // YescryptR8 (MTBC etc.)
+#define COIN_MGPC 21     // YespowerMGPC (Magpiecoin)
+#define COIN_URX 22      // YespowerURX (UraniumX)
+#define COIN_LTNCG 23    // YespowerLTNCG (Crane/CRNC)
+#define COIN_YSC 24      // Yescrypt (plain)
+#define COIN_EQPAY 25    // YespowerEQPAY (EqpayCoin)
+#define COIN_YCR32 26    // YescryptR32 (LuckyPepe etc.)
+#define COIN_RVN 27      // Ravencoin (KawPow)
+#define COIN_QUAI 28     // Quai Network (KawPow)
+#define COIN_KAWPOW 29   // For generic/arbitrary
 
-#define COIN_COUNT 15
+#define COIN_COUNT 30
 
 // Corresponding to the ALGO_POW[] array in miners.hpp
 // Also used in coins[COIN_COUNT] from tnn-common.hpp
 #define ALGO_UNSUPPORTED 0
 #define ALGO_ASTROBWTV3 10
 #define ALGO_XELISV2 20
+#define ALGO_XELISV3 21
 #define ALGO_SPECTRE_X 30
 #define ALGO_RX0 40
 #define ALGO_VERUS 50
@@ -61,11 +80,47 @@
 #define ALGO_WALA_HASH 90
 #define ALGO_SHAI_HIVE 100
 #define ALGO_YESPOWER 110
+#define ALGO_RINHASH 120
+#define ALGO_KAWPOW 130
+
+inline const char* algoName(int algo) {
+  switch(algo) {
+    case ALGO_ASTROBWTV3:
+      return "AstroBWTv3";
+    case ALGO_XELISV2:
+      return "XelisHashV2";
+    case ALGO_XELISV3:
+      return "XelisHashV3";
+    case ALGO_SPECTRE_X:
+      return "SpectreX";
+    case ALGO_RX0:
+      return "RandomX";
+    case ALGO_VERUS:
+      return "VerusHash";
+    case ALGO_ASTRIX_HASH:
+      return "AstrixHash";
+    case ALGO_NXL_HASH:
+      return "NxlHash";
+    case ALGO_HOOHASH:
+      return "HooHash";
+    case ALGO_SHAI_HIVE:
+      return "ShaiHive";
+    case ALGO_YESPOWER:
+      return "YesPower";
+    case ALGO_RINHASH:
+      return "RinHash";
+    case ALGO_KAWPOW:
+      return "KawPow";
+    default:
+      return "Unknown";
+  }
+}
 
 typedef enum {
   ENDIAN_LITTLE,
   ENDIAN_BIG,
   ENDIAN_SWAP_32,
+  ENDIAN_SWAP_32_BE,
   ENDIAN_MIXED
 } endian_mode_t;
 
@@ -83,11 +138,16 @@ extern algo_config_t current_algo_config;
 #define CONFIG_ENDIAN_X11 2
 #define CONFIG_ENDIAN_YESPOWER 3
 
+static const int astroAlgos[] = {
+  ALGO_ASTROBWTV3,
+  ALGO_SPECTRE_X
+};
+
 static const algo_config_t algo_configs[] = {
   // Bitcoin/SHA256
   { .header_endian = ENDIAN_SWAP_32, .swap_merkle_root = true, .swap_prev_hash = true, .nbits_index = 18 },
   // Scrypt  
-  { .header_endian = ENDIAN_SWAP_32, .swap_merkle_root = true, .swap_prev_hash = true, .nbits_index = 18 },
+  { .header_endian = ENDIAN_SWAP_32_BE, .swap_merkle_root = false, .swap_prev_hash = true, .nbits_index = 18 },
   // X11
   { .header_endian = ENDIAN_LITTLE, .swap_merkle_root = false, .swap_prev_hash = false, .nbits_index = 18 },
   // YESPOWER

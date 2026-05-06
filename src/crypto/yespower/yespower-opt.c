@@ -563,6 +563,13 @@ typedef struct {
 	__asm__("" : "=a" (x), "+d" (Smask2reg), "+S" (S0), "+D" (S1));
 #define FORCE_REGALLOC_2 \
 	__asm__("" : : "c" (lo));
+#elif defined(__clang__)
+/* clang-cl: same inline asm constraints as GCC (clang supports them) */
+#define DECL_SMASK2REG uint64_t Smask2reg = Smask2;
+#define FORCE_REGALLOC_1 \
+	__asm__("" : "=a" (x), "+d" (Smask2reg), "+S" (S0), "+D" (S1));
+#define FORCE_REGALLOC_2 \
+	__asm__("" : : "c" (lo));
 #else
 static volatile uint64_t Smask2var = Smask2;
 #define DECL_SMASK2REG uint64_t Smask2reg = Smask2var;
@@ -1185,7 +1192,7 @@ fail:
 int yespower_tls(const uint8_t *src, size_t srclen,
     const yespower_params_t *params, yespower_binary_t *dst)
 {
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && !defined(__clang__)
 	static __declspec(thread) int initialized = 0;
 	static __declspec(thread) yespower_local_t local;
 #else

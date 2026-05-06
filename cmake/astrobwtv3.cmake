@@ -22,12 +22,25 @@ if (WITH_ASTROBWTV3)
       src/coins/mine_spectre.cpp
     )
 
+    # Exclude .spec.cpp files from direct compilation (processed by gen_tiers)
+    list(FILTER astroSources EXCLUDE REGEX "\\.spec\\.cpp$")
+
+    # Generate per-SIMD-tier TUs from spec files (SimdTiers from tnn-prism CPM)
+    set(astro_simd_generated "")
+    simd_tiers_generate(
+      SPEC   src/crypto/astrobwtv3/wolfbranching.spec.cpp
+      OUTDIR src/crypto/astrobwtv3/simd_sources
+      OUTPUT_SOURCES astro_simd_generated
+    )
+    include_directories("${PROJECT_SOURCE_DIR}/src/crypto/astrobwtv3/simd_sources")
+
     list(APPEND HEADERS_CRYPTO
       ${astroHeaders}
     )
 
     list(APPEND SOURCES_CRYPTO
       ${astroSources}
+      ${astro_simd_generated}
     )
 
     # if (WITH_MSR AND NOT TNN_ARM AND CMAKE_SIZEOF_VOID_P EQUAL 8 AND (TNN_OS_WIN OR TNN_OS_LINUX))

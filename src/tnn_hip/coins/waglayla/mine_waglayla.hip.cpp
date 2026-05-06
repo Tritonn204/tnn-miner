@@ -1,6 +1,6 @@
 // The order is important here for WIN32 builds: https://stackoverflow.com/a/16288859
 #include <coins/miners.hpp>
-#include "tnn-hugepages.h"
+#include "tnn-hugepages.hpp"
 #include <stratum/stratum.h>
 
 #include "mine_waglayla.hip.h"
@@ -38,7 +38,7 @@ void jobThread(
       break;
     }
 
-    uint64_t &N = devMine ? HIP_kIndex_dev[d] : HIP_kIndex[d];
+    auto &N = devMine ? HIP_kIndex_dev[d] : HIP_kIndex[d];
 
     Wala_HIP::walaHash_wrapper(
         ctx.blocks[d],
@@ -47,13 +47,12 @@ void jobThread(
         ctx.d_nonceBuffer,
         ctx.d_nonceCount,
         ctx.d_hashBuffer,
-        N,
+        N.load(),
         ctx.batchSizes[d],
         d,
         devMine);
 
     HIP_counters[d].fetch_add(ctx.batchSizes[d]);
-    counter.fetch_add(ctx.batchSizes[d]);
     // printf("%d loops\n", kernelIndex);
 
     N++; 
@@ -88,7 +87,7 @@ void jobThread(
             int64_t &rH = devMine ? devHeight : ourHeight;
             if (submit || localJobCounter != jobCounter || rH != localOurHeight)
               return;
-            boost::this_thread::yield();
+            std::this_thread::yield();
           }
         }
 
@@ -107,7 +106,7 @@ void jobThread(
           case PROTO_KAS_STRATUM:
             std::vector<char> nonceStr;
             Num(std::to_string(nonce).c_str(),10).print(nonceStr, 16);
-            devShare = {{{"id", SpectreStratum::submitID},
+            devShare = {{{"rpc_id", submitTracker.nextId(d)},
                       {"method", SpectreStratum::submit.method.c_str()},
                       {"params", {devWorkerName,                                   // WORKER
                                   jobId.c_str(), // JOB ID
@@ -128,7 +127,7 @@ void jobThread(
           case PROTO_KAS_STRATUM:
             std::vector<char> nonceStr;
             Num(std::to_string(nonce).c_str(),10).print(nonceStr, 16);
-            share = {{{"id", SpectreStratum::submitID},
+            share = {{{"rpc_id", submitTracker.nextId(d)},
                       {"method", SpectreStratum::submit.method.c_str()},
                       {"params", {workerName,                                   // WORKER
                                   jobId.c_str(), // JOB ID
@@ -175,7 +174,7 @@ waitForJob:
   while (!isConnected)
   {
     CHECK_CLOSE;
-    boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
   uint64_t *nonceCache = (uint64_t*)malloc(sizeof(uint64_t)*ctx.GPUCount);
@@ -189,7 +188,7 @@ waitForJob:
       boost::json::value myJob;
       boost::json::value myJobDev;
       {
-        std::scoped_lock<boost::mutex> lockGuard(mutex);
+        std::scoped_lock<std::mutex> lockGuard(mutex);
         myJob = job;
         myJobDev = devJob;
         localJobCounter = jobCounter;
@@ -220,6 +219,7 @@ waitForJob:
       }
 
       for (d = 0; d < ctx.GPUCount; d++) {
+        TNN_GPU_GATE(d)
         Wala_HIP_Worker::setDevice(d);
         Wala_HIP::copyWork<false>(devWork);
         Wala_HIP::newMatrix(work, false);
@@ -247,6 +247,7 @@ waitForJob:
         }
 
         for (d = 0; d < ctx.GPUCount; d++) {
+          TNN_GPU_GATE(d)
           Wala_HIP_Worker::setDevice(d);
           Wala_HIP::copyWork<true>(devWork);
           Wala_HIP::newMatrix(devWork, true);
@@ -303,12 +304,13 @@ waitForJob:
 
       // printf("end of job application\n");
       for(d = 0; d < ctx.GPUCount; d++) {
-        workers.emplace_back(jobThread, 
-          d, 
-          ctx, 
-          localJobCounter, 
-          devMine ? localDevHeight : localOurHeight, 
-          n, 
+        TNN_GPU_GATE(d)
+        workers.emplace_back(jobThread,
+          d,
+          ctx,
+          localJobCounter,
+          devMine ? localDevHeight : localOurHeight,
+          n,
           nonceMask,
           work, 
           devMine ? myJobDev.at("jobId").as_string().c_str() : myJob.at("jobId").as_string().c_str(),

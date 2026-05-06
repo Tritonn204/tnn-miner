@@ -64,9 +64,8 @@ void hashAes1Rx4(const void *input, size_t inputSize, void *hash) {
 	const uint8_t* inputEnd = inptr + inputSize;
 
 	rx_vec_i128 state0, state1, state2, state3;
-	rx_vec_i128 in0, in1, in2, in3;
 
-	//intial state
+	//initial state
 	state0 = rx_set_int_vec_i128(AES_HASH_1R_STATE0);
 	state1 = rx_set_int_vec_i128(AES_HASH_1R_STATE1);
 	state2 = rx_set_int_vec_i128(AES_HASH_1R_STATE2);
@@ -74,11 +73,13 @@ void hashAes1Rx4(const void *input, size_t inputSize, void *hash) {
 
 	//process 64 bytes at a time in 4 lanes
 	while (inptr < inputEnd) {
-		in0 = rx_load_vec_i128((rx_vec_i128*)inptr + 0);
-		in1 = rx_load_vec_i128((rx_vec_i128*)inptr + 1);
-		in2 = rx_load_vec_i128((rx_vec_i128*)inptr + 2);
-		in3 = rx_load_vec_i128((rx_vec_i128*)inptr + 3);
+		// Batch load inputs for better cache utilization
+		rx_vec_i128 in0 = rx_load_vec_i128((rx_vec_i128*)inptr + 0);
+		rx_vec_i128 in1 = rx_load_vec_i128((rx_vec_i128*)inptr + 1);
+		rx_vec_i128 in2 = rx_load_vec_i128((rx_vec_i128*)inptr + 2);
+		rx_vec_i128 in3 = rx_load_vec_i128((rx_vec_i128*)inptr + 3);
 
+		// Interleaved operations for better pipelining
 		state0 = aesenc<softAes>(state0, in0);
 		state1 = aesdec<softAes>(state1, in1);
 		state2 = aesenc<softAes>(state2, in2);
@@ -245,7 +246,6 @@ void hashAndFillAes1Rx4(void *scratchpad, size_t scratchpadSize, void *hash, voi
 	uint8_t* scratchpadPtr = (uint8_t*)scratchpad;
 	const uint8_t* scratchpadEnd = scratchpadPtr + scratchpadSize;
 
-	// initial state
 	rx_vec_i128 hash_state0 = rx_set_int_vec_i128(AES_HASH_1R_STATE0);
 	rx_vec_i128 hash_state1 = rx_set_int_vec_i128(AES_HASH_1R_STATE1);
 	rx_vec_i128 hash_state2 = rx_set_int_vec_i128(AES_HASH_1R_STATE2);
@@ -261,36 +261,59 @@ void hashAndFillAes1Rx4(void *scratchpad, size_t scratchpadSize, void *hash, voi
 	rx_vec_i128 fill_state2 = rx_load_vec_i128((rx_vec_i128*)fill_state + 2);
 	rx_vec_i128 fill_state3 = rx_load_vec_i128((rx_vec_i128*)fill_state + 3);
 
-	constexpr int PREFETCH_DISTANCE = 4096;
+	constexpr int PREFETCH_DISTANCE = 7168;
 	const char* prefetchPtr = ((const char*)scratchpad) + PREFETCH_DISTANCE;
 	scratchpadEnd -= PREFETCH_DISTANCE;
 
+#define HASH_STATE(k) \
+		hash_state0 = aesenc<softAes>(hash_state0, rx_load_vec_i128((rx_vec_i128*)scratchpadPtr + (k) * 4 + 0)); \
+		hash_state1 = aesdec<softAes>(hash_state1, rx_load_vec_i128((rx_vec_i128*)scratchpadPtr + (k) * 4 + 1)); \
+		hash_state2 = aesenc<softAes>(hash_state2, rx_load_vec_i128((rx_vec_i128*)scratchpadPtr + (k) * 4 + 2)); \
+		hash_state3 = aesdec<softAes>(hash_state3, rx_load_vec_i128((rx_vec_i128*)scratchpadPtr + (k) * 4 + 3));
+
+#define FILL_STATE(k) \
+		fill_state0 = aesdec<softAes>(fill_state0, key0); \
+		fill_state1 = aesenc<softAes>(fill_state1, key1); \
+		fill_state2 = aesdec<softAes>(fill_state2, key2); \
+		fill_state3 = aesenc<softAes>(fill_state3, key3); \
+		rx_store_vec_i128((rx_vec_i128*)scratchpadPtr + (k) * 4 + 0, fill_state0); \
+		rx_store_vec_i128((rx_vec_i128*)scratchpadPtr + (k) * 4 + 1, fill_state1); \
+		rx_store_vec_i128((rx_vec_i128*)scratchpadPtr + (k) * 4 + 2, fill_state2); \
+		rx_store_vec_i128((rx_vec_i128*)scratchpadPtr + (k) * 4 + 3, fill_state3);
+
 	for (int i = 0; i < 2; ++i) {
-		//process 64 bytes at a time in 4 lanes
 		while (scratchpadPtr < scratchpadEnd) {
-			hash_state0 = aesenc<softAes>(hash_state0, rx_load_vec_i128((rx_vec_i128*)scratchpadPtr + 0));
-			hash_state1 = aesdec<softAes>(hash_state1, rx_load_vec_i128((rx_vec_i128*)scratchpadPtr + 1));
-			hash_state2 = aesenc<softAes>(hash_state2, rx_load_vec_i128((rx_vec_i128*)scratchpadPtr + 2));
-			hash_state3 = aesdec<softAes>(hash_state3, rx_load_vec_i128((rx_vec_i128*)scratchpadPtr + 3));
+			if constexpr (!softAes) {
+				// Hardware AES: batch hash reads (2x64B) then fill writes (2x64B)
+				// Saturates AES pipeline and avoids read-after-write on same cache lines
+				HASH_STATE(0);
+				HASH_STATE(1);
 
-			fill_state0 = aesdec<softAes>(fill_state0, key0);
-			fill_state1 = aesenc<softAes>(fill_state1, key1);
-			fill_state2 = aesdec<softAes>(fill_state2, key2);
-			fill_state3 = aesenc<softAes>(fill_state3, key3);
+				FILL_STATE(0);
+				FILL_STATE(1);
 
-			rx_store_vec_i128((rx_vec_i128*)scratchpadPtr + 0, fill_state0);
-			rx_store_vec_i128((rx_vec_i128*)scratchpadPtr + 1, fill_state1);
-			rx_store_vec_i128((rx_vec_i128*)scratchpadPtr + 2, fill_state2);
-			rx_store_vec_i128((rx_vec_i128*)scratchpadPtr + 3, fill_state3);
+				rx_prefetch_t0(prefetchPtr);
+				rx_prefetch_t0(prefetchPtr + 64);
 
-			rx_prefetch_t0(prefetchPtr);
+				scratchpadPtr += 128;
+				prefetchPtr += 128;
+			} else {
+				// Software AES: interleave hash/fill for better ILP
+				HASH_STATE(0);
+				FILL_STATE(0);
 
-			scratchpadPtr += 64;
-			prefetchPtr += 64;
+				rx_prefetch_t0(prefetchPtr);
+
+				scratchpadPtr += 64;
+				prefetchPtr += 64;
+			}
 		}
 		prefetchPtr = (const char*) scratchpad;
 		scratchpadEnd += PREFETCH_DISTANCE;
 	}
+
+#undef HASH_STATE
+#undef FILL_STATE
 
 	rx_store_vec_i128((rx_vec_i128*)fill_state + 0, fill_state0);
 	rx_store_vec_i128((rx_vec_i128*)fill_state + 1, fill_state1);
@@ -311,7 +334,6 @@ void hashAndFillAes1Rx4(void *scratchpad, size_t scratchpadSize, void *hash, voi
 	hash_state2 = aesenc<softAes>(hash_state2, xkey1);
 	hash_state3 = aesdec<softAes>(hash_state3, xkey1);
 
-	//output hash
 	rx_store_vec_i128((rx_vec_i128*)hash + 0, hash_state0);
 	rx_store_vec_i128((rx_vec_i128*)hash + 1, hash_state1);
 	rx_store_vec_i128((rx_vec_i128*)hash + 2, hash_state2);

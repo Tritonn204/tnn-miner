@@ -31,6 +31,7 @@ _RANDOMX_JITX86_STATIC SEGMENT PAGE READ EXECUTE
 PUBLIC randomx_prefetch_scratchpad
 PUBLIC randomx_prefetch_scratchpad_end
 PUBLIC randomx_program_prologue
+PUBLIC randomx_program_imul_rcp_store
 PUBLIC randomx_program_loop_begin
 PUBLIC randomx_program_loop_load
 PUBLIC randomx_program_start
@@ -78,11 +79,22 @@ randomx_program_prologue PROC
 	and eax, RANDOMX_SCRATCHPAD_MASK
 	ror rdx, 32
 	and edx, RANDOMX_SCRATCHPAD_MASK
-	jmp rx_program_loop_begin
+	sub rsp, 40
+	mov dword ptr [rsp], 9FC0h
+	mov dword ptr [rsp+4], 0BFC0h
+	mov dword ptr [rsp+8], 0DFC0h
+	mov dword ptr [rsp+12], 0FFC0h
+	mov dword ptr [rsp+32], -1
+	jmp randomx_program_imul_rcp_store
 randomx_program_prologue ENDP
 
 ALIGN 64
 	include asm/program_xmm_constants.inc
+
+randomx_program_imul_rcp_store PROC
+	include asm/program_imul_rcp_store.inc
+	jmp rx_program_loop_begin
+randomx_program_imul_rcp_store ENDP
 
 ALIGN 64
 randomx_program_loop_begin PROC

@@ -29,7 +29,7 @@ using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
 //   // std::cout << "Stratum packet: " << boost::json::serialize(packet).c_str() << std::endl;
 //   if (M.compare(SpectreStratum::s_notify) == 0)
 //   {
-//     std::scoped_lock<boost::mutex> lockGuard(mutex);
+//     std::scoped_lock<std::mutex> lockGuard(mutex);
 //     boost::json::value *J = isDev ? &devJob : &job;
 //     int64_t *h = isDev ? &devHeight : &ourHeight;
 
@@ -120,7 +120,7 @@ using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
 //   }
 //   else if (M.compare(SpectreStratum::s_setExtraNonce) == 0)
 //   {
-//     std::scoped_lock<boost::mutex> lockGuard(mutex);
+//     std::scoped_lock<std::mutex> lockGuard(mutex);
 //     boost::json::value *J = isDev ? &devJob : &job;
 //     // uint64_t *h = isDev ? &devHeight : &ourHeight;
 
@@ -429,10 +429,10 @@ void verus_stratum_session(
   bool submitThread = false;
   bool abort = false;
 
-  boost::thread subThread([&](){
+  std::thread subThread([&](){
     submitThread = true;
     while(!abort) {
-      boost::unique_lock<boost::mutex> lock(mutex);
+      std::unique_lock<std::mutex> lock(mutex);
       bool *B = isDev ? &submittingDev : &submitting;
       cv.wait(lock, [&]{ return (data_ready && (*B)) || abort; });
       if (abort) break;
@@ -440,6 +440,7 @@ void verus_stratum_session(
         boost::json::object *S = &share;
         if (isDev)
           S = &devShare;
+        hoist_rpc_id(*S);
 
         boost::system::error_code ec;
         std::string msg = boost::json::serialize((*S)) + "\n";
@@ -464,7 +465,7 @@ void verus_stratum_session(
         setcolor(BRIGHT_WHITE);
         break;
       }
-      boost::this_thread::yield();
+      std::this_thread::yield();
     }
     submitThread = false;
   });
@@ -487,7 +488,7 @@ void verus_stratum_session(
 
         for (;;) {
           if (!submitThread) break;
-          boost::this_thread::yield();
+          std::this_thread::yield();
         }
         stream.close();
         return fail(ec, "Stratum session timed out");
@@ -504,14 +505,14 @@ void verus_stratum_session(
         fflush(stdout);
         setcolor(BRIGHT_WHITE);
         setForDisconnected(C, B, &abort, &data_ready, &cv);
-        boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
         cv.notify_all();
 
         for (;;) {
           if (!submitThread) {
             break;
           }
-          boost::this_thread::yield();
+          std::this_thread::yield();
         }
         
         stream.close();
@@ -520,7 +521,7 @@ void verus_stratum_session(
 
       if (trans > 0)
       {
-        // std::scoped_lock<boost::mutex> lockGuard(wsMutex);
+        // std::scoped_lock<std::mutex> lockGuard(wsMutex);
         std::vector<std::string> packets;
         std::string data = beast::buffers_to_string(response.data());
         // Consume the data from the buffer after processing it
@@ -568,7 +569,7 @@ void verus_stratum_session(
                   {
                     if (!submitThread)
                       break;
-                    boost::this_thread::yield();
+                    std::this_thread::yield();
                   }
                   stream.close();
                   return fail(ec, "Stratum pong");
@@ -623,7 +624,7 @@ void verus_stratum_session(
                         if (!submitThread) {
                           break;
                         }
-                        boost::this_thread::yield();
+                        std::this_thread::yield();
                       }
                       stream.close();
                       return fail(ec, "Stratum pong");
@@ -666,7 +667,7 @@ void verus_stratum_session(
 
       for (;;) {
         if (!submitThread) break;
-        boost::this_thread::yield();
+        std::this_thread::yield();
       }
       stream.close();
       setcolor(RED);
@@ -675,7 +676,7 @@ void verus_stratum_session(
       setcolor(BRIGHT_WHITE);
       return fail(ec, "Stratum session error");
     }
-    boost::this_thread::yield();
+    std::this_thread::yield();
     if(ABORT_MINER) {
       bool *connPtr = isDev ? &devConnected : &isConnected;
       bool *submitPtr = isDev ? &submittingDev : &submitting;
@@ -685,10 +686,8 @@ void verus_stratum_session(
   }
   cv.notify_all();
 
-  subThread.interrupt();
   subThread.join();
 
-  // submission_thread.interrupt();
   // printf("\n\n\nflagged connection loss\n");
   // stream.close();
 }

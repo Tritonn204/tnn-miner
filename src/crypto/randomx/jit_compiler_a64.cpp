@@ -31,7 +31,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "superscalar.hpp"
 #include "program.hpp"
 #include "reciprocal.h"
-#include "virtual_memory.h"
+#include "virtual_memory.hpp"
 
 namespace ARMV8A {
 
@@ -123,7 +123,7 @@ void JitCompilerA64::enableAll()
 	setPagesRWX(code, CodeSize + CalcDatasetItemSize);
 }
 
-void JitCompilerA64::generateProgram(Program& program, ProgramConfiguration& config)
+void JitCompilerA64::generateProgram(Program& program, ProgramConfiguration& config, uint32_t)
 {
 	uint32_t codePos = MainLoopBegin + 4;
 
@@ -174,7 +174,7 @@ void JitCompilerA64::generateProgram(Program& program, ProgramConfiguration& con
 #endif
 }
 
-void JitCompilerA64::generateProgramLight(Program& program, ProgramConfiguration& config, uint32_t datasetOffset)
+void JitCompilerA64::generateProgramLight(Program& program, ProgramConfiguration& config, uint32_t datasetOffset, uint32_t)
 {
 	uint32_t codePos = MainLoopBegin + 4;
 

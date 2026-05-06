@@ -29,12 +29,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdexcept>
 #include <cstring>
 #include <climits>
+#include <atomic>
 #include "jit_compiler_x86.hpp"
+#include "cpu.hpp"
 #include "jit_compiler_x86_static.hpp"
 #include "superscalar.hpp"
 #include "program.hpp"
 #include "reciprocal.h"
-#include "virtual_memory.h"
+#include "virtual_memory.hpp"
 
 namespace randomx {
 	/*
@@ -101,6 +103,7 @@ namespace randomx {
 #endif
 
 	const uint8_t* codePrologue = ADDR(randomx_program_prologue);
+	const uint8_t* codeImulRcpStore = ADDR(randomx_program_imul_rcp_store);
 	const uint8_t* codeLoopBegin = ADDR(randomx_program_loop_begin);
 	const uint8_t* codeLoopLoad = ADDR(randomx_program_loop_load);
 	const uint8_t* codeProgamStart = ADDR(randomx_program_start);
@@ -183,8 +186,11 @@ namespace randomx {
 	static const uint8_t REX_MAXPD[] = { 0x66, 0x41, 0x0f, 0x5f };
 	static const uint8_t REX_DIVPD[] = { 0x66, 0x41, 0x0f, 0x5e };
 	static const uint8_t SQRTPD[] = { 0x66, 0x0f, 0x51 };
-	static const uint8_t AND_OR_MOV_LDMXCSR[] = { 0x25, 0x00, 0x60, 0x00, 0x00, 0x0D, 0xC0, 0x9F, 0x00, 0x00, 0x50, 0x0F, 0xAE, 0x14, 0x24, 0x58 };
-	static const uint8_t ROL_RAX[] = { 0x48, 0xc1, 0xc0 };
+	static const uint8_t AND_EAX_0C[] = { 0x83, 0xE0, 0x0C };
+	static const uint8_t LDMXCSR_RSP_RAX[] = { 0x0F, 0xAE, 0x14, 0x04 };
+	static const uint8_t CMP_EAX_RSP_20[] = { 0x3B, 0x44, 0x24, 0x20 };
+	static const uint8_t MOV_RSP_20_EAX[] = { 0x89, 0x44, 0x24, 0x20 };
+	static const uint8_t ROR_RAX[] = { 0x48, 0xC1, 0xC8 };
 	static const uint8_t XOR_ECX_ECX[] = { 0x33, 0xC9 };
 	static const uint8_t REX_CMP_R32I[] = { 0x41, 0x81 };
 	static const uint8_t REX_CMP_M32I[] = { 0x81, 0x3c, 0x06 };
@@ -216,45 +222,83 @@ namespace randomx {
 	static const uint8_t NOP6[] = { 0x66, 0x0F, 0x1F, 0x44, 0x00, 0x00 };
 	static const uint8_t NOP7[] = { 0x0F, 0x1F, 0x80, 0x00, 0x00, 0x00, 0x00 };
 	static const uint8_t NOP8[] = { 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00 };
+	static const uint8_t NOP9[] = { 0x66, 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
-	static const uint8_t* NOPX[] = { NOP1, NOP2, NOP3, NOP4, NOP5, NOP6, NOP7, NOP8 };
+	static const uint8_t* NOPX[] = { NOP1, NOP2, NOP3, NOP4, NOP5, NOP6, NOP7, NOP8, NOP9 };
+
+	// Fixed-size NOP sequences for CFROUND NOP-out (must match exact instruction sizes)
+	static const uint8_t NOP13[] = { 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0F, 0x1F, 0x44, 0x00, 0x00 };
+	static const uint8_t NOP14[] = { 0x0F, 0x1F, 0x80, 0x00, 0x00, 0x00, 0x00, 0x0F, 0x1F, 0x80, 0x00, 0x00, 0x00, 0x00 };
+	static const uint8_t NOP25[] = { 0x66, 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00 };
+	static const uint8_t NOP26[] = { 0x66, 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0x66, 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00 };
+
+	// CS segment override prefixes used to align branches away from 32-byte boundaries
+	// (JCC erratum mitigation for AMD Zen/Zen2/Zen3)
+	static const uint8_t JMP_ALIGN_PREFIX[14][16] = {
+		{},
+		{0x2E},
+		{0x2E, 0x2E},
+		{0x2E, 0x2E, 0x2E},
+		{0x2E, 0x2E, 0x2E, 0x2E},
+		{0x2E, 0x2E, 0x2E, 0x2E, 0x2E},
+		{0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E},
+		{0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E},
+		{0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E},
+		{0x90, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E},
+		{0x66, 0x90, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E},
+		{0x66, 0x66, 0x90, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E},
+		{0x0F, 0x1F, 0x40, 0x00, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E},
+		{0x0F, 0x1F, 0x44, 0x00, 0x00, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E, 0x2E},
+	};
+
+	static bool BranchesWithin32B = false;
+
+	static std::atomic<size_t> codeOffset;
+	constexpr size_t codeOffsetIncrement = 59 * 64;
 
 	size_t JitCompilerX86::getCodeSize() {
 		return CodeSize;
 	}
 
 	JitCompilerX86::JitCompilerX86() {
-		code = (uint8_t*)allocMemoryPages(CodeSize);
-		if (code == nullptr)
+		if (engine[0] == nullptr)
+			initEngine();
+		allocatedSize_ = CodeSize * 2;
+		allocatedCode_ = (uint8_t*)allocMemoryPages(allocatedSize_);
+		if (allocatedCode_ == nullptr)
 			throw std::runtime_error("allocMemoryPages");
+		code = allocatedCode_ + (codeOffset.fetch_add(codeOffsetIncrement) % CodeSize);
 		memcpy(code, codePrologue, prologueSize);
 		memcpy(code + epilogueOffset, codeEpilogue, epilogueSize);
 	}
 
 	JitCompilerX86::~JitCompilerX86() {
-		freePagedMemory(code, CodeSize);
+		codeOffset.fetch_sub(codeOffsetIncrement);
+		freePagedMemory(allocatedCode_, allocatedSize_);
 	}
 
 	void JitCompilerX86::enableAll() {
-		setPagesRWX(code, CodeSize);
+		setPagesRWX(allocatedCode_, allocatedSize_);
 	}
 
 	void JitCompilerX86::enableWriting() {
-		setPagesRW(code, CodeSize);
+		setPagesRW(allocatedCode_, allocatedSize_);
 	}
 
 	void JitCompilerX86::enableExecution() {
-		setPagesRX(code, CodeSize);
+		setPagesRX(allocatedCode_, allocatedSize_);
 	}
 
-	void JitCompilerX86::generateProgram(Program& prog, ProgramConfiguration& pcfg) {
+	void JitCompilerX86::generateProgram(Program& prog, ProgramConfiguration& pcfg, uint32_t flags) {
+		vm_flags = flags;
 		generateProgramPrologue(prog, pcfg);
 		memcpy(code + codePos, codeReadDataset, readDatasetSize);
 		codePos += readDatasetSize;
 		generateProgramEpilogue(prog, pcfg);
 	}
 
-	void JitCompilerX86::generateProgramLight(Program& prog, ProgramConfiguration& pcfg, uint32_t datasetOffset) {
+	void JitCompilerX86::generateProgramLight(Program& prog, ProgramConfiguration& pcfg, uint32_t datasetOffset, uint32_t flags) {
+		vm_flags = flags;
 		generateProgramPrologue(prog, pcfg);
 		emit(codeReadDatasetLightSshInit, readDatasetLightInitSize);
 		emit(ADD_EBX_I);
@@ -306,9 +350,14 @@ namespace randomx {
 		for (unsigned i = 0; i < RegistersCount; ++i) {
 			registerUsage[i] = -1;
 		}
+		prevCFROUND = -1;
+		prevFPOperation = -1;
 
+		imul_rcp_storage = code + (codeImulRcpStore - codePrologue) + 2;
+		imul_rcp_storage_used = 0;
+
+		memcpy(imul_rcp_storage - 34, &pcfg.eMask, sizeof(pcfg.eMask));
 		codePos = prologueSize;
-		memcpy(code + codePos - 48, &pcfg.eMask, sizeof(pcfg.eMask));
 		memcpy(code + codePos, codeLoopLoad, loopLoadSize);
 		codePos += loopLoadSize;
 		for (unsigned i = 0; i < prog.getSize(); ++i) {
@@ -331,6 +380,22 @@ namespace randomx {
 		emit(ADDR(randomx_prefetch_scratchpad), ADDR(randomx_prefetch_scratchpad_end) - ADDR(randomx_prefetch_scratchpad));
 		memcpy(code + codePos, codeLoopStore, loopStoreSize);
 		codePos += loopStoreSize;
+
+		if (BranchesWithin32B) {
+			// Align the loop-back branch (sub+jnz = 9 bytes) to not cross 32-byte boundary
+			const uint32_t branch_begin = static_cast<uint32_t>(codePos);
+			const uint32_t branch_end = branch_begin + 9;
+
+			if ((branch_begin ^ branch_end) >= 32) {
+				uint32_t alignment_size = 32 - (branch_begin & 31);
+				if (alignment_size > 8) {
+					emit(NOPX[alignment_size - 9], alignment_size - 8);
+					alignment_size = 8;
+				}
+				emit(NOPX[alignment_size - 1], alignment_size);
+			}
+		}
+
 		emit(SUB_EBX);
 		emit(JNZ);
 		emit32(prologueSize - codePos - 4);
@@ -569,6 +634,15 @@ namespace randomx {
 		emitByte(0xc2 + 8 * instr.dst);
 	}
 
+	// BMI2: mov rdx,r[dst] + mulx r[dst],rcx,r[src] (8 bytes vs 9 for standard)
+	void JitCompilerX86::h_IMULH_R_BMI2(Instruction& instr, int i) {
+		registerUsage[instr.dst] = i;
+		uint32_t word1 = 0xC4D08B49 + (instr.dst << 16);
+		uint32_t word2 = 0xC0F6FB42 + (instr.dst << 27) + (instr.src << 24);
+		emit32(word1);
+		emit32(word2);
+	}
+
 	void JitCompilerX86::h_IMULH_M(Instruction& instr, int i) {
 		registerUsage[instr.dst] = i;
 		if (instr.src != instr.dst) {
@@ -586,6 +660,26 @@ namespace randomx {
 		}
 		emit(REX_MOV_R64R);
 		emitByte(0xc2 + 8 * instr.dst);
+	}
+
+	// BMI2: mov rdx,r[dst] + mulx r[dst],rcx,[rsi+rax/imm] (avoids separate mul+mov rdx)
+	void JitCompilerX86::h_IMULH_M_BMI2(Instruction& instr, int i) {
+		registerUsage[instr.dst] = i;
+		if (instr.src != instr.dst) {
+			genAddressReg(instr, false);
+			// mov rdx, r[dst] (3 bytes) + VEX prefix (1 byte) packed
+			uint32_t w1 = static_cast<uint32_t>(0xC4D08B49 + (instr.dst << 16));
+			emit32(w1);
+			// mulx r[dst], rcx, [rsi+rcx] -> C4 62 FB F6 0E04
+			uint64_t w2 = 0x0E04F6FB62ULL + (static_cast<uint64_t>(instr.dst) << 27);
+			emit(reinterpret_cast<const uint8_t*>(&w2), 5);
+		}
+		else {
+			// mov rdx, r[dst] + mulx r[dst], rcx, [rsi+imm32]
+			uint64_t w1 = 0x86F6FB62C4D08B49ULL + (static_cast<uint64_t>(instr.dst) << 16) + (static_cast<uint64_t>(instr.dst) << 59);
+			emit(reinterpret_cast<const uint8_t*>(&w1), 8);
+			genAddressImm(instr);
+		}
 	}
 
 	void JitCompilerX86::h_ISMULH_R(Instruction& instr, int i) {
@@ -621,10 +715,22 @@ namespace randomx {
 		const uint32_t divisor = instr.getImm32();
 		if (!isZeroOrPowerOf2(divisor)) {
 			registerUsage[instr.dst] = i;
-			emit(MOV_RAX_I);
-			emit64(randomx_reciprocal_fast(divisor));
-			emit(REX_IMUL_RM);
-			emitByte(0xc0 + 8 * instr.dst);
+			const uint64_t reciprocal = randomx_reciprocal_fast(divisor);
+			if (imul_rcp_storage_used < 16) {
+				memcpy(imul_rcp_storage, &reciprocal, sizeof(reciprocal));
+				// imul r[dst], [rsp+disp8]: 4C 0F AF 44 24 disp8
+				const uint64_t dst = instr.dst;
+				const uint8_t disp = 248 - imul_rcp_storage_used * 8;
+				*(uint64_t*)(code + codePos) = 0x2444AF0F4Cull + (dst << 27) + (static_cast<uint64_t>(disp) << 40);
+				codePos += 6;
+				++imul_rcp_storage_used;
+				imul_rcp_storage += 11;
+			} else {
+				emit(MOV_RAX_I);
+				emit64(reciprocal);
+				emit(REX_IMUL_RM);
+				emitByte(0xc0 + 8 * instr.dst);
+			}
 		}
 	}
 
@@ -708,6 +814,7 @@ namespace randomx {
 	}
 
 	void JitCompilerX86::h_FADD_R(Instruction& instr, int i) {
+		prevFPOperation = codePos;
 		instr.dst %= RegisterCountFlt;
 		instr.src %= RegisterCountFlt;
 		emit(REX_ADDPD);
@@ -715,6 +822,7 @@ namespace randomx {
 	}
 
 	void JitCompilerX86::h_FADD_M(Instruction& instr, int i) {
+		prevFPOperation = codePos;
 		instr.dst %= RegisterCountFlt;
 		genAddressReg(instr);
 		emit(REX_CVTDQ2PD_XMM12);
@@ -723,6 +831,7 @@ namespace randomx {
 	}
 
 	void JitCompilerX86::h_FSUB_R(Instruction& instr, int i) {
+		prevFPOperation = codePos;
 		instr.dst %= RegisterCountFlt;
 		instr.src %= RegisterCountFlt;
 		emit(REX_SUBPD);
@@ -730,6 +839,7 @@ namespace randomx {
 	}
 
 	void JitCompilerX86::h_FSUB_M(Instruction& instr, int i) {
+		prevFPOperation = codePos;
 		instr.dst %= RegisterCountFlt;
 		genAddressReg(instr);
 		emit(REX_CVTDQ2PD_XMM12);
@@ -744,6 +854,7 @@ namespace randomx {
 	}
 
 	void JitCompilerX86::h_FMUL_R(Instruction& instr, int i) {
+		prevFPOperation = codePos;
 		instr.dst %= RegisterCountFlt;
 		instr.src %= RegisterCountFlt;
 		emit(REX_MULPD);
@@ -751,6 +862,7 @@ namespace randomx {
 	}
 
 	void JitCompilerX86::h_FDIV_M(Instruction& instr, int i) {
+		prevFPOperation = codePos;
 		instr.dst %= RegisterCountFlt;
 		genAddressReg(instr);
 		emit(REX_CVTDQ2PD_XMM12);
@@ -760,25 +872,90 @@ namespace randomx {
 	}
 
 	void JitCompilerX86::h_FSQRT_R(Instruction& instr, int i) {
+		prevFPOperation = codePos;
 		instr.dst %= RegisterCountFlt;
 		emit(SQRTPD);
 		emitByte(0xe4 + 9 * instr.dst);
 	}
 
 	void JitCompilerX86::h_CFROUND(Instruction& instr, int i) {
+		if (prevCFROUND > prevFPOperation) {
+			if (vm_flags & RANDOMX_FLAG_AMD) {
+				memcpy(code + prevCFROUND, NOP26, 26);
+			} else {
+				memcpy(code + prevCFROUND, NOP14, 14);
+			}
+		}
+		prevCFROUND = codePos;
+
 		emit(REX_MOV_RR64);
 		emitByte(0xc0 + instr.src);
-		int rotate = (13 - (instr.getImm32() & 63)) & 63;
-		if (rotate != 0) {
-			emit(ROL_RAX);
-			emitByte(rotate);
+		int rotate = (static_cast<int>(instr.getImm32() & 63) - 2) & 63;
+		emit(ROR_RAX);
+		emitByte(rotate);
+		emit(AND_EAX_0C);
+		if (vm_flags & RANDOMX_FLAG_AMD) {
+			emit(CMP_EAX_RSP_20);
+			emitByte(0x74); // je
+			emitByte(10);   // skip ldmxcsr(4) + jmp(2) + mov(4)
+			emit(LDMXCSR_RSP_RAX);
+			emitByte(0xEB); // jmp +0
+			emitByte(0x00);
+			emit(MOV_RSP_20_EAX);
+		} else {
+			emit(LDMXCSR_RSP_RAX);
 		}
-		emit(AND_OR_MOV_LDMXCSR);
 	}
 
+	// BMI2: rorx rax, r[src], rotate (single non-destructive rotate, no mov needed)
+	void JitCompilerX86::h_CFROUND_BMI2(Instruction& instr, int i) {
+		if (prevCFROUND > prevFPOperation) {
+			if (vm_flags & RANDOMX_FLAG_AMD) {
+				memcpy(code + prevCFROUND, NOP25, 25);
+			} else {
+				memcpy(code + prevCFROUND, NOP13, 13);
+			}
+		}
+		prevCFROUND = codePos;
+
+		int rotate = (static_cast<int>(instr.getImm32() & 63) - 2) & 63;
+		uint64_t rorx = 0xC0F0FBC3C4ULL | (static_cast<uint64_t>(instr.src) << 32) | (static_cast<uint64_t>(rotate) << 40);
+		emit(reinterpret_cast<const uint8_t*>(&rorx), 6);
+		emit(AND_EAX_0C);
+		if (vm_flags & RANDOMX_FLAG_AMD) {
+			emit(CMP_EAX_RSP_20);
+			emitByte(0x74); // je
+			emitByte(10);   // skip ldmxcsr(4) + jmp(2) + mov(4)
+			emit(LDMXCSR_RSP_RAX);
+			emitByte(0xEB); // jmp +0
+			emitByte(0x00);
+			emit(MOV_RSP_20_EAX);
+		} else {
+			emit(LDMXCSR_RSP_RAX);
+		}
+	}
+
+	template<bool jccErratum>
 	void JitCompilerX86::h_CBRANCH(Instruction& instr, int i) {
 		int reg = instr.dst;
 		int target = registerUsage[reg] + 1;
+		int32_t jmp_target = instructionOffsets[target];
+
+		// jmp_offset relative to end of short jz (codePos + 7 add + 7 test + 2 short_jz = +16)
+		int32_t jmp_offset = jmp_target - (codePos + 16);
+
+		if constexpr (jccErratum) {
+			// Check if branch (test+jz) crosses a 32-byte boundary
+			const uint32_t branch_begin = static_cast<uint32_t>(codePos + 7);
+			const uint32_t branch_end = branch_begin + ((jmp_offset >= -128) ? 9 : 13);
+
+			if ((branch_begin ^ branch_end) >= 32) {
+				const uint32_t alignment_size = 32 - (branch_begin & 31);
+				jmp_offset -= alignment_size;
+				emit(JMP_ALIGN_PREFIX[alignment_size], alignment_size);
+			}
+		}
+
 		emit(REX_ADD_I);
 		emitByte(0xc0 + reg);
 		int shift = instr.getModCond() + ConditionOffset;
@@ -789,13 +966,28 @@ namespace randomx {
 		emit(REX_TEST);
 		emitByte(0xc0 + reg);
 		emit32(ConditionMask << shift);
-		emit(JZ);
-		emit32(instructionOffsets[target] - (codePos + 4));
+
+		if (jmp_offset >= -128) {
+			emitByte(0x74);
+			emitByte(static_cast<uint8_t>(jmp_offset));
+		} else {
+			emit(JZ);
+			emit32(jmp_offset - 4);
+		}
+
+		// if branch target crosses prevFPOperation, treat as if FP op happened now
+		if (jmp_target <= prevFPOperation) {
+			prevFPOperation = codePos;
+		}
+
 		//mark all registers as used
 		for (unsigned j = 0; j < RegistersCount; ++j) {
 			registerUsage[j] = i;
 		}
 	}
+
+	template void JitCompilerX86::h_CBRANCH<false>(Instruction&, int);
+	template void JitCompilerX86::h_CBRANCH<true>(Instruction&, int);
 
 	void JitCompilerX86::h_ISTORE(Instruction& instr, int i) {
 		genAddressRegDst(instr);
@@ -809,39 +1001,77 @@ namespace randomx {
 	}
 
 #include "instruction_weights.hpp"
-#define INST_HANDLE(x) REPN(&JitCompilerX86::h_##x, WT(x))
 
-	InstructionGeneratorX86 JitCompilerX86::engine[256] = {
-		INST_HANDLE(IADD_RS)
-		INST_HANDLE(IADD_M)
-		INST_HANDLE(ISUB_R)
-		INST_HANDLE(ISUB_M)
-		INST_HANDLE(IMUL_R)
-		INST_HANDLE(IMUL_M)
-		INST_HANDLE(IMULH_R)
-		INST_HANDLE(IMULH_M)
-		INST_HANDLE(ISMULH_R)
-		INST_HANDLE(ISMULH_M)
-		INST_HANDLE(IMUL_RCP)
-		INST_HANDLE(INEG_R)
-		INST_HANDLE(IXOR_R)
-		INST_HANDLE(IXOR_M)
-		INST_HANDLE(IROR_R)
-		INST_HANDLE(IROL_R)
-		INST_HANDLE(ISWAP_R)
-		INST_HANDLE(FSWAP_R)
-		INST_HANDLE(FADD_R)
-		INST_HANDLE(FADD_M)
-		INST_HANDLE(FSUB_R)
-		INST_HANDLE(FSUB_M)
-		INST_HANDLE(FSCAL_R)
-		INST_HANDLE(FMUL_R)
-		INST_HANDLE(FDIV_M)
-		INST_HANDLE(FSQRT_R)
-		INST_HANDLE(CBRANCH)
-		INST_HANDLE(CFROUND)
-		INST_HANDLE(ISTORE)
-		INST_HANDLE(NOP)
-	};
+	InstructionGeneratorX86 JitCompilerX86::engine[256] = {};
+
+	void JitCompilerX86::initEngine() {
+		uint32_t k = 0;
+
+#define FILL_HANDLE(x, handler) \
+		for (uint32_t i = 0; i < RANDOMX_FREQ_##x; ++i, ++k) { \
+			engine[k] = &JitCompilerX86::handler; \
+		}
+
+#define FILL_DEFAULT(x) FILL_HANDLE(x, h_##x)
+
+#if defined(_M_X64) || defined(__x86_64__)
+		static Cpu cpu;
+		const bool hasBMI2 = cpu.hasBmi2();
+		BranchesWithin32B = cpu.hasJccErratum();
+#else
+		const bool hasBMI2 = false;
+#endif
+
+		FILL_DEFAULT(IADD_RS);
+		FILL_DEFAULT(IADD_M);
+		FILL_DEFAULT(ISUB_R);
+		FILL_DEFAULT(ISUB_M);
+		FILL_DEFAULT(IMUL_R);
+		FILL_DEFAULT(IMUL_M);
+
+		if (hasBMI2) {
+			FILL_HANDLE(IMULH_R, h_IMULH_R_BMI2);
+			FILL_HANDLE(IMULH_M, h_IMULH_M_BMI2);
+		} else {
+			FILL_DEFAULT(IMULH_R);
+			FILL_DEFAULT(IMULH_M);
+		}
+
+		FILL_DEFAULT(ISMULH_R);
+		FILL_DEFAULT(ISMULH_M);
+		FILL_DEFAULT(IMUL_RCP);
+		FILL_DEFAULT(INEG_R);
+		FILL_DEFAULT(IXOR_R);
+		FILL_DEFAULT(IXOR_M);
+		FILL_DEFAULT(IROR_R);
+		FILL_DEFAULT(IROL_R);
+		FILL_DEFAULT(ISWAP_R);
+		FILL_DEFAULT(FSWAP_R);
+		FILL_DEFAULT(FADD_R);
+		FILL_DEFAULT(FADD_M);
+		FILL_DEFAULT(FSUB_R);
+		FILL_DEFAULT(FSUB_M);
+		FILL_DEFAULT(FSCAL_R);
+		FILL_DEFAULT(FMUL_R);
+		FILL_DEFAULT(FDIV_M);
+		FILL_DEFAULT(FSQRT_R);
+		if (BranchesWithin32B) {
+			FILL_HANDLE(CBRANCH, h_CBRANCH<true>);
+		} else {
+			FILL_HANDLE(CBRANCH, h_CBRANCH<false>);
+		}
+
+		if (hasBMI2) {
+			FILL_HANDLE(CFROUND, h_CFROUND_BMI2);
+		} else {
+			FILL_DEFAULT(CFROUND);
+		}
+
+		FILL_DEFAULT(ISTORE);
+		FILL_DEFAULT(NOP);
+
+#undef FILL_DEFAULT
+#undef FILL_HANDLE
+	}
 
 }

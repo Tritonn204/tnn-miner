@@ -15,8 +15,9 @@ if (WITH_ASTRIXHASH)
       src/net/astrix/*.cpp
     )
     
+    # New unified CPU mining infrastructure
     list(APPEND astrixHashSources
-      src/coins/mine_astrix.cpp
+      src/tnn_cpu/mine_kas_unified.cpp
     )
 
     list(APPEND HEADERS_CRYPTO

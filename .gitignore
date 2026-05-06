@@ -24,8 +24,12 @@ build/*
 **.out
 **.app
 
+# Generated SIMD tier sources
+**/simd_sources/
+
 # Directories
 /bin
+/hip-build
 /hooks
 /info
 /CMakeFiles
@@ -57,9 +61,26 @@ build/*
 
 # Misc
 **.txt
+**.DS_Store
+hiprtc_standalone_test/
+nvidia_bench/
+nvrtc_debug/
+kawpow_iterate/
+
+!CMakeLists.txt
+# Winring0
+!/lib/winring0/*.dll
 # Blake3
 !/extern/BLAKE3/c/CMakeLists.txt
 # SPSA
 !/src/astrobwtv3/CMakeLists.txt
 # tnn-hip
 !/src/tnn_hip/CMakeLists.txt
+# hiprtc
+!/lib/hiprtc/*.dll
+# cudart
+!/lib/cudart/*.dll
+# nvrtc
+!/lib/nvrtc/*.dll
+# Default tune files
+!/default-tunes/**

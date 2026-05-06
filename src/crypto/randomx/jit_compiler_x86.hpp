@@ -47,8 +47,9 @@ namespace randomx {
 	public:
 		JitCompilerX86();
 		~JitCompilerX86();
-		void generateProgram(Program&, ProgramConfiguration&);
-		void generateProgramLight(Program&, ProgramConfiguration&, uint32_t);
+		static void initEngine();
+		void generateProgram(Program&, ProgramConfiguration&, uint32_t flags = 0);
+		void generateProgramLight(Program&, ProgramConfiguration&, uint32_t, uint32_t flags = 0);
 		template<size_t N>
 		void generateSuperscalarHash(SuperscalarProgram (&programs)[N], std::vector<uint64_t> &);
 		void generateDatasetInitCode();
@@ -70,7 +71,14 @@ namespace randomx {
 		std::vector<int32_t> instructionOffsets;
 		int registerUsage[RegistersCount];
 		uint8_t* code;
+		uint8_t* allocatedCode_ = nullptr;
+		size_t allocatedSize_ = 0;
 		int32_t codePos;
+		uint32_t vm_flags = 0;
+		int32_t prevCFROUND = -1;
+		int32_t prevFPOperation = -1;
+		uint8_t* imul_rcp_storage = nullptr;
+		uint32_t imul_rcp_storage_used = 0;
 
 		void generateProgramPrologue(Program&, ProgramConfiguration&);
 		void generateProgramEpilogue(Program&, ProgramConfiguration&);
@@ -114,7 +122,9 @@ namespace randomx {
 		void h_IMUL_R(Instruction&, int);
 		void h_IMUL_M(Instruction&, int);
 		void h_IMULH_R(Instruction&, int);
+		void h_IMULH_R_BMI2(Instruction&, int);
 		void h_IMULH_M(Instruction&, int);
+		void h_IMULH_M_BMI2(Instruction&, int);
 		void h_ISMULH_R(Instruction&, int);
 		void h_ISMULH_M(Instruction&, int);
 		void h_IMUL_RCP(Instruction&, int);
@@ -133,8 +143,10 @@ namespace randomx {
 		void h_FMUL_R(Instruction&, int);
 		void h_FDIV_M(Instruction&, int);
 		void h_FSQRT_R(Instruction&, int);
+		template<bool jccErratum>
 		void h_CBRANCH(Instruction&, int);
 		void h_CFROUND(Instruction&, int);
+		void h_CFROUND_BMI2(Instruction&, int);
 		void h_ISTORE(Instruction&, int);
 		void h_NOP(Instruction&, int);
 	};

@@ -57,12 +57,20 @@ extern "C" {
 		if (HAVE_AES && cpu.hasAes()) {
 			flags |= RANDOMX_FLAG_HARD_AES;
 		}
-		if (randomx_argon2_impl_avx2() != nullptr && cpu.hasAvx2()) {
+		if (cpu.isAmd()) {
+			flags |= RANDOMX_FLAG_AMD;
+		}
+    #ifdef __x86_64
+		if (randomx_argon2_impl_avx512() != nullptr && cpu.hasAvx512()) {
+			flags |= RANDOMX_FLAG_ARGON2_AVX512;
+		}
+    if (randomx_argon2_impl_avx2() != nullptr && cpu.hasAvx2()) {
 			flags |= RANDOMX_FLAG_ARGON2_AVX2;
 		}
 		if (randomx_argon2_impl_ssse3() != nullptr && cpu.hasSsse3()) {
 			flags |= RANDOMX_FLAG_ARGON2_SSSE3;
 		}
+    #endif
 		return flags;
 	}
 
@@ -320,6 +328,8 @@ extern "C" {
 					UNREACHABLE;
 			}
 
+			vm->vm_flags = static_cast<uint32_t>(flags);
+
 			if(cache != nullptr) {
 				vm->setCache(cache);
 				vm->cacheKey = cache->cacheKey;
@@ -377,7 +387,7 @@ extern "C" {
 		machine->resetRoundingMode();
 		for (int chain = 0; chain < RANDOMX_PROGRAM_COUNT - 1; ++chain) {
 			machine->run(&tempHash);
-			blakeResult = blake2b(tempHash, sizeof(tempHash), machine->getRegisterFile(), sizeof(randomx::RegisterFile), nullptr, 0);
+			blakeResult = blake2b_registerfile_hash(tempHash, machine->getRegisterFile());
 			assert(blakeResult == 0);
 		}
 		machine->run(&tempHash);

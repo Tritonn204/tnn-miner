@@ -36,6 +36,7 @@
 #include "sysendian.h"
 
 #include "sha256_yp.h"
+#include "sha_detect.h"
 
 #ifdef __ICC
 /* Miscompile with icc 14.0.0 (at least), so don't use restrict there */
@@ -46,6 +47,13 @@
 #define restrict __restrict
 #else
 #define restrict
+#endif
+
+/* clang-cl uses C99 inline semantics (no external linkage for inline).
+ * Stub it out so these functions get emitted as normal external symbols. */
+#if defined(__clang__) && !defined(__GNUC__)
+#undef inline
+#define inline
 #endif
 
 /*
@@ -109,15 +117,17 @@ static const uint32_t Krnd[64] = {
 #else /* Let the compiler cache/reuse or not */
 #define Maj(x, y, z)	(y ^ ((x ^ y) & (y ^ z)))
 #endif
-#ifdef __SHA__
 /*
  * SHA256 block compression function using SHA-NI instructions.
  * Processes all 64 rounds using hardware acceleration.
  */
+
+__attribute__((target("sha,ssse3,sse4.1")))
 static inline void
 SHA256_Transform_SHANI(uint32_t state[static restrict 8],
     const uint8_t block[static restrict 64])
 {
+  #ifdef __x86_64__
 	__m128i STATE0, STATE1;
 	__m128i MSG, TMP, TMP2;
 	__m128i MSG0, MSG1, MSG2, MSG3;
@@ -303,8 +313,8 @@ SHA256_Transform_SHANI(uint32_t state[static restrict 8],
 	/* Store result */
 	_mm_storeu_si128((__m128i*) &state[0], STATE0);
 	_mm_storeu_si128((__m128i*) &state[4], STATE1);
+  #endif
 }
-#endif
 
 /* Elementary functions used by SHA256 */
 #define Ch(x, y, z)	((x & (y ^ z)) ^ z)
@@ -348,69 +358,68 @@ SHA256_Transform(uint32_t state[static restrict 8],
     const uint8_t block[static restrict 64],
     uint32_t W[static restrict 64], uint32_t S[static restrict 8])
 {
-#ifdef __SHA__
-	/* Use SHA-NI if available */
-	(void)W; (void)S; /* Suppress unused parameter warnings */
-	SHA256_Transform_SHANI(state, block);
-#else
-	int i;
+  if (has_sha_ni_support_cached()) {
+    (void)W; (void)S; /* Suppress unused parameter warnings */
+    SHA256_Transform_SHANI(state, block);
+  } else {
+    int i;
 
-	/* 1. Prepare the first part of the message schedule W. */
-	be32dec_vect(W, block, 8);
+    /* 1. Prepare the first part of the message schedule W. */
+    be32dec_vect(W, block, 8);
 
-	/* 2. Initialize working variables. */
-	memcpy(S, state, 32);
+    /* 2. Initialize working variables. */
+    memcpy(S, state, 32);
 
-	/* 3. Mix. */
-	for (i = 0; i < 64; i += 16) {
-		uint32_t x_xor_y, y_xor_z = S[(65 - i) % 8] ^ S[(66 - i) % 8];
-		RNDr(S, W, 0, i);
-		RNDr(S, W, 1, i);
-		RNDr(S, W, 2, i);
-		RNDr(S, W, 3, i);
-		RNDr(S, W, 4, i);
-		RNDr(S, W, 5, i);
-		RNDr(S, W, 6, i);
-		RNDr(S, W, 7, i);
-		RNDr(S, W, 8, i);
-		RNDr(S, W, 9, i);
-		RNDr(S, W, 10, i);
-		RNDr(S, W, 11, i);
-		RNDr(S, W, 12, i);
-		RNDr(S, W, 13, i);
-		RNDr(S, W, 14, i);
-		RNDr(S, W, 15, i);
+    /* 3. Mix. */
+    for (i = 0; i < 64; i += 16) {
+      uint32_t x_xor_y, y_xor_z = S[(65 - i) % 8] ^ S[(66 - i) % 8];
+      RNDr(S, W, 0, i);
+      RNDr(S, W, 1, i);
+      RNDr(S, W, 2, i);
+      RNDr(S, W, 3, i);
+      RNDr(S, W, 4, i);
+      RNDr(S, W, 5, i);
+      RNDr(S, W, 6, i);
+      RNDr(S, W, 7, i);
+      RNDr(S, W, 8, i);
+      RNDr(S, W, 9, i);
+      RNDr(S, W, 10, i);
+      RNDr(S, W, 11, i);
+      RNDr(S, W, 12, i);
+      RNDr(S, W, 13, i);
+      RNDr(S, W, 14, i);
+      RNDr(S, W, 15, i);
 
-		if (i == 48)
-			break;
-		MSCH(W, 0, i);
-		MSCH(W, 1, i);
-		MSCH(W, 2, i);
-		MSCH(W, 3, i);
-		MSCH(W, 4, i);
-		MSCH(W, 5, i);
-		MSCH(W, 6, i);
-		MSCH(W, 7, i);
-		MSCH(W, 8, i);
-		MSCH(W, 9, i);
-		MSCH(W, 10, i);
-		MSCH(W, 11, i);
-		MSCH(W, 12, i);
-		MSCH(W, 13, i);
-		MSCH(W, 14, i);
-		MSCH(W, 15, i);
-	}
+      if (i == 48)
+        break;
+      MSCH(W, 0, i);
+      MSCH(W, 1, i);
+      MSCH(W, 2, i);
+      MSCH(W, 3, i);
+      MSCH(W, 4, i);
+      MSCH(W, 5, i);
+      MSCH(W, 6, i);
+      MSCH(W, 7, i);
+      MSCH(W, 8, i);
+      MSCH(W, 9, i);
+      MSCH(W, 10, i);
+      MSCH(W, 11, i);
+      MSCH(W, 12, i);
+      MSCH(W, 13, i);
+      MSCH(W, 14, i);
+      MSCH(W, 15, i);
+    }
 
-	/* 4. Mix local working variables into global state. */
-	state[0] += S[0];
-	state[1] += S[1];
-	state[2] += S[2];
-	state[3] += S[3];
-	state[4] += S[4];
-	state[5] += S[5];
-	state[6] += S[6];
-	state[7] += S[7];
-#endif
+    /* 4. Mix local working variables into global state. */
+    state[0] += S[0];
+    state[1] += S[1];
+    state[2] += S[2];
+    state[3] += S[3];
+    state[4] += S[4];
+    state[5] += S[5];
+    state[6] += S[6];
+    state[7] += S[7];
+  }
 }
 
 static const uint8_t PAD[64] = {

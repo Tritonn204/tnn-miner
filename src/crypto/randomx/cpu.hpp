@@ -42,8 +42,23 @@ namespace randomx {
 		bool hasAvx2() const {
 			return avx2_;
 		}
+		bool hasAvx512() const {
+			return avx512_;
+		}
+		bool hasBmi2() const {
+			return bmi2_;
+		}
+		bool isAmd() const {
+			return amd_;
+		}
+		bool hasJccErratum() const {
+			return jccErratum_;
+		}
 	private:
-		bool aes_, ssse3_, avx2_;
+		bool aes_, ssse3_, avx2_, avx512_;
+		bool bmi2_ = false;
+		bool amd_ = false;
+		bool jccErratum_ = false;
 	};
 
 }
