@@ -34,14 +34,15 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if echo "$CMAKE_ARGS" | grep -Eq "WITH_OROCHI=ON|HIP_PLATFORM=nvidia"; then \
       cuda_lib_dirs="/usr/local/cuda/lib64 /usr/local/cuda/targets/x86_64-linux/lib /usr/local/cuda-*/lib64 /usr/local/cuda-*/targets/x86_64-linux/lib /usr/lib/x86_64-linux-gnu"; \
-      if ! for dir in $cuda_lib_dirs; do [ -d "$dir" ] && find "$dir" -maxdepth 1 \( -name 'libnvrtc.so*' -o -name 'libcudart.so*' \) 2>/dev/null; done | grep -q .; then \
-        echo "CUDA NVRTC/CUDART not found in builder image; installing CUDA dev packages..." && \
+      if ! command -v patchelf >/dev/null 2>&1 || ! for dir in $cuda_lib_dirs; do [ -d "$dir" ] && find "$dir" -maxdepth 1 \( -name 'libnvrtc.so*' -o -name 'libcudart.so*' \) 2>/dev/null; done | grep -q .; then \
+        echo "Installing required CUDA packaging dependencies..." && \
         curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb \
           -o /tmp/cuda-keyring.deb && \
         dpkg -i /tmp/cuda-keyring.deb && \
         rm /tmp/cuda-keyring.deb && \
         apt-get update && \
         apt-get install -y --no-install-recommends \
+          patchelf \
           cuda-compiler-${CUDA_VER} \
           cuda-cudart-dev-${CUDA_VER} \
           cuda-nvrtc-dev-${CUDA_VER} \
@@ -111,9 +112,9 @@ RUN mkdir -p ./libs && \
         done; \
       done && \
       find ./libs -maxdepth 1 -type f \( -name 'libcudart.so*' -o -name 'libnvrtc.so*' -o -name 'libnvrtc-builtins.so*' \) -exec patchelf --set-rpath '$ORIGIN' {} \; && \
-      test -e ./libs/libcudart.so -o -e ./libs/libcudart.so.* || \
+      [ -e ./libs/libcudart.so ] || find ./libs -maxdepth 1 -name 'libcudart.so.*' | grep -q . || \
         (echo "ERROR: WITH_OROCHI/HIP_PLATFORM=nvidia build did not bundle libcudart.so*" >&2; exit 1); \
-      test -e ./libs/libnvrtc.so -o -e ./libs/libnvrtc.so.* || \
+      [ -e ./libs/libnvrtc.so ] || find ./libs -maxdepth 1 -name 'libnvrtc.so.*' | grep -q . || \
         (echo "ERROR: WITH_OROCHI/HIP_PLATFORM=nvidia build did not bundle libnvrtc.so*" >&2; exit 1); \
       ls -la ./libs/; \
     fi
