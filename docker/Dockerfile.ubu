@@ -88,6 +88,7 @@ RUN mkdir -p ./libs && \
           echo "  bundled: $(basename "$found") -> libs/"; \
         fi; \
       done && \
+      find ./libs -maxdepth 1 -type f \( -name 'libamdhip64.so*' -o -name 'libhiprtc.so*' -o -name 'libamd_comgr.so*' -o -name 'libhsa-runtime64.so*' -o -name 'librocm_smi64.so*' -o -name 'librocprofiler-register.so*' -o -name 'libdrm.so*' -o -name 'libdrm_amdgpu.so*' \) -exec patchelf --set-rpath '$ORIGIN' {} \; && \
       ls -la ./libs/; \
     fi
 
@@ -109,6 +110,7 @@ RUN mkdir -p ./libs && \
           echo "  bundled: $(basename "$found") -> libs/"; \
         done; \
       done && \
+      find ./libs -maxdepth 1 -type f \( -name 'libcudart.so*' -o -name 'libnvrtc.so*' -o -name 'libnvrtc-builtins.so*' \) -exec patchelf --set-rpath '$ORIGIN' {} \; && \
       test -e ./libs/libcudart.so -o -e ./libs/libcudart.so.* || \
         (echo "ERROR: WITH_OROCHI/HIP_PLATFORM=nvidia build did not bundle libcudart.so*" >&2; exit 1); \
       test -e ./libs/libnvrtc.so -o -e ./libs/libnvrtc.so.* || \
