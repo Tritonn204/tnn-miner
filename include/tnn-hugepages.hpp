@@ -310,6 +310,7 @@ inline void* malloc_huge_pages(size_t size)
     if (!ptr) {
         if (printHugepagesError) {
 #ifdef __cplusplus
+#if defined(__linux__)
             const long long free_2mb = tnn_read_hugepage_count(HUGE_PAGE_2MB, "free_hugepages");
             const long long total_2mb = tnn_read_hugepage_count(HUGE_PAGE_2MB, "nr_hugepages");
             const long long free_1gb = tnn_read_hugepage_count(HUGE_PAGE_1GB, "free_hugepages");
@@ -319,6 +320,10 @@ inline void* malloc_huge_pages(size_t size)
                       << " [2MB free/total=" << free_2mb << "/" << total_2mb
                       << ", 1GB free/total=" << free_1gb << "/" << total_1gb
                       << "]" << std::endl;
+#else
+            std::cerr << "failed to allocate hugepages... using regular malloc"
+                      << std::endl;
+#endif
 #endif
             printHugepagesError = false;
         }
