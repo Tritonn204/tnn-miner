@@ -33,8 +33,8 @@ RUN chmod +x ./scripts/*.sh
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if echo "$CMAKE_ARGS" | grep -Eq "WITH_OROCHI=ON|HIP_PLATFORM=nvidia"; then \
-      if ! find /usr/local/cuda/lib64 /usr/local/cuda-*/lib64 /usr/lib/x86_64-linux-gnu \
-              -maxdepth 1 -name 'libnvrtc.so*' 2>/dev/null | grep -q .; then \
+      nvrtc_dirs="/usr/local/cuda/lib64 /usr/local/cuda/targets/x86_64-linux/lib /usr/local/cuda-*/lib64 /usr/local/cuda-*/targets/x86_64-linux/lib /usr/lib/x86_64-linux-gnu"; \
+      if ! for dir in $nvrtc_dirs; do [ -d "$dir" ] && find "$dir" -maxdepth 1 -name 'libnvrtc.so*' 2>/dev/null; done | grep -q .; then \
         echo "CUDA NVRTC not found in builder image; installing cuda-nvrtc-dev-${CUDA_VER}..." && \
         curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb \
           -o /tmp/cuda-keyring.deb && \
@@ -48,8 +48,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
           cuda-profiler-api-${CUDA_VER} && \
         rm -rf /var/lib/apt/lists/*; \
       fi; \
-      find /usr/local/cuda/lib64 /usr/local/cuda-*/lib64 /usr/lib/x86_64-linux-gnu \
-        -maxdepth 1 \( -name 'libnvrtc.so*' -o -name 'libnvrtc-builtins.so*' \) 2>/dev/null | sort -V; \
+      for dir in $nvrtc_dirs; do \
+        [ -d "$dir" ] && find "$dir" -maxdepth 1 \( -name 'libnvrtc.so*' -o -name 'libnvrtc-builtins.so*' \) 2>/dev/null; \
+      done | sort -V; \
     fi
 RUN --mount=type=cache,target=/src/_deps ./scripts/prereqs.sh
 RUN --mount=type=cache,target=/src/_deps mkdir ./build && cd ./build && cmake $CMAKE_ARGS -DTNN_VERSION=$PACKAGE_VERSION ..
@@ -95,9 +96,11 @@ RUN mkdir -p ./libs && \
 RUN mkdir -p ./libs && \
     if echo "$CMAKE_ARGS" | grep -Eq "WITH_OROCHI=ON|HIP_PLATFORM=nvidia"; then \
       echo "Collecting NVRTC libs for NVIDIA bundle..." && \
+      nvrtc_dirs="/usr/local/cuda/lib64 /usr/local/cuda/targets/x86_64-linux/lib /usr/local/cuda-*/lib64 /usr/local/cuda-*/targets/x86_64-linux/lib /usr/lib/x86_64-linux-gnu"; \
       for lib in libnvrtc.so libnvrtc-builtins.so; do \
-        find /usr/local/cuda/lib64 /usr/local/cuda-*/lib64 /usr/lib/x86_64-linux-gnu \
-             -maxdepth 1 -name "${lib}*" 2>/dev/null | sort -V | while read -r found; do \
+        for dir in $nvrtc_dirs; do \
+          [ -d "$dir" ] && find "$dir" -maxdepth 1 -name "${lib}*" 2>/dev/null; \
+        done | sort -V | while read -r found; do \
           cp -P "$found" ./libs/; \
           if [ -L "$found" ]; then \
             real="$(readlink -f "$found")"; \
@@ -106,6 +109,8 @@ RUN mkdir -p ./libs && \
           echo "  bundled: $(basename "$found") -> libs/"; \
         done; \
       done && \
+      test -e ./libs/libnvrtc.so -o -e ./libs/libnvrtc.so.* || \
+        (echo "ERROR: WITH_OROCHI/HIP_PLATFORM=nvidia build did not bundle libnvrtc.so*" >&2; exit 1); \
       ls -la ./libs/; \
     fi
 
