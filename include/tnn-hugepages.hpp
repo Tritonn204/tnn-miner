@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <string>
 #include <fstream>
+#include <mutex>
 #endif
 
 #include <assert.h>
@@ -139,6 +140,59 @@ inline std::string GetLastErrorAsString()
   #endif
 #endif
 
+#if defined(__linux__)
+inline std::mutex& tnn_hugepage_reserve_mutex()
+{
+    static std::mutex mutex;
+    return mutex;
+}
+
+inline std::string tnn_hugepage_sysfs_dir(size_t page_size)
+{
+    return "/sys/kernel/mm/hugepages/hugepages-" + std::to_string(page_size / 1024) + "kB";
+}
+
+inline long long tnn_read_hugepage_count(size_t page_size, const char* name)
+{
+    std::ifstream file(tnn_hugepage_sysfs_dir(page_size) + "/" + name);
+    if (!file.is_open()) return -1;
+
+    long long value = -1;
+    file >> value;
+    return value;
+}
+
+inline bool tnn_write_hugepage_count(size_t page_size, const char* name, unsigned long long value)
+{
+    std::ofstream file(tnn_hugepage_sysfs_dir(page_size) + "/" + name, std::ios::out | std::ios::trunc);
+    if (!file.is_open()) return false;
+
+    file << value;
+    file.flush();
+    return file.good();
+}
+
+inline bool tnn_reserve_hugepages(size_t bytes, size_t page_size)
+{
+    std::lock_guard<std::mutex> lock(tnn_hugepage_reserve_mutex());
+
+    const size_t required = ALIGN_UP(bytes, page_size) / page_size;
+    if (required == 0) return true;
+
+    const long long free_pages = tnn_read_hugepage_count(page_size, "free_hugepages");
+    if (free_pages < 0 || static_cast<size_t>(free_pages) >= required) {
+        return free_pages >= 0;
+    }
+
+    const long long total_pages = tnn_read_hugepage_count(page_size, "nr_hugepages");
+    if (total_pages < 0) return false;
+
+    const unsigned long long target =
+        static_cast<unsigned long long>(total_pages) + (required - static_cast<size_t>(free_pages));
+    return tnn_write_hugepage_count(page_size, "nr_hugepages", target);
+}
+#endif
+
 inline void* malloc_huge_pages(size_t size)
 {
     size_t requested = size + HUGE_META_PAGE_SIZE;
@@ -208,6 +262,7 @@ inline void* malloc_huge_pages(size_t size)
     if (requested >= HUGE_PAGE_1GB) {
         size_t huge_gran = HUGE_PAGE_1GB;
         real_size = ALIGN_UP(requested, huge_gran);
+        tnn_reserve_hugepages(real_size, huge_gran);
         mmap_flags |= MAP_HUGETLB | MAP_HUGE_1GB;
 
         ptr = (char*)mmap(
@@ -231,7 +286,8 @@ inline void* malloc_huge_pages(size_t size)
     if (!ptr) {
         size_t huge_gran = HUGE_PAGE_2MB;
         real_size = ALIGN_UP(requested, huge_gran);
-        mmap_flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB;
+        tnn_reserve_hugepages(real_size, huge_gran);
+        mmap_flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | MAP_HUGE_2MB;
 
         ptr = (char*)mmap(
             0,
@@ -254,8 +310,15 @@ inline void* malloc_huge_pages(size_t size)
     if (!ptr) {
         if (printHugepagesError) {
 #ifdef __cplusplus
-            std::cerr << "failed to allocate hugepages... using regular malloc"
-                      << std::endl;
+            const long long free_2mb = tnn_read_hugepage_count(HUGE_PAGE_2MB, "free_hugepages");
+            const long long total_2mb = tnn_read_hugepage_count(HUGE_PAGE_2MB, "nr_hugepages");
+            const long long free_1gb = tnn_read_hugepage_count(HUGE_PAGE_1GB, "free_hugepages");
+            const long long total_1gb = tnn_read_hugepage_count(HUGE_PAGE_1GB, "nr_hugepages");
+            std::cerr << "failed to allocate hugepages (" << strerror(errno)
+                      << "); using regular malloc"
+                      << " [2MB free/total=" << free_2mb << "/" << total_2mb
+                      << ", 1GB free/total=" << free_1gb << "/" << total_1gb
+                      << "]" << std::endl;
 #endif
             printHugepagesError = false;
         }

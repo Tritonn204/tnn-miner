@@ -83,8 +83,15 @@ bool NUMAOptimizer::initialize() {
               << total_cpus << " CPUs total" << std::endl;
     
     // Print huge page availability
-    std::cout << "Huge pages: 2MB=" << (isHugePagesAvailable() ? "available" : "unavailable")
-              << ", 1GB=" << (isOneGbPagesAvailable() ? "available" : "unavailable") 
+    const auto hpinfo = getHugePagesInfo();
+    setcolor(BRIGHT_YELLOW);
+    std::cout << ((hpinfo.page_size_2mb > 0 || hpinfo.page_size_1gb > 0)
+                  ? "Huge Pages: Available!"
+                  : "Huge Pages: Unavailable...")
+              << std::endl;
+    setcolor(BRIGHT_WHITE);
+    std::cout << "Huge Pages: 2MB=" << hpinfo.free_2mb << "/" << hpinfo.total_2mb
+              << ", 1GB=" << hpinfo.free_1gb << "/" << hpinfo.total_1gb
               << std::endl;
     fflush(stdout);
     
