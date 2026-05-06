@@ -308,17 +308,15 @@ DEBUG:
 
 ## mmpOS Setup
 
-tnn-miner ships with custom miner wrappers for [mmpOS](https://app.mmpos.eu/). Current Linux releases use the unified Orochi wrapper when available, while AMD-specific and NVIDIA-specific wrapper directories are still present for packaged deployments that need them.
+tnn-miner ships with a custom miner wrapper for [mmpOS](https://app.mmpos.eu/). Current Linux releases use the unified Orochi wrapper, so the same package can run CPU mining, AMD GPU mining, NVIDIA GPU mining, or mixed CPU/GPU mining depending on your flags and installed drivers.
 
 | Variant | Binary | Broadcast Port | Use Case |
 |---------|--------|---------------|----------|
 | `hiveos+mmpos` | `tnn-miner` | 8989 | Unified CPU, AMD GPU, NVIDIA GPU |
-| `hiveos+mmpos-amd` | `tnn-miner-rocm` | 8989 | AMD/ROCm package |
-| `hiveos+mmpos-nvidia` | `tnn-miner-cuda` | 8991 | NVIDIA/CUDA package |
 
 ### Installation
 
-1. Download the appropriate wrapper archive from the [releases page](https://gitlab.com/Tritonn204/tnn-miner/-/releases).
+1. Download the `hiveos_mmpos` wrapper archive from the [releases page](https://gitlab.com/Tritonn204/tnn-miner/-/releases).
 2. Upload it as a custom miner in mmpOS.
 
 ### Flight Sheet Configuration
