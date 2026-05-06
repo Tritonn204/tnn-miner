@@ -153,6 +153,18 @@ extern "C" void test_hiprtc_isolation() {
     fflush(stdout);
 
 #ifdef TNN_XELISHASH
+#ifdef WITH_OROCHI
+    {
+        oroApi loaded = oroLoadedAPI();
+        bool has_rtc = (loaded & ORO_API_HIPRTC) || (loaded & ORO_API_CUDARTC);
+        if (!has_rtc) {
+            printf("[ISOLATION TEST] WARNING: Runtime compiler is not loaded; skipping HIPRTC isolation test\n");
+            fflush(stdout);
+            return;
+        }
+    }
+#endif
+
     // ------------------------------------------------------------------------
     // TEST 1: Minimal kernel (raw HIPRTC using arch_option)
     // ------------------------------------------------------------------------

@@ -68,11 +68,32 @@ RUN mkdir -p ./libs && \
       ls -la ./libs/; \
     fi
 
+# Collect NVIDIA RTC libs from the Linux build image.  HiveOS wrappers add
+# nvrtc_libs to LD_LIBRARY_PATH, and the Orochi binary also has
+# $ORIGIN/nvrtc_libs in RPATH.
+RUN mkdir -p ./nvrtc_libs && \
+    if echo "$CMAKE_ARGS" | grep -Eq "WITH_OROCHI=ON|HIP_PLATFORM=nvidia"; then \
+      echo "Collecting NVRTC libs for NVIDIA bundle..." && \
+      for lib in libnvrtc.so libnvrtc-builtins.so; do \
+        find /usr/local/cuda/lib64 /usr/local/cuda-*/lib64 /usr/lib/x86_64-linux-gnu \
+             -maxdepth 1 -name "${lib}*" 2>/dev/null | sort -V | while read -r found; do \
+          cp -P "$found" ./nvrtc_libs/; \
+          if [ -L "$found" ]; then \
+            real="$(readlink -f "$found")"; \
+            [ -f "$real" ] && cp -P "$real" ./nvrtc_libs/; \
+          fi; \
+          echo "  bundled: $(basename "$found") -> nvrtc_libs/"; \
+        done; \
+      done && \
+      ls -la ./nvrtc_libs/; \
+    fi
+
 RUN ls -la ./
 RUN set -e; \
     files="$(find . -maxdepth 1 -type f -name 'tnn-miner*' -print)"; \
     [ -d ./tunes ] && [ "$(ls -A ./tunes 2>/dev/null)" ] && files="$files ./tunes"; \
     [ -d ./libs ] && [ "$(ls -A ./libs 2>/dev/null)" ] && files="$files ./libs"; \
+    [ -d ./nvrtc_libs ] && [ "$(ls -A ./nvrtc_libs 2>/dev/null)" ] && files="$files ./nvrtc_libs"; \
     tar -czvf "${TARGZ_FILE}" $files
 RUN md5sum ./${TARGZ_FILE}
 
@@ -83,3 +104,4 @@ COPY --from=build /src/${TARGZ_FILE} /
 COPY --from=build /src/tnn-miner* /
 COPY --from=build /src/tunes/ /tunes/
 COPY --from=build /src/libs/ /libs/
+COPY --from=build /src/nvrtc_libs/ /nvrtc_libs/

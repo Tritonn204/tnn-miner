@@ -197,7 +197,20 @@ public:
 
 private:
     void mine_loop() {
-        oroSetDevice(device_id_);
+        oroCtx ctx = algo_->get_ctx();
+        if (!ctx) {
+            TNN_LOG_ERROR("[ERROR] GPU %d: No GPU context available for mining thread\n", device_id_);
+            running_ = false;
+            return;
+        }
+
+        oroError_t ctx_err = oroCtxSetCurrent(ctx);
+        if (ctx_err != oroSuccess) {
+            TNN_LOG_ERROR("[ERROR] GPU %d: oroCtxSetCurrent failed in mining thread: %s\n",
+                          device_id_, tnn_error_string(ctx_err));
+            running_ = false;
+            return;
+        }
 
         // Nonce segmentation:
         // - Bits 59-63 (top 5 bits): device ID (supports up to 32 GPUs)

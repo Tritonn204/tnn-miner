@@ -27,7 +27,20 @@ jobs:
     - name: 'Package'
       run: |
         cd hip-build/linux/orochi
-        tar -czvf ../../../tnn-miner-linux-x86_64.tar.gz tnn-miner tunes/
+        mkdir -p nvrtc_libs
+        for lib in libnvrtc.so libnvrtc-builtins.so; do
+          find /usr/local/cuda/lib64 /usr/local/cuda-*/lib64 /usr/lib/x86_64-linux-gnu \
+            -maxdepth 1 -name "${lib}*" 2>/dev/null | sort -V | while read -r found; do
+              cp -P "$found" nvrtc_libs/
+              if [ -L "$found" ]; then
+                real="$(readlink -f "$found")"
+                [ -f "$real" ] && cp -P "$real" nvrtc_libs/
+              fi
+            done
+        done
+        files="tnn-miner tunes/"
+        [ "$(ls -A nvrtc_libs 2>/dev/null)" ] && files="$files nvrtc_libs/"
+        tar -czvf ../../../tnn-miner-linux-x86_64.tar.gz $files
     - name: 'Upload artifact'
       uses: actions/upload-artifact@v4
       with:

@@ -1230,6 +1230,11 @@ elseif (WITH_OROCHI)
   # On Linux, Orochi needs dl for dlopen/dlsym; on Windows, hipew needs version.lib
   if (NOT WIN32)
     target_link_libraries(${TNN_OUTPUT_NAME} dl)
+    set_target_properties(${TNN_OUTPUT_NAME} PROPERTIES
+      BUILD_RPATH_USE_ORIGIN TRUE
+      INSTALL_RPATH "$ORIGIN/nvrtc_libs"
+      BUILD_RPATH "$ORIGIN/nvrtc_libs"
+    )
   else()
     if (USE_CLANG_CL OR MSVC)
       target_link_libraries(${TNN_OUTPUT_NAME} version.lib)

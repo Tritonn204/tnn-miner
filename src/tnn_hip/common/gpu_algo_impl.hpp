@@ -147,6 +147,7 @@ public:
     
     bool set_batch_size_override(uint32_t batch_size) override {
         if (!initialized_) return false;
+        if (!bind_context("set_batch_size_override")) return false;
 
         batch_size = (batch_size / block_size_) * block_size_;
         if (batch_size == 0) batch_size = block_size_;
@@ -245,7 +246,7 @@ public:
     void cleanup() override
     {
         // Rebind context for cleanup (runs on destructor thread, not mine_loop)
-        if (ctx_) (void)oroCtxSetCurrent(ctx_);
+        if (ctx_) (void)bind_context("cleanup");
 
         if (config_.algo_data_cleanup_fn && algo_data_) {
             config_.algo_data_cleanup_fn(algo_data_);
@@ -260,6 +261,8 @@ public:
 
     void set_work(const uint8_t *work_template, uint64_t difficulty) override
     {
+        if (!bind_context("set_work")) return;
+
         // Save host-side copy for solution verification (prevents race with job updates)
         h_work_template_.resize(config_.template_size);
         memcpy(h_work_template_.data(), work_template, config_.template_size);
@@ -280,6 +283,8 @@ public:
     // Used by algos like KawPow where the pool sends a 256-bit target.
     void set_raw_target(const uint8_t* target_32bytes) override
     {
+        if (!bind_context("set_raw_target")) return;
+
         oroError_t err = oro_safe_memcpy(d_difficulty_target_, target_32bytes, 32, oroMemcpyHostToDevice);
         if (err != oroSuccess)
             TNN_LOG_ERROR("[ERROR] GPU %d: set_raw_target memcpy failed: %s\n",
@@ -312,6 +317,8 @@ public:
     }
 
     bool do_main_thread_work() override {
+        if (!bind_context("do_main_thread_work")) return false;
+
         TNN_LOG_INFO("[INFO] GPU %d: Main-thread work starting...\n", device_id_);
         fflush(stdout);
 
@@ -344,6 +351,8 @@ public:
     }
 
     bool flush_deps() override {
+        if (!bind_context("flush_deps")) return false;
+
         // Run deps_changed + main_thread_fn in-line on the calling thread.
         // Called from init thread BEFORE worker thread is created, so the GPU
         // context is in its original known-good state.
@@ -400,6 +409,14 @@ public:
 
     BatchResult mine_batch(uint64_t nonce_start, uint32_t count = 0) override
     {
+        if (!bind_context("mine_batch")) {
+            BatchResult failed;
+            failed.nonce_start = nonce_start;
+            failed.count = 0;
+            failed.num_valid = 0;
+            return failed;
+        }
+
         if (count == 0) count = batch_size_;
 
         // Snapshot is_dev flag for this batch
@@ -572,6 +589,22 @@ public:
     const AlgoConfig &get_config() const override { return config_; }
 
 private:
+    bool bind_context(const char* caller) const {
+        if (!ctx_) {
+            TNN_LOG_ERROR("[ERROR] GPU %d: %s has no GPU context\n", device_id_, caller);
+            return false;
+        }
+
+        oroError_t err = oroCtxSetCurrent(ctx_);
+        if (err != oroSuccess) {
+            TNN_LOG_ERROR("[ERROR] GPU %d: %s oroCtxSetCurrent failed: %s\n",
+                          device_id_, caller, tnn_error_string(err));
+            return false;
+        }
+
+        return true;
+    }
+
     // ========================================================================
     // Difficulty Target Calculation
     // ========================================================================
