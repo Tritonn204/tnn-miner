@@ -2,9 +2,9 @@
 //@ section xelis
 //@ guard __x86_64__
 
-//@ tier aes aes,sse4.1
-//@ tier avx2 avx2,bmi2,lzcnt
 //@ tier avx512 avx512f,avx512dq,avx512bw,bmi2,lzcnt
+//@ tier avx2 avx2,bmi2,lzcnt
+//@ tier aes aes,sse4.1
 //@ tier fallback default
 
 //@ common
@@ -29,11 +29,6 @@ __attribute__((target("avx512f,avx512dq,avx512bw,bmi2"))) void stage_1(const uin
 __attribute__((target("avx512f,avx512dq,avx512bw,bmi2"))) void stage_1_nt(const uint8_t *input, uint64_t *sp, size_t input_len)
 {
   XELIS_STAGE1_INLINE(ChaCha20EncryptXelis_avx512_inline, StorePolicy::NON_TEMPORAL)
-}
-
-__attribute__((target("avx512f,avx512dq,avx512bw,bmi2"))) void stage_1_serial(const uint8_t *input, uint64_t *sp, size_t input_len)
-{
-  XELIS_STAGE1_SERIAL_BODY
 }
 
 __attribute__((target("avx512f,avx512dq,avx512bw,bmi2"))) void stage_3(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
@@ -96,11 +91,6 @@ __attribute__((target("avx2,bmi2"))) void stage_1(const uint8_t *input, uint64_t
 __attribute__((target("avx2,bmi2"))) void stage_1_nt(const uint8_t *input, uint64_t *sp, size_t input_len)
 {
   XELIS_STAGE1_INLINE(ChaCha20EncryptXelis_avx2_inline, StorePolicy::NON_TEMPORAL)
-}
-
-__attribute__((target("avx2,bmi2"))) void stage_1_serial(const uint8_t *input, uint64_t *sp, size_t input_len)
-{
-  XELIS_STAGE1_SERIAL_BODY
 }
 
 __attribute__((target("avx2,bmi2"))) void stage_3(uint64_t *scratch_pad, workerData_xelis_v3 &worker)
