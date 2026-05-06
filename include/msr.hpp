@@ -292,11 +292,11 @@ public:
                 break;
                 
             case CPUType::AMD_ZEN3:
-                msrValues.emplace_back(0xC0011022, 0x01570000);
+                msrValues.emplace_back(0xC0011022, 0xC000000401570000);
                 break;
                 
             case CPUType::AMD_ZEN4_ZEN5:
-                msrValues.emplace_back(0xC0011022, 0x01570000);
+                msrValues.emplace_back(0xC0011022, 0x8680000401570000);
                 break;
 
             default:

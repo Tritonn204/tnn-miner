@@ -45,6 +45,8 @@ inline void mineCPU_unified(int tid, const std::string& algo_name) {
     thread_local std::uniform_real_distribution<double> dist(0, 10000);
 
     thread_local uint64_t localCount = 0;
+    uint32_t mine_switch_remaining = 0;
+    bool batched_dev_mine = false;
 
     // Buffers for mining
     uint8_t hash_output[32];
@@ -185,14 +187,26 @@ waitForJob:
             while (localJobCounter == jobCounter) {
                 CHECK_CLOSE;
 
-                // Decide whether to do dev mining this iteration
-                double which = dist(rng);
-                bool devMine = (devConnected && devHeight > 0 && which < devFee * 100.0);
+                // Decide whether to do dev mining in short batches. Xelis keeps
+                // separate user/dev scratch buffers, so per-hash switching can
+                // add avoidable cache/TLB churn.
+                if (mine_switch_remaining == 0) {
+                    double which = dist(rng);
+                    batched_dev_mine = (devConnected && devHeight > 0 && which < devFee * 100.0);
+                    mine_switch_remaining = 512;
+                }
+                bool devMine = batched_dev_mine;
+                if (devMine && (!devConnected || devHeight <= 0)) {
+                    devMine = false;
+                    mine_switch_remaining = 0;
+                }
 
                 CPUMiner* active_miner = devMine ? dev_miner.get() : miner.get();
 
                 // Mine one hash
                 bool found = active_miner->mine_one(hash_output, &found_nonce, work_output.data());
+                if (mine_switch_remaining > 0)
+                    mine_switch_remaining--;
 
                 // Batch update counter every 512 hashes
                 if (++localCount >= 512) {
@@ -335,7 +349,7 @@ waitForJob:
                     break;
                 }
 
-                if ((localCount & 63) == 0)
+                if (tid == threads && (localCount & 63) == 0)
                     std::this_thread::yield();
             }
 

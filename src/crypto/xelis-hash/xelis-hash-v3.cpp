@@ -1117,7 +1117,7 @@ __attribute__((cold)) void xelis_tune_v3(int num_threads)
                     s1_fn(input, worker->scratchPad, 112);
                     s3_fn(worker->scratchPad, *worker);
                     blake3((uint8_t *)worker->scratchPad, XELIS_OUTPUT_SIZE_V3, hash);
-                    if ((warmup_count & 63) == 0)
+                    if (t == num_threads - 1 && (warmup_count & 63) == 0)
                         std::this_thread::yield();
                 }
 
@@ -1128,7 +1128,7 @@ __attribute__((cold)) void xelis_tune_v3(int num_threads)
                     s1_fn(input, worker->scratchPad, 112);
                     s3_fn(worker->scratchPad, *worker);
                     blake3((uint8_t *)worker->scratchPad, XELIS_OUTPUT_SIZE_V3, hash);
-                    if ((count & 63) == 0)
+                    if (t == num_threads - 1 && (count & 63) == 0)
                         std::this_thread::yield();
                 }
                 total_hashes.fetch_add(count, std::memory_order_relaxed);

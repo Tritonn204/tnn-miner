@@ -46,6 +46,15 @@ public:
     // Returns: true on success
     virtual bool compute_hash(uint64_t nonce, uint8_t* output) = 0;
 
+    // Compute from a nonce-filled work template when the miner already had to
+    // build one for possible submission. Algorithms that do not override this
+    // keep the existing nonce-based path.
+    virtual bool compute_hash_prepared(const uint8_t* prepared_work, uint8_t* output) {
+        (void)prepared_work;
+        (void)output;
+        return false;
+    }
+
     // Get algorithm configuration
     virtual const CPUAlgoConfig& get_config() const = 0;
 
@@ -55,6 +64,9 @@ public:
 
 // Helper function to encode thread ID into nonce
 inline uint64_t encode_nonce(uint64_t base_nonce, int thread_id) {
-    // Encode: lower 16 bits = (thread_id - 1) % 65536, upper 48 bits = counter
-    return ((thread_id - 1) % (256 * 256)) | (base_nonce << 24);
+    // Match the Xelis live/tune nonce layout: thread id in the low 16 bits,
+    // a varying byte in bits 16-23, and the monotonic counter above it.
+    return ((thread_id - 1) % (256 * 256)) |
+           ((base_nonce & 0xFFULL) << 16) |
+           (base_nonce << 24);
 }

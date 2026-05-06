@@ -3,6 +3,7 @@
 #ifdef __cplusplus
 #include <iostream>
 #include <cstdlib>
+#include <cstdint>
 #include <string>
 #include <fstream>
 #include <mutex>
@@ -29,8 +30,26 @@ extern bool printHugepagesError;
 #define HUGE_META_PAGE_SIZE (2ULL * 1024 * 1024)
 #define HUGE_PAGE_2MB       (2ULL * 1024 * 1024)
 #define HUGE_PAGE_1GB       (1024ULL * 1024 * 1024)
+#define TNN_1GB_ARENA_MIN_ALLOC HUGE_META_PAGE_SIZE
+#define TNN_1GB_ARENA_MAX_ALLOC (64ULL * 1024 * 1024)
+#define TNN_HUGE_ALLOC_MAGIC 0x54484D41u
 
 #define ALIGN_UP(x, a)  ( ((x) + (a) - 1) & ~((size_t)((a) - 1)) )
+
+enum TnnPageType {
+  TNN_PAGE_REGULAR = 0,
+  TNN_PAGE_2MB = 1,
+  TNN_PAGE_1GB = 2
+};
+
+struct TnnHugeAllocHeader {
+  size_t real_size = 0;
+  uint32_t magic = TNN_HUGE_ALLOC_MAGIC;
+  uint32_t page_type = TNN_PAGE_REGULAR;
+  size_t slot_size = 0;
+  void* arena = nullptr;
+  bool in_use = false;
+};
 
 struct HugePagesInfo {
   size_t page_size_2mb = 0;
@@ -39,12 +58,6 @@ struct HugePagesInfo {
   size_t page_size_1gb = 0;
   size_t total_1gb = 0;
   size_t free_1gb = 0;
-};
-
-enum TnnPageType {
-  TNN_PAGE_REGULAR = 0,
-  TNN_PAGE_2MB = 1,
-  TNN_PAGE_1GB = 2
 };
 
 #ifdef _WIN32
@@ -191,6 +204,106 @@ inline bool tnn_reserve_hugepages(size_t bytes, size_t page_size)
         static_cast<unsigned long long>(total_pages) + (required - static_cast<size_t>(free_pages));
     return tnn_write_hugepage_count(page_size, "nr_hugepages", target);
 }
+
+struct TnnHugepageArena {
+    char* base = nullptr;
+    size_t used = 0;
+    TnnHugepageArena* next = nullptr;
+};
+
+inline std::mutex& tnn_hugepage_arena_mutex()
+{
+    static std::mutex mutex;
+    return mutex;
+}
+
+inline TnnHugepageArena*& tnn_hugepage_1gb_arenas()
+{
+    static TnnHugepageArena* arenas = nullptr;
+    return arenas;
+}
+
+inline void* tnn_alloc_from_1gb_arena(size_t requested)
+{
+    if (requested < TNN_1GB_ARENA_MIN_ALLOC || requested > TNN_1GB_ARENA_MAX_ALLOC) {
+        return nullptr;
+    }
+
+    const size_t slot_size = ALIGN_UP(requested, HUGE_META_PAGE_SIZE);
+    if (slot_size == 0 || slot_size > HUGE_PAGE_1GB) {
+        return nullptr;
+    }
+
+    std::lock_guard<std::mutex> lock(tnn_hugepage_arena_mutex());
+    TnnHugepageArena*& arenas = tnn_hugepage_1gb_arenas();
+
+    for (TnnHugepageArena* arena = arenas; arena; arena = arena->next) {
+        char* cursor = arena->base;
+        char* end = arena->base + arena->used;
+        while (cursor < end) {
+            TnnHugeAllocHeader* header = (TnnHugeAllocHeader*)cursor;
+            if (header->magic == TNN_HUGE_ALLOC_MAGIC &&
+                !header->in_use &&
+                header->slot_size >= slot_size) {
+                header->in_use = true;
+                return cursor + HUGE_META_PAGE_SIZE;
+            }
+            if (header->magic != TNN_HUGE_ALLOC_MAGIC || header->slot_size == 0) {
+                break;
+            }
+            cursor += header->slot_size;
+        }
+
+        if (arena->used + slot_size <= HUGE_PAGE_1GB) {
+            char* slot = arena->base + arena->used;
+            arena->used += slot_size;
+            TnnHugeAllocHeader* header = (TnnHugeAllocHeader*)slot;
+            header->real_size = 0;
+            header->magic = TNN_HUGE_ALLOC_MAGIC;
+            header->page_type = TNN_PAGE_1GB;
+            header->slot_size = slot_size;
+            header->arena = arena;
+            header->in_use = true;
+            return slot + HUGE_META_PAGE_SIZE;
+        }
+    }
+
+    if (!tnn_reserve_hugepages(HUGE_PAGE_1GB, HUGE_PAGE_1GB)) {
+        return nullptr;
+    }
+
+    char* base = (char*)mmap(
+        0,
+        HUGE_PAGE_1GB,
+        PROT_READ | PROT_WRITE,
+        MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | MAP_HUGE_1GB,
+        -1,
+        0
+    );
+    if (base == MAP_FAILED) {
+        return nullptr;
+    }
+
+    TnnHugepageArena* arena = (TnnHugepageArena*)std::malloc(sizeof(TnnHugepageArena));
+    if (!arena) {
+        munmap(base, HUGE_PAGE_1GB);
+        return nullptr;
+    }
+
+    arena->base = base;
+    arena->used = slot_size;
+    arena->next = arenas;
+    arenas = arena;
+
+    TnnHugeAllocHeader* header = (TnnHugeAllocHeader*)base;
+    header->real_size = 0;
+    header->magic = TNN_HUGE_ALLOC_MAGIC;
+    header->page_type = TNN_PAGE_1GB;
+    header->slot_size = slot_size;
+    header->arena = arena;
+    header->in_use = true;
+    return base + HUGE_META_PAGE_SIZE;
+}
 #endif
 
 inline void* malloc_huge_pages(size_t size)
@@ -253,13 +366,17 @@ inline void* malloc_huge_pages(size_t size)
 
 #else // POSIX path (Linux / others)
 
-    // On Linux, try 1GB huge pages first for very large allocations, then 2MB.
-    int use_huge = 0;
     int mmap_flags = MAP_PRIVATE | MAP_ANONYMOUS;
 
 #if !defined(__APPLE__)
+#if defined(__linux__)
+    // Pack small worker allocations into 1GB pages when available. This lets
+    // the mining session benefit from 1GB pages even when each worker is small.
+    ptr = (char*)tnn_alloc_from_1gb_arena(requested);
+#endif
+
     // Attempt 1GB huge pages if request is large enough
-    if (requested >= HUGE_PAGE_1GB) {
+    if (!ptr && requested >= HUGE_PAGE_1GB) {
         size_t huge_gran = HUGE_PAGE_1GB;
         real_size = ALIGN_UP(requested, huge_gran);
         tnn_reserve_hugepages(real_size, huge_gran);
@@ -275,7 +392,13 @@ inline void* malloc_huge_pages(size_t size)
         );
 
         if (ptr != MAP_FAILED) {
-            use_huge = 1;
+            TnnHugeAllocHeader* header = (TnnHugeAllocHeader*)ptr;
+            header->real_size = real_size;
+            header->magic = TNN_HUGE_ALLOC_MAGIC;
+            header->page_type = TNN_PAGE_1GB;
+            header->slot_size = real_size;
+            header->arena = nullptr;
+            header->in_use = true;
         } else {
             ptr = nullptr;
             real_size = 0;
@@ -299,7 +422,13 @@ inline void* malloc_huge_pages(size_t size)
         );
 
         if (ptr != MAP_FAILED) {
-            use_huge = 1;
+            TnnHugeAllocHeader* header = (TnnHugeAllocHeader*)ptr;
+            header->real_size = real_size;
+            header->magic = TNN_HUGE_ALLOC_MAGIC;
+            header->page_type = TNN_PAGE_2MB;
+            header->slot_size = real_size;
+            header->arena = nullptr;
+            header->in_use = true;
         } else {
             ptr = nullptr;
             real_size = 0;
@@ -332,11 +461,34 @@ inline void* malloc_huge_pages(size_t size)
         ptr = (char*)std::malloc(real_size);
         if (ptr == NULL) return NULL;
         real_size = 0;
+        TnnHugeAllocHeader* header = (TnnHugeAllocHeader*)ptr;
+        header->real_size = 0;
+        header->magic = TNN_HUGE_ALLOC_MAGIC;
+        header->page_type = TNN_PAGE_REGULAR;
+        header->slot_size = ALIGN_UP(requested, HUGE_META_PAGE_SIZE);
+        header->arena = nullptr;
+        header->in_use = true;
     }
 
 #endif // _WIN32 / POSIX
 
-    *((size_t*)ptr) = real_size;
+#if defined(_WIN32)
+    TnnHugeAllocHeader* header = (TnnHugeAllocHeader*)ptr;
+    header->real_size = real_size;
+    header->magic = TNN_HUGE_ALLOC_MAGIC;
+    header->page_type = real_size != 0 ? TNN_PAGE_2MB : TNN_PAGE_REGULAR;
+    header->slot_size = real_size;
+    header->arena = nullptr;
+    header->in_use = true;
+#elif defined(__APPLE__)
+    TnnHugeAllocHeader* header = (TnnHugeAllocHeader*)ptr;
+    header->real_size = real_size;
+    header->magic = TNN_HUGE_ALLOC_MAGIC;
+    header->page_type = real_size != 0 ? TNN_PAGE_2MB : TNN_PAGE_REGULAR;
+    header->slot_size = real_size;
+    header->arena = nullptr;
+    header->in_use = true;
+#endif
 
     return ptr + HUGE_META_PAGE_SIZE;
 }
@@ -346,6 +498,31 @@ inline void free_huge_pages(void* ptr)
     if (ptr == NULL) return;
 
     void* real_ptr = (char*)ptr - HUGE_META_PAGE_SIZE;
+
+    TnnHugeAllocHeader* header = (TnnHugeAllocHeader*)real_ptr;
+    if (header->magic == TNN_HUGE_ALLOC_MAGIC) {
+        if (header->arena != nullptr) {
+#if defined(__linux__)
+            std::lock_guard<std::mutex> lock(tnn_hugepage_arena_mutex());
+            header->in_use = false;
+#endif
+            return;
+        }
+
+        size_t real_size = header->real_size;
+        header->in_use = false;
+
+        if (real_size != 0) {
+#if defined(_WIN32)
+            VirtualFree(real_ptr, 0, MEM_RELEASE);
+#else
+            munmap(real_ptr, real_size);
+#endif
+        } else {
+            std::free(real_ptr);
+        }
+        return;
+    }
 
     size_t real_size = *((size_t*)real_ptr);
 

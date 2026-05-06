@@ -3,8 +3,6 @@
 #include "../common/cpu_algo_registry.hpp"
 #include "tnn-hugepages.hpp"
 #include <xelis-hash/xelis-hash.hpp>
-#include <algorithm>
-#include <endian.hpp>
 #include "tnn-common.hpp"
 
 // Xelis V2 CPU Algorithm Implementation
@@ -58,13 +56,15 @@ public:
         // Just write it to the template
         std::memcpy(local_work + config.nonce_offset, &nonce, config.nonce_size);
 
-        // Compute hash
         xelis_hash_v2(local_work, *worker_, output);
 
-        // Handle endianness
-        if (littleEndian()) {
-            std::reverse(output, output + 32);
-        }
+        return true;
+    }
+
+    bool compute_hash_prepared(const uint8_t* prepared_work, uint8_t* output) override {
+        if (!worker_) return false;
+
+        xelis_hash_v2((byte*)prepared_work, *worker_, output);
 
         return true;
     }
@@ -143,10 +143,13 @@ public:
 
         hash_fn_(local_work, *worker_, output);
 
-        // Handle endianness
-        if (littleEndian()) {
-            std::reverse(output, output + 32);
-        }
+        return true;
+    }
+
+    bool compute_hash_prepared(const uint8_t* prepared_work, uint8_t* output) override {
+        if (!worker_) return false;
+
+        hash_fn_((byte*)prepared_work, *worker_, output);
 
         return true;
     }

@@ -57,6 +57,30 @@ static inline bool hashMeetsTarget_le(const uint8_t *hash, const uint8_t *target
     return h[0] <= t[0];
 }
 
+static inline uint64_t load_be64(const uint8_t *p) {
+    return ((uint64_t)p[0] << 56) |
+           ((uint64_t)p[1] << 48) |
+           ((uint64_t)p[2] << 40) |
+           ((uint64_t)p[3] << 32) |
+           ((uint64_t)p[4] << 24) |
+           ((uint64_t)p[5] << 16) |
+           ((uint64_t)p[6] << 8) |
+           (uint64_t)p[7];
+}
+
+// Xelis hashes are emitted in canonical/display byte order, while cached
+// targets are stored as LE bytes. Compare without reversing the hot hash buffer.
+static inline bool hashMeetsTarget_be_hash_le_target(const uint8_t *hash, const uint8_t *target) {
+    const uint64_t *t = (const uint64_t *)target;
+    const uint64_t h3 = load_be64(hash);
+    if (h3 != t[3]) return h3 < t[3];
+    const uint64_t h2 = load_be64(hash + 8);
+    if (h2 != t[2]) return h2 < t[2];
+    const uint64_t h1 = load_be64(hash + 16);
+    if (h1 != t[1]) return h1 < t[1];
+    return load_be64(hash + 24) <= t[0];
+}
+
 inline std::string uint32ToHex(uint32_t value) {
   std::stringstream ss;
   ss << std::hex << std::setw(8) << std::setfill('0') << value;

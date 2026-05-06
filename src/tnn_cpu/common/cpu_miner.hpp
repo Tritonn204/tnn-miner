@@ -67,24 +67,32 @@ public:
         // Encode nonce with thread ID
         uint64_t encoded_nonce = encode_nonce(nonce_counter_++, thread_id_);
 
-        // Copy work to output buffer (for submission)
-        std::memcpy(work_output, work_buffer_.data(), config.template_size);
-
-        // Write nonce to work
-        std::memcpy(work_output + config.nonce_offset,
+        // Write nonce into this thread's prepared work buffer.
+        std::memcpy(work_buffer_.data() + config.nonce_offset,
                    &encoded_nonce,
                    config.nonce_size);
 
-        // Compute hash (algorithm will write to hash_output)
-        if (!algo_->compute_hash(encoded_nonce, hash_output)) {
+        // Compute hash from the nonce-filled work buffer when supported.
+        if (!algo_->compute_hash_prepared(work_buffer_.data(), hash_output) &&
+            !algo_->compute_hash(encoded_nonce, hash_output)) {
             return false;
         }
 
         total_hashes_++;
 
-        // Fast LE byte comparison (no bignum, no hex, no reverse)
-        if (current_difficulty_ > 0 && hashMeetsTarget_le(hash_output, cached_target_)) {
+        bool meets_target = false;
+        if (current_difficulty_ > 0) {
+            if (config.algo_id == ALGO_XELISV2 || config.algo_id == ALGO_XELISV3) {
+                meets_target = hashMeetsTarget_be_hash_le_target(hash_output, cached_target_);
+            } else {
+                meets_target = hashMeetsTarget_le(hash_output, cached_target_);
+            }
+        }
+
+        // Fast target comparison (no bignum, no hex, no hot-buffer reverse)
+        if (meets_target) {
             *found_nonce = encoded_nonce;
+            std::memcpy(work_output, work_buffer_.data(), config.template_size);
             return true;
         }
 
