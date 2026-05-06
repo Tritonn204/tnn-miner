@@ -22,6 +22,7 @@ using oroStream_t    = hipStream_t;
 using oroDeviceptr_t = hipDeviceptr_t;
 using oroDeviceptr   = oroDeviceptr_t;
 using oroDevice_t    = hipDevice_t;
+using oroCtx         = hipCtx_t;
 using oroCtx_t       = hipCtx_t;
 using oroDeviceProp_t = hipDeviceProp_t;
 using orortcProgram  = hiprtcProgram;
@@ -59,6 +60,10 @@ constexpr auto ORORTC_SUCCESS       = HIPRTC_SUCCESS;
 #define oroDeviceGetPCIBusId    hipDeviceGetPCIBusId
 #define oroDeviceReset          hipDeviceReset
 #define oroDeviceSynchronize    hipDeviceSynchronize
+#define oroCtxCreate            hipCtxCreate
+#define oroCtxDestroy           hipCtxDestroy
+#define oroCtxGetCurrent        hipCtxGetCurrent
+#define oroCtxSetCurrent        hipCtxSetCurrent
 
 #define oroModuleLoadData       hipModuleLoadData
 #define oroModuleGetFunction    hipModuleGetFunction

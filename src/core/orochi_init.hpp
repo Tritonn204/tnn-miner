@@ -17,16 +17,17 @@ namespace oro
   struct InitPaths
   {
     std::string libsDir;
-    std::string nvrtcLibsDir;
     std::string hipLib;
     std::string hiprtcLib;
     std::string nvrtcLib;
     std::string nvrtcLibVersioned;
+    std::string legacyNvrtcLib;
+    std::string legacyNvrtcLibVersioned;
 
     // HIP paths (bundled + system fallbacks)
     const char *hip[14];
     const char *hiprtc[14];
-    const char *nvrtc[30];
+    const char *nvrtc[32];
 
     void build()
     {
@@ -93,7 +94,9 @@ namespace oro
       nvrtc[23] = "/usr/local/cuda-12/lib64/libnvrtc.so";
       nvrtc[24] = nvrtcLib.c_str();
       nvrtc[25] = nvrtcLibVersioned.c_str();
-      nvrtc[26] = nullptr;
+      nvrtc[26] = legacyNvrtcLib.c_str();
+      nvrtc[27] = legacyNvrtcLibVersioned.c_str();
+      nvrtc[28] = nullptr;
     }
   };
 
@@ -146,16 +149,17 @@ namespace oro
     InitPaths paths;
     const std::string exeDir = getExeDir();
     paths.libsDir = exeDir + "/libs";
-    paths.nvrtcLibsDir = exeDir + "/nvrtc_libs";
     paths.hipLib = paths.libsDir + "/libamdhip64.so.6";
     paths.hiprtcLib = paths.libsDir + "/libhiprtc.so.6";
-    paths.nvrtcLib = paths.nvrtcLibsDir + "/libnvrtc.so.12";
-    paths.nvrtcLibVersioned = paths.nvrtcLibsDir + "/libnvrtc.so";
+    paths.nvrtcLib = paths.libsDir + "/libnvrtc.so.12";
+    paths.nvrtcLibVersioned = paths.libsDir + "/libnvrtc.so";
+    paths.legacyNvrtcLib = exeDir + "/nvrtc_libs/libnvrtc.so.12";
+    paths.legacyNvrtcLibVersioned = exeDir + "/nvrtc_libs/libnvrtc.so";
     paths.build();
 
     const char **hipPaths = paths.libsDir.empty() ? nullptr : paths.hip;
     const char **hiprtcPaths = paths.libsDir.empty() ? nullptr : paths.hiprtc;
-    const char **nvrtcPaths = paths.nvrtcLibsDir.empty() ? nullptr : paths.nvrtc;
+    const char **nvrtcPaths = paths.libsDir.empty() ? nullptr : paths.nvrtc;
 
 // Try HIP + CUDA
 #ifdef _WIN32

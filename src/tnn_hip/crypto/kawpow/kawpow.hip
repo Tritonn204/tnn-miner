@@ -106,14 +106,30 @@ dag_ptrload_plain(const uint8_t* base, uint32_t byte_off)
     return out;
 }
 
+#ifndef KAWPOW_DAG_VEC_TYPES_DEFINED
+#define KAWPOW_DAG_VEC_TYPES_DEFINED
+#if defined(__HIP_PLATFORM_AMD__)
 typedef uint32_t dag_vec4 __attribute__((ext_vector_type(4)));
+typedef uint32_t dag_vec2 __attribute__((ext_vector_type(2)));
+#else
+typedef uint4 dag_vec4;
+typedef uint2 dag_vec2;
+#endif
+#endif
 
 __device__ __forceinline__ dag128_u64
 dag_ptrload_vec4_ptr(const uint8_t* ptr)
 {
     const dag_vec4* p = reinterpret_cast<const dag_vec4*>(ptr);
     dag_vec4 t = *p;
+#if defined(__HIP_PLATFORM_AMD__)
     return __builtin_bit_cast(dag128_u64, t);
+#else
+    dag128_u64 out;
+    out.lo = (uint64_t)t.x | ((uint64_t)t.y << 32);
+    out.hi = (uint64_t)t.z | ((uint64_t)t.w << 32);
+    return out;
+#endif
 }
 
 #define PROGPOW_ISSUE_DAG_FROM(MIX0_VAL, DG, LOOP) do {                              \
@@ -352,8 +368,16 @@ __device__ __forceinline__ uint32_t shfl_lane16(uint32_t val, int src_lane)
 // AMD:    plain dwordx4 via ext_vector_type(4) (true clang hardware vector)
 // NVIDIA: single ld.global.cg.v2.u64 (bypass L1, cache in L2)
 // Fallback: plain two-uint64 load
+#ifndef KAWPOW_DAG_VEC_TYPES_DEFINED
+#define KAWPOW_DAG_VEC_TYPES_DEFINED
+#if defined(__HIP_PLATFORM_AMD__)
 typedef uint32_t dag_vec4 __attribute__((ext_vector_type(4)));
 typedef uint32_t dag_vec2 __attribute__((ext_vector_type(2)));
+#else
+typedef uint4 dag_vec4;
+typedef uint2 dag_vec2;
+#endif
+#endif
 
 // Non-temporal store — bypasses L2 (GLC on AMD, streaming on NVIDIA).
 // Use for write-once data (intermediate buffer) to avoid evicting DAG lines.
@@ -1183,13 +1207,10 @@ void kawpow_progpow_kernel_2way_seed64_digest(
     }
 
     // --- Broadcast z,w to all 16 lanes in the group ---
-    const uint32_t wave_lane  = __lane_id();
-    const uint32_t group_base = wave_lane & ~0xFu;
-
-    z0 = PROGPOW_BPERMUTE(group_base + 0, z0);
-    w0 = PROGPOW_BPERMUTE(group_base + 0, w0);
-    z1 = PROGPOW_BPERMUTE(group_base + 1, z1);
-    w1 = PROGPOW_BPERMUTE(group_base + 1, w1);
+    z0 = kawpow_broadcast_lane16(z0, 0);
+    w0 = kawpow_broadcast_lane16(w0, 0);
+    z1 = kawpow_broadcast_lane16(z1, 1);
+    w1 = kawpow_broadcast_lane16(w1, 1);
 
     // --- Fill mix directly from z,w — no seed-to-fnv1a work on the hot path ---
     uint32_t m0[PROGPOW_REGS];

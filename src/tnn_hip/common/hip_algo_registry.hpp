@@ -1288,6 +1288,30 @@ static constexpr int KAWPOW_BENCH_PERIODS = 1;
 static constexpr int KAWPOW_BENCH_BASE_BLOCK = 7500;
 static constexpr size_t KAWPOW_INTERMEDIATE_WORDS = 8;
 
+inline std::vector<std::string> kawpow_rtc_options(const oroDeviceProp_t& props, int device_id)
+{
+    if (tnn_is_amd_device(device_id)) {
+        std::vector<std::string> opts = {"-O3", "-mno-cumode", "-ffast-math"};
+        if (props.gcnArchName[0] != '\0')
+            opts.push_back(std::string("--gpu-architecture=") + props.gcnArchName);
+        return opts;
+    }
+
+    std::vector<std::string> opts = {"--dopt=on", "--use_fast_math"};
+    char arch_buf[32];
+#ifdef _WIN32
+    std::snprintf(arch_buf, sizeof(arch_buf), "compute_%d%d", props.major, props.minor);
+#else
+    std::snprintf(arch_buf, sizeof(arch_buf), "sm_%d%d", props.major, props.minor);
+#endif
+    opts.push_back(std::string("--gpu-architecture=") + arch_buf);
+#ifdef __linux__
+    opts.push_back("--device-int128");
+#endif
+    opts.push_back("-DDEVICE_ID=" + std::to_string(device_id));
+    return opts;
+}
+
 // Override block height for --bench-kawpow <block_height>.  -1 = use default.
 // Uses function-local static to avoid ODR issues across translation units.
 inline int& kawpow_bench_block_override() {
@@ -1535,10 +1559,7 @@ inline std::string kawpow_source_transform(const std::string& source, int device
 inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& props,
                              int device_id, void** algo_data)
 {
-    (void)kernels; (void)props;
-
-    // Ensure HIP runtime is initialized on this thread
-    oroSetDevice(device_id);
+    (void)kernels;
 
     const int epoch = ethash::get_epoch_number(kawpow_bench_block());
     auto ctx = ethash::create_epoch_context(epoch);
@@ -1597,7 +1618,6 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
     // fflush(stdout);
 
     // ---- Compile DAG gen kernel ----
-    bool is_amd = tnn_is_amd_device(device_id);
     auto& compiler = RTCCompiler::instance();
 
     for (const auto& h : hip_embedded::KAWPOW_HEADERS)
@@ -1605,17 +1625,7 @@ inline bool kawpow_pre_tune(const KernelMap& kernels, const oroDeviceProp_t& pro
     for (const auto& h : hip_embedded::COMMON_HEADERS)
         compiler.add_header_source(std::string(h.path), std::string(h.source));
 
-    std::vector<std::string> dag_opts;
-    if (is_amd) {
-        dag_opts = {"-O3", "-mno-cumode", "-ffast-math"};
-        if (props.gcnArchName[0] != '\0')
-            dag_opts.push_back(std::string("--gpu-architecture=") + props.gcnArchName);
-    } else {
-        dag_opts = {"--dopt=on", "--use_fast_math"};
-        char buf[32];
-        std::snprintf(buf, sizeof(buf), "sm_%d%d", props.major, props.minor);
-        dag_opts.push_back(std::string("--gpu-architecture=") + buf);
-    }
+    std::vector<std::string> dag_opts = kawpow_rtc_options(props, device_id);
 
     std::string dag_src(hip_ethash_dag_source::SRC_TNN_HIP_CRYPTO_KAWPOW_ETHASH_DAG_GEN_HIP_SOURCE);
     auto dag_ck = compiler.compile_from_source(dag_src, "ethash-dag-gen.hip",
@@ -2108,6 +2118,40 @@ inline void kawpow_algo_data_cleanup(void* algo_data)
     }
 }
 
+inline bool kawpow_refresh_dag_gen_kernel(KawPowAlgoData* kp, int device_id, const char* tag)
+{
+    if (!kp) return false;
+
+    auto& compiler = RTCCompiler::instance();
+    for (const auto& h : hip_embedded::KAWPOW_HEADERS)
+        compiler.add_header_source(std::string(h.path), std::string(h.source));
+    for (const auto& h : hip_embedded::COMMON_HEADERS)
+        compiler.add_header_source(std::string(h.path), std::string(h.source));
+
+    try {
+        std::string dag_src(hip_ethash_dag_source::SRC_TNN_HIP_CRYPTO_KAWPOW_ETHASH_DAG_GEN_HIP_SOURCE);
+        auto dag_ck = compiler.compile_from_source(dag_src, "ethash-dag-gen.hip",
+                                                   "ethash_dag_gen_kernel",
+                                                   kp->compile_opts,
+                                                   kp->compile_device_id);
+        if (!dag_ck.function) {
+            fprintf(stderr, "[KawPow] GPU %d: %sDAG gen kernel reload failed\n", device_id, tag);
+            return false;
+        }
+
+        if (kp->dag_gen_module && kp->dag_gen_module != dag_ck.module)
+            (void)oroModuleUnload(kp->dag_gen_module);
+
+        kp->dag_gen_module = dag_ck.module;
+        kp->dag_gen_function = dag_ck.function;
+        return true;
+    } catch (const std::exception& e) {
+        fprintf(stderr, "[KawPow] GPU %d: %sDAG gen kernel reload failed: %s\n",
+                device_id, tag, e.what());
+        return false;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // DAG rebuild helper — regenerates DAG + Barrett constants
 // for a new epoch. Must be called on GPU thread with context bound.
@@ -2176,6 +2220,12 @@ inline bool kawpow_rebuild_dag(KawPowLiveState& ls, KawPowAlgoData* kp, int new_
     fflush(stdout);
 
     // Launch DAG generation kernel
+    if (!kawpow_refresh_dag_gen_kernel(kp, device_id, tag)) {
+        oroFree((oroDeviceptr)d_light_cache);
+        ls.free_dag();
+        return false;
+    }
+
     oroFunction_t dag_fn = kp->dag_gen_function;
     if (!dag_fn) {
         fprintf(stderr, "[KawPow] GPU %d: DAG gen kernel not available\n", device_id);
@@ -2298,29 +2348,46 @@ inline bool kawpow_deps_changed(
         return false;
     }
 
-    // Unload old live module
-    ls.free_module();
+    oroFunction_t mono_kernel = ck.function;
+    oroFunction_t seed_kernel = nullptr;
+    oroFunction_t progpow_2way_kernel = nullptr;
+    oroFunction_t final_kernel = nullptr;
 
+    auto require_function = [&](oroFunction_t& out, const char* name) -> bool {
+        oroError_t err = oroModuleGetFunction(&out, ck.module, name);
+        if (err != oroSuccess || !out) {
+            fprintf(stderr, "[KawPow] GPU %d: %sMissing live kernel '%s' for period %d: %s\n",
+                    device_id, tag, name, new_period, tnn_error_string(err));
+            return false;
+        }
+        return true;
+    };
+
+    if (!require_function(seed_kernel, "kawpow_seed_kernel_seed64") ||
+        !require_function(progpow_2way_kernel, "kawpow_progpow_kernel_2way_seed64_digest") ||
+        !require_function(final_kernel, "kawpow_final_kernel_reseed_seed64_digest")) {
+        (void)oroModuleUnload(ck.module);
+        return false;
+    }
+
+    // All replacement symbols are valid; now swap out the previous live module.
+    ls.free_module();
     ls.live_module = ck.module;
-    ls.live_mono_kernel = ck.function;
-    oroModuleGetFunction(&ls.live_seed_kernel,          ck.module, "kawpow_seed_kernel_seed64");
-    oroModuleGetFunction(&ls.live_progpow_2way_kernel, ck.module, "kawpow_progpow_kernel_2way_seed64_digest");
-    oroModuleGetFunction(&ls.live_final_kernel,        ck.module, "kawpow_final_kernel_reseed_seed64_digest");
+    ls.live_mono_kernel = mono_kernel;
+    ls.live_seed_kernel = seed_kernel;
+    ls.live_progpow_2way_kernel = progpow_2way_kernel;
+    ls.live_progpow_4way_kernel = nullptr;
+    ls.live_final_kernel = final_kernel;
 
     // Update the kernel map so execute_fn uses the new kernels
     kernels["kawpow_hash_kernel"] = ls.live_mono_kernel;
-    if (ls.live_seed_kernel) {
-        kernels["kawpow_seed_kernel_seed64"] = ls.live_seed_kernel;
-        kernels["kawpow_seed_kernel"] = ls.live_seed_kernel;
-    }
-    if (ls.live_progpow_2way_kernel) {
-        kernels["kawpow_progpow_kernel_2way_seed64_digest"] = ls.live_progpow_2way_kernel;
-        kernels["kawpow_progpow_kernel_2way"] = ls.live_progpow_2way_kernel;
-    }
-    if (ls.live_final_kernel) {
-        kernels["kawpow_final_kernel_reseed_seed64_digest"] = ls.live_final_kernel;
-        kernels["kawpow_final_kernel"] = ls.live_final_kernel;
-    }
+    kernels["kawpow_seed_kernel_seed64"] = ls.live_seed_kernel;
+    kernels["kawpow_seed_kernel"] = ls.live_seed_kernel;
+    kernels["kawpow_progpow_kernel_2way_seed64_digest"] = ls.live_progpow_2way_kernel;
+    kernels["kawpow_progpow_kernel_2way"] = ls.live_progpow_2way_kernel;
+    kernels.erase("kawpow_progpow_kernel_4way");
+    kernels["kawpow_final_kernel_reseed_seed64_digest"] = ls.live_final_kernel;
+    kernels["kawpow_final_kernel"] = ls.live_final_kernel;
 
     printf("[KawPow] GPU %d: %sRecompiled for period %d\n", device_id, tag, new_period);
     fflush(stdout);
@@ -2524,8 +2591,18 @@ inline void kawpow_post_tune(const TuningResult& result,
     std::atomic<uint64_t> completed_hashes{0};
     bool launch_done = false;
 
-    std::thread reporter([&]() {
-        (void)oroSetDevice(device_id);
+    oroCtx reporter_ctx = nullptr;
+    (void)oroCtxGetCurrent(&reporter_ctx);
+
+    std::thread reporter([&, reporter_ctx]() {
+        if (reporter_ctx) {
+            oroError_t ctx_err = oroCtxSetCurrent(reporter_ctx);
+            if (ctx_err != oroSuccess) {
+                fprintf(stderr, "[KawPow] GPU %d: sustained bench reporter context bind failed: %s\n",
+                        device_id, tnn_error_string(ctx_err));
+                return;
+            }
+        }
 
         uint64_t total_hashes = 0;
         double total_ms = 0.0;
@@ -2658,8 +2735,6 @@ inline bool kawpow_context_rebuild(
     bool rebuild_is_dev = kp->pending_rebuild_is_dev;
     kp->pending_rebuild_epoch = -1;  // consume
 
-    // Reuse the original DAG gen function from pre_tune — no module reload.
-    // Same thread, same context, original module still loaded.
     auto& ls = kp->live;
     if (!kawpow_rebuild_dag(ls, kp, new_epoch, device_id, rebuild_is_dev))
         return false;
