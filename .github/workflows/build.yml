@@ -20,6 +20,20 @@ jobs:
       run: |
         chmod +x ./scripts/prereqs.sh
         ./scripts/prereqs.sh
+    - name: 'Setup CUDA NVRTC'
+      run: |
+        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb \
+          -o /tmp/cuda-keyring.deb
+        sudo dpkg -i /tmp/cuda-keyring.deb
+        rm /tmp/cuda-keyring.deb
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          cuda-compiler-12-9 \
+          cuda-cudart-dev-12-9 \
+          cuda-nvrtc-dev-12-9 \
+          cuda-profiler-api-12-9
+        find /usr/local/cuda/lib64 /usr/local/cuda-*/lib64 /usr/lib/x86_64-linux-gnu \
+          -maxdepth 1 \( -name 'libnvrtc.so*' -o -name 'libnvrtc-builtins.so*' \) 2>/dev/null | sort -V
     - name: 'Build Orochi'
       run: |
         chmod +x ./scripts/build_all.sh
@@ -27,19 +41,19 @@ jobs:
     - name: 'Package'
       run: |
         cd hip-build/linux/orochi
-        mkdir -p nvrtc_libs
+        mkdir -p libs
         for lib in libnvrtc.so libnvrtc-builtins.so; do
           find /usr/local/cuda/lib64 /usr/local/cuda-*/lib64 /usr/lib/x86_64-linux-gnu \
             -maxdepth 1 -name "${lib}*" 2>/dev/null | sort -V | while read -r found; do
-              cp -P "$found" nvrtc_libs/
+              cp -P "$found" libs/
               if [ -L "$found" ]; then
                 real="$(readlink -f "$found")"
-                [ -f "$real" ] && cp -P "$real" nvrtc_libs/
+                [ -f "$real" ] && cp -P "$real" libs/
               fi
             done
         done
         files="tnn-miner tunes/"
-        [ "$(ls -A nvrtc_libs 2>/dev/null)" ] && files="$files nvrtc_libs/"
+        [ "$(ls -A libs 2>/dev/null)" ] && files="$files libs/"
         tar -czvf ../../../tnn-miner-linux-x86_64.tar.gz $files
     - name: 'Upload artifact'
       uses: actions/upload-artifact@v4

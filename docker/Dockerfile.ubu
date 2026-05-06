@@ -18,6 +18,7 @@ FROM base AS build
 ENV HIP_PATH=/opt/rocm
 ENV ROCM_PATH=/opt/rocm
 ARG  CMAKE_ARGS=
+ARG  CUDA_VER=12-9
 ARG  PACKAGE_VERSION=0.0.1
 ARG  TARGZ_FILE=miner.tar.gz
 RUN pwd
@@ -29,6 +30,27 @@ COPY . .
 RUN ls -la .
 
 RUN chmod +x ./scripts/*.sh
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if echo "$CMAKE_ARGS" | grep -Eq "WITH_OROCHI=ON|HIP_PLATFORM=nvidia"; then \
+      if ! find /usr/local/cuda/lib64 /usr/local/cuda-*/lib64 /usr/lib/x86_64-linux-gnu \
+              -maxdepth 1 -name 'libnvrtc.so*' 2>/dev/null | grep -q .; then \
+        echo "CUDA NVRTC not found in builder image; installing cuda-nvrtc-dev-${CUDA_VER}..." && \
+        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb \
+          -o /tmp/cuda-keyring.deb && \
+        dpkg -i /tmp/cuda-keyring.deb && \
+        rm /tmp/cuda-keyring.deb && \
+        apt-get update && \
+        apt-get install -y --no-install-recommends \
+          cuda-compiler-${CUDA_VER} \
+          cuda-cudart-dev-${CUDA_VER} \
+          cuda-nvrtc-dev-${CUDA_VER} \
+          cuda-profiler-api-${CUDA_VER} && \
+        rm -rf /var/lib/apt/lists/*; \
+      fi; \
+      find /usr/local/cuda/lib64 /usr/local/cuda-*/lib64 /usr/lib/x86_64-linux-gnu \
+        -maxdepth 1 \( -name 'libnvrtc.so*' -o -name 'libnvrtc-builtins.so*' \) 2>/dev/null | sort -V; \
+    fi
 RUN --mount=type=cache,target=/src/_deps ./scripts/prereqs.sh
 RUN --mount=type=cache,target=/src/_deps mkdir ./build && cd ./build && cmake $CMAKE_ARGS -DTNN_VERSION=$PACKAGE_VERSION ..
 RUN --mount=type=cache,target=/src/_deps cd ./build && make -j$(nproc)
@@ -68,24 +90,23 @@ RUN mkdir -p ./libs && \
       ls -la ./libs/; \
     fi
 
-# Collect NVIDIA RTC libs from the Linux build image.  HiveOS wrappers add
-# nvrtc_libs to LD_LIBRARY_PATH, and the Orochi binary also has
-# $ORIGIN/nvrtc_libs in RPATH.
-RUN mkdir -p ./nvrtc_libs && \
+# Collect NVIDIA RTC libs from the Linux build image into the same bundle
+# directory used for other GPU runtime libraries.
+RUN mkdir -p ./libs && \
     if echo "$CMAKE_ARGS" | grep -Eq "WITH_OROCHI=ON|HIP_PLATFORM=nvidia"; then \
       echo "Collecting NVRTC libs for NVIDIA bundle..." && \
       for lib in libnvrtc.so libnvrtc-builtins.so; do \
         find /usr/local/cuda/lib64 /usr/local/cuda-*/lib64 /usr/lib/x86_64-linux-gnu \
              -maxdepth 1 -name "${lib}*" 2>/dev/null | sort -V | while read -r found; do \
-          cp -P "$found" ./nvrtc_libs/; \
+          cp -P "$found" ./libs/; \
           if [ -L "$found" ]; then \
             real="$(readlink -f "$found")"; \
-            [ -f "$real" ] && cp -P "$real" ./nvrtc_libs/; \
+            [ -f "$real" ] && cp -P "$real" ./libs/; \
           fi; \
-          echo "  bundled: $(basename "$found") -> nvrtc_libs/"; \
+          echo "  bundled: $(basename "$found") -> libs/"; \
         done; \
       done && \
-      ls -la ./nvrtc_libs/; \
+      ls -la ./libs/; \
     fi
 
 RUN ls -la ./
@@ -93,7 +114,6 @@ RUN set -e; \
     files="$(find . -maxdepth 1 -type f -name 'tnn-miner*' -print)"; \
     [ -d ./tunes ] && [ "$(ls -A ./tunes 2>/dev/null)" ] && files="$files ./tunes"; \
     [ -d ./libs ] && [ "$(ls -A ./libs 2>/dev/null)" ] && files="$files ./libs"; \
-    [ -d ./nvrtc_libs ] && [ "$(ls -A ./nvrtc_libs 2>/dev/null)" ] && files="$files ./nvrtc_libs"; \
     tar -czvf "${TARGZ_FILE}" $files
 RUN md5sum ./${TARGZ_FILE}
 
@@ -104,4 +124,3 @@ COPY --from=build /src/${TARGZ_FILE} /
 COPY --from=build /src/tnn-miner* /
 COPY --from=build /src/tunes/ /tunes/
 COPY --from=build /src/libs/ /libs/
-COPY --from=build /src/nvrtc_libs/ /nvrtc_libs/

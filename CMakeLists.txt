@@ -1163,8 +1163,8 @@ if (WITH_HIP)
       if (HIP_PLATFORM MATCHES "nvidia")
         set_target_properties(${TNN_OUTPUT_NAME} PROPERTIES
           BUILD_RPATH_USE_ORIGIN TRUE
-          INSTALL_RPATH "$ORIGIN/nvrtc_libs"
-          BUILD_RPATH "$ORIGIN/nvrtc_libs"
+          INSTALL_RPATH "$ORIGIN/libs;$ORIGIN/nvrtc_libs"
+          BUILD_RPATH "$ORIGIN/libs;$ORIGIN/nvrtc_libs"
         )
       endif()
     endif()
@@ -1232,8 +1232,8 @@ elseif (WITH_OROCHI)
     target_link_libraries(${TNN_OUTPUT_NAME} dl)
     set_target_properties(${TNN_OUTPUT_NAME} PROPERTIES
       BUILD_RPATH_USE_ORIGIN TRUE
-      INSTALL_RPATH "$ORIGIN/nvrtc_libs"
-      BUILD_RPATH "$ORIGIN/nvrtc_libs"
+      INSTALL_RPATH "$ORIGIN/libs;$ORIGIN/nvrtc_libs"
+      BUILD_RPATH "$ORIGIN/libs;$ORIGIN/nvrtc_libs"
     )
   else()
     if (USE_CLANG_CL OR MSVC)
