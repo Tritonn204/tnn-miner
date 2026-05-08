@@ -65,8 +65,14 @@
 
 #ifdef __HIP_PLATFORM_AMD__
 #define PROGPOW_BPERMUTE(src, val) __builtin_amdgcn_ds_bpermute((src) << 2, (val))
+// ds_swizzle BitMode XOR-8: each lane i reads from lane i^8.
+// Pattern 0x201F: bit15=0 (BitMode), xor_mask=8 << 10, or_mask=0 << 5, and_mask=0x1F.
+// Saves a VGPR and address-generation VALU vs ds_bpermute broadcast.
+// Same as __shfl_xor_sync(..., 8, 16) on NVIDIA.
+#define PROGPOW_SHUFFLE_XOR8(val) __builtin_amdgcn_ds_swizzle((val), 0x201F)
 #else
 #define PROGPOW_BPERMUTE(src, val) __shfl_sync(0xFFFFFFFF, (val), (src), 16)
+#define PROGPOW_SHUFFLE_XOR8(val)  __shfl_xor_sync(0xFFFFFFFF, (val), 8, 16)
 #endif
 
 #define KAWPOW_DAG_AUX 0x01
@@ -117,19 +123,50 @@ typedef uint2 dag_vec2;
 #endif
 #endif
 
+// ---- GLC/DLC cache-bypass load variant (renamed — toggle via dag_ptrload_vec4_ptr below) ----
+__device__ __forceinline__ dag128_u64
+dag_ptrload_vec4_glc_dlc(const uint8_t* ptr)
+{
+#ifdef __HIP_PLATFORM_AMD__
+    dag128_u64 out;
+    const uint64_t* p = reinterpret_cast<const uint64_t*>(ptr);
+#if defined(__gfx1030__) || defined(__gfx1031__) || defined(__gfx1032__) || \
+    defined(__gfx1033__) || defined(__gfx1034__) || defined(__gfx1035__) || \
+    defined(__gfx1036__) || defined(__gfx1100__) || defined(__gfx1101__) || \
+    defined(__gfx1102__) || defined(__gfx1103__) || defined(__gfx1150__) || \
+    defined(__gfx1151__)
+    asm volatile(
+        "global_load_dwordx2 %0, %1, off glc dlc\n\t"
+        "s_waitcnt vmcnt(0)"
+        : "=v"(out.lo)
+        : "v"(p));
+    asm volatile(
+        "global_load_dwordx2 %0, %1, off glc dlc"
+        : "=v"(out.hi)
+        : "v"(p + 2));
+#else
+    asm volatile(
+        "global_load_dwordx2 %0, %1, off glc\n\t"
+        "s_waitcnt vmcnt(0)"
+        : "=v"(out.lo)
+        : "v"(p));
+    asm volatile(
+        "global_load_dwordx2 %0, %1, off glc"
+        : "=v"(out.hi)
+        : "v"(p + 2));
+#endif
+    return out;
+#else
+    return dag_ptrload_plain(ptr, 0);
+#endif
+}
+
+// active DAG-load shim — point to the variant you want:
 __device__ __forceinline__ dag128_u64
 dag_ptrload_vec4_ptr(const uint8_t* ptr)
 {
-    const dag_vec4* p = reinterpret_cast<const dag_vec4*>(ptr);
-    dag_vec4 t = *p;
-#if defined(__HIP_PLATFORM_AMD__)
-    return __builtin_bit_cast(dag128_u64, t);
-#else
-    dag128_u64 out;
-    out.lo = (uint64_t)t.x | ((uint64_t)t.y << 32);
-    out.hi = (uint64_t)t.z | ((uint64_t)t.w << 32);
-    return out;
-#endif
+    return dag_ptrload_plain(ptr, 0);          // HEAD (plain loads)
+    // return dag_ptrload_vec4_glc_dlc(ptr);   // glc+dlc inline asm
 }
 
 #define PROGPOW_ISSUE_DAG_FROM(MIX0_VAL, DG, LOOP) do {                              \
@@ -343,16 +380,6 @@ __device__ __forceinline__ void fill_mix_4way(
         mix2[i] = (((z2 << 16) + w2) ^ jcong2) + jsr2;
         mix3[i] = (((z3 << 16) + w3) ^ jcong3) + jsr3;
     }
-}
-
-__device__ __forceinline__ uint32_t shfl_lane16(uint32_t val, int src_lane)
-{
-#ifdef __HIP_PLATFORM_AMD__
-    uint32_t base = __lane_id() & ~15u;
-    return __builtin_amdgcn_ds_bpermute(((base | src_lane) << 2), val);
-#else
-    return __shfl_sync(0xFFFFFFFF, val, src_lane, 16);
-#endif
 }
 
 // ===========================================================================
@@ -570,13 +597,11 @@ __device__ __forceinline__ void progpow_reduce(
     for (int i = 0; i < PROGPOW_REGS; i++)
         lane_result = fnv1a(lane_result, mix[i]);
 
-    #pragma unroll
-    for (int i = 0; i < 8; i++)
-    {
-        digest[i] = FNV_OFFSET_BASIS;
-        digest[i] = fnv1a(digest[i], shfl_lane16(lane_result, i));
-        digest[i] = fnv1a(digest[i], shfl_lane16(lane_result, i + 8));
-    }
+    uint32_t n = PROGPOW_SHUFFLE_XOR8(lane_result);
+
+    uint32_t lid = __lane_id() & 15u;
+    if (lid < 8)
+        digest[lid] = fnv1a(fnv1a(FNV_OFFSET_BASIS, lane_result), n);
 }
 
 __device__ __forceinline__ void progpow_reduce_2way(
@@ -594,24 +619,16 @@ __device__ __forceinline__ void progpow_reduce_2way(
         lane_result1 = fnv1a(lane_result1, mix1[i]);
     }
 
-    #pragma unroll
-    for (int i = 0; i < 8; i++) {
-        uint32_t a0 = shfl_lane16(lane_result0, i);
-        uint32_t b0 = shfl_lane16(lane_result0, i + 8);
-        uint32_t a1 = shfl_lane16(lane_result1, i);
-        uint32_t b1 = shfl_lane16(lane_result1, i + 8);
+    // XOR-8 swizzle: each lane i gets lane_result from lane i^8.
+    // 2 instructions replace 32 ds_bpermute (4 per digest slot × 8 slots).
+    uint32_t n0 = PROGPOW_SHUFFLE_XOR8(lane_result0);
+    uint32_t n1 = PROGPOW_SHUFFLE_XOR8(lane_result1);
 
-        uint32_t d0 = FNV_OFFSET_BASIS;
-        uint32_t d1 = FNV_OFFSET_BASIS;
-
-        d0 = fnv1a(d0, a0);
-        d0 = fnv1a(d0, b0);
-
-        d1 = fnv1a(d1, a1);
-        d1 = fnv1a(d1, b1);
-
-        digest0[i] = d0;
-        digest1[i] = d1;
+    uint32_t lid = __lane_id() & 15u;
+    if (lid < 8) {
+        // lane i has local=R_i and swizzled=R_{i+8} → correct FNV order
+        digest0[lid] = fnv1a(fnv1a(FNV_OFFSET_BASIS, lane_result0), n0);
+        digest1[lid] = fnv1a(fnv1a(FNV_OFFSET_BASIS, lane_result1), n1);
     }
 }
 
@@ -1048,8 +1065,8 @@ __device__ __forceinline__ void store_digest_coop_16x8_u32(
 
     if (lane_id < 8u) {
         store_nt_u32(&dst0[lane_id], digest0[lane_id]);
-    } else if (have_h1) {
-        store_nt_u32(&dst1[lane_id - 8u], digest1[lane_id - 8u]);
+        if (have_h1)
+            store_nt_u32(&dst1[lane_id], digest1[lane_id]);
     }
 }
 
