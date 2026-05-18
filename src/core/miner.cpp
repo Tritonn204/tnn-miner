@@ -994,6 +994,20 @@ int tnn_main(int argc, char **argv)
 #endif
   }
 
+  if (vm.count("bench-pearl"))
+  {
+#if defined(TNN_HIP) && defined(TNN_PEARL)
+    int rc = bench_pearl_hip();
+    return rc;
+#elif !defined(TNN_HIP)
+    TNN_LOG_ERROR("[PEARL-HIP-BENCH] ERROR: --bench-pearl requires TNN_HIP to be enabled\n");
+    return 1;
+#else
+    TNN_LOG_ERROR("[PEARL-HIP-BENCH] ERROR: --bench-pearl requires WITH_PEARL=ON\n");
+    return 1;
+#endif
+  }
+
   if (vm.count("bench-kawpow"))
   {
 #if defined(TNN_KAWPOW)

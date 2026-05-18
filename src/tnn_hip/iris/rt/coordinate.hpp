@@ -3,7 +3,7 @@
 #include <cstdint>
 
 #ifndef IRIS_HIP_FRONTEND
-#if defined(__HIPCC__) || defined(__HIPRTC__) || defined(__HIP_DEVICE_COMPILE__)
+#if defined(__HIPCC__) || defined(__HIPRTC__) || defined(__HIPCC_RTC__) || defined(__HIP_DEVICE_COMPILE__)
 #define IRIS_HIP_FRONTEND 1
 #else
 #define IRIS_HIP_FRONTEND 0

@@ -77,6 +77,36 @@ if (WITH_OROCHI)
         MANIFEST_NAME COMMON_HEADERS
     )
 
+    embed_hip_sources(
+        OUTPUT_FILE "${PROJECT_BINARY_DIR}/generated/iris_embedded_headers.hpp"
+        SOURCES
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/arch_traits.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/block_reduce.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/buffer_view.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/coordinate.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/copy.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/iris.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/lds_view.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/load_store_traits.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/space_filling_curve.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/static_distributed_tensor.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/sweep_tile.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/tensor_adaptor.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/tensor_coordinate.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/tensor_desc.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/tensor_view.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/thread_map.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/tile_distribution.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/tile_window.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/transform.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/vec_store.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/waitcnt.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/warp_primitives.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/warp_wmma.hpp"
+            "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/wmma_i8.hpp"
+        MANIFEST_NAME IRIS_HEADERS
+    )
+
     # Per-algo HIP crypto sources
     include(cmake/hip-crypto/astrix-hash/astrix-hash-hip.cmake)
     include(cmake/hip-crypto/nxl-hash/nxl-hash-hip.cmake)

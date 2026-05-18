@@ -186,7 +186,7 @@ __global__ void noise_generation_dense_kernel(
     }
 
     // 3. Vectorized store to global memory
-    auto out_view = iris::hip::gmem_view(ptr_out, num_rows, R, R);
+    auto out_view = iris::hip::make_global_row_major_tensor_view(ptr_out, num_rows, R, R);
     iris::hip::store_row_major_vector<DenseMap>(out_view, bid * DenseMap::rows_per_block, 0, tid, vals);
 }
 
