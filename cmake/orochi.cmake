@@ -83,6 +83,7 @@ if (WITH_OROCHI)
     include(cmake/hip-crypto/wala-hash/wala-hash-hip.cmake)
     include(cmake/hip-crypto/xelis-hash/xelis-hash-hip.cmake)
     include(cmake/hip-crypto/kawpow/kawpow-hip.cmake)
+    include(cmake/hip-crypto/pearl-pouw/pearl-pouw-hip.cmake)
 
     # NOTE: We do NOT define __HIP_PLATFORM_AMD__ or __HIP_PLATFORM_NVIDIA__ at
     # compile time. Platform detection happens at runtime via oroGetCurAPI().

@@ -121,6 +121,8 @@ const TnnDevMinerInfo devInfo[COIN_COUNT] = {
   {COIN_KAWPOW,   "stratum+tcp://rvn.2miners.com",              "6060",     "RQzFzM3nUuie4urAfM8afQqzXdRqpXXpeB", "RQzFzM3nUuie4urAfM8afQqzXdRqpXXpeB"},
   {COIN_RVN,      "stratum+tcp://rvn.2miners.com",              "6060",     "RQzFzM3nUuie4urAfM8afQqzXdRqpXXpeB", "RQzFzM3nUuie4urAfM8afQqzXdRqpXXpeB"},
   {COIN_QUAI,     "stratum+tcp://rvn.2miners.com",              "6060",     "RQzFzM3nUuie4urAfM8afQqzXdRqpXXpeB", "RQzFzM3nUuie4urAfM8afQqzXdRqpXXpeB"},
+  {COIN_QUBIT,    "stratum+tcp://qubit.pool",                    "5555",     "QUBIT_WALLET_PLACEHOLDER",              "QUBIT_WALLET_PLACEHOLDER"},
+  {COIN_PEARL,    "localhost",                                   "8337",     "PEARL_WALLET_PLACEHOLDER",              "PEARL_WALLET_PLACEHOLDER"},
 };
 
 typedef struct {
@@ -162,6 +164,8 @@ const Coin coins[COIN_COUNT] = {
   {COIN_KAWPOW,   ALGO_KAWPOW,      "KAWPOW",   "KawPow (Generic)"},
   {COIN_RVN,      ALGO_KAWPOW,      "RVN",      "Ravencoin (KawPow)"},
   {COIN_QUAI,     ALGO_KAWPOW,      "QUAI",     "Quai Network (KawPow)"},
+  {COIN_QUBIT,    ALGO_QHASH,       "QUBIT",    "QubitCoin"},
+  {COIN_PEARL,    ALGO_PEARL_POUW,  "PRL",      "Pearl"},
 };
 
 // ============================================================================
@@ -383,6 +387,12 @@ class MiningProfile {
           case ALGO_KAWPOW:
             this->protocol = PROTO_KAWPOW_STRATUM;
             break;
+          case ALGO_QHASH:
+            this->protocol = PROTO_BTC_STRATUM;
+            break;
+          case ALGO_PEARL_POUW:
+            this->protocol = PROTO_PEARL_STRATUM;
+            break;
         }
       } else {
         switch (this->coin.miningAlgo) {
@@ -393,6 +403,9 @@ class MiningProfile {
             break;            
           case ALGO_RX0:
             this->protocol = PROTO_RX0_SOLO;
+            break;
+          case ALGO_PEARL_POUW:
+            this->protocol = PROTO_PEARL_SOLO;
             break;
         }
       }

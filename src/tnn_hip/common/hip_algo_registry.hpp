@@ -28,6 +28,11 @@
 #include "../crypto/kawpow/kawpow_proggen.hpp"
 #endif
 
+#ifdef TNN_QHASH
+#include "qhash_embedded_headers.hpp"
+#include "qhash-kernel.hip.hpp"
+#endif
+
 // ============================================================================
 // Xelis V3 Shared Memory Calculator
 // ============================================================================
@@ -1962,7 +1967,7 @@ inline bool kawpow_occupancy_tune(TuningResult& result, const oroDeviceProp_t& p
     }
 
     // ---- 2D TPB × multiplier sweep helper ----
-    static constexpr int mult_candidates[] = {128, 256, 512, 1024, 4096, 8192};
+    static constexpr int mult_candidates[] = {16, 32, 64, 128, 256, 512, 1024, 2048};
     static constexpr int n_mults = sizeof(mult_candidates) / sizeof(mult_candidates[0]);
     constexpr double MAX_LAUNCH_SEC = 3.0;
 
@@ -2805,6 +2810,95 @@ inline AlgoConfig KAWPOW_CONFIG = {
 };
 #endif // TNN_KAWPOW
 
+#ifdef TNN_QHASH
+// ============================================================================
+// QHash algorithm hooks (QubitCoin)
+// ============================================================================
+
+// Placeholder: custom kernel launch dispatch
+static bool qhash_execute(KernelContext &kernels, const KernelLaunchContext &ctx)
+{
+    (void)kernels;
+    (void)ctx;
+    // TODO: Implement QHash kernel launch dispatch
+    return false;
+}
+
+// Minimal executors for autotune
+static bool qhash_bottleneck_execute(KernelContext &kernels, const KernelLaunchContext &ctx)
+{
+    return qhash_execute(kernels, ctx);
+}
+
+static bool qhash_bottleneck_setup(KernelContext &kernels, const KernelLaunchContext &ctx)
+{
+    (void)kernels;
+    (void)ctx;
+    return true;
+}
+
+// Shared memory calculator
+static size_t qhash_shared_mem(int block_size) {
+    (void)block_size;
+    return 0;
+}
+
+inline AlgoConfig QHASH_CONFIG = {
+    .name = "qhash",
+    .source_path = "src/tnn_hip/crypto/qhash/qhash-kernel.hip",
+#ifdef TNN_QHASH
+    .source = hip_qhash_source::SRC_TNN_HIP_CRYPTO_QHASH_QHASH_KERNEL_HIP_SOURCE.data(),
+#else
+    .source = {},
+#endif
+
+    .kernel_names = {
+        "qhash_kernel",
+    },
+    .kernel_name = "",
+
+#ifdef TNN_QHASH
+    .rtc_headers = build_rtc_headers(hip_embedded::QHASH_HEADERS, hip_embedded::COMMON_HEADERS),
+#else
+    .rtc_headers = {},
+#endif
+    .template_size = 80,
+    .hash_size = 32,
+    .nonce_size = 4,
+    .scratch_per_hash = 0,
+    .preferred_block_size = 256,
+    .algo_id = ALGO_QHASH,
+    .calc_shared_mem = qhash_shared_mem,
+
+    .category = AlgoCategory::Mixed,
+    .enable_reg_tuning = false,
+
+    .amd_blocks = {64, 512, 64},
+    .nvidia_blocks = {64, 512, 64},
+    .target_batch_time_ms = 500.0,
+    .max_batch_time_ms = 1000.0,
+    .min_batch_time_ms = 50.0,
+    .enable_autotune = true,
+    .autotune_warmup = 2,
+    .autotune_iterations = 3,
+    .batch_step_denom = 1,
+    .memory_reserve_mb = 32.0,
+    .memory_usage_factor = 1.0,
+
+    .execute_fn = qhash_execute,
+
+    .strategy_variants = {},
+    .strategy_names = {},
+    .strategy_bottleneck_kernels = {},
+
+    .bottleneck_execute_fn = qhash_bottleneck_execute,
+    .bottleneck_setup_fn = qhash_bottleneck_setup,
+    .tune_key_probe_fn = nullptr,
+
+    .occupancy_threshold = 0.0,
+};
+#endif // TNN_QHASH
+
 // ============================================================================
 // Algorithm Registry
 // ============================================================================
@@ -2829,6 +2923,12 @@ public:
       return std::make_unique<GPUAlgorithm>(KAWPOW_CONFIG);
     }
 #endif
+#ifdef TNN_QHASH
+    if (name == "qhash")
+    {
+      return std::make_unique<GPUAlgorithm>(QHASH_CONFIG);
+    }
+#endif
     return nullptr;
   }
 
@@ -2838,6 +2938,9 @@ public:
       "xelis_v3",
 #ifdef TNN_KAWPOW
       "kawpow",
+#endif
+#ifdef TNN_QHASH
+      "qhash",
 #endif
     };
   }

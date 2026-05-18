@@ -45,6 +45,8 @@ if (WITH_HIP)
   include(cmake/hip-crypto/wala-hash/wala-hash-hip.cmake)
   include(cmake/hip-crypto/xelis-hash/xelis-hash-hip.cmake)
   include(cmake/hip-crypto/kawpow/kawpow-hip.cmake)
+  include(cmake/hip-crypto/qhash/qhash-hip.cmake)
+  include(cmake/hip-crypto/pearl-pouw/pearl-pouw-hip.cmake)
 
   if (HIP_PLATFORM MATCHES "nvidia")
     add_compile_definitions(__HIP_PLATFORM_NVIDIA__)

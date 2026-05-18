@@ -81,6 +81,10 @@
 #include <tnn_hip/coins/kawpow/test_kawpow_hip.h>
 #endif
 
+#if defined(TNN_PEARL)
+#include <tnn_hip/coins/pearl/test_pearl_hip.h>
+#endif
+
 #ifdef TNN_YESPOWER
 #include <crypto/yespower/yespower_algo.h>
 #include <yespower/yespower.h>
@@ -317,6 +321,11 @@ int enhanceWallet(MiningProfile *currentProfile, bool checkWallet)
   {
     preserveAlgoOverride(*currentProfile, COIN_SPECTRE);
     currentProfile->protocol = PROTO_SPECTRE_STRATUM;
+  }
+  if (currentProfile->wallet.find("qubit", 0) != std::string::npos)
+  {
+    preserveAlgoOverride(*currentProfile, COIN_QUBIT);
+    currentProfile->protocol = PROTO_BTC_STRATUM;
   }
 
   // Recalculate protocol after wallet autodetect
@@ -761,6 +770,26 @@ int tnn_main(int argc, char **argv)
 #endif
   }
 
+  if (miningProfile.coin.coinId == COIN_QUBIT)
+  {
+#if defined(TNN_QHASH)
+    preserveAlgoOverride(miningProfile, COIN_QUBIT);
+    miningProfile.protocol = PROTO_BTC_STRATUM;
+#else
+    UNSUPPORTED_ALGO_ERROR(unsupported_qhash);
+#endif
+  }
+
+  if (miningProfile.coin.coinId == COIN_PEARL)
+  {
+#if defined(TNN_PEARL)
+    preserveAlgoOverride(miningProfile, COIN_PEARL);
+    miningProfile.protocol = PROTO_PEARL_SOLO;
+#else
+    UNSUPPORTED_ALGO_ERROR(unsupported_pearl);
+#endif
+  }
+
   if (vm.count("randomx") || miningProfile.coin.miningAlgo == ALGO_RX0)
   {
 #if defined(TNN_RANDOMX)
@@ -947,6 +976,20 @@ int tnn_main(int argc, char **argv)
     printf("ERROR: --hip-test-kawpow requires TNN_KAWPOW to be enabled\n");
     fflush(stdout);
     setcolor(BRIGHT_WHITE);
+    return 1;
+#endif
+  }
+
+  if (vm.count("hip-test-pearl"))
+  {
+#if defined(TNN_HIP) && defined(TNN_PEARL)
+    int rc = test_pearl_hip();
+    return rc;
+#elif !defined(TNN_HIP)
+    TNN_LOG_ERROR("[PEARL-HIP-TEST] ERROR: --hip-test-pearl requires TNN_HIP to be enabled\n");
+    return 1;
+#else
+    TNN_LOG_ERROR("[PEARL-HIP-TEST] ERROR: --hip-test-pearl requires WITH_PEARL=ON\n");
     return 1;
 #endif
   }
@@ -1174,6 +1217,11 @@ int tnn_main(int argc, char **argv)
     if (miningProfile.wallet.find("ZEPHYR", 0) != std::string::npos)
     {
       preserveAlgoOverride(miningProfile, COIN_ZEPH);
+    }
+    if (miningProfile.wallet.find("qubit", 0) != std::string::npos)
+    {
+      preserveAlgoOverride(miningProfile, COIN_QUBIT);
+      miningProfile.protocol = PROTO_BTC_STRATUM;
     }
 
     // Recalculate protocol after wallet autodetect
@@ -2360,6 +2408,7 @@ connectionAttempt:
       case ALGO_HOOHASH:
       case ALGO_WALA_HASH:
       case ALGO_KAWPOW:
+      case ALGO_QHASH:
       {
         miningProf->workerName = devWorkerName;
         break;

@@ -184,19 +184,6 @@ dag_ptrload_vec4_ptr(const uint8_t* ptr)
 #define PROGPOW_ISSUE_DAG(MIX, DG, LOOP) \
     PROGPOW_ISSUE_DAG_FROM((MIX)[0], DG, LOOP)
 
-#define PROGPOW_STORE_COOP(MIX, VALUE, LOOP) do {                                    \
-    uint32_t _sglane = lane_id & 15u;                                                \
-    uint32_t _isrc   = (threadIdx.x & ~15u) | ((LOOP) & 15u);                        \
-    uint32_t _seed   = PROGPOW_BPERMUTE(_isrc, (MIX)[1]);                            \
-    uint32_t _q      = __umulhi(_seed, KAWPOW_BARRETT_M) >> KAWPOW_BARRETT_SHIFT;    \
-    _seed -= _q * KAWPOW_DAG_NUM_ITEMS_DIV;                                          \
-    if (_seed >= KAWPOW_DAG_NUM_ITEMS_DIV) _seed -= KAWPOW_DAG_NUM_ITEMS_DIV;        \
-    uint64_t _base   = ((uint64_t)_seed << 8);                                       \
-    uint64_t _off    = ((uint64_t)((_sglane ^ (LOOP)) & 15u)) << 4;                  \
-    uint8_t* _ptr    = reinterpret_cast<uint8_t*>(d_dag) + _base + _off;             \
-    store_glc_slc(reinterpret_cast<uint64_t*>(_ptr), VALUE);                         \
-} while(0)
-
 // ProgPoW body macro — injected by host before RTC.
 // #define PROGPOW_BODY(MIX, DG) do { ... } while(0)
 // MIX = uint32_t[32] mix array name, DG = dag_vec4 pre-loaded DAG data variable
@@ -921,8 +908,12 @@ __device__ __forceinline__ void kawpow_make_seed_state(
 __device__ __forceinline__ uint32_t kawpow_broadcast_lane16(uint32_t val, int src_lane)
 {
 #ifdef __HIP_PLATFORM_AMD__
-    uint32_t base = __lane_id() & ~15u;
-    return PROGPOW_BPERMUTE(base + (uint32_t)src_lane, val);
+    // ds_swizzle BitMode broadcast within 16-lane subgroups.
+    // and_mask=0x10 isolates bit4 (value 16) to separate subgroups.
+    // Pattern must be a constant for HIPRTC.
+    if (src_lane == 0)
+        return __builtin_amdgcn_ds_swizzle(val, 0x10);
+    return __builtin_amdgcn_ds_swizzle(val, 0x30);  // src_lane == 1
 #else
     return __shfl_sync(0xFFFFFFFF, val, src_lane, 16);
 #endif
@@ -1124,12 +1115,11 @@ void kawpow_progpow_kernel_2way(
     }
 
     {
-        uint32_t digest0[8];
-        progpow_reduce(m0, digest0);
-
-        uint32_t digest1[8];
+        uint32_t digest0[8], digest1[8];
         if (have_h1) {
-            progpow_reduce(m1, digest1);
+            progpow_reduce_2way(m0, m1, digest0, digest1);
+        } else {
+            progpow_reduce(m0, digest0);
         }
 
         store_digest_coop_16x8_u32(
@@ -1252,12 +1242,11 @@ void kawpow_progpow_kernel_2way_seed64_digest(
     // --- Reduce + store digest ---
     // Digest overwrites the z,w slot — seed data is consumed, no longer needed.
     {
-        uint32_t digest0[8];
-        progpow_reduce(m0, digest0);
-
-        uint32_t digest1[8];
+        uint32_t digest0[8], digest1[8];
         if (have_h1)
-            progpow_reduce(m1, digest1);
+            progpow_reduce_2way(m0, m1, digest0, digest1);
+        else
+            progpow_reduce(m0, digest0);
 
         store_digest_coop_16x8_u32(
             d_seed_digest + hash_id_0 * 8u,
