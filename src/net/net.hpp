@@ -547,6 +547,18 @@ inline void do_session_v2(
         break;
 #endif
 
+#ifdef TNN_PEARL
+    case ALGO_PEARL_POUW:
+        switch (miningProf->protocol)
+        {
+        case PROTO_PEARL_SOLO:
+            tnn::pearl::pearl_session(miningProf->host, miningProf->port, miningProf->wallet,
+                          miningProf->workerName, ioc, yield, miningProf->isDev);
+            break;
+        }
+        break;
+#endif
+
 #ifdef TNN_RINHASH
     case ALGO_RINHASH:
         switch (miningProf->protocol)

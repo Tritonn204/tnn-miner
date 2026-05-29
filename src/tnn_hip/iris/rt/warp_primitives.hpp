@@ -1,5 +1,6 @@
 #pragma once
 
+#include "arch_traits.hpp"
 #include "coordinate.hpp"
 
 namespace iris::hip {
@@ -28,6 +29,15 @@ IRIS_DEVICE_INLINE uint32_t exchange_lane_x16_u32(uint32_t v) {
 #if IRIS_AMDGCN_FRONTEND && (defined(__gfx11__) || defined(__gfx1100__) || defined(__gfx1101__) || defined(__gfx1102__))
     return __builtin_amdgcn_permlanex16(0, v, 0x76543210, 0xfedcba98, false, true);
 #else
+    return v;
+#endif
+}
+
+IRIS_DEVICE_INLINE uint32_t shuffle_xor_u32(uint32_t v, int lane_mask) {
+#if IRIS_DEVICE_FRONTEND
+    return __shfl_xor(v, lane_mask, arch::wave_size);
+#else
+    (void)lane_mask;
     return v;
 #endif
 }

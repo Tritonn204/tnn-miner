@@ -884,6 +884,7 @@ file(GLOB SOURCES_NET
   "${PROJECT_SOURCE_DIR}/src/net/*.c"
   "${PROJECT_SOURCE_DIR}/src/net/kas/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/net/xelis/*.cpp"
+  "${PROJECT_SOURCE_DIR}/src/net/pearl/*.cpp"
 )
 
 include(cmake/spsa.cmake)

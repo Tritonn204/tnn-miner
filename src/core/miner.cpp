@@ -31,6 +31,7 @@
 #include "net.hpp"
 
 #include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <iostream>
 #include <string>
@@ -118,6 +119,10 @@ const char *tnnTargetArch = XSTR(CPU_ARCHTARGET);
 double latest_hashrate = 0.0;
 
 bool gpuMine = false;
+
+static int g_bench_pearl_m = 0;
+static int g_bench_pearl_n = 0;
+static int g_bench_pearl_k = 0;
 bool cpuMine = true;
 bool g_powerMonAvail = false;
 bool g_ocAvail = false;
@@ -587,6 +592,27 @@ int tnn_main(int argc, char **argv)
     {
       std::string cleanArg = arg;
 
+      auto parseBenchPearlInt = [&](const char* prefix, int& dst) -> bool {
+        const size_t prefix_len = std::strlen(prefix);
+        if (arg.rfind(prefix, 0) != 0)
+          return false;
+        const char* value = arg.c_str() + prefix_len;
+        if (*value == '\0')
+          throw po::error(std::string("missing value for ") + prefix);
+        char* end = nullptr;
+        const long parsed = std::strtol(value, &end, 10);
+        if (end == value || *end != '\0' || parsed <= 0 || parsed > static_cast<long>(INT32_MAX))
+          throw po::error(std::string("bad value for ") + prefix);
+        dst = static_cast<int>(parsed);
+        return true;
+      };
+      if (parseBenchPearlInt("--bench-pearl-m=", g_bench_pearl_m) ||
+          parseBenchPearlInt("--bench-pearl-n=", g_bench_pearl_n) ||
+          parseBenchPearlInt("--bench-pearl-k=", g_bench_pearl_k))
+      {
+        continue;
+      }
+
       // Strip leading dashes
       while (!cleanArg.empty() && cleanArg[0] == '-')
       {
@@ -983,7 +1009,7 @@ int tnn_main(int argc, char **argv)
   if (vm.count("hip-test-pearl"))
   {
 #if defined(TNN_HIP) && defined(TNN_PEARL)
-    int rc = test_pearl_hip();
+    int rc = tnn::pearl::test_pearl_hip();
     return rc;
 #elif !defined(TNN_HIP)
     TNN_LOG_ERROR("[PEARL-HIP-TEST] ERROR: --hip-test-pearl requires TNN_HIP to be enabled\n");
@@ -994,10 +1020,43 @@ int tnn_main(int argc, char **argv)
 #endif
   }
 
+  if (vm.count("pearl-rpc-test"))
+  {
+#if defined(TNN_PEARL)
+    MiningProfile pearlProfile = miningProfile;
+    pearlProfile.setCoin(coins[COIN_PEARL]);
+    pearlProfile.setPoolAddress(devInfo[COIN_PEARL].devHost + ":" + devInfo[COIN_PEARL].devPort);
+
+    std::string host = vm.count("daemon-address")
+        ? vm["daemon-address"].as<std::string>()
+        : pearlProfile.host;
+    std::string port = vm.count("port")
+        ? std::to_string(vm["port"].as<int>())
+        : pearlProfile.port;
+
+    return tnn::pearl::pearl_rpc_test(host, port);
+#else
+    TNN_LOG_ERROR("[PEARL-RPC-TEST] ERROR: WITH_PEARL=ON is required\n");
+    return 1;
+#endif
+  }
+
   if (vm.count("bench-pearl"))
   {
 #if defined(TNN_HIP) && defined(TNN_PEARL)
-    int rc = bench_pearl_hip();
+    auto set_bench_pearl_env = [](const char* name, int value) {
+      if (value <= 0)
+        return;
+#if defined(_WIN32)
+      _putenv_s(name, std::to_string(value).c_str());
+#else
+      setenv(name, std::to_string(value).c_str(), 1);
+#endif
+    };
+    set_bench_pearl_env("TNN_PEARL_BENCH_M", g_bench_pearl_m);
+    set_bench_pearl_env("TNN_PEARL_BENCH_N", g_bench_pearl_n);
+    set_bench_pearl_env("TNN_PEARL_BENCH_K", g_bench_pearl_k);
+    int rc = tnn::pearl::bench_pearl_hip();
     return rc;
 #elif !defined(TNN_HIP)
     TNN_LOG_ERROR("[PEARL-HIP-BENCH] ERROR: --bench-pearl requires TNN_HIP to be enabled\n");

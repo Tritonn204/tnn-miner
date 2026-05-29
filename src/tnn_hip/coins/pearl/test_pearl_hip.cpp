@@ -1,7 +1,6 @@
 #include "test_pearl_hip.h"
 
 #include <tnn_hip/crypto/pearl/pearl_pouw_defs.h>
-#include <tnn_hip/crypto/pearl/pearl_pouw_vectors.inc>
 
 #include <BLAKE3/c/blake3.h>
 
@@ -12,14 +11,16 @@
 #include <tnn_hip/common/gpu_algo.hpp>
 #include <tnn_hip/common/gpu_rtc.hpp>
 #include "iris_embedded_headers.hpp"
-#include "pearl-noise-dense-test.hip.hpp"
-#include "pearl-expand-jackpot.hip.hpp"
 #include "pearl_embedded_headers.hpp"
+#include "pearl_gemm_simple.hip.hpp"
+#include "rocwmma_headers.hip.hpp"
 #include "tnn_hip_common_embedded.hpp"
 #endif
 
 #include <algorithm>
 #include <array>
+#include <chrono>
+#include <cstdlib>
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
@@ -28,22 +29,7 @@
 #include <vector>
 
 namespace tnn::pearl {
-
 namespace {
-
-void append_u16_le(std::vector<uint8_t>& out, uint16_t v)
-{
-  out.push_back(static_cast<uint8_t>(v & 0xff));
-  out.push_back(static_cast<uint8_t>((v >> 8) & 0xff));
-}
-
-void append_u32_le(std::vector<uint8_t>& out, uint32_t v)
-{
-  out.push_back(static_cast<uint8_t>(v & 0xff));
-  out.push_back(static_cast<uint8_t>((v >> 8) & 0xff));
-  out.push_back(static_cast<uint8_t>((v >> 16) & 0xff));
-  out.push_back(static_cast<uint8_t>((v >> 24) & 0xff));
-}
 
 template <size_t N>
 std::string hex_bytes(const std::array<uint8_t, N>& bytes)
@@ -57,32 +43,6 @@ std::string hex_bytes(const std::array<uint8_t, N>& bytes)
     out[i * 2 + 1] = lut[bytes[i] & 0x0f];
   }
   return out;
-}
-
-bool check_bytes(const char* tag, const char* name, const std::string& got, const char* want)
-{
-  if (got == want)
-  {
-    TNN_LOG_INFO("%s %s OK\n", tag, name);
-    return true;
-  }
-
-  TNN_LOG_ERROR("%s %s mismatch\n", tag, name);
-  TNN_LOG_ERROR("%s   got:  %s\n", tag, got.c_str());
-  TNN_LOG_ERROR("%s   want: %s\n", tag, want);
-  return false;
-}
-
-bool check_u32_list(const char* tag, const char* name, const std::vector<uint32_t>& got, const std::vector<uint32_t>& want)
-{
-  if (got == want)
-  {
-    TNN_LOG_INFO("%s %s OK\n", tag, name);
-    return true;
-  }
-
-  TNN_LOG_ERROR("%s %s mismatch\n", tag, name);
-  return false;
 }
 
 uint8_t hex_nibble(char c)
@@ -107,27 +67,6 @@ Hash256 hash_from_hex(const char* hex)
 }
 
 using I32Matrix = std::vector<std::vector<int32_t>>;
-
-template <size_t RowCount>
-I32Matrix matrix_from_hex_rows(const char* const (&rows)[RowCount], size_t cols)
-{
-  I32Matrix out;
-  out.reserve(RowCount);
-
-  for (const char* row_hex : rows)
-  {
-    std::vector<int32_t> row;
-    row.reserve(cols);
-    for (size_t i = 0; i < cols; ++i)
-    {
-      const uint8_t raw = static_cast<uint8_t>((hex_nibble(row_hex[i * 2]) << 4) | hex_nibble(row_hex[i * 2 + 1]));
-      row.push_back(raw < 128 ? static_cast<int32_t>(raw) : static_cast<int32_t>(raw) - 256);
-    }
-    out.push_back(std::move(row));
-  }
-
-  return out;
-}
 
 std::array<uint32_t, 16> compute_jackpot_words(
   const I32Matrix& s_a,
@@ -175,25 +114,6 @@ std::array<uint32_t, 16> compute_jackpot_words(
   return jackpot_msg;
 }
 
-bool check_jackpot_words(const char* tag, const std::array<uint32_t, 16>& got, const std::array<uint32_t, 16>& want)
-{
-  if (got == want)
-  {
-    TNN_LOG_INFO("%s vector.jackpot_words OK\n", tag);
-    return true;
-  }
-
-  TNN_LOG_ERROR("%s vector.jackpot_words mismatch\n", tag);
-  for (size_t i = 0; i < got.size(); ++i)
-  {
-    if (got[i] != want[i])
-    {
-      TNN_LOG_ERROR("%s   word[%zu] got=%08x want=%08x\n", tag, i, got[i], want[i]);
-    }
-  }
-  return false;
-}
-
 #ifdef TNN_HIP
 bool pearl_gpu_check(const char* tag, oroError_t err, const char* expr, const char* file, int line)
 {
@@ -212,19 +132,19 @@ bool pearl_gpu_check(const char* tag, oroError_t err, const char* expr, const ch
 
 #define PEARL_GPU_CHECK(call) pearl_gpu_check(tag, (call), #call, __FILE__, __LINE__)
 
-std::array<uint8_t, 32> pearl_noise_seed_label(const char* label)
-{
-  std::array<uint8_t, 32> out{};
-  std::copy(label, label + std::strlen(label), out.begin());
-  return out;
-}
-
 int8_t pearl_dense_noise_byte(uint8_t raw)
 {
   constexpr int noise_abs_max = 128;
   constexpr int noise_range = 64;
   const int32_t signed_raw = static_cast<int32_t>(static_cast<int8_t>(raw));
   return static_cast<int8_t>(((signed_raw + noise_abs_max) % noise_range) - (noise_range / 2));
+}
+
+inline int8_t clampi8(int32_t v)
+{
+  if (v < -128) return -128;
+  if (v > 127) return 127;
+  return static_cast<int8_t>(v);
 }
 
 std::vector<int8_t> pearl_dense_noise_reference(
@@ -302,6 +222,109 @@ std::vector<int8_t> pearl_sparse_noise_reference(
   return out;
 }
 
+std::vector<int32_t> compute_host_gemm_ref(
+  const std::vector<int8_t>& ApEA,
+  const std::vector<int8_t>& BpEB,
+  int h, int w, int k)
+{
+  std::vector<int32_t> C(static_cast<size_t>(h) * w, 0);
+  for (int i = 0; i < h; ++i)
+  {
+    for (int j = 0; j < w; ++j)
+    {
+      int32_t sum = 0;
+      for (int l = 0; l < k; ++l)
+      {
+        sum += static_cast<int32_t>(ApEA[static_cast<size_t>(i) * k + l]) *
+               static_cast<int32_t>(BpEB[static_cast<size_t>(j) * k + l]);
+      }
+      C[static_cast<size_t>(i) * w + j] = sum;
+    }
+  }
+  return C;
+}
+
+std::pair<std::vector<int8_t>, std::vector<int8_t>>
+compute_noised_matrices(
+  const I32Matrix& s_a, const I32Matrix& s_b,
+  const I32Matrix& noise_a, const I32Matrix& noise_b)
+{
+  int h = static_cast<int>(s_a.size());
+  int w = static_cast<int>(s_b.size());
+  int k = static_cast<int>(s_a[0].size());
+
+  std::vector<int8_t> ApEA(static_cast<size_t>(h) * k);
+  std::vector<int8_t> BpEB(static_cast<size_t>(w) * k);
+
+  for (int i = 0; i < h; ++i)
+    for (int l = 0; l < k; ++l)
+      ApEA[static_cast<size_t>(i) * k + l] =
+        clampi8(s_a[i][l] + noise_a[i][l]);
+
+  for (int j = 0; j < w; ++j)
+    for (int l = 0; l < k; ++l)
+      BpEB[static_cast<size_t>(j) * k + l] =
+        clampi8(s_b[j][l] + noise_b[j][l]);
+
+  return {std::move(ApEA), std::move(BpEB)};
+}
+
+struct SparseNoisePairs
+{
+  std::vector<int> first_idx;
+  std::vector<int> second_idx;
+};
+
+SparseNoisePairs extract_sparse_pairs(
+  const std::vector<int8_t>& sparse_noise,
+  size_t num_rows,
+  size_t cols)
+{
+  SparseNoisePairs pairs;
+  pairs.first_idx.resize(num_rows);
+  pairs.second_idx.resize(num_rows);
+  for (size_t row = 0; row < num_rows; ++row)
+  {
+    bool found_first = false;
+    for (size_t c = 0; c < cols; ++c)
+    {
+      if (sparse_noise[row * cols + c] == 1)
+      {
+        if (!found_first)
+        {
+          pairs.first_idx[row] = static_cast<int>(c);
+          found_first = true;
+        }
+      }
+      else if (sparse_noise[row * cols + c] == -1)
+      {
+        pairs.second_idx[row] = static_cast<int>(c);
+      }
+    }
+  }
+  return pairs;
+}
+
+I32Matrix compute_noise_from_factors_dense_times_sparse_T(
+  const std::vector<int8_t>& dense,
+  size_t dense_rows,
+  const SparseNoisePairs& sparse_pairs,
+  size_t sparse_rows,
+  size_t R)
+{
+  I32Matrix noise(dense_rows, std::vector<int32_t>(sparse_rows, 0));
+  for (size_t i = 0; i < dense_rows; ++i)
+  {
+    for (size_t l = 0; l < sparse_rows; ++l)
+    {
+      int32_t val = static_cast<int32_t>(dense[i * R + sparse_pairs.first_idx[l]]) -
+                    static_cast<int32_t>(dense[i * R + sparse_pairs.second_idx[l]]);
+      noise[i][l] = val;
+    }
+  }
+  return noise;
+}
+
 std::string rtc_include_basename(const std::string& include_name)
 {
   const auto pos = include_name.find_last_of("/\\");
@@ -333,539 +356,14 @@ std::vector<std::string> pearl_rtc_compile_opts(const oroDeviceProp_t& props, bo
   return opts;
 }
 
-bool run_dense_noise_gpu_case(
-  const char* tag,
-  const char* name,
-  oroFunction_t kernel,
-  int num_rows,
-  int cols,
-  const Hash256& key,
-  const std::array<uint8_t, 32>& seed)
-{
-  constexpr int threads = 128;
-  constexpr int rows_per_block = 128;
-
-  const int blocks = (num_rows + rows_per_block - 1) / rows_per_block;
-  const size_t out_bytes = static_cast<size_t>(num_rows) * cols;
-
-  int8_t* d_out = nullptr;
-  uint8_t* d_key = nullptr;
-  uint8_t* d_seed = nullptr;
-
-  if (!PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_out), out_bytes)) ||
-      !PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_key), key.size())) ||
-      !PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_seed), seed.size())))
-  {
-    return false;
-  }
-
-  bool ok = true;
-  ok &= PEARL_GPU_CHECK(oroMemcpy(d_key, key.data(), key.size(), oroMemcpyHostToDevice));
-  ok &= PEARL_GPU_CHECK(oroMemcpy(d_seed, seed.data(), seed.size(), oroMemcpyHostToDevice));
-  ok &= PEARL_GPU_CHECK(oroMemset(d_out, 0, out_bytes));
-
-  uint32_t thread_coord_base = 0;
-  void* args[] = {&d_out, &num_rows, &d_key, &d_seed, &thread_coord_base};
-  ok &= PEARL_GPU_CHECK(oroModuleLaunchKernel(kernel, blocks, 1, 1, threads, 1, 1, 0, nullptr, args, nullptr));
-  ok &= PEARL_GPU_CHECK(oroDeviceSynchronize());
-
-  std::vector<int8_t> got(out_bytes);
-  ok &= PEARL_GPU_CHECK(oroMemcpy(got.data(), d_out, out_bytes, oroMemcpyDeviceToHost));
-
-  (void)oroFree(reinterpret_cast<oroDeviceptr>(d_out));
-  (void)oroFree(reinterpret_cast<oroDeviceptr>(d_key));
-  (void)oroFree(reinterpret_cast<oroDeviceptr>(d_seed));
-
-  if (!ok)
-    return false;
-
-  const std::vector<int8_t> want = pearl_dense_noise_reference(num_rows, cols, key, seed);
-  if (got == want)
-  {
-    TNN_LOG_INFO("%s gpu.%s_dense OK\n", tag, name);
-    return true;
-  }
-
-  TNN_LOG_ERROR("%s gpu.%s_dense mismatch\n", tag, name);
-  for (size_t i = 0; i < got.size(); ++i)
-  {
-    if (got[i] != want[i])
-    {
-      TNN_LOG_ERROR("%s   first mismatch row=%zu col=%zu got=%d want=%d\n",
-                    tag,
-                    i / static_cast<size_t>(cols),
-                    i % static_cast<size_t>(cols),
-                    static_cast<int>(got[i]),
-                    static_cast<int>(want[i]));
-      break;
-    }
-  }
-  return false;
-}
-
-bool run_sparse_noise_gpu_case(
-  const char* tag,
-  const char* name,
-  oroFunction_t kernel,
-  int num_rows,
-  int cols,
-  const Hash256& key,
-  const std::array<uint8_t, 32>& seed)
-{
-  constexpr int threads = 128;
-  constexpr int rows_per_thread = 8;
-
-  const int blocks = (num_rows + threads * rows_per_thread - 1) / (threads * rows_per_thread);
-  const size_t out_bytes = static_cast<size_t>(num_rows) * cols;
-
-  int8_t* d_out = nullptr;
-  uint8_t* d_key = nullptr;
-  uint8_t* d_seed = nullptr;
-
-  if (!PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_out), out_bytes)) ||
-      !PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_key), key.size())) ||
-      !PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_seed), seed.size())))
-  {
-    return false;
-  }
-
-  bool ok = true;
-  ok &= PEARL_GPU_CHECK(oroMemcpy(d_key, key.data(), key.size(), oroMemcpyHostToDevice));
-  ok &= PEARL_GPU_CHECK(oroMemcpy(d_seed, seed.data(), seed.size(), oroMemcpyHostToDevice));
-  ok &= PEARL_GPU_CHECK(oroMemset(d_out, 0, out_bytes));
-
-  uint32_t thread_coord_base = 0;
-  void* args[] = {&d_out, &num_rows, &d_key, &d_seed, &thread_coord_base};
-  ok &= PEARL_GPU_CHECK(oroModuleLaunchKernel(kernel, blocks, 1, 1, threads, 1, 1, 0, nullptr, args, nullptr));
-  ok &= PEARL_GPU_CHECK(oroDeviceSynchronize());
-
-  std::vector<int8_t> got(out_bytes);
-  ok &= PEARL_GPU_CHECK(oroMemcpy(got.data(), d_out, out_bytes, oroMemcpyDeviceToHost));
-
-  (void)oroFree(reinterpret_cast<oroDeviceptr>(d_out));
-  (void)oroFree(reinterpret_cast<oroDeviceptr>(d_key));
-  (void)oroFree(reinterpret_cast<oroDeviceptr>(d_seed));
-
-  if (!ok)
-    return false;
-
-  const std::vector<int8_t> want = pearl_sparse_noise_reference(num_rows, cols, key, seed);
-  if (got == want)
-  {
-    TNN_LOG_INFO("%s gpu.%s_sparse OK\n", tag, name);
-    return true;
-  }
-
-  TNN_LOG_ERROR("%s gpu.%s_sparse mismatch\n", tag, name);
-  for (size_t i = 0; i < got.size(); ++i)
-  {
-    if (got[i] != want[i])
-    {
-      TNN_LOG_ERROR("%s   first mismatch row=%zu col=%zu got=%d want=%d\n",
-                    tag,
-                    i / static_cast<size_t>(cols),
-                    i % static_cast<size_t>(cols),
-                    static_cast<int>(got[i]),
-                    static_cast<int>(want[i]));
-      break;
-    }
-  }
-  return false;
-}
-
-bool run_noise_gpu_checks(
-  const char* tag,
-  const HarnessFixture& fixture,
-  const Hash256& a_noise_seed,
-  const Hash256& b_noise_seed)
-{
-  int device_count = 0;
-  if (!PEARL_GPU_CHECK(oroGetDeviceCount(&device_count)))
-    return false;
-  if (device_count == 0)
-  {
-    TNN_LOG_ERROR("%s no GPU devices found for noise checks\n", tag);
-    return false;
-  }
-
-  oroDeviceProp_t props{};
-  if (!PEARL_GPU_CHECK(oroGetDeviceProperties(&props, tnn_get_device(0))))
-    return false;
-
-  oroCtx ctx{};
-  if (!PEARL_GPU_CHECK(oroCtxCreate(&ctx, 0, tnn_get_device(0))))
-    return false;
-
-  auto& compiler = RTCCompiler::instance();
-  auto rtc_headers = build_rtc_headers(
-    hip_embedded::PEARL_HEADERS,
-    hip_embedded::IRIS_HEADERS,
-    hip_embedded::COMMON_HEADERS);
-  for (const auto& h : rtc_headers)
-  {
-    const std::string include_name(h.name);
-    const std::string source(h.source);
-    compiler.add_header_source(include_name, source);
-
-    const std::string basename = rtc_include_basename(include_name);
-    if (basename != include_name)
-      compiler.add_header_source(basename, source);
-  }
-
-  const bool is_amd = tnn_is_amd_device(0);
-  const auto compile_opts = pearl_rtc_compile_opts(props, is_amd);
-  const std::string source(
-    hip_pearl_noise_dense_source::SRC_TNN_HIP_CRYPTO_PEARL_NOISE_GENERATION_DENSE_TEST_HIP_SOURCE);
-
-  TNN_LOG_INFO("%s compiling Pearl noise HIPRTC kernels\n", tag);
-  RTCCompiler::CompiledKernel dense_compiled{};
-  RTCCompiler::CompiledKernel sparse_compiled{};
-  try
-  {
-    dense_compiled = compiler.compile_from_source(
-      source,
-      "pearl-noise-dense-test.hip",
-      "pearl_noise_dense_32_128_kernel",
-      compile_opts);
-    sparse_compiled = compiler.compile_from_source(
-      source,
-      "pearl-noise-dense-test.hip",
-      "pearl_noise_sparse_32_128_kernel",
-      compile_opts);
-  }
-  catch (const std::exception& e)
-  {
-    TNN_LOG_ERROR("%s Pearl noise HIPRTC compile failed: %s\n", tag, e.what());
-    (void)oroCtxDestroy(ctx);
-    return false;
-  }
-
-  const auto seed_a = pearl_noise_seed_label("A_tensor");
-  const auto seed_b = pearl_noise_seed_label("B_tensor");
-  const int dense_cols = static_cast<int>(fixture.config.rank);
-  if (dense_cols != 32)
-  {
-    TNN_LOG_ERROR("%s dense noise HIP test currently expects rank=32, got %d\n", tag, dense_cols);
-    (void)oroCtxDestroy(ctx);
-    return false;
-  }
-
-  bool ok = true;
-  ok &= run_dense_noise_gpu_case(
-    tag, "noise_a_factor", dense_compiled.function, static_cast<int>(fixture.m), dense_cols, a_noise_seed, seed_a);
-  ok &= run_dense_noise_gpu_case(
-    tag, "noise_b_factor", dense_compiled.function, static_cast<int>(fixture.n), dense_cols, b_noise_seed, seed_b);
-  ok &= run_sparse_noise_gpu_case(
-    tag, "sparse_a_factor", sparse_compiled.function, static_cast<int>(fixture.config.common_dim), dense_cols, a_noise_seed, seed_a);
-  ok &= run_sparse_noise_gpu_case(
-    tag, "sparse_b_factor", sparse_compiled.function, static_cast<int>(fixture.config.common_dim), dense_cols, b_noise_seed, seed_b);
-
-  (void)oroCtxDestroy(ctx);
-  return ok;
-}
-
-// Helper constants for jackpot GPU kernel
-static constexpr int kNumThreads = 256;
-static constexpr int kJackpotSize = 16;
-
-bool run_jackpot_gpu_check(
-  const char* tag,
-  const I32Matrix& s_a,
-  const I32Matrix& s_b,
-  const I32Matrix& noise_a,
-  const I32Matrix& noise_b,
-  int k_in,
-  int rank,
-  const std::array<uint32_t, 16>& expected_jackpot)
-{
-  int h = static_cast<int>(s_a.size());
-  int w = static_cast<int>(s_b.size());
-  int k = k_in;
-  const int tiles = k / rank;
-  const int jackpot_tile_rows_a = 16;
-  const int jackpot_tile_rows_b = 32;
-  const unsigned int partial_grid_x = static_cast<unsigned int>((w + jackpot_tile_rows_b - 1) / jackpot_tile_rows_b);
-  const unsigned int partial_grid_y = static_cast<unsigned int>((h + jackpot_tile_rows_a - 1) / jackpot_tile_rows_a);
-  int partial_blocks = static_cast<int>(partial_grid_x * partial_grid_y);
-  const size_t partial_bytes = static_cast<size_t>(partial_blocks) * tiles * sizeof(uint32_t);
-
-  // Convert matrices from I32Matrix (int32) to flat int8 arrays
-  const size_t a_bytes = static_cast<size_t>(h) * k;
-  const size_t b_bytes = static_cast<size_t>(w) * k;
-  std::vector<int8_t> s_a_flat(a_bytes);
-  std::vector<int8_t> noise_a_flat(a_bytes);
-  std::vector<int8_t> s_b_flat(b_bytes);
-  std::vector<int8_t> noise_b_flat(b_bytes);
-
-  for (int i = 0; i < h; ++i)
-    for (int j = 0; j < k; ++j)
-      s_a_flat[i * k + j] = static_cast<int8_t>(s_a[i][j]);
-  for (int i = 0; i < h; ++i)
-    for (int j = 0; j < k; ++j)
-      noise_a_flat[i * k + j] = static_cast<int8_t>(noise_a[i][j]);
-  for (int i = 0; i < w; ++i)
-    for (int j = 0; j < k; ++j)
-      s_b_flat[i * k + j] = static_cast<int8_t>(s_b[i][j]);
-  for (int i = 0; i < w; ++i)
-    for (int j = 0; j < k; ++j)
-      noise_b_flat[i * k + j] = static_cast<int8_t>(noise_b[i][j]);
-
-  int device_count = 0;
-  if (!PEARL_GPU_CHECK(oroGetDeviceCount(&device_count)))
-    return false;
-  if (device_count == 0)
-  {
-    TNN_LOG_ERROR("%s no GPU devices found for jackpot check\n", tag);
-    return false;
-  }
-
-  oroDeviceProp_t props{};
-  if (!PEARL_GPU_CHECK(oroGetDeviceProperties(&props, tnn_get_device(0))))
-    return false;
-
-  oroCtx ctx{};
-  if (!PEARL_GPU_CHECK(oroCtxCreate(&ctx, 0, tnn_get_device(0))))
-    return false;
-
-  auto& compiler = RTCCompiler::instance();
-  auto rtc_headers = build_rtc_headers(
-    hip_embedded::PEARL_HEADERS,
-    hip_embedded::IRIS_HEADERS,
-    hip_embedded::COMMON_HEADERS);
-  for (const auto& hdr : rtc_headers)
-  {
-    const std::string include_name(hdr.name);
-    const std::string source(hdr.source);
-    compiler.add_header_source(include_name, source);
-
-    const std::string basename = rtc_include_basename(include_name);
-    if (basename != include_name)
-      compiler.add_header_source(basename, source);
-  }
-
-  const bool is_amd = tnn_is_amd_device(0);
-  const auto compile_opts = pearl_rtc_compile_opts(props, is_amd);
-  const std::string source(
-    hip_pearl_expand_jackpot_source::SRC_TNN_HIP_CRYPTO_PEARL_PEARL_EXPAND_JACKPOT_HIP_SOURCE);
-
-  TNN_LOG_INFO("%s compiling Pearl jackpot HIPRTC kernels\n", tag);
-  RTCCompiler::CompiledKernel partial_compiled{};
-  RTCCompiler::CompiledKernel reduce_compiled{};
-  try
-  {
-    partial_compiled = compiler.compile_from_source(
-      source,
-      "pearl-expand-jackpot.hip",
-      "pearl_expand_jackpot_tiled_partial",
-      compile_opts);
-    reduce_compiled = compiler.compile_from_source(
-      source,
-      "pearl-expand-jackpot.hip",
-      "pearl_jackpot_tiled_reduce",
-      compile_opts);
-  }
-  catch (const std::exception& e)
-  {
-    TNN_LOG_ERROR("%s Pearl jackpot HIPRTC compile failed: %s\n", tag, e.what());
-    (void)oroCtxDestroy(ctx);
-    return false;
-  }
-
-  // Allocate GPU memory
-  signed char* d_s_a = nullptr;
-  signed char* d_noise_a = nullptr;
-  signed char* d_s_b = nullptr;
-  signed char* d_noise_b = nullptr;
-  uint32_t* d_partial = nullptr;
-  uint32_t* d_jackpot = nullptr;
-
-  bool alloc_ok = true;
-  alloc_ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_s_a), a_bytes));
-  alloc_ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_noise_a), a_bytes));
-  alloc_ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_s_b), b_bytes));
-  alloc_ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_noise_b), b_bytes));
-  alloc_ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_partial), partial_bytes));
-  alloc_ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_jackpot), kJackpotSize * sizeof(uint32_t)));
-
-  if (!alloc_ok)
-  {
-    auto free_all = [&]() {
-      if (d_s_a)     (void)oroFree(reinterpret_cast<oroDeviceptr>(d_s_a));
-      if (d_noise_a) (void)oroFree(reinterpret_cast<oroDeviceptr>(d_noise_a));
-      if (d_s_b)     (void)oroFree(reinterpret_cast<oroDeviceptr>(d_s_b));
-      if (d_noise_b) (void)oroFree(reinterpret_cast<oroDeviceptr>(d_noise_b));
-      if (d_partial)  (void)oroFree(reinterpret_cast<oroDeviceptr>(d_partial));
-      if (d_jackpot)  (void)oroFree(reinterpret_cast<oroDeviceptr>(d_jackpot));
-    };
-    free_all();
-    (void)oroCtxDestroy(ctx);
-    return false;
-  }
-
-  bool ok = true;
-  ok &= PEARL_GPU_CHECK(oroMemcpy(d_s_a, s_a_flat.data(), a_bytes, oroMemcpyHostToDevice));
-  ok &= PEARL_GPU_CHECK(oroMemcpy(d_noise_a, noise_a_flat.data(), a_bytes, oroMemcpyHostToDevice));
-  ok &= PEARL_GPU_CHECK(oroMemcpy(d_s_b, s_b_flat.data(), b_bytes, oroMemcpyHostToDevice));
-  ok &= PEARL_GPU_CHECK(oroMemcpy(d_noise_b, noise_b_flat.data(), b_bytes, oroMemcpyHostToDevice));
-  ok &= PEARL_GPU_CHECK(oroMemset(d_partial, 0, partial_bytes));
-  ok &= PEARL_GPU_CHECK(oroMemset(d_jackpot, 0, kJackpotSize * sizeof(uint32_t)));
-
-  if (!ok)
-  {
-    (void)oroFree(reinterpret_cast<oroDeviceptr>(d_s_a));
-    (void)oroFree(reinterpret_cast<oroDeviceptr>(d_noise_a));
-    (void)oroFree(reinterpret_cast<oroDeviceptr>(d_s_b));
-    (void)oroFree(reinterpret_cast<oroDeviceptr>(d_noise_b));
-    (void)oroFree(reinterpret_cast<oroDeviceptr>(d_partial));
-    (void)oroFree(reinterpret_cast<oroDeviceptr>(d_jackpot));
-    (void)oroCtxDestroy(ctx);
-    return false;
-  }
-
-  // Launch Phase 1: partial jackpot computation
-  void* partial_args[] = {&d_s_a, &d_noise_a, &d_s_b, &d_noise_b, &d_partial, &h, &w, &k};
-  ok &= PEARL_GPU_CHECK(oroModuleLaunchKernel(
-    partial_compiled.function, partial_grid_x, partial_grid_y, 1, kNumThreads, 1, 1, 0, nullptr, partial_args, nullptr));
-
-  if (!ok)
-  {
-    TNN_LOG_ERROR("%s pearl_expand_jackpot_tiled_partial launch failed\n", tag);
-    (void)oroFree(reinterpret_cast<oroDeviceptr>(d_s_a));
-    (void)oroFree(reinterpret_cast<oroDeviceptr>(d_noise_a));
-    (void)oroFree(reinterpret_cast<oroDeviceptr>(d_s_b));
-    (void)oroFree(reinterpret_cast<oroDeviceptr>(d_noise_b));
-    (void)oroFree(reinterpret_cast<oroDeviceptr>(d_partial));
-    (void)oroFree(reinterpret_cast<oroDeviceptr>(d_jackpot));
-    (void)oroCtxDestroy(ctx);
-    return false;
-  }
-
-  // Launch Phase 2: reduction
-  void* reduce_args[] = {&d_partial, &d_jackpot, &partial_blocks, &k};
-  ok &= PEARL_GPU_CHECK(oroModuleLaunchKernel(
-    reduce_compiled.function, kJackpotSize, 1, 1, kNumThreads, 1, 1, 0, nullptr, reduce_args, nullptr));
-
-  ok &= PEARL_GPU_CHECK(oroDeviceSynchronize());
-
-  if (!ok)
-  {
-    TNN_LOG_ERROR("%s pearl_jackpot_tiled_reduce launch or sync failed\n", tag);
-    (void)oroFree(reinterpret_cast<oroDeviceptr>(d_s_a));
-    (void)oroFree(reinterpret_cast<oroDeviceptr>(d_noise_a));
-    (void)oroFree(reinterpret_cast<oroDeviceptr>(d_s_b));
-    (void)oroFree(reinterpret_cast<oroDeviceptr>(d_noise_b));
-    (void)oroFree(reinterpret_cast<oroDeviceptr>(d_partial));
-    (void)oroFree(reinterpret_cast<oroDeviceptr>(d_jackpot));
-    (void)oroCtxDestroy(ctx);
-    return false;
-  }
-
-  // Download result
-  std::array<uint32_t, kJackpotSize> got_jackpot{};
-  ok &= PEARL_GPU_CHECK(oroMemcpy(
-    got_jackpot.data(), d_jackpot, kJackpotSize * sizeof(uint32_t), oroMemcpyDeviceToHost));
-
-  // Cleanup
-  (void)oroFree(reinterpret_cast<oroDeviceptr>(d_s_a));
-  (void)oroFree(reinterpret_cast<oroDeviceptr>(d_noise_a));
-  (void)oroFree(reinterpret_cast<oroDeviceptr>(d_s_b));
-  (void)oroFree(reinterpret_cast<oroDeviceptr>(d_noise_b));
-  (void)oroFree(reinterpret_cast<oroDeviceptr>(d_partial));
-  (void)oroFree(reinterpret_cast<oroDeviceptr>(d_jackpot));
-  (void)oroCtxDestroy(ctx);
-
-  if (!ok)
-    return false;
-
-  // Compare
-  if (got_jackpot == expected_jackpot)
-  {
-    TNN_LOG_INFO("%s gpu.jackpot_words OK\n", tag);
-    return true;
-  }
-
-  TNN_LOG_ERROR("%s gpu.jackpot_words mismatch\n", tag);
-  for (size_t i = 0; i < got_jackpot.size(); ++i)
-  {
-    if (got_jackpot[i] != expected_jackpot[i])
-    {
-      TNN_LOG_ERROR("%s   word[%zu] got=%08x want=%08x\n", tag, i, got_jackpot[i], expected_jackpot[i]);
-    }
-  }
-  return false;
-}
-
-float pearl_time_kernel_ms(
-  const char* tag,
-  const char* name,
-  oroFunction_t kernel,
-  unsigned int grid_x,
-  unsigned int grid_y,
-  unsigned int grid_z,
-  unsigned int block_x,
-  void** args,
-  int warmup,
-  int iterations)
-{
-  for (int i = 0; i < warmup; ++i)
-  {
-    if (!PEARL_GPU_CHECK(oroModuleLaunchKernel(kernel, grid_x, grid_y, grid_z, block_x, 1, 1, 0, nullptr, args, nullptr)))
-      return -1.0f;
-  }
-  if (!PEARL_GPU_CHECK(oroDeviceSynchronize()))
-    return -1.0f;
-
-  oroEvent_t start = nullptr;
-  oroEvent_t stop = nullptr;
-  if (!PEARL_GPU_CHECK(oroEventCreate(&start)) ||
-      !PEARL_GPU_CHECK(oroEventCreate(&stop)))
-  {
-    if (start) (void)oroEventDestroy(start);
-    if (stop) (void)oroEventDestroy(stop);
-    return -1.0f;
-  }
-
-  bool ok = true;
-  ok &= PEARL_GPU_CHECK(oroEventRecord(start, nullptr));
-  for (int i = 0; i < iterations; ++i)
-  {
-    ok &= PEARL_GPU_CHECK(oroModuleLaunchKernel(kernel, grid_x, grid_y, grid_z, block_x, 1, 1, 0, nullptr, args, nullptr));
-  }
-  ok &= PEARL_GPU_CHECK(oroEventRecord(stop, nullptr));
-  ok &= PEARL_GPU_CHECK(oroEventSynchronize(stop));
-
-  float total_ms = 0.0f;
-  ok &= PEARL_GPU_CHECK(oroEventElapsedTime(&total_ms, start, stop));
-  (void)oroEventDestroy(start);
-  (void)oroEventDestroy(stop);
-
-  if (!ok)
-    return -1.0f;
-
-  const float avg_ms = total_ms / static_cast<float>(iterations);
-  TNN_LOG_INFO("%s %-22s avg=%.4f ms iterations=%d\n", tag, name, avg_ms, iterations);
-  return avg_ms;
-}
-
-std::vector<int8_t> pearl_bench_matrix(size_t size, uint32_t seed)
-{
-  std::vector<int8_t> out(size);
-  uint32_t x = seed;
-  for (size_t i = 0; i < size; ++i)
-  {
-    x = x * 1664525u + 1013904223u;
-    out[i] = static_cast<int8_t>(static_cast<int>((x >> 24) & 63u) - 32);
-  }
-  return out;
-}
-
 bool pearl_register_rtc_headers()
 {
   auto& compiler = RTCCompiler::instance();
   auto rtc_headers = build_rtc_headers(
     hip_embedded::PEARL_HEADERS,
     hip_embedded::IRIS_HEADERS,
-    hip_embedded::COMMON_HEADERS);
+    hip_embedded::COMMON_HEADERS,
+    hip_embedded::ROCWMMA_HEADERS);
   for (const auto& hdr : rtc_headers)
   {
     const std::string include_name(hdr.name);
@@ -875,362 +373,24 @@ bool pearl_register_rtc_headers()
     const std::string basename = rtc_include_basename(include_name);
     if (basename != include_name)
       compiler.add_header_source(basename, source);
+
+    {
+      auto parent = include_name;
+      auto slash  = parent.find('/');
+      while (slash != std::string::npos)
+      {
+        parent = parent.substr(slash + 1);
+        compiler.add_header_source(parent, source);
+        slash = parent.find('/');
+      }
+    }
   }
   return true;
-}
-
-int run_pearl_benchmark(const char* tag)
-{
-  constexpr int m = 1024;
-  constexpr int n = 1024;
-  constexpr int k = 4096;
-  constexpr int rank = 32;
-  constexpr int noise_threads = 128;
-  constexpr int jackpot_threads = 256;
-  constexpr int warmup = 3;
-  constexpr int noise_iterations = 200;
-  constexpr int jackpot_iterations = 10;
-
-  int device_count = 0;
-  if (!PEARL_GPU_CHECK(oroGetDeviceCount(&device_count)))
-    return 1;
-  if (device_count == 0)
-  {
-    TNN_LOG_ERROR("%s no GPU devices found for benchmark\n", tag);
-    return 1;
-  }
-
-  oroDeviceProp_t props{};
-  if (!PEARL_GPU_CHECK(oroGetDeviceProperties(&props, tnn_get_device(0))))
-    return 1;
-
-  oroCtx ctx{};
-  if (!PEARL_GPU_CHECK(oroCtxCreate(&ctx, 0, tnn_get_device(0))))
-    return 1;
-
-  pearl_register_rtc_headers();
-  auto& compiler = RTCCompiler::instance();
-  const bool is_amd = tnn_is_amd_device(0);
-  const auto compile_opts = pearl_rtc_compile_opts(props, is_amd);
-  const std::string noise_source(
-    hip_pearl_noise_dense_source::SRC_TNN_HIP_CRYPTO_PEARL_NOISE_GENERATION_DENSE_TEST_HIP_SOURCE);
-  const std::string jackpot_source(
-    hip_pearl_expand_jackpot_source::SRC_TNN_HIP_CRYPTO_PEARL_PEARL_EXPAND_JACKPOT_HIP_SOURCE);
-
-  RTCCompiler::CompiledKernel dense_compiled{};
-  RTCCompiler::CompiledKernel sparse_compiled{};
-  RTCCompiler::CompiledKernel partial_compiled{};
-  RTCCompiler::CompiledKernel wmma_partial_compiled{};
-  RTCCompiler::CompiledKernel reduce_compiled{};
-  try
-  {
-    dense_compiled = compiler.compile_from_source(
-      noise_source, "pearl-noise-dense-test.hip", "pearl_noise_dense_32_128_kernel", compile_opts);
-    sparse_compiled = compiler.compile_from_source(
-      noise_source, "pearl-noise-dense-test.hip", "pearl_noise_sparse_32_128_kernel", compile_opts);
-    partial_compiled = compiler.compile_from_source(
-      jackpot_source, "pearl-expand-jackpot.hip", "pearl_expand_jackpot_tiled_partial", compile_opts);
-    wmma_partial_compiled = compiler.compile_from_source(
-      jackpot_source, "pearl-expand-jackpot.hip", "pearl_expand_jackpot_wmma_partial", compile_opts);
-    reduce_compiled = compiler.compile_from_source(
-      jackpot_source, "pearl-expand-jackpot.hip", "pearl_jackpot_tiled_reduce", compile_opts);
-  }
-  catch (const std::exception& e)
-  {
-    TNN_LOG_ERROR("%s Pearl benchmark HIPRTC compile failed: %s\n", tag, e.what());
-    (void)oroCtxDestroy(ctx);
-    return 1;
-  }
-
-  const size_t dense_a_bytes = static_cast<size_t>(m) * rank;
-  const size_t dense_b_bytes = static_cast<size_t>(n) * rank;
-  const size_t sparse_bytes = static_cast<size_t>(k) * rank;
-  const size_t matrix_a_bytes = static_cast<size_t>(m) * k;
-  const size_t matrix_b_bytes = static_cast<size_t>(n) * k;
-  const int tiles = k / rank;
-  const int jackpot_tile_rows_a = 16;
-  const int jackpot_tile_rows_b = 32;
-  const int jackpot_wmma_tile_rows_a = 64;
-  const int jackpot_wmma_tile_rows_b = 32;
-  const unsigned int partial_grid_x = static_cast<unsigned int>((n + jackpot_tile_rows_b - 1) / jackpot_tile_rows_b);
-  const unsigned int partial_grid_y = static_cast<unsigned int>((m + jackpot_tile_rows_a - 1) / jackpot_tile_rows_a);
-  int partial_blocks = static_cast<int>(partial_grid_x * partial_grid_y);
-  const unsigned int wmma_partial_grid_x = static_cast<unsigned int>((n + jackpot_wmma_tile_rows_b - 1) / jackpot_wmma_tile_rows_b);
-  const unsigned int wmma_partial_grid_y = static_cast<unsigned int>((m + jackpot_wmma_tile_rows_a - 1) / jackpot_wmma_tile_rows_a);
-  int wmma_partial_blocks = static_cast<int>(wmma_partial_grid_x * wmma_partial_grid_y);
-  constexpr int jackpot_batch_probe = 8;
-  const size_t partial_bytes = static_cast<size_t>(partial_blocks) * tiles * sizeof(uint32_t);
-  const size_t partial_alloc_bytes = partial_bytes * jackpot_batch_probe;
-
-  const auto seed_a = pearl_noise_seed_label("A_tensor");
-  const auto seed_b = pearl_noise_seed_label("B_tensor");
-  Hash256 key_a{};
-  Hash256 key_b{};
-  for (size_t i = 0; i < key_a.size(); ++i)
-  {
-    key_a[i] = static_cast<uint8_t>(0x11u + i * 7u);
-    key_b[i] = static_cast<uint8_t>(0xc2u + i * 5u);
-  }
-
-  std::vector<int8_t> s_a = pearl_bench_matrix(matrix_a_bytes, 0x12345678u);
-  std::vector<int8_t> s_b = pearl_bench_matrix(matrix_b_bytes, 0x9abcdef0u);
-  std::vector<int8_t> noise_a = pearl_bench_matrix(matrix_a_bytes, 0x0badc0deu);
-  std::vector<int8_t> noise_b = pearl_bench_matrix(matrix_b_bytes, 0xfeedfaceu);
-
-  int8_t* d_dense_a = nullptr;
-  int8_t* d_dense_b = nullptr;
-  int8_t* d_sparse = nullptr;
-  uint8_t* d_key_a = nullptr;
-  uint8_t* d_key_b = nullptr;
-  uint8_t* d_seed_a = nullptr;
-  uint8_t* d_seed_b = nullptr;
-  int8_t* d_s_a = nullptr;
-  int8_t* d_s_b = nullptr;
-  int8_t* d_noise_a = nullptr;
-  int8_t* d_noise_b = nullptr;
-  uint32_t* d_partial = nullptr;
-  uint32_t* d_jackpot = nullptr;
-
-  bool ok = true;
-  ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_dense_a), dense_a_bytes));
-  ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_dense_b), dense_b_bytes));
-  ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_sparse), sparse_bytes));
-  ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_key_a), key_a.size()));
-  ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_key_b), key_b.size()));
-  ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_seed_a), seed_a.size()));
-  ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_seed_b), seed_b.size()));
-  ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_s_a), matrix_a_bytes));
-  ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_s_b), matrix_b_bytes));
-  ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_noise_a), matrix_a_bytes));
-  ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_noise_b), matrix_b_bytes));
-  ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_partial), partial_alloc_bytes));
-  ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&d_jackpot), kJackpotSize * sizeof(uint32_t)));
-
-  if (ok)
-  {
-    ok &= PEARL_GPU_CHECK(oroMemcpy(d_key_a, key_a.data(), key_a.size(), oroMemcpyHostToDevice));
-    ok &= PEARL_GPU_CHECK(oroMemcpy(d_key_b, key_b.data(), key_b.size(), oroMemcpyHostToDevice));
-    ok &= PEARL_GPU_CHECK(oroMemcpy(d_seed_a, seed_a.data(), seed_a.size(), oroMemcpyHostToDevice));
-    ok &= PEARL_GPU_CHECK(oroMemcpy(d_seed_b, seed_b.data(), seed_b.size(), oroMemcpyHostToDevice));
-    ok &= PEARL_GPU_CHECK(oroMemcpy(d_s_a, s_a.data(), matrix_a_bytes, oroMemcpyHostToDevice));
-    ok &= PEARL_GPU_CHECK(oroMemcpy(d_s_b, s_b.data(), matrix_b_bytes, oroMemcpyHostToDevice));
-    ok &= PEARL_GPU_CHECK(oroMemcpy(d_noise_a, noise_a.data(), matrix_a_bytes, oroMemcpyHostToDevice));
-    ok &= PEARL_GPU_CHECK(oroMemcpy(d_noise_b, noise_b.data(), matrix_b_bytes, oroMemcpyHostToDevice));
-    ok &= PEARL_GPU_CHECK(oroMemset(d_sparse, 0, sparse_bytes));
-    ok &= PEARL_GPU_CHECK(oroMemset(d_partial, 0, partial_alloc_bytes));
-    ok &= PEARL_GPU_CHECK(oroMemset(d_jackpot, 0, kJackpotSize * sizeof(uint32_t)));
-  }
-
-  if (!ok)
-  {
-    TNN_LOG_ERROR("%s setup failed\n", tag);
-  }
-  else
-  {
-    TNN_LOG_INFO_COLOR(BRIGHT_CYAN, "%s Pearl PoUW realistic GPU benchmark\n", tag);
-    TNN_LOG_INFO("%s shape m=%d n=%d k=%d rank=%d tiles=%d\n", tag, m, n, k, rank, tiles);
-    TNN_LOG_INFO("%s warmup=%d noise_iters=%d jackpot_iters=%d\n", tag, warmup, noise_iterations, jackpot_iterations);
-
-    int m_arg = m;
-    int n_arg = n;
-    int k_arg = k;
-    uint32_t coord_base = 0;
-    void* dense_a_args[] = {&d_dense_a, &m_arg, &d_key_a, &d_seed_a, &coord_base};
-    void* dense_b_args[] = {&d_dense_b, &n_arg, &d_key_b, &d_seed_b, &coord_base};
-    void* sparse_a_args[] = {&d_sparse, &k_arg, &d_key_a, &d_seed_a, &coord_base};
-    void* sparse_b_args[] = {&d_sparse, &k_arg, &d_key_b, &d_seed_b, &coord_base};
-    void* partial_args[] = {&d_s_a, &d_noise_a, &d_s_b, &d_noise_b, &d_partial, &m_arg, &n_arg, &k_arg};
-    void* reduce_args[] = {&d_partial, &d_jackpot, &partial_blocks, &k_arg};
-    void* wmma_reduce_args[] = {&d_partial, &d_jackpot, &wmma_partial_blocks, &k_arg};
-
-    const unsigned dense_a_grid = static_cast<unsigned>((m + 127) / 128);
-    const unsigned dense_b_grid = static_cast<unsigned>((n + 127) / 128);
-    const unsigned sparse_grid = static_cast<unsigned>((k + noise_threads * 8 - 1) / (noise_threads * 8));
-
-    const float dense_a_ms = pearl_time_kernel_ms(tag, "dense A factor", dense_compiled.function, dense_a_grid, 1, 1, noise_threads, dense_a_args, warmup, noise_iterations);
-    const float dense_b_ms = pearl_time_kernel_ms(tag, "dense B factor", dense_compiled.function, dense_b_grid, 1, 1, noise_threads, dense_b_args, warmup, noise_iterations);
-    const float sparse_a_ms = pearl_time_kernel_ms(tag, "sparse A factor", sparse_compiled.function, sparse_grid, 1, 1, noise_threads, sparse_a_args, warmup, noise_iterations);
-    const float sparse_b_ms = pearl_time_kernel_ms(tag, "sparse B factor", sparse_compiled.function, sparse_grid, 1, 1, noise_threads, sparse_b_args, warmup, noise_iterations);
-
-    (void)oroMemset(d_partial, 0, partial_alloc_bytes);
-    (void)oroMemset(d_jackpot, 0, kJackpotSize * sizeof(uint32_t));
-    const float partial_ms = pearl_time_kernel_ms(tag, "jackpot partial", partial_compiled.function, partial_grid_x, partial_grid_y, 1, jackpot_threads, partial_args, warmup, jackpot_iterations);
-    const float reduce_ms = pearl_time_kernel_ms(tag, "jackpot reduce", reduce_compiled.function, kJackpotSize, 1, 1, jackpot_threads, reduce_args, warmup, jackpot_iterations);
-    const float partial_batch2_ms = pearl_time_kernel_ms(tag, "jackpot partial x2", partial_compiled.function, partial_grid_x, partial_grid_y, 2, jackpot_threads, partial_args, warmup, jackpot_iterations);
-    const float partial_batch4_ms = pearl_time_kernel_ms(tag, "jackpot partial x4", partial_compiled.function, partial_grid_x, partial_grid_y, 4, jackpot_threads, partial_args, warmup, jackpot_iterations);
-    (void)oroMemset(d_partial, 0, partial_alloc_bytes);
-    (void)oroMemset(d_jackpot, 0, kJackpotSize * sizeof(uint32_t));
-    const float wmma_partial_ms = pearl_time_kernel_ms(tag, "jackpot wmma partial", wmma_partial_compiled.function, wmma_partial_grid_x, wmma_partial_grid_y, 1, jackpot_threads, partial_args, warmup, jackpot_iterations);
-    const float wmma_reduce_ms = pearl_time_kernel_ms(tag, "jackpot wmma reduce", reduce_compiled.function, kJackpotSize, 1, 1, jackpot_threads, wmma_reduce_args, warmup, jackpot_iterations);
-    const float wmma_partial_batch2_ms = pearl_time_kernel_ms(tag, "jackpot wmma partial x2", wmma_partial_compiled.function, wmma_partial_grid_x, wmma_partial_grid_y, 2, jackpot_threads, partial_args, warmup, jackpot_iterations);
-    const float wmma_partial_batch4_ms = pearl_time_kernel_ms(tag, "jackpot wmma partial x4", wmma_partial_compiled.function, wmma_partial_grid_x, wmma_partial_grid_y, 4, jackpot_threads, partial_args, warmup, jackpot_iterations);
-    const float wmma_partial_batch8_ms = pearl_time_kernel_ms(tag, "jackpot wmma partial x8", wmma_partial_compiled.function, wmma_partial_grid_x, wmma_partial_grid_y, 8, jackpot_threads, partial_args, warmup, jackpot_iterations);
-
-    const double dense_rows = static_cast<double>(m + n);
-    const double sparse_rows = static_cast<double>(k * 2);
-    const double dot_ops = static_cast<double>(m) * static_cast<double>(n) * static_cast<double>(k) * 2.0;
-    if (dense_a_ms > 0.0f && dense_b_ms > 0.0f)
-    {
-      const double dense_ms = static_cast<double>(dense_a_ms + dense_b_ms);
-      TNN_LOG_INFO("%s dense factors throughput=%.2f Mrows/s\n", tag, dense_rows / dense_ms / 1000.0);
-    }
-    if (sparse_a_ms > 0.0f && sparse_b_ms > 0.0f)
-    {
-      const double sparse_ms = static_cast<double>(sparse_a_ms + sparse_b_ms);
-      TNN_LOG_INFO("%s sparse factors throughput=%.2f Mrows/s\n", tag, sparse_rows / sparse_ms / 1000.0);
-    }
-    if (partial_ms > 0.0f)
-    {
-      TNN_LOG_INFO("%s jackpot partial effective=%.2f TOPS/s\n", tag, dot_ops / (static_cast<double>(partial_ms) * 1.0e9));
-    }
-    if (partial_batch2_ms > 0.0f)
-    {
-      TNN_LOG_INFO("%s jackpot partial x2 effective=%.2f TOPS/s\n", tag, (dot_ops * 2.0) / (static_cast<double>(partial_batch2_ms) * 1.0e9));
-    }
-    if (partial_batch4_ms > 0.0f)
-    {
-      TNN_LOG_INFO("%s jackpot partial x4 effective=%.2f TOPS/s\n", tag, (dot_ops * 4.0) / (static_cast<double>(partial_batch4_ms) * 1.0e9));
-    }
-    if (wmma_partial_ms > 0.0f)
-    {
-      TNN_LOG_INFO("%s jackpot wmma partial effective=%.2f TOPS/s\n", tag, dot_ops / (static_cast<double>(wmma_partial_ms) * 1.0e9));
-    }
-    if (wmma_partial_batch2_ms > 0.0f)
-    {
-      TNN_LOG_INFO("%s jackpot wmma partial x2 effective=%.2f TOPS/s\n", tag, (dot_ops * 2.0) / (static_cast<double>(wmma_partial_batch2_ms) * 1.0e9));
-    }
-    if (wmma_partial_batch4_ms > 0.0f)
-    {
-      TNN_LOG_INFO("%s jackpot wmma partial x4 effective=%.2f TOPS/s\n", tag, (dot_ops * 4.0) / (static_cast<double>(wmma_partial_batch4_ms) * 1.0e9));
-    }
-    if (wmma_partial_batch8_ms > 0.0f)
-    {
-      TNN_LOG_INFO("%s jackpot wmma partial x8 effective=%.2f TOPS/s\n", tag, (dot_ops * 8.0) / (static_cast<double>(wmma_partial_batch8_ms) * 1.0e9));
-    }
-    if (partial_ms > 0.0f && reduce_ms > 0.0f)
-    {
-      TNN_LOG_INFO("%s jackpot total avg=%.4f ms\n", tag, partial_ms + reduce_ms);
-    }
-    if (wmma_partial_ms > 0.0f && wmma_reduce_ms > 0.0f)
-    {
-      TNN_LOG_INFO("%s jackpot wmma total avg=%.4f ms\n", tag, wmma_partial_ms + wmma_reduce_ms);
-    }
-  }
-
-  if (d_dense_a) (void)oroFree(reinterpret_cast<oroDeviceptr>(d_dense_a));
-  if (d_dense_b) (void)oroFree(reinterpret_cast<oroDeviceptr>(d_dense_b));
-  if (d_sparse) (void)oroFree(reinterpret_cast<oroDeviceptr>(d_sparse));
-  if (d_key_a) (void)oroFree(reinterpret_cast<oroDeviceptr>(d_key_a));
-  if (d_key_b) (void)oroFree(reinterpret_cast<oroDeviceptr>(d_key_b));
-  if (d_seed_a) (void)oroFree(reinterpret_cast<oroDeviceptr>(d_seed_a));
-  if (d_seed_b) (void)oroFree(reinterpret_cast<oroDeviceptr>(d_seed_b));
-  if (d_s_a) (void)oroFree(reinterpret_cast<oroDeviceptr>(d_s_a));
-  if (d_s_b) (void)oroFree(reinterpret_cast<oroDeviceptr>(d_s_b));
-  if (d_noise_a) (void)oroFree(reinterpret_cast<oroDeviceptr>(d_noise_a));
-  if (d_noise_b) (void)oroFree(reinterpret_cast<oroDeviceptr>(d_noise_b));
-  if (d_partial) (void)oroFree(reinterpret_cast<oroDeviceptr>(d_partial));
-  if (d_jackpot) (void)oroFree(reinterpret_cast<oroDeviceptr>(d_jackpot));
-  (void)oroCtxDestroy(ctx);
-
-  return ok ? 0 : 1;
 }
 
 #endif
 
 } // namespace
-
-std::array<uint8_t, kIncompleteBlockHeaderBytes> IncompleteBlockHeader::to_bytes() const
-{
-  std::vector<uint8_t> out;
-  out.reserve(kIncompleteBlockHeaderBytes);
-
-  append_u32_le(out, version);
-  out.insert(out.end(), prev_block.rbegin(), prev_block.rend());
-  out.insert(out.end(), merkle_root.rbegin(), merkle_root.rend());
-  append_u32_le(out, timestamp);
-  append_u32_le(out, nbits);
-
-  std::array<uint8_t, kIncompleteBlockHeaderBytes> bytes{};
-  std::copy_n(out.begin(), bytes.size(), bytes.begin());
-  return bytes;
-}
-
-std::array<uint8_t, 2 * kPatternDims> PeriodicPattern::to_bytes() const
-{
-  std::array<uint8_t, 2 * kPatternDims> bytes{};
-  uint32_t min_stride = 1;
-
-  for (size_t i = 0; i < shape.size(); ++i)
-  {
-    const auto [stride, length] = shape[i];
-    const uint32_t factor = stride / min_stride;
-    bytes[2 * i] = static_cast<uint8_t>(factor - 1);
-    bytes[2 * i + 1] = static_cast<uint8_t>(length - 1);
-    min_stride = stride * length;
-  }
-
-  return bytes;
-}
-
-std::vector<uint32_t> PeriodicPattern::to_list() const
-{
-  std::vector<uint32_t> result{0};
-  for (const auto& [stride, length] : shape)
-  {
-    std::vector<uint32_t> next;
-    next.reserve(result.size() * length);
-    for (uint32_t i = 0; i < length; ++i)
-    {
-      for (uint32_t value : result)
-      {
-        next.push_back(value + i * stride);
-      }
-    }
-    result = std::move(next);
-  }
-  return result;
-}
-
-uint32_t PeriodicPattern::period() const
-{
-  const auto [stride, length] = shape.back();
-  return stride * length;
-}
-
-uint32_t PeriodicPattern::size() const
-{
-  uint32_t total = 1;
-  for (const auto& [_, length] : shape)
-  {
-    total *= length;
-  }
-  return total;
-}
-
-std::array<uint8_t, kMiningConfigBytes> MiningConfiguration::to_bytes() const
-{
-  std::vector<uint8_t> out;
-  out.reserve(kMiningConfigBytes);
-
-  append_u32_le(out, common_dim);
-  append_u16_le(out, rank);
-  append_u16_le(out, mma_type);
-
-  const auto rows = rows_pattern.to_bytes();
-  const auto cols = cols_pattern.to_bytes();
-  out.insert(out.end(), rows.begin(), rows.end());
-  out.insert(out.end(), cols.begin(), cols.end());
-  out.insert(out.end(), reserved.begin(), reserved.end());
-
-  std::array<uint8_t, kMiningConfigBytes> bytes{};
-  std::copy_n(out.begin(), bytes.size(), bytes.begin());
-  return bytes;
-}
-
-uint32_t MiningConfiguration::dot_product_length() const
-{
-  return common_dim - (common_dim % rank);
-}
 
 Hash256 blake3_digest(const uint8_t* data, size_t len)
 {
@@ -1309,142 +469,771 @@ HarnessFixture default_fixture()
   return fixture;
 }
 
-static bool run_fixture_contract_checks(const char* tag, const HarnessFixture& fixture)
+} // namespace tnn::pearl
+
+static int env_or_default(const char* name, int fallback)
 {
-  bool ok = true;
-
-  ok &= check_u32_list(tag, "rows_pattern", fixture.config.rows_pattern.to_list(), {0, 8, 64, 72});
-  ok &= check_u32_list(tag, "cols_pattern", fixture.config.cols_pattern.to_list(), {0, 1, 8, 9, 32, 33, 40, 41});
-  ok &= fixture.config.rows_pattern.size() == 4;
-  ok &= fixture.config.cols_pattern.size() == 8;
-  ok &= fixture.config.dot_product_length() == 1024;
-
-  const auto header_bytes = fixture.header.to_bytes();
-  const auto config_bytes = fixture.config.to_bytes();
-  const auto job_key = compute_job_key(fixture.header, fixture.config);
-
-  ok &= check_bytes(
-    tag,
-    "header_bytes",
-    hex_bytes(header_bytes),
-    "000000000000000000000000000000000000000000000000000000000000000000000000666564636261393837363534333231306665646362613938373635343332313066666666ffff2f1d");
-  ok &= check_bytes(
-    tag,
-    "mining_config_bytes",
-    hex_bytes(config_bytes),
-    "00040000200000000701030100000001030101010000000000000000000000000000000000000000000000000000000000000000");
-
-  TNN_LOG_INFO("%s fixture=%s m=%u n=%u k=%u rank=%u\n",
-               tag,
-               fixture.name,
-               fixture.m,
-               fixture.n,
-               fixture.config.common_dim,
-               fixture.config.rank);
-  TNN_LOG_INFO("%s job_key=%s\n", tag, hex_bytes(job_key).c_str());
-
-  return ok;
+  const char* val = std::getenv(name);
+  if (!val) return fallback;
+  char* end = nullptr;
+  long parsed = std::strtol(val, &end, 10);
+  if (end == val || *end != '\0') return fallback;
+  return static_cast<int>(parsed);
 }
 
-static bool run_openpearl_vector_checks(const char* tag, const HarnessFixture& fixture)
+namespace tnn::pearl {
+
+namespace {
+constexpr uint32_t TBLOCK_X       = 64u;
+constexpr uint32_t TBLOCK_Y       = 2u;
+constexpr uint32_t WARP_SIZE      = 32u;
+constexpr uint32_t ROCWMMA_M      = 16u;
+constexpr uint32_t ROCWMMA_N      = 16u;
+constexpr uint32_t BLOCKS_M       = 4u;
+constexpr uint32_t BLOCKS_N       = 2u;
+constexpr uint32_t WARP_TILE_M    = BLOCKS_M * ROCWMMA_M;
+constexpr uint32_t WARP_TILE_N    = BLOCKS_N * ROCWMMA_N;
+constexpr uint32_t WARPS_M        = TBLOCK_X / WARP_SIZE;
+constexpr uint32_t WARPS_N        = TBLOCK_Y;
+constexpr uint32_t MACRO_TILE_M   = WARPS_M * WARP_TILE_M;
+constexpr uint32_t MACRO_TILE_N   = WARPS_N * WARP_TILE_N;
+constexpr uint32_t MACRO_TILE_K   = 16u;
+} // anonymous namespace
+
+static bool test_pearl_noised_gemm(
+  const char* tag,
+  const RTCCompiler::CompiledKernel& compiled)
 {
-  constexpr const char* vector_name = "openpearl-python-api-default-chacha20-deadbeef";
-  constexpr uint64_t attempts = 4;
-  constexpr uint32_t t_rows = 16;
-  constexpr uint32_t t_cols = 16;
+  setvbuf(stdout, NULL, _IONBF, 0);
+  TNN_LOG_INFO("%s [NG] starting noised GEMM test\n", tag);
 
-  const std::vector<uint32_t> a_row_indices = {16, 24, 80, 88};
-  const std::vector<uint32_t> bt_row_indices = {16, 17, 24, 25, 48, 49, 56, 57};
+  const HarnessFixture fixture = default_fixture();
+  TNN_LOG_INFO("%s [NG] fixture: m=%u n=%u common_dim=%u rank=%u\n", tag,
+               fixture.m, fixture.n, fixture.config.common_dim, fixture.config.rank);
+  TNN_LOG_INFO("%s [NG] ROWS_PATTERN cols_pattern OK\n", tag);
 
+  const int h = static_cast<int>(fixture.m);
+  const int w = static_cast<int>(fixture.n);
+  const int k = static_cast<int>(fixture.config.common_dim);
+  const int R = static_cast<int>(fixture.config.rank);
+
+  TNN_LOG_INFO("%s [NG] generating deterministic base s_a(%dx%d) and s_b(%dx%d)...\n", tag, h, k, w, k);
+
+  I32Matrix s_a(h, std::vector<int32_t>(k));
+  I32Matrix s_b(w, std::vector<int32_t>(k));
+  for (int i = 0; i < h; ++i)
+    for (int l = 0; l < k; ++l)
+      s_a[i][l] = static_cast<int32_t>(static_cast<int8_t>(((i * k + l) * 0x9e3779b9u) & 0xff));
+  for (int j = 0; j < w; ++j)
+    for (int l = 0; l < k; ++l)
+      s_b[j][l] = static_cast<int32_t>(static_cast<int8_t>(((j * k + l) * 0x9e3779b9u + 0x55) & 0xff));
+
+  TNN_LOG_INFO("%s [NG] computing hashes...\n", tag);
   const Hash256 hash_a = hash_from_hex("88c7adb4f1a8d0144fd69ab6a827eba27352a64d506f313c6ceb238a2d50730e");
   const Hash256 hash_b = hash_from_hex("2e3f1797a80ab8028a9524604caad12c036059fcfaceaa601fd95993c5db9034");
-  const Hash256 expected_b_noise_seed = hash_from_hex("c20cf3fd6d5f5e8ccab11a63e4832fbe9db36c7bc8bb60c1faadd40058c48791");
-  const Hash256 expected_a_noise_seed = hash_from_hex("1134748ecce2eadc7ed91a91a5f3cf9c9c806205afa0399a3d04fd43d64a2323");
-  const Hash256 expected_hash_jackpot = hash_from_hex("87c814042be240802805a62bb7438d6129837d45edc60d8b256ea6f892ab0900");
-  const std::array<uint32_t, 16> expected_jackpot = {
-    0x07ac6dcd, 0x1e82a302, 0xdb625818, 0x20727c2f,
-    0xd273c89c, 0x2f926839, 0x1a9fda3d, 0xe0a8ca8b,
-    0xd7c521fd, 0x0389ee21, 0xdfe51ce8, 0xec6827e0,
-    0xe03ced35, 0x24ae4dba, 0x0870e804, 0xe5fdb03b,
-  };
-
-  bool ok = true;
   const Hash256 job_key = compute_job_key(fixture.header, fixture.config);
   const auto [b_noise_seed, a_noise_seed] = compute_commitment_hash(job_key, hash_a, hash_b);
-  const I32Matrix s_a = matrix_from_hex_rows(vectors::kOpenPearlSAHex, fixture.config.common_dim);
-  const I32Matrix s_b = matrix_from_hex_rows(vectors::kOpenPearlSBHex, fixture.config.common_dim);
-  const I32Matrix noise_a = matrix_from_hex_rows(vectors::kOpenPearlNoiseAHex, fixture.config.common_dim);
-  const I32Matrix noise_b = matrix_from_hex_rows(vectors::kOpenPearlNoiseBHex, fixture.config.common_dim);
-  const std::array<uint32_t, 16> jackpot = compute_jackpot_words(
-    s_a,
-    s_b,
-    noise_a,
-    noise_b,
-    fixture.config.common_dim,
-    fixture.config.rank);
-  const Hash256 hash_jackpot = compute_jackpot_hash(jackpot, a_noise_seed);
+  TNN_LOG_INFO("%s [NG] hashes computed\n", tag);
 
-  ok &= check_u32_list(tag, "vector.a_row_indices", a_row_indices, {16, 24, 80, 88});
-  ok &= check_u32_list(tag, "vector.bt_row_indices", bt_row_indices, {16, 17, 24, 25, 48, 49, 56, 57});
-  ok &= check_bytes(tag, "vector.b_noise_seed", hex_bytes(b_noise_seed), hex_bytes(expected_b_noise_seed).c_str());
-  ok &= check_bytes(tag, "vector.a_noise_seed", hex_bytes(a_noise_seed), hex_bytes(expected_a_noise_seed).c_str());
-  ok &= check_jackpot_words(tag, jackpot, expected_jackpot);
-  ok &= check_bytes(tag, "vector.hash_jackpot", hex_bytes(hash_jackpot), hex_bytes(expected_hash_jackpot).c_str());
+  std::array<uint8_t, 32> seed_a_label = {};
+  std::copy_n("A_tensor", 8, seed_a_label.begin());
+  std::array<uint8_t, 32> seed_b_label = {};
+  std::copy_n("B_tensor", 8, seed_b_label.begin());
 
-  TNN_LOG_INFO("%s vector=%s attempts=%llu t_rows=%u t_cols=%u\n",
-               tag,
-               vector_name,
-               static_cast<unsigned long long>(attempts),
-               t_rows,
-               t_cols);
-  TNN_LOG_INFO("%s hash_a=%s\n", tag, hex_bytes(hash_a).c_str());
-  TNN_LOG_INFO("%s hash_b=%s\n", tag, hex_bytes(hash_b).c_str());
+  TNN_LOG_INFO("%s [NG] generating dense eal(%dx%d)...\n", tag, h, R);
+  const std::vector<int8_t> eal = pearl_dense_noise_reference(h, R, a_noise_seed, seed_a_label);
+  TNN_LOG_INFO("%s [NG] eal size=%zu\n", tag, eal.size());
 
-#ifdef TNN_HIP
-  ok &= run_noise_gpu_checks(tag, fixture, a_noise_seed, b_noise_seed);
-  ok &= run_jackpot_gpu_check(
-    tag,
-    s_a, s_b, noise_a, noise_b,
-    static_cast<int>(fixture.config.common_dim),
-    static_cast<int>(fixture.config.rank),
-    expected_jackpot);
-#endif
+  TNN_LOG_INFO("%s [NG] generating sparse ear(%dx%d)...\n", tag, k, R);
+  const std::vector<int8_t> ear = pearl_sparse_noise_reference(k, R, a_noise_seed, seed_a_label);
+  TNN_LOG_INFO("%s [NG] ear size=%zu\n", tag, ear.size());
 
-  return ok;
+  TNN_LOG_INFO("%s [NG] generating sparse ebl(%dx%d)...\n", tag, k, R);
+  const std::vector<int8_t> ebl = pearl_sparse_noise_reference(k, R, b_noise_seed, seed_b_label);
+  TNN_LOG_INFO("%s [NG] ebl size=%zu\n", tag, ebl.size());
+
+  TNN_LOG_INFO("%s [NG] generating dense ebr(%dx%d)...\n", tag, w, R);
+  const std::vector<int8_t> ebr = pearl_dense_noise_reference(w, R, b_noise_seed, seed_b_label);
+  TNN_LOG_INFO("%s [NG] ebr size=%zu\n", tag, ebr.size());
+
+  TNN_LOG_INFO("%s [NG] extracting sparse pairs...\n", tag);
+  const SparseNoisePairs ear_pairs = extract_sparse_pairs(ear, k, R);
+  TNN_LOG_INFO("%s [NG] ear_pairs extracted: first_idx size=%zu\n", tag, ear_pairs.first_idx.size());
+  const SparseNoisePairs ebl_pairs = extract_sparse_pairs(ebl, k, R);
+  TNN_LOG_INFO("%s [NG] ebl_pairs extracted: first_idx size=%zu\n", tag, ebl_pairs.first_idx.size());
+
+  TNN_LOG_INFO("%s [NG] composing noise_a (%dx%d)...\n", tag, h, k);
+  const I32Matrix noise_a = compute_noise_from_factors_dense_times_sparse_T(eal, h, ear_pairs, k, R);
+  TNN_LOG_INFO("%s [NG] noise_a composed: %zu x %zu\n", tag, noise_a.size(), noise_a.empty() ? 0 : noise_a[0].size());
+
+  TNN_LOG_INFO("%s [NG] composing noise_b (%dx%d)...\n", tag, w, k);
+  const I32Matrix noise_b = compute_noise_from_factors_dense_times_sparse_T(ebr, w, ebl_pairs, k, R);
+  TNN_LOG_INFO("%s [NG] noise_b composed: %zu x %zu\n", tag, noise_b.size(), noise_b.empty() ? 0 : noise_b[0].size());
+
+  TNN_LOG_INFO("%s [NG] computing noised matrices ApEA, BpEB...\n", tag);
+  const auto [ApEA, BpEB] = compute_noised_matrices(s_a, s_b, noise_a, noise_b);
+  TNN_LOG_INFO("%s [NG] ApEA size=%zu, BpEB size=%zu\n", tag, ApEA.size(), BpEB.size());
+
+  TNN_LOG_INFO("%s [NG] computing host ref GEMM (%dx%dx%d)...\n", tag, h, w, k);
+  const std::vector<int32_t> C_ref = compute_host_gemm_ref(ApEA, BpEB, h, w, k);
+  TNN_LOG_INFO("%s [NG] C_ref size=%zu, first few: %d %d %d %d\n", tag,
+               C_ref.size(),
+               C_ref.size() > 0 ? C_ref[0] : 0,
+               C_ref.size() > 1 ? C_ref[1] : 0,
+               C_ref.size() > 2 ? C_ref[2] : 0,
+               C_ref.size() > 3 ? C_ref[3] : 0);
+
+  TNN_LOG_INFO("%s [NG] noised GEMM ref computed: h=%d w=%d k=%d R=%d\n", tag, h, w, k, R);
+
+  TNN_LOG_INFO("%s [NG] preparing GPU buffers...\n", tag);
+  const std::size_t a_elems = static_cast<std::size_t>(k) * h;
+  const std::size_t b_elems = static_cast<std::size_t>(k) * w;
+  const std::size_t c_elems = static_cast<std::size_t>(h) * w;
+  TNN_LOG_INFO("%s [NG] a_elems=%zu b_elems=%zu c_elems=%zu\n", tag, a_elems, b_elems, c_elems);
+
+  std::vector<signed char> hA(a_elems);
+  std::vector<signed char> hB(b_elems);
+  std::vector<int32_t> hC(c_elems, 0);
+
+  TNN_LOG_INFO("%s [NG] copying A row-major (%dx%d)...\n", tag, h, k);
+  for (std::size_t i = 0; i < a_elems; ++i) hA[i] = ApEA[i];
+  TNN_LOG_INFO("%s [NG] copying B row-major (%dx%d)...\n", tag, w, k);
+  for (std::size_t i = 0; i < b_elems; ++i) hB[i] = BpEB[i];
+
+  TNN_LOG_INFO("%s [NG] GPU oroMalloc...\n", tag);
+  signed char* dA = nullptr;
+  signed char* dB = nullptr;
+  int32_t* dC = nullptr;
+
+  bool ok = true;
+  ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&dA), a_elems));
+  ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&dB), b_elems));
+  ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&dC), c_elems * sizeof(int32_t)));
+
+  if (!ok)
+  {
+    TNN_LOG_ERROR("%s [NG] oroMalloc failed\n", tag);
+    if (dA) (void)oroFree(dA);
+    if (dB) (void)oroFree(dB);
+    if (dC) (void)oroFree(dC);
+    return false;
+  }
+
+  ok  = PEARL_GPU_CHECK(oroMemcpy(dA, hA.data(), a_elems, oroMemcpyHostToDevice));
+  ok &= PEARL_GPU_CHECK(oroMemcpy(dB, hB.data(), b_elems, oroMemcpyHostToDevice));
+  ok &= PEARL_GPU_CHECK(oroMemset(dC, 0, c_elems * sizeof(int32_t)));
+
+  if (!ok)
+  {
+    TNN_LOG_ERROR("%s [NG] oroMemcpy failed\n", tag);
+    (void)oroFree(dA);
+    (void)oroFree(dB);
+    (void)oroFree(dC);
+    return false;
+  }
+
+  int M_gpu = h, N_gpu = w, K_gpu = k;
+  const dim3 gridDim(
+    (M_gpu + MACRO_TILE_M - 1) / MACRO_TILE_M,
+    (N_gpu + MACRO_TILE_N - 1) / MACRO_TILE_N,
+    1);
+  const dim3 blockDim(TBLOCK_X, TBLOCK_Y, 1);
+
+  constexpr uint32_t ldsWidth      = MACRO_TILE_K;
+  constexpr uint32_t ldsHeightA    = MACRO_TILE_M;
+  constexpr uint32_t ldsHeightB    = MACRO_TILE_N;
+  constexpr uint32_t ldsHeight     = ldsHeightA + ldsHeightB;
+  constexpr uint32_t sizeLds       = ldsHeight * ldsWidth;
+  const int sharedMemBytes = static_cast<int>(2 * sizeLds * sizeof(signed char));
+
+  int lda = K_gpu;
+  int ldb = K_gpu;
+  int ldd = N_gpu;
+
+  void* kernel_args[] = {&M_gpu, &N_gpu, &K_gpu, &dA, &dB, &dC, &lda, &ldb, &ldd};
+
+  TNN_LOG_INFO("%s [NG] launching rocWMMA kernel grid=(%u,%u) block=(%u,%u) shmem=%d\n",
+               tag, gridDim.x, gridDim.y, blockDim.x, blockDim.y, sharedMemBytes);
+  ok = PEARL_GPU_CHECK(oroModuleLaunchKernel(
+    compiled.function,
+    gridDim.x, gridDim.y, gridDim.z,
+    blockDim.x, blockDim.y, blockDim.z,
+    sharedMemBytes, nullptr, kernel_args, nullptr));
+
+  ok &= PEARL_GPU_CHECK(oroDeviceSynchronize());
+
+  if (!ok)
+  {
+    TNN_LOG_ERROR("%s [NG] Kernel launch or sync failed\n", tag);
+    (void)oroFree(dA);
+    (void)oroFree(dB);
+    (void)oroFree(dC);
+    return false;
+  }
+
+  TNN_LOG_INFO("%s [NG] kernel done, downloading result...\n", tag);
+
+  ok = PEARL_GPU_CHECK(oroMemcpy(hC.data(), dC, c_elems * sizeof(int32_t), oroMemcpyDeviceToHost));
+  if (!ok)
+  {
+    TNN_LOG_ERROR("%s [NG] oroMemcpy result failed\n", tag);
+    (void)oroFree(dA);
+    (void)oroFree(dB);
+    (void)oroFree(dC);
+    return false;
+  }
+
+  (void)oroFree(dA);
+  (void)oroFree(dB);
+  (void)oroFree(dC);
+
+  TNN_LOG_INFO("%s [NG] comparing %d elements...\n", tag, h * w);
+  int64_t max_abs_error = 0;
+  int64_t mismatch_count = 0;
+  int first_mismatch_i = -1, first_mismatch_j = -1;
+  int32_t first_mismatch_ref = 0, first_mismatch_gpu = 0;
+
+  for (int i = 0; i < h; ++i)
+  {
+    for (int j = 0; j < w; ++j)
+    {
+      const size_t idx = static_cast<size_t>(i) * w + j;
+      const int64_t delta = static_cast<int64_t>(C_ref[idx]) - static_cast<int64_t>(hC[idx]);
+      const int64_t abs_delta = (delta < 0) ? -delta : delta;
+      if (abs_delta > 0)
+      {
+        ++mismatch_count;
+        if (abs_delta > max_abs_error)
+          max_abs_error = abs_delta;
+        if (first_mismatch_i < 0)
+        {
+          first_mismatch_i = i;
+          first_mismatch_j = j;
+          first_mismatch_ref = C_ref[idx];
+          first_mismatch_gpu = hC[idx];
+        }
+      }
+    }
+  }
+
+  if (mismatch_count == 0)
+  {
+    TNN_LOG_INFO("%s noised GEMM: PASS (%d elements match exactly)\n", tag, h * w);
+    return true;
+  }
+
+  TNN_LOG_ERROR("%s noised GEMM: FAIL\n", tag);
+  TNN_LOG_ERROR("%s   total elements: %d\n", tag, h * w);
+  TNN_LOG_ERROR("%s   mismatches: %ld\n", tag, static_cast<long>(mismatch_count));
+  TNN_LOG_ERROR("%s   max_abs_error: %ld\n", tag, static_cast<long>(max_abs_error));
+  TNN_LOG_ERROR("%s   first mismatch at (%d, %d): ref=%d gpu=%d\n",
+                tag, first_mismatch_i, first_mismatch_j,
+                first_mismatch_ref, first_mismatch_gpu);
+  return false;
 }
-
-} // namespace tnn::pearl
 
 int test_pearl_hip()
 {
   constexpr const char* tag = "[PEARL-HIP-TEST]";
-  TNN_LOG_INFO_COLOR(BRIGHT_CYAN, "%s Pearl PoUW HIP harness scaffold\n", tag);
-  TNN_LOG_INFO("%s proto_solo=%d algo=%d\n", tag, PROTO_PEARL_SOLO, ALGO_PEARL_POUW);
-  const auto fixture = tnn::pearl::default_fixture();
+  TNN_LOG_INFO_COLOR(BRIGHT_CYAN, "%s rocWMMA Cooperative GEMM HIP test\n", tag);
 
-  if (!tnn::pearl::run_fixture_contract_checks(tag, fixture))
+  int device_count = 0;
+  if (!PEARL_GPU_CHECK(oroGetDeviceCount(&device_count)))
   {
-    TNN_LOG_ERROR("%s OpenPearl fixture contract check failed\n", tag);
+    TNN_LOG_ERROR("%s orogetDeviceCount failed\n", tag);
+    return 1;
+  }
+  if (device_count == 0)
+  {
+    TNN_LOG_ERROR("%s No GPU devices found\n", tag);
     return 1;
   }
 
-  if (!tnn::pearl::run_openpearl_vector_checks(tag, fixture))
+  oroDeviceProp_t props{};
+  if (!PEARL_GPU_CHECK(oroGetDeviceProperties(&props, tnn_get_device(0))))
   {
-    TNN_LOG_ERROR("%s OpenPearl vector check failed\n", tag);
+    TNN_LOG_ERROR("%s oroGetDeviceProperties failed\n", tag);
     return 1;
   }
 
-  TNN_LOG_INFO("%s TODO: add GPU dense-sparse expansion and OpenPearl PlainProof vectors\n", tag);
-  return 0;
+  oroCtx ctx{};
+  if (!PEARL_GPU_CHECK(oroCtxCreate(&ctx, 0, tnn_get_device(0))))
+  {
+    TNN_LOG_ERROR("%s oroCtxCreate failed\n", tag);
+    return 1;
+  }
+
+  pearl_register_rtc_headers();
+  auto& compiler = RTCCompiler::instance();
+  const bool is_amd = tnn_is_amd_device(0);
+  const auto compile_opts = pearl_rtc_compile_opts(props, is_amd);
+
+  const std::string kernel_source(
+    hip_pearl_gemm_simple_source::SRC_TNN_HIP_CRYPTO_PEARL_PEARL_GEMM_SIMPLE_HIP_SOURCE);
+
+  RTCCompiler::CompiledKernel compiled{};
+  try
+  {
+    compiled = compiler.compile_from_source(
+      kernel_source,
+      "pearl_gemm_simple.hip",
+      "pearl_gemm_simple",
+      compile_opts);
+  }
+  catch (const std::exception& e)
+  {
+    TNN_LOG_ERROR("%s rocWMMA kernel compile failed: %s\n", tag, e.what());
+    (void)oroCtxDestroy(ctx);
+    return 1;
+  }
+
+  int M = 1024, N = 1024, K = 4096;
+
+  const std::size_t a_elems = static_cast<std::size_t>(M) * K;
+  const std::size_t b_elems = static_cast<std::size_t>(K) * N;
+  const std::size_t c_elems = static_cast<std::size_t>(M) * N;
+
+  std::vector<signed char> hA(a_elems);
+  std::vector<signed char> hB(b_elems);
+  for (std::size_t i = 0; i < a_elems; ++i) hA[i] = static_cast<signed char>((i * 0x9e3779b9u) & 0xff);
+  for (int j = 0; j < N; ++j)
+    for (int l = 0; l < K; ++l)
+      hB[static_cast<std::size_t>(j) * K + l] =
+        static_cast<signed char>(((static_cast<std::size_t>(j) * K + l) * 0x9e3779b9u + 0x55) & 0xff);
+
+  std::vector<int32_t> hC(c_elems, 0);
+
+  signed char* dA = nullptr;
+  signed char* dB = nullptr;
+  int32_t* dC = nullptr;
+
+  bool ok = true;
+  ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&dA), a_elems));
+  ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&dB), b_elems));
+  ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&dC), c_elems * sizeof(int32_t)));
+
+  if (!ok)
+  {
+    TNN_LOG_ERROR("%s oroMalloc failed\n", tag);
+    if (dA) (void)oroFree(dA);
+    if (dB) (void)oroFree(dB);
+    if (dC) (void)oroFree(dC);
+    (void)oroCtxDestroy(ctx);
+    return 1;
+  }
+
+  ok  = PEARL_GPU_CHECK(oroMemcpy(dA, hA.data(), a_elems, oroMemcpyHostToDevice));
+  ok &= PEARL_GPU_CHECK(oroMemcpy(dB, hB.data(), b_elems, oroMemcpyHostToDevice));
+  ok &= PEARL_GPU_CHECK(oroMemset(dC, 0, c_elems * sizeof(int32_t)));
+
+  if (!ok)
+  {
+    TNN_LOG_ERROR("%s oroMemcpy failed\n", tag);
+    (void)oroFree(dA);
+    (void)oroFree(dB);
+    (void)oroFree(dC);
+    (void)oroCtxDestroy(ctx);
+    return 1;
+  }
+
+  const dim3 gridDim(
+    (M + MACRO_TILE_M - 1) / MACRO_TILE_M,
+    (N + MACRO_TILE_N - 1) / MACRO_TILE_N,
+    1);
+  const dim3 blockDim(TBLOCK_X, TBLOCK_Y, 1);
+
+  constexpr uint32_t ldsWidth      = MACRO_TILE_K;
+  constexpr uint32_t ldsHeightA    = MACRO_TILE_M;
+  constexpr uint32_t ldsHeightB    = MACRO_TILE_N;
+  constexpr uint32_t ldsHeight     = ldsHeightA + ldsHeightB;
+  constexpr uint32_t sizeLds       = ldsHeight * ldsWidth;
+  const int sharedMemBytes = static_cast<int>(2 * sizeLds * sizeof(signed char));
+
+  int lda = K;
+  int ldb = K;
+  int ldd = N;
+
+  void* kernel_args[] = {&M, &N, &K, &dA, &dB, &dC, &lda, &ldb, &ldd};
+
+  ok = PEARL_GPU_CHECK(oroModuleLaunchKernel(
+    compiled.function,
+    gridDim.x, gridDim.y, gridDim.z,
+    blockDim.x, blockDim.y, blockDim.z,
+    sharedMemBytes, nullptr, kernel_args, nullptr));
+
+  ok &= PEARL_GPU_CHECK(oroDeviceSynchronize());
+
+  if (!ok)
+  {
+    TNN_LOG_ERROR("%s Kernel launch or sync failed\n", tag);
+    (void)oroFree(dA);
+    (void)oroFree(dB);
+    (void)oroFree(dC);
+    (void)oroCtxDestroy(ctx);
+    return 1;
+  }
+
+  ok = PEARL_GPU_CHECK(oroMemcpy(hC.data(), dC, c_elems * sizeof(int32_t), oroMemcpyDeviceToHost));
+  if (!ok)
+  {
+    TNN_LOG_ERROR("%s oroMemcpy result failed\n", tag);
+    (void)oroFree(dA);
+    (void)oroFree(dB);
+    (void)oroFree(dC);
+    (void)oroCtxDestroy(ctx);
+    return 1;
+  }
+
+  bool nonzero = false;
+  for (std::size_t i = 0; i < c_elems && !nonzero; ++i)
+  {
+    if (hC[i] != 0) nonzero = true;
+  }
+
+  TNN_LOG_INFO("%s rocWMMA kernel: %s (output %s)\n",
+               tag, ok ? "PASSED" : "FAILED",
+               nonzero ? "non-zero" : "ALL ZERO");
+
+  (void)oroFree(dA);
+  (void)oroFree(dB);
+  (void)oroFree(dC);
+
+  bool ng_ok = test_pearl_noised_gemm(tag, compiled);
+
+  (void)oroCtxDestroy(ctx);
+
+  return (ok && nonzero && ng_ok) ? 0 : 1;
 }
 
 int bench_pearl_hip()
 {
 #ifdef TNN_HIP
   constexpr const char* tag = "[PEARL-HIP-BENCH]";
-  return tnn::pearl::run_pearl_benchmark(tag);
+  TNN_LOG_INFO_COLOR(BRIGHT_CYAN, "%s Pearl E2E Mining Pipeline Benchmark\n", tag);
+
+  int device_count = 0;
+  if (!PEARL_GPU_CHECK(oroGetDeviceCount(&device_count)))
+  {
+    TNN_LOG_ERROR("%s oroGetDeviceCount failed\n", tag);
+    return 1;
+  }
+  if (device_count == 0)
+  {
+    TNN_LOG_ERROR("%s No GPU devices found\n", tag);
+    return 1;
+  }
+
+  oroDeviceProp_t props{};
+  if (!PEARL_GPU_CHECK(oroGetDeviceProperties(&props, tnn_get_device(0))))
+  {
+    TNN_LOG_ERROR("%s oroGetDeviceProperties failed\n", tag);
+    return 1;
+  }
+
+  oroCtx ctx{};
+  if (!PEARL_GPU_CHECK(oroCtxCreate(&ctx, 0, tnn_get_device(0))))
+  {
+    TNN_LOG_ERROR("%s oroCtxCreate failed\n", tag);
+    return 1;
+  }
+
+  pearl_register_rtc_headers();
+  auto& compiler = RTCCompiler::instance();
+  const bool is_amd = tnn_is_amd_device(0);
+  const auto compile_opts = pearl_rtc_compile_opts(props, is_amd);
+
+  const std::string kernel_source(
+    hip_pearl_gemm_simple_source::SRC_TNN_HIP_CRYPTO_PEARL_PEARL_GEMM_SIMPLE_HIP_SOURCE);
+
+  RTCCompiler::CompiledKernel compiled{};
+  try
+  {
+    compiled = compiler.compile_from_source(
+      kernel_source,
+      "pearl_gemm_simple.hip",
+      "pearl_gemm_simple",
+      compile_opts);
+  }
+  catch (const std::exception& e)
+  {
+    TNN_LOG_ERROR("%s rocWMMA kernel compile failed: %s\n", tag, e.what());
+    (void)oroCtxDestroy(ctx);
+    return 1;
+  }
+
+  HarnessFixture fixture = default_fixture();
+  const int h = env_or_default("TNN_PEARL_M", static_cast<int>(fixture.m));
+  const int w = env_or_default("TNN_PEARL_N", static_cast<int>(fixture.n));
+  const int k = env_or_default("TNN_PEARL_K", static_cast<int>(fixture.config.common_dim));
+  const int R = env_or_default("TNN_PEARL_R", static_cast<int>(fixture.config.rank));
+  const int warmup = env_or_default("TNN_PEARL_WARMUP", 3);
+  const int iters  = env_or_default("TNN_PEARL_ITERS", 10);
+
+  TNN_LOG_INFO("%s dims: M=%d N=%d K=%d R=%d warmup=%d iters=%d\n",
+               tag, h, w, k, R, warmup, iters);
+
+  I32Matrix s_a(h, std::vector<int32_t>(k));
+  I32Matrix s_b(w, std::vector<int32_t>(k));
+  for (int i = 0; i < h; ++i)
+    for (int l = 0; l < k; ++l)
+      s_a[i][l] = static_cast<int32_t>(static_cast<int8_t>(((i * k + l) * 0x9e3779b9u) & 0xff));
+  for (int j = 0; j < w; ++j)
+    for (int l = 0; l < k; ++l)
+      s_b[j][l] = static_cast<int32_t>(static_cast<int8_t>(((j * k + l) * 0x9e3779b9u + 0x55) & 0xff));
+
+  const Hash256 job_key = compute_job_key(fixture.header, fixture.config);
+
+  std::array<uint8_t, 32> seed_a_label = {};
+  std::copy_n("A_tensor", 8, seed_a_label.begin());
+  std::array<uint8_t, 32> seed_b_label = {};
+  std::copy_n("B_tensor", 8, seed_b_label.begin());
+
+  const std::size_t a_elems = static_cast<std::size_t>(k) * h;
+  const std::size_t b_elems = static_cast<std::size_t>(k) * w;
+  const std::size_t c_elems = static_cast<std::size_t>(h) * w;
+
+  signed char* dA = nullptr;
+  signed char* dB = nullptr;
+  int32_t* dC = nullptr;
+
+  bool ok = true;
+  ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&dA), a_elems));
+  ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&dB), b_elems));
+  ok &= PEARL_GPU_CHECK(oroMalloc(reinterpret_cast<oroDeviceptr*>(&dC), c_elems * sizeof(int32_t)));
+
+  if (!ok)
+  {
+    TNN_LOG_ERROR("%s oroMalloc failed\n", tag);
+    if (dA) (void)oroFree(dA);
+    if (dB) (void)oroFree(dB);
+    if (dC) (void)oroFree(dC);
+    (void)oroCtxDestroy(ctx);
+    return 1;
+  }
+
+  std::vector<signed char> hA(a_elems);
+  std::vector<signed char> hB(b_elems);
+  std::vector<int32_t> hC(c_elems);
+
+  const dim3 gridDim(
+    (h + MACRO_TILE_M - 1) / MACRO_TILE_M,
+    (w + MACRO_TILE_N - 1) / MACRO_TILE_N,
+    1);
+  const dim3 blockDim(TBLOCK_X, TBLOCK_Y, 1);
+
+  constexpr uint32_t ldsWidth    = MACRO_TILE_K;
+  constexpr uint32_t ldsHeightA  = MACRO_TILE_M;
+  constexpr uint32_t ldsHeightB  = MACRO_TILE_N;
+  constexpr uint32_t ldsHeight   = ldsHeightA + ldsHeightB;
+  constexpr uint32_t sizeLds     = ldsHeight * ldsWidth;
+  const int sharedMemBytes = static_cast<int>(2 * sizeLds * sizeof(signed char));
+
+  hipEvent_t gpu_start{}, gpu_stop{};
+  ok = PEARL_GPU_CHECK(hipEventCreate(&gpu_start));
+  ok &= PEARL_GPU_CHECK(hipEventCreate(&gpu_stop));
+
+  if (!ok)
+  {
+    TNN_LOG_ERROR("%s hipEventCreate failed\n", tag);
+    (void)oroFree(dA);
+    (void)oroFree(dB);
+    (void)oroFree(dC);
+    (void)oroCtxDestroy(ctx);
+    return 1;
+  }
+
+  TNN_LOG_INFO("%s warming up (%d iterations)...\n", tag, warmup);
+  for (int iter = 0; iter < warmup; ++iter)
+  {
+    const uint32_t counter = static_cast<uint32_t>(iter);
+
+    uint8_t a_preimage[12] = {};
+    std::memcpy(a_preimage, "pearl_a", 7);
+    a_preimage[8] = static_cast<uint8_t>(counter & 0xff);
+    a_preimage[9] = static_cast<uint8_t>((counter >> 8) & 0xff);
+    a_preimage[10] = static_cast<uint8_t>((counter >> 16) & 0xff);
+    a_preimage[11] = static_cast<uint8_t>((counter >> 24) & 0xff);
+    const Hash256 hash_a = blake3_digest(a_preimage, sizeof(a_preimage));
+
+    uint8_t b_preimage[12] = {};
+    std::memcpy(b_preimage, "pearl_b", 7);
+    b_preimage[8] = static_cast<uint8_t>(counter & 0xff);
+    b_preimage[9] = static_cast<uint8_t>((counter >> 8) & 0xff);
+    b_preimage[10] = static_cast<uint8_t>((counter >> 16) & 0xff);
+    b_preimage[11] = static_cast<uint8_t>((counter >> 24) & 0xff);
+    const Hash256 hash_b = blake3_digest(b_preimage, sizeof(b_preimage));
+
+    const auto [b_noise_seed, a_noise_seed] = compute_commitment_hash(job_key, hash_a, hash_b);
+
+    const std::vector<int8_t> eal = pearl_dense_noise_reference(h, R, a_noise_seed, seed_a_label);
+    const std::vector<int8_t> ear = pearl_sparse_noise_reference(k, R, a_noise_seed, seed_a_label);
+    const std::vector<int8_t> ebl = pearl_sparse_noise_reference(k, R, b_noise_seed, seed_b_label);
+    const std::vector<int8_t> ebr = pearl_dense_noise_reference(w, R, b_noise_seed, seed_b_label);
+
+    const SparseNoisePairs ear_pairs = extract_sparse_pairs(ear, k, R);
+    const SparseNoisePairs ebl_pairs = extract_sparse_pairs(ebl, k, R);
+
+    const I32Matrix noise_a = compute_noise_from_factors_dense_times_sparse_T(eal, h, ear_pairs, k, R);
+    const I32Matrix noise_b = compute_noise_from_factors_dense_times_sparse_T(ebr, w, ebl_pairs, k, R);
+
+    const auto [ApEA, BpEB] = compute_noised_matrices(s_a, s_b, noise_a, noise_b);
+
+    for (std::size_t i = 0; i < a_elems; ++i) hA[i] = ApEA[i];
+    for (std::size_t i = 0; i < b_elems; ++i) hB[i] = BpEB[i];
+
+    ok = PEARL_GPU_CHECK(oroMemcpy(dA, hA.data(), a_elems, oroMemcpyHostToDevice));
+    ok &= PEARL_GPU_CHECK(oroMemcpy(dB, hB.data(), b_elems, oroMemcpyHostToDevice));
+    ok &= PEARL_GPU_CHECK(oroMemset(dC, 0, c_elems * sizeof(int32_t)));
+
+    int M_gpu = h, N_gpu = w, K_gpu = k;
+    int lda = K_gpu, ldb = K_gpu, ldd = N_gpu;
+    void* kernel_args[] = {&M_gpu, &N_gpu, &K_gpu, &dA, &dB, &dC, &lda, &ldb, &ldd};
+
+    ok &= PEARL_GPU_CHECK(oroModuleLaunchKernel(
+      compiled.function,
+      gridDim.x, gridDim.y, gridDim.z,
+      blockDim.x, blockDim.y, blockDim.z,
+      sharedMemBytes, nullptr, kernel_args, nullptr));
+
+    if (!ok) break;
+  }
+  ok &= PEARL_GPU_CHECK(oroDeviceSynchronize());
+
+  if (!ok)
+  {
+    TNN_LOG_ERROR("%s Warmup failed\n", tag);
+    (void)hipEventDestroy(gpu_start);
+    (void)hipEventDestroy(gpu_stop);
+    (void)oroFree(dA);
+    (void)oroFree(dB);
+    (void)oroFree(dC);
+    (void)oroCtxDestroy(ctx);
+    return 1;
+  }
+
+  TNN_LOG_INFO("%s benchmarking %d iterations...\n", tag, iters);
+
+  std::array<uint32_t, 16> last_jackpot = {};
+  Hash256 last_hash_jackpot = {};
+  double total_gpu_ms = 0.0;
+
+  using clock = std::chrono::high_resolution_clock;
+  const auto wall_start = clock::now();
+
+  for (int iter = 0; iter < iters; ++iter)
+  {
+    const uint32_t counter = static_cast<uint32_t>(iter + warmup);
+
+    uint8_t a_preimage[12] = {};
+    std::memcpy(a_preimage, "pearl_a", 7);
+    a_preimage[8] = static_cast<uint8_t>(counter & 0xff);
+    a_preimage[9] = static_cast<uint8_t>((counter >> 8) & 0xff);
+    a_preimage[10] = static_cast<uint8_t>((counter >> 16) & 0xff);
+    a_preimage[11] = static_cast<uint8_t>((counter >> 24) & 0xff);
+    const Hash256 hash_a = blake3_digest(a_preimage, sizeof(a_preimage));
+
+    uint8_t b_preimage[12] = {};
+    std::memcpy(b_preimage, "pearl_b", 7);
+    b_preimage[8] = static_cast<uint8_t>(counter & 0xff);
+    b_preimage[9] = static_cast<uint8_t>((counter >> 8) & 0xff);
+    b_preimage[10] = static_cast<uint8_t>((counter >> 16) & 0xff);
+    b_preimage[11] = static_cast<uint8_t>((counter >> 24) & 0xff);
+    const Hash256 hash_b = blake3_digest(b_preimage, sizeof(b_preimage));
+
+    const auto [b_noise_seed, a_noise_seed] = compute_commitment_hash(job_key, hash_a, hash_b);
+
+    const std::vector<int8_t> eal = pearl_dense_noise_reference(h, R, a_noise_seed, seed_a_label);
+    const std::vector<int8_t> ear = pearl_sparse_noise_reference(k, R, a_noise_seed, seed_a_label);
+    const std::vector<int8_t> ebl = pearl_sparse_noise_reference(k, R, b_noise_seed, seed_b_label);
+    const std::vector<int8_t> ebr = pearl_dense_noise_reference(w, R, b_noise_seed, seed_b_label);
+
+    const SparseNoisePairs ear_pairs = extract_sparse_pairs(ear, k, R);
+    const SparseNoisePairs ebl_pairs = extract_sparse_pairs(ebl, k, R);
+
+    const I32Matrix noise_a = compute_noise_from_factors_dense_times_sparse_T(eal, h, ear_pairs, k, R);
+    const I32Matrix noise_b = compute_noise_from_factors_dense_times_sparse_T(ebr, w, ebl_pairs, k, R);
+
+    const auto [ApEA, BpEB] = compute_noised_matrices(s_a, s_b, noise_a, noise_b);
+
+    for (std::size_t i = 0; i < a_elems; ++i) hA[i] = ApEA[i];
+    for (std::size_t i = 0; i < b_elems; ++i) hB[i] = BpEB[i];
+
+    ok = PEARL_GPU_CHECK(oroMemcpy(dA, hA.data(), a_elems, oroMemcpyHostToDevice));
+    ok &= PEARL_GPU_CHECK(oroMemcpy(dB, hB.data(), b_elems, oroMemcpyHostToDevice));
+    ok &= PEARL_GPU_CHECK(oroMemset(dC, 0, c_elems * sizeof(int32_t)));
+
+    ok &= PEARL_GPU_CHECK(hipEventRecord(gpu_start, nullptr));
+
+    int M_gpu = h, N_gpu = w, K_gpu = k;
+    int lda = K_gpu, ldb = K_gpu, ldd = N_gpu;
+    void* kernel_args[] = {&M_gpu, &N_gpu, &K_gpu, &dA, &dB, &dC, &lda, &ldb, &ldd};
+
+    ok &= PEARL_GPU_CHECK(oroModuleLaunchKernel(
+      compiled.function,
+      gridDim.x, gridDim.y, gridDim.z,
+      blockDim.x, blockDim.y, blockDim.z,
+      sharedMemBytes, nullptr, kernel_args, nullptr));
+
+    ok &= PEARL_GPU_CHECK(hipEventRecord(gpu_stop, nullptr));
+    ok &= PEARL_GPU_CHECK(hipEventSynchronize(gpu_stop));
+
+    if (!ok) break;
+
+    float gpu_ms = 0.0f;
+    if (PEARL_GPU_CHECK(hipEventElapsedTime(&gpu_ms, gpu_start, gpu_stop)))
+      total_gpu_ms += static_cast<double>(gpu_ms);
+
+    ok &= PEARL_GPU_CHECK(oroMemcpy(hC.data(), dC, c_elems * sizeof(int32_t), oroMemcpyDeviceToHost));
+
+    const std::array<uint32_t, 16> jackpot = compute_jackpot_words(s_a, s_b, noise_a, noise_b, k, R);
+    const Hash256 hash_jackpot = compute_jackpot_hash(jackpot, a_noise_seed);
+
+    last_jackpot = jackpot;
+    last_hash_jackpot = hash_jackpot;
+  }
+
+  const auto wall_end = clock::now();
+  const double total_wall_ms = static_cast<double>(
+    std::chrono::duration_cast<std::chrono::microseconds>(wall_end - wall_start).count()) / 1000.0;
+
+  (void)hipEventDestroy(gpu_start);
+  (void)hipEventDestroy(gpu_stop);
+
+  if (!ok)
+  {
+    TNN_LOG_ERROR("%s Benchmark iteration failed\n", tag);
+    (void)oroFree(dA);
+    (void)oroFree(dB);
+    (void)oroFree(dC);
+    (void)oroCtxDestroy(ctx);
+    return 1;
+  }
+
+  const double ms_per_eval   = total_wall_ms / static_cast<double>(iters);
+  const double evals_per_sec = (ms_per_eval > 0.0) ? (1000.0 / ms_per_eval) : 0.0;
+  const double avg_gpu_ms    = total_gpu_ms / static_cast<double>(iters);
+  const double avg_cpu_ms    = ms_per_eval - avg_gpu_ms;
+
+  TNN_LOG_INFO("%s === E2E Mining Benchmark Results ===\n", tag);
+  TNN_LOG_INFO("%s dims:        M=%d N=%d K=%d R=%d\n", tag, h, w, k, R);
+  TNN_LOG_INFO("%s iterations:  %d  warmup: %d\n", tag, iters, warmup);
+  TNN_LOG_INFO("%s total wall:  %9.3f ms\n", tag, total_wall_ms);
+  TNN_LOG_INFO("%s per eval:    %9.3f ms\n", tag, ms_per_eval);
+  TNN_LOG_INFO("%s   GPU:       %9.3f ms (kernel only)\n", tag, avg_gpu_ms);
+  TNN_LOG_INFO("%s   CPU:       %9.3f ms (noise+sX+gEM+jackpot)\n", tag, avg_cpu_ms);
+  TNN_LOG_INFO("%s hashrate:    %9.2f eval/s\n", tag, evals_per_sec);
+  TNN_LOG_INFO("%s last jackpot hash: %s\n", tag, hex_bytes(last_hash_jackpot).c_str());
+
+  (void)oroFree(dA);
+  (void)oroFree(dB);
+  (void)oroFree(dC);
+  (void)oroCtxDestroy(ctx);
+
+  return 0;
 #else
   TNN_LOG_ERROR("[PEARL-HIP-BENCH] ERROR: TNN_HIP is not enabled\n");
   return 1;
 #endif
 }
+
+} // namespace tnn::pearl

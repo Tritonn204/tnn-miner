@@ -203,3 +203,21 @@ void kawpow_stratum_session_nossl(
     ssl::context &ctx,
     net::yield_context yield,
     bool isDev);
+
+// Pearl gateway solo
+namespace tnn::pearl {
+
+void pearl_session(
+    std::string host,
+    std::string const &port,
+    std::string const &wallet,
+    std::string const &worker,
+    net::io_context &ioc,
+    net::yield_context yield,
+    bool isDev);
+
+int pearl_rpc_test(
+    std::string host,
+    std::string const &port);
+
+} // namespace tnn::pearl
