@@ -26,6 +26,24 @@ if (WITH_PEARL)
       NAMESPACE hip_pearl_gemm_simple_source
   )
 
+  # Embed pearl_fused_noise_gemm kernel source (Phase 1: fused noise-gen + GEMM)
+  embed_hip_sources(
+      OUTPUT_FILE "${PROJECT_BINARY_DIR}/generated/pearl_fused_noise_gemm.hip.hpp"
+      SOURCES
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/pearl/pearl_fused_noise_gemm.hip"
+      NO_MANIFEST
+      NAMESPACE hip_pearl_fused_noise_gemm_source
+  )
+
+  # Embed pearl_sparse_noise_gen kernel source (Phase 2: sparse noise index pairs)
+  embed_hip_sources(
+      OUTPUT_FILE "${PROJECT_BINARY_DIR}/generated/pearl_sparse_noise_gen.hip.hpp"
+      SOURCES
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/pearl/pearl_sparse_noise_gen.hip"
+      NO_MANIFEST
+      NAMESPACE hip_pearl_sparse_noise_gen_source
+  )
+
   # Embed rocwmma header sources for HIPRTC
   file(GLOB_RECURSE ROCWMMA_INTERNAL_HEADERS
       "${PROJECT_SOURCE_DIR}/include/rocwmma/internal/*.hpp"
