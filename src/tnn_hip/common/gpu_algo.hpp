@@ -13,6 +13,7 @@
 #include <condition_variable>
 #include <tnn_log.hpp>
 #include <atomic>
+#include <work_rate.hpp>
 
 inline int parse_gfx_number(const char *gcnArchName)
 {
@@ -137,6 +138,9 @@ struct TuningResult {
 // ============================================================================
 // Kernel Launch Context - passed to execution strategy
 // ============================================================================
+struct JobSnapshot;
+struct BatchResult;
+
 struct KernelLaunchContext {
     // Device buffers
     uint8_t* d_input;
@@ -166,6 +170,11 @@ struct KernelLaunchContext {
 
     // Algo-specific opaque state (e.g., KawPow DAG pointer + metadata)
     void* algo_data = nullptr;
+    const JobSnapshot* job_snapshot = nullptr;
+    float elapsed_ms = 0;
+    bool gpu_timing_valid = true;
+    double prepare_host_ms = 0;
+    double completion_host_ms = 0;
 
     // True when this batch is mining for dev fee
     bool is_dev = false;
@@ -336,6 +345,7 @@ using TuneKeyProbeFn = std::function<bool(
 // Algorithm configuration
 // ============================================================================
 struct AlgoConfig {
+    RateUnit rate_unit = RateUnit::Hashes;
     std::string name;
     std::string source_path;
     std::string_view source;
@@ -355,6 +365,9 @@ struct AlgoConfig {
     size_t scratch_per_hash;
     bool allocate_output_buffer = true;
     bool allocate_scratch_buffer = true;
+    // Opt-in for complete custom batch adapters. These must upload/reset their
+    // own work, target and result buffers through prepare/execute/collect.
+    bool owns_work_and_result_buffers = false;
     int preferred_block_size;
     int algo_id;
 
@@ -494,6 +507,20 @@ struct AlgoConfig {
     // a high cost (e.g. KawPow DAG rebuild).
     bool dev_fee_session_based = false;
 
+    // Owned-work algorithms prepare outside the timed kernel interval, then
+    // extract their own result format after successful synchronization.
+    using PrepareBatchFn = std::function<bool(const KernelLaunchContext&)>;
+    using CollectBatchFn = std::function<void(const KernelLaunchContext&, BatchResult&)>;
+    PrepareBatchFn prepare_batch_fn = nullptr;
+    CollectBatchFn collect_batch_fn = nullptr;
+    // Optional owned stream and post-kernel readback. The latter must complete
+    // its transfers before returning; the kernel timer excludes that work.
+    std::function<oroStream_t(void*)> batch_stream_fn = nullptr;
+    std::function<void(const KernelLaunchContext&)> finish_batch_fn = nullptr;
+    bool host_timing_only = false;
+    bool skip_cached_tune_validation = false;
+    std::optional<TuningResult> fixed_launch;
+
     // Helper to get all kernel names (handles legacy single name)
     std::vector<std::string> get_kernel_names() const {
         if (!kernel_names.empty()) {
@@ -522,7 +549,10 @@ struct JobSnapshot {
     int algo_id;                         // Algorithm identifier (e.g., ALGO_XELISV3)
     std::string job_id_str;             // Protocol-assigned job ID (stratum)
     bool is_dev;                         // Whether this batch was mined for dev fee
-    std::array<uint8_t, 32> raw_target;
+    std::array<uint8_t, 32> raw_target{};
+    uint64_t connection_generation = 0;
+    uint64_t block_height = 0;
+    uint32_t pearl_cert_version = 0;
 
     JobSnapshot() : job_id(0), difficulty(0), algo_id(0), is_dev(false) {}
 
@@ -542,13 +572,19 @@ struct JobSnapshot {
 // ============================================================================
 // Batch result
 // ============================================================================
+struct GPUBatchEvidence {
+    virtual ~GPUBatchEvidence() = default;
+};
+
 struct BatchResult {
     std::vector<uint8_t> hashes;         // Deprecated
     std::vector<uint64_t> valid_nonces;
     std::vector<uint8_t> valid_hashes;
-    uint32_t num_valid;
-    uint64_t nonce_start;
-    uint32_t count;
+    uint32_t num_valid = 0;
+    uint64_t nonce_start = 0;
+    uint32_t count = 0;
+    uint64_t work_multiplier = 1;
+    std::shared_ptr<const GPUBatchEvidence> evidence;
 };
 
 // ============================================================================
@@ -568,6 +604,8 @@ public:
     virtual void set_raw_target(const uint8_t* target_32bytes) = 0;
     virtual const uint8_t* get_current_work_template() const = 0;
     virtual BatchResult mine_batch(uint64_t nonce_start, uint32_t batch_size = 0) = 0;
+    // Called on the mining thread with the same snapshot used for submission.
+    virtual void set_job_snapshot(const JobSnapshot&) {}
 
     virtual uint32_t get_batch_size() const = 0;
     virtual double get_hashrate() const = 0;

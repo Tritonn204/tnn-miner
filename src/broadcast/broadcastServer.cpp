@@ -41,7 +41,7 @@ namespace BroadcastServer
       // Aggregate hashrate: CPU + all GPUs
       double total_hr = 0.0;
       if (cpu_mining && rate30sec_ptr && !rate30sec_ptr->empty()) {
-        total_hr += (double)std::accumulate(rate30sec_ptr->begin(), rate30sec_ptr->end(), 0LL) / (double)rate30sec_ptr->size();
+        total_hr += (double)std::accumulate(rate30sec_ptr->begin(), rate30sec_ptr->end(), 0.0L) / (double)rate30sec_ptr->size();
       }
       if (gpu_count > 0 && gpu_rates1min_ptr) {
         for (int i = 0; i < gpu_count; i++) {
@@ -50,10 +50,11 @@ namespace BroadcastServer
 #endif
           auto& rates = (*gpu_rates1min_ptr)[i];
           if (!rates.empty())
-            total_hr += (double)std::accumulate(rates.begin(), rates.end(), 0LL) / (double)rates.size();
+            total_hr += (double)std::accumulate(rates.begin(), rates.end(), 0.0L) / (double)rates.size();
         }
       }
       jsonData["hashrate"] = total_hr;
+      jsonData["rate_unit"] = rate_suffix(algo_rate_info(miningProfile.coin.miningAlgo).unit);
       jsonData["accepted"] = *accepted_ptr;
       jsonData["rejected"] = *rejected_ptr;
 
@@ -68,7 +69,7 @@ namespace BroadcastServer
 
       // CPU hashrate (from rate30sec rolling window)
       if (cpu_mining && rate30sec_ptr && !rate30sec_ptr->empty()) {
-        double cpu_hr = (double)std::accumulate(rate30sec_ptr->begin(), rate30sec_ptr->end(), 0LL) / (double)rate30sec_ptr->size();
+        double cpu_hr = (double)std::accumulate(rate30sec_ptr->begin(), rate30sec_ptr->end(), 0.0L) / (double)rate30sec_ptr->size();
         jsonData["cpu_hashrate"] = cpu_hr;
       }
 
@@ -86,9 +87,10 @@ namespace BroadcastServer
           auto& rates = (*gpu_rates1min_ptr)[i];
           double hr = 0.0;
           if (!rates.empty()) {
-            hr = (double)std::accumulate(rates.begin(), rates.end(), 0LL) / (double)rates.size();
+            hr = (double)std::accumulate(rates.begin(), rates.end(), 0.0L) / (double)rates.size();
           }
           gpu["hashrate"] = hr;
+          gpu["rate_unit"] = rate_suffix(algo_rate_info(miningProfile.coin.miningAlgo).unit);
 
           if (gpu_names_ptr) {
             gpu["name"] = gpu_names_ptr[i].c_str();

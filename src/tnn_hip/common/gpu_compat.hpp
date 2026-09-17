@@ -7,6 +7,8 @@
 #ifdef WITH_OROCHI
 
 #include <Orochi/Orochi.h>
+// Orochi exposes stream creation but does not alias this HIP/CUDA flag.
+constexpr unsigned oroStreamNonBlocking = 0x01;
 
 #else // !WITH_OROCHI — standard HIP, alias hip* to oro* so code uses oro* everywhere
 
@@ -36,12 +38,14 @@ constexpr auto oroMemcpyHostToDevice  = hipMemcpyHostToDevice;
 constexpr auto oroMemcpyDeviceToHost  = hipMemcpyDeviceToHost;
 constexpr auto oroEventDefault      = hipEventDefault;
 constexpr auto oroEventBlockingSync = hipEventBlockingSync;
+constexpr auto oroStreamNonBlocking = hipStreamNonBlocking;
 constexpr auto ORORTC_SUCCESS       = HIPRTC_SUCCESS;
 
 // ---- Runtime API ----
 #define oroMalloc               hipMalloc
 #define oroFree                 hipFree
 #define oroMemcpy               hipMemcpy
+#define oroMemcpyAsync          hipMemcpyAsync
 #define oroMemcpyToSymbol       hipMemcpyToSymbol
 #define oroMemcpyFromSymbol     hipMemcpyFromSymbol
 #define oroMemset               hipMemset
@@ -79,6 +83,7 @@ constexpr auto ORORTC_SUCCESS       = HIPRTC_SUCCESS;
 #define oroEventElapsedTime     hipEventElapsedTime
 
 #define oroStreamCreate         hipStreamCreate
+#define oroStreamCreateWithFlags hipStreamCreateWithFlags
 #define oroStreamDestroy        hipStreamDestroy
 #define oroStreamSynchronize    hipStreamSynchronize
 

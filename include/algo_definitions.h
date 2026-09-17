@@ -1,5 +1,7 @@
 #pragma once
 
+#include "work_rate.hpp"
+
 // Each new blockchain has 10 reserved net protocol slots
 // AstroBWTv3
 #define PROTO_DERO_SOLO 0
@@ -94,6 +96,12 @@
 #define ALGO_KAWPOW 130
 #define ALGO_QHASH 140
 #define ALGO_PEARL_POUW 150
+
+inline constexpr RateInfo algo_rate_info(int algo) {
+  return algo == ALGO_PEARL_POUW
+      ? RateInfo{RateUnit::MultiplyAccumulates}
+      : RateInfo{};
+}
 
 inline const char* algoName(int algo) {
   switch(algo) {
