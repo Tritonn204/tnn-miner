@@ -10,6 +10,9 @@
 #include <unordered_set>
 
 #include "tnn_hip_common_embedded.hpp"
+#ifdef TNN_PEARL
+#include <tnn_hip/coins/pearl/pearl_mining.hpp>
+#endif
 #ifdef TNN_XELISHASH
 #include "xelis_embedded_headers.hpp"
 #include "xelis-hash-v3.hip.hpp"
@@ -2913,6 +2916,12 @@ public:
 
   std::unique_ptr<IGPUAlgorithm> create(const std::string &name)
   {
+#ifdef TNN_PEARL
+    if (name == "pearl")
+    {
+      return std::make_unique<GPUAlgorithm>(tnn::pearl::pearl_gpu_config());
+    }
+#endif
     if (name == "xelis_v3")
     {
       return std::make_unique<GPUAlgorithm>(XELIS_V3_CONFIG);
@@ -2936,6 +2945,9 @@ public:
   {
     return {
       "xelis_v3",
+#ifdef TNN_PEARL
+      "pearl",
+#endif
 #ifdef TNN_KAWPOW
       "kawpow",
 #endif

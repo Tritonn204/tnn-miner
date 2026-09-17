@@ -879,7 +879,7 @@ if (NOT WITH_HIP OR WITH_OROCHI)
        ${SOURCES_CORE_ARGON2})
 endif()
 
-file(GLOB SOURCES_NET
+file(GLOB SOURCES_NET CONFIGURE_DEPENDS
   "${PROJECT_SOURCE_DIR}/src/net/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/net/*.c"
   "${PROJECT_SOURCE_DIR}/src/net/kas/*.cpp"

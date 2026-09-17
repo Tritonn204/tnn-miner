@@ -84,6 +84,7 @@
 
 #if defined(TNN_PEARL)
 #include <tnn_hip/coins/pearl/test_pearl_hip.h>
+#include <tnn_hip/coins/pearl/pearl_mining.hpp>
 #endif
 
 #ifdef TNN_YESPOWER
@@ -120,9 +121,6 @@ double latest_hashrate = 0.0;
 
 bool gpuMine = false;
 
-static int g_bench_pearl_m = 0;
-static int g_bench_pearl_n = 0;
-static int g_bench_pearl_k = 0;
 bool cpuMine = true;
 bool g_powerMonAvail = false;
 bool g_ocAvail = false;
@@ -592,27 +590,6 @@ int tnn_main(int argc, char **argv)
     {
       std::string cleanArg = arg;
 
-      auto parseBenchPearlInt = [&](const char* prefix, int& dst) -> bool {
-        const size_t prefix_len = std::strlen(prefix);
-        if (arg.rfind(prefix, 0) != 0)
-          return false;
-        const char* value = arg.c_str() + prefix_len;
-        if (*value == '\0')
-          throw po::error(std::string("missing value for ") + prefix);
-        char* end = nullptr;
-        const long parsed = std::strtol(value, &end, 10);
-        if (end == value || *end != '\0' || parsed <= 0 || parsed > static_cast<long>(INT32_MAX))
-          throw po::error(std::string("bad value for ") + prefix);
-        dst = static_cast<int>(parsed);
-        return true;
-      };
-      if (parseBenchPearlInt("--bench-pearl-m=", g_bench_pearl_m) ||
-          parseBenchPearlInt("--bench-pearl-n=", g_bench_pearl_n) ||
-          parseBenchPearlInt("--bench-pearl-k=", g_bench_pearl_k))
-      {
-        continue;
-      }
-
       // Strip leading dashes
       while (!cleanArg.empty() && cleanArg[0] == '-')
       {
@@ -810,7 +787,6 @@ int tnn_main(int argc, char **argv)
   {
 #if defined(TNN_PEARL)
     preserveAlgoOverride(miningProfile, COIN_PEARL);
-    miningProfile.protocol = PROTO_PEARL_SOLO;
 #else
     UNSUPPORTED_ALGO_ERROR(unsupported_pearl);
 #endif
@@ -1020,43 +996,12 @@ int tnn_main(int argc, char **argv)
 #endif
   }
 
-  if (vm.count("pearl-rpc-test"))
-  {
-#if defined(TNN_PEARL)
-    MiningProfile pearlProfile = miningProfile;
-    pearlProfile.setCoin(coins[COIN_PEARL]);
-    pearlProfile.setPoolAddress(devInfo[COIN_PEARL].devHost + ":" + devInfo[COIN_PEARL].devPort);
-
-    std::string host = vm.count("daemon-address")
-        ? vm["daemon-address"].as<std::string>()
-        : pearlProfile.host;
-    std::string port = vm.count("port")
-        ? std::to_string(vm["port"].as<int>())
-        : pearlProfile.port;
-
-    return tnn::pearl::pearl_rpc_test(host, port);
-#else
-    TNN_LOG_ERROR("[PEARL-RPC-TEST] ERROR: WITH_PEARL=ON is required\n");
-    return 1;
-#endif
-  }
-
   if (vm.count("bench-pearl"))
   {
 #if defined(TNN_HIP) && defined(TNN_PEARL)
-    auto set_bench_pearl_env = [](const char* name, int value) {
-      if (value <= 0)
-        return;
-#if defined(_WIN32)
-      _putenv_s(name, std::to_string(value).c_str());
-#else
-      setenv(name, std::to_string(value).c_str(), 1);
-#endif
-    };
-    set_bench_pearl_env("TNN_PEARL_BENCH_M", g_bench_pearl_m);
-    set_bench_pearl_env("TNN_PEARL_BENCH_N", g_bench_pearl_n);
-    set_bench_pearl_env("TNN_PEARL_BENCH_K", g_bench_pearl_k);
-    int rc = tnn::pearl::bench_pearl_hip();
+    int rc = tnn::pearl::bench_pearl_hip(
+        vm["bench-pearl-m"].as<uint32_t>(), vm["bench-pearl-n"].as<uint32_t>(),
+        vm["bench-pearl-k"].as<uint32_t>());
     return rc;
 #elif !defined(TNN_HIP)
     TNN_LOG_ERROR("[PEARL-HIP-BENCH] ERROR: --bench-pearl requires TNN_HIP to be enabled\n");
@@ -1619,6 +1564,28 @@ fillBlanks:
     break;
   }
 
+#if defined(TNN_PEARL)
+  if (miningProfile.coin.miningAlgo == ALGO_PEARL_POUW)
+  {
+    if (vm.count("testnet") || vm.count("no-gpu") ||
+        miningProfile.protocol != PROTO_PEARL_STRATUM) {
+      TNN_LOG_ERROR("[PEARL] Requires mainnet Pearl Stratum and a supported GPU\n");
+      return 1;
+    }
+    tnn::pearl::configure_mining();
+    if (vm.count("pearl-cert-version-fallback")) {
+      const auto fallback = vm["pearl-cert-version-fallback"].as<unsigned>();
+      if (fallback != 1 && fallback != 2) {
+        TNN_LOG_ERROR("[PEARL] Certificate fallback must be 1 or 2\n");
+        return 1;
+      }
+      tnn::pearl::cert_version_fallback = fallback;
+    }
+    cpuMine = false;
+    threads = 0;
+  }
+#endif
+
   // if (threads == 0)
   // {
   //   setcolor(CYAN);
@@ -1872,6 +1839,11 @@ Mining:
   // #endif
 
   g_start_time = std::chrono::steady_clock::now();
+#if defined(TNN_HIP) && defined(TNN_PEARL)
+  // Pearl must finish GPU/proof cleanup before process teardown.
+  // Other algorithms retain their existing detached-worker behavior.
+  std::thread pearl_gpu_worker;
+#endif
   if (gpuMine)
   {
 #ifdef TNN_HIP
@@ -1879,6 +1851,11 @@ Mining:
     auto gpuFunc = getMiningFunc(miningProfile.coin.miningAlgo, true);
     std::thread t([gpuFunc]()
                   { gpuFunc(0); });
+#ifdef TNN_PEARL
+    if (miningProfile.coin.miningAlgo == ALGO_PEARL_POUW)
+      pearl_gpu_worker = std::move(t);
+    else
+#endif
     t.detach();
 #else
     printf("Please use a GPU TNN Miner binary...\n");
@@ -1943,7 +1920,7 @@ Mining:
     BROADCAST.detach();
   }
 
-  while (!isConnected)
+  while (!isConnected && !ABORT_MINER)
   {
     std::this_thread::yield();
   }
@@ -1954,6 +1931,7 @@ Mining:
     std::cout << "Will mine for " << mine_time << " seconds" << std::endl;
     mine_duration_timer.async_wait([&](const boost::system::error_code &ec)
                                    {
+        if (ec) return;
         ABORT_MINER = true;
         std::cout << std::endl << "Mined for " << mine_time << " seconds" << std::endl;
         update_timer.cancel();
@@ -1969,6 +1947,25 @@ Mining:
 
   // Start an asynchronous wait.
   update_timer.async_wait(update_handler);
+#if defined(TNN_PEARL)
+  // A bounded Pearl worker can finish or fail before the application timer.
+  // Wake the reporter event loop promptly instead of waiting out mine-time.
+  net::steady_timer pearl_stop_timer(my_context);
+  std::function<void()> check_pearl_stop;
+  check_pearl_stop = [&] {
+    if (ABORT_MINER) {
+      update_timer.cancel();
+      mine_duration_timer.cancel();
+      my_context.stop();
+      return;
+    }
+    pearl_stop_timer.expires_after(std::chrono::milliseconds(100));
+    pearl_stop_timer.async_wait([&](const boost::system::error_code& error) {
+      if (!error) check_pearl_stop();
+    });
+  };
+  if (tnn::pearl::mining_enabled) check_pearl_stop();
+#endif
   my_context.run();
   // });
   // setPriority(reportThread.native_handle(), THREAD_PRIORITY_TIME_CRITICAL);
@@ -1980,6 +1977,9 @@ Mining:
   // ioc.reset();
   // GETWORK/DEVWORK are detached std::threads — they exit via ABORT_MINER flag
   std::cout << "Interrupting all threads...\n";
+#if defined(TNN_HIP) && defined(TNN_PEARL)
+  if (pearl_gpu_worker.joinable()) pearl_gpu_worker.join();
+#endif
   for (unsigned i = 0; i < threads; ++i)
   {
     minerThreads[i].join();

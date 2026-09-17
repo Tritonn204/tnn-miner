@@ -204,49 +204,4 @@ void pearl_session(
   socket.close(ignored);
 }
 
-int pearl_rpc_test(
-    std::string host,
-    std::string const &port)
-{
-  try {
-    net::io_context ioc;
-    tcp::resolver resolver(ioc);
-    auto results = resolver.resolve(host, port);
-    tcp::socket socket(ioc);
-    net::connect(socket, results);
-
-    const std::string request = make_request_line(1, "getMiningInfo");
-    net::write(socket, net::buffer(request));
-
-    net::streambuf buffer;
-    boost::asio::read_until(socket, buffer, '\n');
-    std::istream is(&buffer);
-    std::string line;
-    std::getline(is, line);
-
-    PearlMiningInfo info;
-    std::string err;
-    if (!parse_mining_info_line(line, info, err)) {
-      TNN_LOG_ERROR("[PEARL-RPC-TEST] getMiningInfo failed: %s\n", err.c_str());
-      return 1;
-    }
-
-    std::string header_bytes;
-    try {
-      header_bytes = base64::from_base64(info.incomplete_header_b64);
-    } catch (const std::exception& e) {
-      TNN_LOG_ERROR("[PEARL-RPC-TEST] invalid header base64: %s\n", e.what());
-      return 1;
-    }
-
-    TNN_LOG_INFO("[PEARL-RPC-TEST] host=%s port=%s\n", host.c_str(), port.c_str());
-    TNN_LOG_INFO("[PEARL-RPC-TEST] incomplete_header_bytes_b64_len=%zu decoded_len=%zu target_digits=%zu\n",
-                 info.incomplete_header_b64.size(), header_bytes.size(), info.target_decimal.size());
-    return 0;
-  } catch (const std::exception& e) {
-    TNN_LOG_ERROR("[PEARL-RPC-TEST] %s\n", e.what());
-    return 1;
-  }
-}
-
 } // namespace tnn::pearl

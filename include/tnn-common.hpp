@@ -122,7 +122,7 @@ const TnnDevMinerInfo devInfo[COIN_COUNT] = {
   {COIN_RVN,      "stratum+tcp://rvn.2miners.com",              "6060",     "RQzFzM3nUuie4urAfM8afQqzXdRqpXXpeB", "RQzFzM3nUuie4urAfM8afQqzXdRqpXXpeB"},
   {COIN_QUAI,     "stratum+tcp://rvn.2miners.com",              "6060",     "RQzFzM3nUuie4urAfM8afQqzXdRqpXXpeB", "RQzFzM3nUuie4urAfM8afQqzXdRqpXXpeB"},
   {COIN_QUBIT,    "stratum+tcp://qubit.pool",                    "5555",     "QUBIT_WALLET_PLACEHOLDER",              "QUBIT_WALLET_PLACEHOLDER"},
-  {COIN_PEARL,    "localhost",                                   "8337",     "PEARL_WALLET_PLACEHOLDER",              "PEARL_WALLET_PLACEHOLDER"},
+  {COIN_PEARL,    "stratum+ssl://stratum-us.suprnova.cc",        "3374",     "prl1ppa03kdng6udu8k4dqs8gmx6gcg4u3nmjl7y2lhygeu4atz0ae2cswcum9r", "PEARL_TESTNET_UNSUPPORTED"},
 };
 
 typedef struct {

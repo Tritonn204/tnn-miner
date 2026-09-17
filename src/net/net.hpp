@@ -555,6 +555,10 @@ inline void do_session_v2(
             tnn::pearl::pearl_session(miningProf->host, miningProf->port, miningProf->wallet,
                           miningProf->workerName, ioc, yield, miningProf->isDev);
             break;
+        case PROTO_PEARL_STRATUM:
+            tnn::pearl::pearl_stratum_session(miningProf->host, miningProf->port, miningProf->wallet,
+                          miningProf->workerName, ioc, ctx, yield, miningProf->isDev, use_ssl);
+            break;
         }
         break;
 #endif

@@ -148,6 +148,7 @@ void mineWaglayla_hip(int tid);
 void mineXelis_hip(int tid);
 void mineKawPow_hip(int tid);
 void mineQubit_hip(int tid);
+void minePearl_hip(int tid);
 
 typedef void (*mineFunc)(int);
 inline mineFunc getMiningFunc(int algoNum, bool gpu) {
@@ -187,7 +188,11 @@ inline mineFunc getMiningFunc(int algoNum, bool gpu) {
         break;
 #endif
       case ALGO_PEARL_POUW:
+#ifdef TNN_PEARL
+        return minePearl_hip;
+#else
         return unsupportedGpu;
+#endif
         break;
       default:
         return unsupportedGpu;

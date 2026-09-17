@@ -1,6 +1,8 @@
 wincross/*
 export/*
 build/*
+# Local research archive; never required by shipping builds.
+/study/
 # Prerequisites
 **.d
 
@@ -61,6 +63,7 @@ build/*
 
 # Misc
 **.txt
+!/src/tnn_hip/crypto/pearl/PEARL_REFERENCE_LICENSE.txt
 **.DS_Store
 hiprtc_standalone_test/
 nvidia_bench/
