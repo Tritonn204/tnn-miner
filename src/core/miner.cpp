@@ -984,10 +984,11 @@ int tnn_main(int argc, char **argv)
 #endif
   }
 
-  if (vm.count("hip-test-pearl"))
+  if (vm.count("hip-test-pearl") || vm.count("hip-test-pearl-gfx12"))
   {
 #if defined(TNN_HIP) && defined(TNN_PEARL)
-    int rc = tnn::pearl::test_pearl_hip();
+    int rc = tnn::pearl::test_pearl_hip(vm.count("hip-test-pearl-gfx12") != 0,
+                                      vm["pearl-test-recipe"].as<unsigned>());
     return rc;
 #elif !defined(TNN_HIP)
     TNN_LOG_ERROR("[PEARL-HIP-TEST] ERROR: --hip-test-pearl requires TNN_HIP to be enabled\n");
@@ -1008,12 +1009,14 @@ int tnn_main(int argc, char **argv)
 #endif
   }
 
-  if (vm.count("bench-pearl"))
+  if (vm.count("bench-pearl") || vm.count("bench-pearl-gfx12"))
   {
 #if defined(TNN_HIP) && defined(TNN_PEARL)
     int rc = tnn::pearl::bench_pearl_hip(
         vm["bench-pearl-m"].as<uint32_t>(), vm["bench-pearl-n"].as<uint32_t>(),
-        vm["bench-pearl-k"].as<uint32_t>(), vm["bench-pearl-seconds"].as<uint32_t>());
+        vm["bench-pearl-k"].as<uint32_t>(), vm["bench-pearl-seconds"].as<uint32_t>(),
+        vm.count("bench-pearl-gfx12") != 0, vm["pearl-test-recipe"].as<unsigned>(),
+        vm["pearl-test-workload"].as<unsigned>());
     return rc;
 #elif !defined(TNN_HIP)
     TNN_LOG_ERROR("[PEARL-HIP-BENCH] ERROR: --bench-pearl requires TNN_HIP to be enabled\n");

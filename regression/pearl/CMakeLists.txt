@@ -13,7 +13,7 @@ target_compile_features(pearl_difficulty PRIVATE cxx_std_20)
 target_include_directories(pearl_difficulty PRIVATE ../../src ${Boost_INCLUDE_DIRS})
 add_test(NAME pearl_difficulty COMMAND pearl_difficulty)
 
-foreach(test contract sha_startup coverage submit_queue target)
+foreach(test contract sha_startup coverage submit_queue target rdna4)
     add_executable(pearl_${test} test_${test}.cpp)
     target_compile_features(pearl_${test} PRIVATE cxx_std_20)
     target_compile_options(pearl_${test} PRIVATE -UNDEBUG)

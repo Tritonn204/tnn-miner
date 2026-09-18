@@ -9,6 +9,8 @@
 #include "pearl_embedded_headers.hpp"
 #include "pearl_iris_qualified_headers.hpp"
 #include "pearl_iris_qualified_kernel.hpp"
+#include "pearl_rdna4_headers.hpp"
+#include "pearl_rdna4_kernel.hpp"
 #include "pearl_prepare_source.hpp"
 #include "pearl_batch_prepare_source.hpp"
 #include "iris_embedded_headers.hpp"
@@ -270,10 +272,19 @@ struct Evidence : GPUBatchEvidence {
 };
 
 #include "pearl_batch.inc"
+#include "pearl_rdna4_check.inc"
 
 } // namespace
 
 AlgoConfig pearl_gpu_config(ExecutionOptions options) {
+    const bool rdna4 = options.backend == Backend::ExperimentalGfx1201;
+    if (options.recipe >= 8 || (!rdna4 && options.recipe != 0))
+        throw std::invalid_argument("Invalid Pearl backend recipe");
+    if (rdna4 && options.mode == ExecutionMode::Mining)
+        throw std::invalid_argument("gfx1201 is offline-test-only until hardware qualification");
+    if (options.test_workload != TestWorkload::FreshFused &&
+        (!rdna4 || options.mode != ExecutionMode::Benchmark))
+        throw std::invalid_argument("Prepared-operand controls are experimental benchmarks only");
     options.shape.layout = native::CandidateLayout::native_4x32;
     options.shape.validate();
     if (!options.batch_size || options.batch_size > 32)
@@ -291,6 +302,16 @@ AlgoConfig pearl_gpu_config(ExecutionOptions options) {
     config.rtc_headers =
         build_rtc_headers(hip_embedded::COMMON_HEADERS, hip_embedded::IRIS_HEADERS,
                           hip_embedded::PEARL_HEADERS, hip_embedded::PEARL_IRIS_QUALIFIED_HEADERS);
+    if (rdna4) {
+        config.name = "pearl-gfx1201-r" + std::to_string(options.recipe);
+        config.source_path = "src/tnn_hip/crypto/pearl/rdna4/rtc.hip";
+        config.source = hip_pearl_rdna4_source::SRC_TNN_HIP_CRYPTO_PEARL_RDNA4_RTC_HIP_SOURCE;
+        config.rtc_headers = build_rtc_headers(hip_embedded::COMMON_HEADERS,
+            hip_embedded::PEARL_HEADERS, hip_embedded::PEARL_RDNA4_HEADERS);
+        config.source_transform_fn = [recipe = options.recipe](const std::string& source, int) {
+            return "#define PEARL_GFX12_RECIPE " + std::to_string(recipe) + "\n" + source;
+        };
+    }
     // HIPRTC virtual includes need the same suffix aliases used by the
     // compile-only qualification (api.hpp, hiprtc_types.hip.h, etc.).
     const size_t header_count = config.rtc_headers.size();
@@ -321,8 +342,9 @@ AlgoConfig pearl_gpu_config(ExecutionOptions options) {
     config.fixed_launch = fixed;
     config.pre_tune_fn = [options](const KernelMap &, const oroDeviceProp_t &props, int device,
                                    void **output) {
-        if (!tnn_is_amd_device(device) || parse_gfx_number(props.gcnArchName) != 1100) {
-            throw std::runtime_error("Pearl mining currently supports one AMD gfx1100 GPU");
+        const int required = options.backend == Backend::ExperimentalGfx1201 ? 1201 : 1100;
+        if (!tnn_is_amd_device(device) || parse_gfx_number(props.gcnArchName) != required) {
+            throw std::runtime_error("Pearl backend/device mismatch; refusing launch");
         }
         size_t free_bytes = 0, total_bytes = 0;
         checked(oroMemGetInfo(&free_bytes, &total_bytes), "Pearl allocation budget");
@@ -382,6 +404,38 @@ AlgoConfig pearl_gpu_config(ExecutionOptions options) {
     };
     config.prepare_batch_fn = prepare;
     config.execute_fn = execute;
+    if (rdna4 && options.mode == ExecutionMode::Validation) {
+        config.execute_fn = [](const KernelMap& kernels, const KernelLaunchContext& context) {
+            check_rdna4(kernels, context);
+            return execute(kernels, context);
+        };
+    }
+    if (options.test_workload != TestWorkload::FreshFused) {
+        config.prepare_batch_fn = [ready = false](const KernelLaunchContext& context) mutable {
+            if (!ready) { ready = prepare(context); return ready; }
+            auto& state = *static_cast<State*>(context.algo_data);
+            checked(oroMemsetAsync(state.result.data(), 0, state.result.size, context.stream),
+                    "Reset prepared-operand control");
+            return true;
+        };
+    }
+    if (options.test_workload == TestWorkload::PreparedRaw) {
+        config.execute_fn = [](const KernelMap& kernels, const KernelLaunchContext& context) {
+            auto& state = *static_cast<State*>(context.algo_data);
+            unsigned m = state.shape.m, n = state.shape.n, k = state.shape.k;
+            auto* b = state.preparation[state.current_identity.is_dev]->b_operand.data();
+            int32_t* d = nullptr;
+            for (unsigned slot = 0; slot < state.batch_size; ++slot) {
+                auto* a = state.a.data() + size_t(slot) * m * k;
+                void* args[] = {&a, &b, &d, &m, &n, &k, &m, &k, &m};
+                checked(oroModuleLaunchKernel(kernels.at("pearl_iris_raw"),
+                    m / 128 * (n / 128), 1, 1, 128, 1, 1, 0, context.stream, args, nullptr),
+                    "Launch D-free raw control");
+                ++state.launches;
+            }
+            return true;
+        };
+    }
     config.collect_batch_fn = collect;
     {
         config.batch_stream_fn = [](void *pointer) {

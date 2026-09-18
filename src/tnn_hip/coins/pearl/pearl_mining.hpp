@@ -12,6 +12,8 @@ struct GPUSubmitEntry;
 namespace tnn::pearl {
 
 enum class ExecutionMode { Mining, Validation, Benchmark };
+enum class Backend { QualifiedGfx1100, ExperimentalGfx1201 };
+enum class TestWorkload { FreshFused, PreparedFused, PreparedRaw };
 
 // Passed into the algorithm factory; test settings never mutate a live worker.
 struct ExecutionOptions {
@@ -19,6 +21,9 @@ struct ExecutionOptions {
     native::Shape shape{8192, 8192, 4096};
     uint32_t winner_capacity = 4096;
     uint32_t batch_size = 16;
+    Backend backend = Backend::QualifiedGfx1100;
+    unsigned recipe = 0; // Experimental gfx12 only; never changes the gfx1100 ISA.
+    TestWorkload test_workload = TestWorkload::FreshFused;
 };
 
 inline bool mining_enabled = false;

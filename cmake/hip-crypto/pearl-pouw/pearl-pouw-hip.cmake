@@ -17,6 +17,21 @@ if (WITH_PEARL)
 
   # Production Iris recipe, shared by mining, validation and benchmark.
   embed_hip_sources(
+      OUTPUT_FILE "${PROJECT_BINARY_DIR}/generated/pearl_rdna4_headers.hpp"
+      SOURCES
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/rdna4/contract.hpp"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/rdna4/kernel.hpp"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/pearl/rdna4/ownership.hpp"
+      MANIFEST_NAME PEARL_RDNA4_HEADERS
+  )
+  embed_hip_sources(
+      OUTPUT_FILE "${PROJECT_BINARY_DIR}/generated/pearl_rdna4_kernel.hpp"
+      SOURCES "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/pearl/rdna4/rtc.hip"
+      NO_MANIFEST
+      NAMESPACE hip_pearl_rdna4_source
+  )
+
+  embed_hip_sources(
       OUTPUT_FILE "${PROJECT_BINARY_DIR}/generated/pearl_iris_qualified_headers.hpp"
       SOURCES
           "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/native128/recipe.hpp"
