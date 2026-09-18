@@ -24,7 +24,7 @@ int update_handler(const boost::system::error_code& error)
     }
 
     using clock = std::chrono::steady_clock;
-    static clock::time_point next_tick = clock::now() + std::chrono::seconds(1);
+    static clock::time_point next_tick = clock::now();
     next_tick += std::chrono::seconds(1);
     update_timer.expires_at(next_tick);
     update_timer.async_wait(update_handler);
