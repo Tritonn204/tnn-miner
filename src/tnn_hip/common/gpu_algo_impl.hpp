@@ -958,6 +958,46 @@ private:
         auto batch_override = g_tuning_overrides.get_batch_override(device_id_);
         auto block_override = g_tuning_overrides.get_block_override(device_id_);
 
+        if (config_.custom_tune_fn) {
+            if (batch_override || block_override)
+                throw std::invalid_argument("Custom-launch algorithm rejects batch/block overrides");
+            if (!config_.custom_tune_validate_fn || !config_.custom_tune_apply_fn)
+                throw std::invalid_argument("Custom tuning requires validation and application hooks");
+
+            // Serialize custom probes, then recheck the cache under the lock.
+            // This also prevents identical devices from duplicating a fresh sweep.
+            static std::timed_mutex custom_tune_mutex;
+            std::unique_lock<std::timed_mutex> lock(custom_tune_mutex, std::defer_lock);
+            if (!acquire_gpu_tune_lock(lock, g_autotune_stop))
+                return false;
+            const bool enabled = !g_tuning_overrides.disable_autotune;
+            bool cached = enabled && !g_tuning_overrides.should_retune(device_id_) &&
+                          load_cached_tune() &&
+                          config_.custom_tune_validate_fn(tuning_result_, device_props_, device_id_);
+            if (!cached) {
+                tuning_result_ = {};
+                if (!config_.custom_tune_fn(kernels_, device_props_, device_id_, enabled,
+                                            tuning_result_))
+                    return false;
+            }
+            if (g_autotune_stop.load(std::memory_order_relaxed) ||
+                !config_.custom_tune_validate_fn(tuning_result_, device_props_, device_id_))
+                return false;
+            if (!config_.custom_tune_apply_fn(tuning_result_, device_props_, device_id_, &algo_data_))
+                return false;
+            if (g_autotune_stop.load(std::memory_order_relaxed))
+                return false;
+
+            block_size_ = tuning_result_.block_size;
+            batch_size_ = tuning_result_.batch_size;
+            num_blocks_ = tuning_result_.num_blocks;
+            if (!cached && enabled)
+                save_tune_cache();
+            TNN_LOG_INFO("[AUTOTUNE] GPU %d: %s %s configuration\n", device_id_,
+                         config_.name.c_str(), cached ? "cached" : enabled ? "measured" : "default");
+            return true;
+        }
+
         if (config_.fixed_launch) {
             if (batch_override || block_override) {
                 throw std::invalid_argument("Fixed-launch algorithm rejects tuning overrides");

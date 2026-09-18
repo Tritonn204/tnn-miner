@@ -893,6 +893,8 @@ int tnn_main(int argc, char **argv)
 
   // Parse GPU overrides early — before any bench/test entry points that may return
 #ifdef TNN_HIP
+  if (vm.count("gpu-no-tune"))
+    g_tuning_overrides.disable_autotune = true;
   if (vm.count("gpu-retune"))
   {
     g_tuning_overrides.force_retune = true;

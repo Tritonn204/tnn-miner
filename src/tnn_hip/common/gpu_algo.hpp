@@ -1,4 +1,5 @@
 #pragma once
+#include "gpu_tune_guard.hpp"
 #include <tnn_hip/common/gpu_compat.hpp>
 #include "oro_seh_wrappers.hpp"
 #include <string>
@@ -436,6 +437,19 @@ struct AlgoConfig {
 
     // Post-sweep tune key probe (nullptr = no extra probing)
     TuneKeyProbeFn tune_key_probe_fn = nullptr;
+
+    // Whole-pipeline algorithms own their launch geometry and measurement.
+    // These hooks bypass hash-batch rounding and the generic occupancy sweep.
+    // The probe receives false when tuning is disabled and must return its default.
+    using CustomTuneFn = std::function<bool(const KernelMap&, const oroDeviceProp_t&,
+                                            int, bool, TuningResult&)>;
+    using CustomTuneValidateFn = std::function<bool(const TuningResult&,
+                                                    const oroDeviceProp_t&, int)>;
+    using CustomTuneApplyFn = std::function<bool(const TuningResult&,
+                                                 const oroDeviceProp_t&, int, void**)>;
+    CustomTuneFn custom_tune_fn = nullptr;
+    CustomTuneValidateFn custom_tune_validate_fn = nullptr;
+    CustomTuneApplyFn custom_tune_apply_fn = nullptr;
 
     // Source transformation — called before RTC compile to modify kernel source.
     // Used by KawPow to inject the random program + coin padding.

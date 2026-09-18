@@ -254,6 +254,7 @@ inline po::options_description get_prog_opts()
     ("mine-time", po::value<int>()->default_value(0), "Mine for a given number of seconds and then exit")
     ("gpu-retune", po::value<std::string>()->implicit_value(""), "Re-run GPU autotune (optional: comma-separated device indices, e.g. 0,2)")
     ("devices", po::value<std::string>(), "Comma-separated list of GPU indices to mine on (e.g. 0,1,3)")
+    ("gpu-no-tune", "Disable timed GPU autotuning (Pearl uses its default shape without a tuning cache)")
     ("gpu-disable", po::value<std::string>(), "Comma-separated list of GPU indices to exclude (e.g. 2,5)")
   ;
 
