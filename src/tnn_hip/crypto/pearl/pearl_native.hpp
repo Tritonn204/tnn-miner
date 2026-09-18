@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -13,6 +14,14 @@ using Header = std::array<uint8_t, 76>;
 
 // Mining base signal only. Commitment-derived rank-128 noise is still mandatory.
 inline constexpr uint8_t mining_base_value = 32;
+inline constexpr uint32_t maximum_dimension = 16384;
+inline constexpr std::array<uint32_t, 3> qualified_depths{2048, 4096, 8192};
+
+inline constexpr bool qualified_depth(uint32_t k) {
+    for (auto depth : qualified_depths)
+        if (k == depth) return true;
+    return false;
+}
 
 enum class CandidateLayout { legacy_2x64, native_4x32 };
 
@@ -25,6 +34,19 @@ struct Shape {
     void validate() const;
     uint64_t macs() const;
 };
+
+// Conservative shared device-allocation budget: batch operands, both channel
+// preparation caches, sampled proof rows, winner buffers and guard overhead.
+inline uint64_t allocation_budget(Shape shape, uint32_t batch, uint32_t capacity) {
+    shape.validate();
+    if (!batch || batch > 32 || !capacity)
+        throw std::invalid_argument("Invalid Pearl allocation configuration");
+    const uint64_t a = uint64_t(shape.m) * shape.k, b = uint64_t(shape.n) * shape.k;
+    return uint64_t(batch) * a + 2 * (3 * b + (a + b) / 8 +
+           uint64_t(shape.n) * 128 + uint64_t(shape.k) * 8) +
+           uint64_t(batch) * (uint64_t(capacity) * 40 + uint64_t(shape.k) * 8 + 4096) +
+           (64ull << 20);
+}
 
 // Copied with the owned attempt, never recovered from mutable global job state.
 struct Identity {

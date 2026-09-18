@@ -136,8 +136,10 @@ void collect(const KernelLaunchContext &context, BatchResult &batch) {
     const auto shape = state.shape;
     auto &prep = *state.preparation[state.current_identity.is_dev];
 
-    if (context.elapsed_ms > 1000 || context.completion_host_ms > 1000)
-        throw std::runtime_error("Pearl batch completion exceeded 1000 ms; stopped");
+    // Large qualified shapes contain up to 32 individually bounded launches.
+    // Their aggregate time can exceed a second without a long-running kernel.
+    if (context.elapsed_ms > 5000 || context.completion_host_ms > 5000)
+        throw std::runtime_error("Pearl batch completion exceeded 5000 ms; stopped");
 
     auto root = std::make_shared<Evidence>();
     const auto copy = [](const uint8_t *device, size_t bytes) {

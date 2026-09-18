@@ -164,9 +164,9 @@ void check_position(Shape shape, uint32_t row, uint32_t col) {
 void Shape::validate() const {
     require(layout == CandidateLayout::legacy_2x64 || layout == CandidateLayout::native_4x32,
             "Unknown candidate layout");
-    require(m >= 256 && m <= 8192 && m % 128 == 0 &&
-            n >= 256 && n <= 8192 && n % 256 == 0 &&
-            (k == 2048 || k == 4096), "Unqualified Pearl shape");
+    require(m >= 256 && m <= maximum_dimension && m % 128 == 0 &&
+            n >= 256 && n <= maximum_dimension && n % 256 == 0 &&
+            qualified_depth(k), "Unqualified Pearl shape");
 }
 
 uint64_t Shape::macs() const {
@@ -200,7 +200,7 @@ bool meets_target(const Digest& digest, const Digest& target_le) {
 }
 
 std::array<uint8_t, 52> configuration(uint32_t k, CandidateLayout layout) {
-    require(k == 2048 || k == 4096, "Unqualified Pearl K");
+    require(qualified_depth(k), "Unqualified Pearl K");
     require(layout == CandidateLayout::legacy_2x64 || layout == CandidateLayout::native_4x32,
             "Unknown candidate layout");
     std::array<uint8_t, 52> result{};
@@ -255,8 +255,8 @@ std::vector<uint32_t> candidate_columns(Shape shape, uint32_t origin) {
 
 MatrixTree::MatrixTree(std::vector<uint8_t> bytes, uint32_t rows, uint32_t k, const Digest& key)
     : rows_(rows), k_(k), bytes_(std::move(bytes)) {
-    require(rows >= 256 && rows <= 8192 && rows % 128 == 0 &&
-            (k == 2048 || k == 4096), "Unqualified matrix shape");
+    require(rows >= 256 && rows <= maximum_dimension && rows % 128 == 0 &&
+            qualified_depth(k), "Unqualified matrix shape");
     require(bytes_.size() == size_t(rows) * k, "Base matrix length");
     for (uint8_t value : bytes_) {
         int signed_value = std::bit_cast<int8_t>(value);
@@ -357,7 +357,7 @@ std::span<const uint8_t> MatrixTree::row(uint32_t index) const {
 
 MatrixTree MatrixTree::from_snapshot(uint32_t rows, uint32_t k, std::vector<uint32_t> selected,
     std::vector<uint8_t> bytes, std::vector<uint8_t> tree, const Digest& key) {
-    require(rows >= 256 && rows <= 8192 && rows % 128 == 0 && (k == 2048 || k == 4096), "Invalid snapshot shape");
+    require(rows >= 256 && rows <= maximum_dimension && rows % 128 == 0 && qualified_depth(k), "Invalid snapshot shape");
     require(!selected.empty() && selected.size() <= 64 && std::is_sorted(selected.begin(), selected.end()), "Invalid sampled rows");
     require(std::adjacent_find(selected.begin(), selected.end()) == selected.end() && selected.back() < rows, "Duplicate/out-of-range sample");
     require(bytes.size() == selected.size() * k, "Sample byte count");

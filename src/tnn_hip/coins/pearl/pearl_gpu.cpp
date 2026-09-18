@@ -324,6 +324,12 @@ AlgoConfig pearl_gpu_config(ExecutionOptions options) {
         if (!tnn_is_amd_device(device) || parse_gfx_number(props.gcnArchName) != 1100) {
             throw std::runtime_error("Pearl mining currently supports one AMD gfx1100 GPU");
         }
+        size_t free_bytes = 0, total_bytes = 0;
+        checked(oroMemGetInfo(&free_bytes, &total_bytes), "Pearl allocation budget");
+        const uint64_t reserve = std::max<uint64_t>(512ull << 20, total_bytes / 10);
+        if (free_bytes <= reserve || native::allocation_budget(options.shape,
+                options.batch_size, options.winner_capacity) > free_bytes - reserve)
+            throw std::runtime_error("Pearl shape exceeds the available device-memory budget");
         auto state = std::make_unique<State>(options);
         {
             checked(oroStreamCreateWithFlags(&state->compute_stream, oroStreamNonBlocking),

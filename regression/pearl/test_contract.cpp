@@ -64,7 +64,8 @@ int main() {
     const tnn::pearl::ExecutionOptions defaults;
     assert(defaults.mode == tnn::pearl::ExecutionMode::Mining);
     assert(defaults.shape.m == 8192 && defaults.shape.n == 8192 && defaults.shape.k == 4096);
-    assert(defaults.winner_capacity == 256);
+    assert(defaults.winner_capacity == 4096);
+    assert(defaults.batch_size == 16);
     test_atomic_jobs();
     using namespace tnn::pearl::stratum;
     assert(completed_work(9) == 9);

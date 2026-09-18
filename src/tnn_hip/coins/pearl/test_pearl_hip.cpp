@@ -73,8 +73,9 @@ int test_pearl_hip() {
 
         // Cover the production K and a non-power-of-two Merkle tree. Both
         // certificate versions must agree with the independent CPU reference.
-        for (unsigned version : {2u, 3u}) {
-            const ExecutionOptions rectangular{ExecutionMode::Validation, {384, 256, 4096}, 768, 1};
+        for (unsigned depth : {4096u, 8192u}) {
+          for (unsigned version : {2u, 3u}) {
+            const ExecutionOptions rectangular{ExecutionMode::Validation, {384, 256, depth}, 768, 1};
             GPUAlgorithm check(pearl_gpu_config(rectangular));
             require(check.initialize(0), "Pearl rectangular initialization failed");
 
@@ -85,7 +86,8 @@ int test_pearl_hip() {
             const auto batch = check.mine_batch(0, rectangular.batch_size);
             require(pearl_validate_batch(batch, true) == 768,
                     "Incomplete rectangular candidate coverage");
-            TNN_LOG_INFO("[PEARL-HIP-TEST] 384x256x4096 cert=%u candidates=768 passed\n", version);
+            TNN_LOG_INFO("[PEARL-HIP-TEST] 384x256x%u cert=%u candidates=768 passed\n", depth, version);
+          }
         }
 
         // Same production collector must fail explicitly when capacity is exceeded.

@@ -18,7 +18,7 @@ struct ExecutionOptions {
     ExecutionMode mode = ExecutionMode::Mining;
     native::Shape shape{8192, 8192, 4096};
     uint32_t winner_capacity = 4096;
-    uint32_t batch_size = 32;
+    uint32_t batch_size = 16;
 };
 
 inline bool mining_enabled = false;
