@@ -17,7 +17,8 @@ enum class ExecutionMode { Mining, Validation, Benchmark };
 struct ExecutionOptions {
     ExecutionMode mode = ExecutionMode::Mining;
     native::Shape shape{8192, 8192, 4096};
-    uint32_t winner_capacity = 256;
+    uint32_t winner_capacity = 4096;
+    uint32_t batch_size = 32;
 };
 
 inline bool mining_enabled = false;

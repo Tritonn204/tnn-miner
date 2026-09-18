@@ -70,7 +70,7 @@ Digest join_hash(const Digest& left, const Digest& right) {
 
 Digest make_job_key(const Header& header, Shape shape) {
     shape.validate();
-    auto config = configuration(shape.k);
+    auto config = configuration(shape.k, shape.layout);
     std::vector<uint8_t> bytes(header.begin(), header.end());
     bytes.insert(bytes.end(), config.begin(), config.end());
     return hash(bytes);
@@ -82,7 +82,7 @@ Identity checked_identity(Identity identity, Shape shape) {
             identity.device_id >= 0, "Missing attempt identity");
     require(std::any_of(identity.target_le.begin(), identity.target_le.end(),
                         [](uint8_t value) { return value != 0; }), "Zero share target");
-    require(identity.target_le == jackpot_target(identity.wire_target_le, shape.k),
+    require(identity.target_le == jackpot_target(identity.wire_target_le, shape.k, shape.layout),
             "Pearl jackpot target/configuration mismatch");
     return identity;
 }
@@ -148,6 +148,13 @@ std::vector<int8_t> materialize(const MatrixTree& tree, uint32_t rows, uint32_t 
 }
 
 void check_position(Shape shape, uint32_t row, uint32_t col) {
+    shape.validate();
+    if (shape.layout == CandidateLayout::native_4x32) {
+        require(row < shape.m - 96 && row % 128 < 32, "Invalid native jackpot row");
+        require(col < shape.n - 59 && (col % 64 == 0 || col % 64 == 4),
+                "Invalid native jackpot column");
+        return;
+    }
     require(row < shape.m - 1 && row % 2 == 0, "Invalid jackpot row");
     require(col < shape.n - 238 && (col & 238) == 0, "Invalid jackpot column");
 }
@@ -155,6 +162,8 @@ void check_position(Shape shape, uint32_t row, uint32_t col) {
 } // namespace
 
 void Shape::validate() const {
+    require(layout == CandidateLayout::legacy_2x64 || layout == CandidateLayout::native_4x32,
+            "Unknown candidate layout");
     require(m >= 256 && m <= 8192 && m % 128 == 0 &&
             n >= 256 && n <= 8192 && n % 256 == 0 &&
             (k == 2048 || k == 4096), "Unqualified Pearl shape");
@@ -190,11 +199,21 @@ bool meets_target(const Digest& digest, const Digest& target_le) {
     return true;
 }
 
-std::array<uint8_t, 52> configuration(uint32_t k) {
+std::array<uint8_t, 52> configuration(uint32_t k, CandidateLayout layout) {
     require(k == 2048 || k == 4096, "Unqualified Pearl K");
+    require(layout == CandidateLayout::legacy_2x64 || layout == CandidateLayout::native_4x32,
+            "Unknown candidate layout");
     std::array<uint8_t, 52> result{};
     write32(result.data(), k);
     result[4] = 128;
+    if (layout == CandidateLayout::native_4x32) {
+        result[8] = 31;
+        result[9] = 3;
+        result[15] = 3;
+        result[16] = 1;
+        result[17] = 7;
+        return result;
+    }
     result[9] = 1;
     result[14] = 1;
     result[15] = 7;
@@ -203,8 +222,8 @@ std::array<uint8_t, 52> configuration(uint32_t k) {
     return result;
 }
 
-uint64_t jackpot_work(uint32_t k) {
-    const auto config = configuration(k);
+uint64_t jackpot_work(uint32_t k, CandidateLayout layout) {
+    const auto config = configuration(k, layout);
     const uint32_t rank = uint32_t(config[4]) | (uint32_t(config[5]) << 8);
     uint32_t rows = 1, columns = 1;
     for (unsigned i = 0; i < 3; ++i) {
@@ -214,8 +233,24 @@ uint64_t jackpot_work(uint32_t k) {
     return tnn::pearl::jackpot_work(rows, columns, k, rank);
 }
 
-Digest jackpot_target(const Digest& wire_target, uint32_t k) {
-    return scale_jackpot_target(wire_target, jackpot_work(k));
+Digest jackpot_target(const Digest& wire_target, uint32_t k, CandidateLayout layout) {
+    return scale_jackpot_target(wire_target, jackpot_work(k, layout));
+}
+
+std::vector<uint32_t> candidate_rows(Shape shape, uint32_t origin) {
+    shape.validate();
+    if (shape.layout == CandidateLayout::native_4x32)
+        return {origin, origin + 32, origin + 64, origin + 96};
+    return {origin, origin + 1};
+}
+
+std::vector<uint32_t> candidate_columns(Shape shape, uint32_t origin) {
+    shape.validate();
+    const bool native = shape.layout == CandidateLayout::native_4x32;
+    std::vector<uint32_t> result(native ? 32 : 64);
+    for (unsigned i = 0; i < result.size(); ++i)
+        result[i] = origin + (native ? (i / 4) * 8 + i % 4 : (i / 8) * 32 + (i % 8) * 2);
+    return result;
 }
 
 MatrixTree::MatrixTree(std::vector<uint8_t> bytes, uint32_t rows, uint32_t k, const Digest& key)
@@ -377,24 +412,26 @@ Attempt::Attempt(Identity id, Shape dimensions, MatrixTree base_a, MatrixTree ba
 
 Digest Attempt::winner_digest(uint32_t row, uint32_t col) const {
     check_position(shape, row, col);
-    std::array<uint32_t, 2> selected_rows{row, row + 1};
-    std::array<uint32_t, 64> selected_cols{};
-    for (unsigned i = 0; i < 64; ++i) selected_cols[i] = col + (i / 8) * 32 + (i % 8) * 2;
+    const auto selected_rows = candidate_rows(shape, row);
+    const auto selected_cols = candidate_columns(shape, col);
     auto sampled_a = a.empty() ? materialize(a_tree, shape.m, shape.k, a_seed, true, selected_rows) : std::vector<int8_t>{};
     auto sampled_b = bt.empty() ? materialize(bt_tree, shape.n, shape.k, b_seed, false, selected_cols) : std::vector<int8_t>{};
-    std::array<std::array<int32_t, 64>, 2> accum{};
+    std::array<int32_t, 128> accum{};
     std::array<uint32_t, 16> transcript{};
     for (uint32_t checkpoint = 0; checkpoint < shape.k / 128; ++checkpoint) {
         uint32_t reduced = 0;
-        for (unsigned u = 0; u < 2; ++u) {
-            for (unsigned v = 0; v < 64; ++v) {
-                uint32_t column = col + (v / 8) * 32 + (v % 8) * 2;
+        for (unsigned u = 0; u < selected_rows.size(); ++u) {
+            for (unsigned v = 0; v < selected_cols.size(); ++v) {
+                uint32_t column = selected_cols[v];
+                auto& value = accum[u * selected_cols.size() + v];
                 for (uint32_t kk = checkpoint * 128; kk < (checkpoint + 1) * 128; ++kk) {
-                    const int av = a.empty() ? sampled_a[size_t(kk) * 2 + u] : a[size_t(kk) * shape.m + row + u];
+                    const int av = a.empty()
+                        ? sampled_a[size_t(kk) * selected_rows.size() + u]
+                        : a[size_t(kk) * shape.m + selected_rows[u]];
                     const int bv = bt.empty() ? sampled_b[size_t(v) * shape.k + kk] : bt[size_t(column) * shape.k + kk];
-                    accum[u][v] += av * bv;
+                    value += av * bv;
                 }
-                reduced ^= uint32_t(accum[u][v]);
+                reduced ^= uint32_t(value);
             }
         }
         auto& slot = transcript[checkpoint % 16];
@@ -413,9 +450,8 @@ std::vector<uint8_t> Attempt::proof(const Winner& winner) const {
     append64(out, shape.n);
     append64(out, shape.k);
     append64(out, 128);
-    std::array<uint32_t, 2> rows{winner.row, winner.row + 1};
-    std::array<uint32_t, 64> cols;
-    for (unsigned i = 0; i < 64; ++i) cols[i] = winner.col + (i / 8) * 32 + (i % 8) * 2;
+    const auto rows = candidate_rows(shape, winner.row);
+    const auto cols = candidate_columns(shape, winner.col);
     a_tree.append_proof(out, rows);
     bt_tree.append_proof(out, cols);
     require(out.size() <= 1'875'000, "Proof exceeds uncompressed pool limit");
@@ -428,7 +464,7 @@ static blake3_hasher base_hasher(const Digest& session_seed, const Identity& ide
                                  Shape shape, bool is_a) {
     shape.validate();
     std::vector<uint8_t> domain(identity.header.begin(), identity.header.end());
-    auto config = configuration(shape.k);
+    auto config = configuration(shape.k, shape.layout);
     domain.insert(domain.end(), config.begin(), config.end());
     append64(domain, shape.m);
     append64(domain, shape.n);

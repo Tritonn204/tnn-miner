@@ -1001,7 +1001,7 @@ int tnn_main(int argc, char **argv)
 #if defined(TNN_HIP) && defined(TNN_PEARL)
     int rc = tnn::pearl::bench_pearl_hip(
         vm["bench-pearl-m"].as<uint32_t>(), vm["bench-pearl-n"].as<uint32_t>(),
-        vm["bench-pearl-k"].as<uint32_t>());
+        vm["bench-pearl-k"].as<uint32_t>(), vm["bench-pearl-seconds"].as<uint32_t>());
     return rc;
 #elif !defined(TNN_HIP)
     TNN_LOG_ERROR("[PEARL-HIP-BENCH] ERROR: --bench-pearl requires TNN_HIP to be enabled\n");

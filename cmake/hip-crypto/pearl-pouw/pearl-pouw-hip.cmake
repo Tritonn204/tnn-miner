@@ -8,22 +8,32 @@ if (WITH_PEARL)
       NAMESPACE hip_pearl_prepare_source
   )
 
+  embed_hip_sources(
+      OUTPUT_FILE "${PROJECT_BINARY_DIR}/generated/pearl_batch_prepare_source.hpp"
+      SOURCES "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/pearl/pearl_batch_prepare.hip"
+      NO_MANIFEST
+      NAMESPACE hip_pearl_batch_prepare_source
+  )
+
   # Production Iris recipe, shared by mining, validation and benchmark.
   embed_hip_sources(
       OUTPUT_FILE "${PROJECT_BINARY_DIR}/generated/pearl_iris_qualified_headers.hpp"
       SOURCES
-          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/qualified/api.hpp"
-          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/qualified/recipe.hpp"
-          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/qualified/ops.hpp"
-          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/qualified/checkpoint.inc"
-          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/qualified/kernel_body.inc"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/native128/recipe.hpp"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/native128/asm_templates.hpp"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/native128/layout.hpp"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/native128/slots.hpp"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/native128/raw_slots.hpp"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/experimental/gfx1100_buffer_inputs.hpp"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/bounded_buffer_load.hpp"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/gemm_schedule.hpp"
       MANIFEST_NAME PEARL_IRIS_QUALIFIED_HEADERS
   )
 
   embed_hip_sources(
       OUTPUT_FILE "${PROJECT_BINARY_DIR}/generated/pearl_iris_qualified_kernel.hpp"
       SOURCES
-          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/qualified/rtc.hip"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/native128/rtc.hip"
       NO_MANIFEST
       NAMESPACE hip_pearl_iris_qualified_source
   )

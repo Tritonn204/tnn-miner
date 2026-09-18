@@ -11,10 +11,16 @@ namespace tnn::pearl::native {
 using Digest = std::array<uint8_t, 32>;
 using Header = std::array<uint8_t, 76>;
 
+// Mining base signal only. Commitment-derived rank-128 noise is still mandatory.
+inline constexpr uint8_t mining_base_value = 32;
+
+enum class CandidateLayout { legacy_2x64, native_4x32 };
+
 struct Shape {
     uint32_t m = 256;
     uint32_t n = 256;
     uint32_t k = 2048;
+    CandidateLayout layout = CandidateLayout::legacy_2x64;
 
     void validate() const;
     uint64_t macs() const;
@@ -52,9 +58,13 @@ static_assert(sizeof(BaseOutput) == 104);
 BaseOutput base_output(const Digest&, const Identity&, Shape, bool is_a);
 Digest job_key(const Header&, Shape);
 bool meets_target(const Digest& digest, const Digest& target_le);
-std::array<uint8_t, 52> configuration(uint32_t k);
-uint64_t jackpot_work(uint32_t k);
-Digest jackpot_target(const Digest& wire_target, uint32_t k);
+std::array<uint8_t, 52> configuration(
+    uint32_t k, CandidateLayout layout = CandidateLayout::legacy_2x64);
+uint64_t jackpot_work(uint32_t k, CandidateLayout layout = CandidateLayout::legacy_2x64);
+Digest jackpot_target(const Digest& wire_target, uint32_t k,
+                      CandidateLayout layout = CandidateLayout::legacy_2x64);
+std::vector<uint32_t> candidate_rows(Shape shape, uint32_t origin);
+std::vector<uint32_t> candidate_columns(Shape shape, uint32_t origin);
 
 // Base matrix bytes are row-major A and row-major B-transpose.
 // The tree owns its bytes so proof construction cannot outlive the input.

@@ -10,6 +10,8 @@
 #include "pearl_iris_qualified_headers.hpp"
 #include "pearl_iris_qualified_kernel.hpp"
 #include "pearl_prepare_source.hpp"
+#include "pearl_batch_prepare_source.hpp"
+#include "iris_embedded_headers.hpp"
 #include <tnn_hip/common/gpu_rtc.hpp>
 
 #include <bit>
@@ -33,21 +35,14 @@ void checked(oroError_t error, const char *operation) {
     }
 }
 
-// Host mirror of the qualified 40/8/24-byte device result ABI.
+// Host mirrors of the kernel's winner record and per-attempt counters.
 struct DeviceWinner {
     uint32_t row, col, digest[8];
 };
 struct DeviceState {
     uint32_t total_hits, overflow;
 };
-struct DeviceResults {
-    DeviceWinner *winners;
-    DeviceState *state;
-    uint32_t capacity;
-};
-static_assert(sizeof(DeviceWinner) == 40 && sizeof(DeviceState) == 8 &&
-              sizeof(DeviceResults) == 24);
-static_assert(offsetof(DeviceResults, state) == 8 && offsetof(DeviceResults, capacity) == 16);
+static_assert(sizeof(DeviceWinner) == 40 && sizeof(DeviceState) == 8);
 
 struct Buffer {
     uint8_t *allocation = nullptr;
@@ -122,10 +117,11 @@ struct Preparation {
     Buffer job_key;
     Buffer b_operand;
     PreparedMatrix b;
-    std::array<PreparedMatrix, 2> a;
+    Buffer template_tree;
+    std::vector<uint8_t> template_tree_cpu;
+    std::vector<size_t> template_offsets;
     native::Identity base_identity;
     bool ready = false;
-    std::array<bool, 2> a_ready{};
     template <class... Args>
     void launch(const char *name, uint32_t count, oroStream_t stream, Args... args) {
         void *arguments[] = {&args...};
@@ -137,14 +133,18 @@ struct Preparation {
     void initialize(native::Shape shape, int device) {
         auto compiled = RTCCompiler::instance().compile_from_source(
             std::string(
-                hip_pearl_prepare_source::SRC_TNN_HIP_CRYPTO_PEARL_PEARL_PREPARE_HIP_SOURCE),
-            "pearl_prepare.hip", "pearl_prepare_base", {"-O3", "-std=c++20"}, device);
+                hip_pearl_prepare_source::SRC_TNN_HIP_CRYPTO_PEARL_PEARL_PREPARE_HIP_SOURCE) +
+                std::string(hip_pearl_batch_prepare_source::
+                                SRC_TNN_HIP_CRYPTO_PEARL_PEARL_BATCH_PREPARE_HIP_SOURCE),
+            "pearl_prepare.hip", "pearl_prepare_base",
+            {"-O3", "-std=c++20",
+             "-DPEARL_BASE_VALUE=" + std::to_string(native::mining_base_value)}, device);
         module = compiled.module;
         for (const auto *name :
              {"pearl_prepare_base", "pearl_prepare_leaves", "pearl_prepare_parents",
               "pearl_prepare_seed", "pearl_prepare_dense", "pearl_prepare_sparse",
-              "pearl_prepare_materialize", "pearl_prepare_gather", "pearl_prepare_zero_fused",
-              "pearl_prepare_incremental_seed"}) {
+              "pearl_prepare_materialize", "pearl_prepare_gather", "pearl_batch_paths",
+              "pearl_batch_sparse", "pearl_batch_materialize"}) {
             oroFunction_t function;
             checked(oroModuleGetFunction(&function, module, name), "Preparation entry point");
             kernels[name] = function;
@@ -152,52 +152,45 @@ struct Preparation {
         job_key.allocate(32);
         b.allocate(shape.n, shape.k);
         b_operand.allocate(size_t(shape.n) * shape.k);
-        for (auto &slot : a)
-            slot.allocate(shape.m, shape.k);
+        size_t tree_bytes = 0;
+        for (size_t nodes = size_t(shape.m) * shape.k / 1024;; nodes = (nodes + 1) / 2) {
+            tree_bytes += nodes * 32;
+            if (nodes == 1)
+                break;
+        }
+        template_tree.allocate(tree_bytes);
     }
 
-    void matrix(PreparedMatrix &matrix, Buffer &operand, const native::BaseOutput &output,
-                uint8_t *seed_left, bool is_a, oroStream_t stream, bool rebuild = true,
-                uint64_t nonce = 0, uint64_t nonce_high = 0) {
-        uint32_t bytes = matrix.rows * matrix.k;
-        if (rebuild) {
-            if (is_a) {
-                checked(oroMemsetAsync(matrix.base.data(), 0, bytes, stream),
-                        "Initialize zero base");
-            } else {
-                matrix.descriptor.upload(&output, sizeof(output));
-                launch("pearl_prepare_base", bytes / 64, stream, matrix.descriptor.data(),
-                       matrix.base.data(), bytes);
-            }
-            uint32_t count = bytes / 1024;
-            launch("pearl_prepare_leaves", count, stream, matrix.base.data(), job_key.data(),
-                   matrix.tree.data(), count);
-            for (size_t level = 1; level < matrix.offsets.size(); ++level) {
-                launch("pearl_prepare_parents", (count + 1) / 2, stream,
-                       matrix.tree.data() + matrix.offsets[level - 1], job_key.data(),
-                       matrix.tree.data() + matrix.offsets[level], count);
-                count = (count + 1) / 2;
-            }
+    // B is job-stable. Unlike fresh A, it is built once when the channel's
+    // immutable job identity changes, not once per GEMM or batch.
+    void prepare_b(oroStream_t stream) {
+        const uint32_t bytes = b.rows * b.k;
+
+        // The base is constant, not the GEMM operand: the job-bound seed and
+        // required noise below still change with each immutable job identity.
+        checked(oroMemsetAsync(b.base.data(), native::mining_base_value, bytes, stream),
+                "Initialize Pearl B base");
+
+        uint32_t count = bytes / 1024;
+        launch("pearl_prepare_leaves", count, stream, b.base.data(), job_key.data(), b.tree.data(),
+               count);
+
+        for (size_t level = 1; level < b.offsets.size(); ++level) {
+            launch("pearl_prepare_parents", (count + 1) / 2, stream,
+                   b.tree.data() + b.offsets[level - 1], job_key.data(),
+                   b.tree.data() + b.offsets[level], count);
+            count = (count + 1) / 2;
         }
-        if (is_a) {
-            launch("pearl_prepare_incremental_seed", 1, stream, matrix.base.data(), job_key.data(),
-                   matrix.tree.data(), bytes / 1024, 0u, nonce, nonce_high, seed_left,
-                   matrix.seed.data(), base_identity.cert_version, matrix.rows);
-            launch("pearl_prepare_sparse", matrix.k / 8, stream, matrix.seed.data(),
-                   matrix.pairs.data(), matrix.k, 1u);
-            launch("pearl_prepare_zero_fused", matrix.rows * 4, stream, matrix.base.data(),
-                   matrix.seed.data(), matrix.pairs.data(), operand.data(), matrix.rows, matrix.k);
-            return;
-        }
-        launch("pearl_prepare_seed", 1, stream, seed_left,
-               matrix.tree.data() + matrix.offsets.back(), matrix.seed.data(),
-               base_identity.cert_version, matrix.rows, 0u);
-        launch("pearl_prepare_dense", matrix.rows * 4, stream, matrix.seed.data(),
-               matrix.dense.data(), matrix.rows, 0u);
-        launch("pearl_prepare_sparse", matrix.k / 8, stream, matrix.seed.data(),
-               matrix.pairs.data(), matrix.k, uint32_t(is_a));
-        launch("pearl_prepare_materialize", bytes, stream, matrix.base.data(), matrix.dense.data(),
-               matrix.pairs.data(), operand.data(), matrix.rows, matrix.k, 0u);
+
+        launch("pearl_prepare_seed", 1, stream, job_key.data(), b.tree.data() + b.offsets.back(),
+               b.seed.data(), base_identity.cert_version, b.rows, 0u);
+
+        launch("pearl_prepare_dense", b.rows * 4, stream, b.seed.data(), b.dense.data(), b.rows,
+               0u);
+        launch("pearl_prepare_sparse", b.k / 8, stream, b.seed.data(), b.pairs.data(), b.k, 0u);
+
+        launch("pearl_prepare_materialize", bytes, stream, b.base.data(), b.dense.data(),
+               b.pairs.data(), b_operand.data(), b.rows, b.k, 0u);
     }
 
     void verify(const PreparedMatrix &matrix, const Buffer &operand,
@@ -244,29 +237,27 @@ struct State {
     }
     explicit State(const ExecutionOptions &options)
         : shape(options.shape), capacity(options.winner_capacity),
-          validation(options.mode == ExecutionMode::Validation) {
+          validation(options.mode == ExecutionMode::Validation), batch_size(options.batch_size) {
     }
     const native::Shape shape;
     const uint32_t capacity;
     const bool validation;
+    const unsigned batch_size;
     int device = 0;
-    unsigned launches = 0;
-    unsigned completed = 0;
+    uint64_t launches = 0;
+    uint64_t completed = 0;
+    uint64_t first_nonce = 0, nonce_high = 0;
     double prepare_host_ms = 0, completion_host_ms = 0, collect_host_ms = 0;
     Clock::time_point first_work{}, last_work{};
     native::Digest session_seed{};
-    std::string previous_job;
-    std::shared_ptr<const native::Attempt> attempt;
     native::Identity current_identity;
-    std::array<native::Identity, 2> logged_target_identity;
     // User and dev jobs retain separate dependency caches across fee switches.
     std::array<std::unique_ptr<Preparation>, 2> preparation;
-    unsigned slot = 0;
-    Buffer alternate_a;
-    Buffer a, d, target, winners, result;
+    Buffer a, target, winners, result, patches, paths, seeds, pairs;
 };
 
 struct Evidence : GPUBatchEvidence {
+    std::vector<std::shared_ptr<const Evidence>> children;
     std::shared_ptr<const native::Attempt> attempt;
     std::vector<native::Winner> winners;
     native::Identity identity;
@@ -279,246 +270,28 @@ struct Evidence : GPUBatchEvidence {
     std::vector<Samples> samples;
 };
 
-bool prepare(const KernelLaunchContext &context) {
-    auto &state = *static_cast<State *>(context.algo_data);
-    const auto shape = state.shape;
-    const auto *job = context.job_snapshot;
-    if (!job || job->work_template.size() != 76 || job->connection_generation == 0) {
-        throw std::invalid_argument("Pearl requires a complete atomic job snapshot");
-    }
-    const auto preparation_started = Clock::now();
-    if (state.first_work == Clock::time_point{})
-        state.first_work = preparation_started;
-    native::Identity identity;
-    identity.job_id = job->job_id_str;
-    identity.connection_generation = job->connection_generation;
-    identity.attempt_id = state.launches;
-    identity.device_id = state.device;
-    identity.is_dev = job->is_dev;
-    std::copy(job->work_template.begin(), job->work_template.end(), identity.header.begin());
-    identity.wire_target_le = job->raw_target;
-    identity.target_le = native::jackpot_target(identity.wire_target_le, shape.k);
-    auto &logged_target = state.logged_target_identity[identity.is_dev];
-    if (logged_target.job_id != identity.job_id ||
-        logged_target.wire_target_le != identity.wire_target_le ||
-        logged_target.connection_generation != identity.connection_generation) {
-        TNN_LOG_DEBUG("[PEARL-TARGET] job=%s dev=%d K=%u rank=128 work_per_jackpot=%llu (wire "
-                      "target scaled once)\n",
-                      identity.job_id.c_str(), int(identity.is_dev), shape.k,
-                      static_cast<unsigned long long>(native::jackpot_work(shape.k)));
-        logged_target = identity;
-    }
-    identity.cert_version = job->pearl_cert_version;
-    state.current_identity = identity;
-    {
-        auto &preparation = *state.preparation[identity.is_dev];
-        const bool new_job =
-            !preparation.ready || preparation.base_identity.header != identity.header ||
-            preparation.base_identity.cert_version != identity.cert_version ||
-            preparation.base_identity.connection_generation != identity.connection_generation ||
-            preparation.base_identity.is_dev != identity.is_dev;
-        if (new_job) {
-            preparation.base_identity = identity;
-            preparation.a_ready.fill(false);
-            const auto key = native::job_key(identity.header, shape);
-            preparation.job_key.upload(key.data(), key.size());
-        }
-        auto base_identity = preparation.base_identity;
-        base_identity.attempt_id = 0;
-        state.slot = state.launches % 2;
-        auto &operand = state.slot ? state.alternate_a : state.a;
-        const bool rebuild_a = !preparation.a_ready[state.slot];
-        uint64_t nonce_high = 0;
-        std::memcpy(&nonce_high, state.session_seed.data(), sizeof(nonce_high));
-        if (new_job)
-            preparation.matrix(preparation.b, preparation.b_operand,
-                               native::base_output(state.session_seed, base_identity, shape, false),
-                               preparation.job_key.data(), false, context.stream);
-        preparation.matrix(preparation.a[state.slot], operand,
-                           native::base_output(state.session_seed, base_identity, shape, true),
-                           preparation.b.seed.data(), true, context.stream, rebuild_a,
-                           uint64_t(identity.attempt_id) + 1, nonce_high);
-        preparation.a_ready[state.slot] = true;
-        preparation.ready = true;
-        if (state.validation) {
-            auto base_a = std::vector<uint8_t>(size_t(shape.m) * shape.k, 0);
-            {
-                const uint64_t nonce = uint64_t(identity.attempt_id) + 1;
-                for (unsigned i = 0; i < 19; ++i) {
-                    unsigned value = 0;
-                    for (unsigned j = 0; j < 7 && i * 7 + j < 128; ++j) {
-                        const unsigned bit = i * 7 + j;
-                        value |= unsigned((bit < 64 ? nonce >> bit : nonce_high >> (bit - 64)) & 1)
-                                 << j;
-                    }
-                    base_a[i] = uint8_t(int(value) - 64);
-                }
-            }
-            state.attempt = std::make_shared<native::Attempt>(
-                identity, shape, std::move(base_a),
-                native::fresh_base(state.session_seed, base_identity, shape, false));
-        }
-        if (!state.target_valid || state.uploaded_target != identity.target_le) {
-            std::memcpy(state.host_transfer, identity.target_le.data(), 32);
-            checked(oroMemcpyAsync(state.target.data(), state.host_transfer, 32,
-                                   oroMemcpyHostToDevice, context.stream),
-                    "Enqueue Pearl target");
-            state.uploaded_target = identity.target_le;
-            state.target_valid = true;
-        }
-        checked(oroMemsetAsync(state.result.data(), 0, sizeof(DeviceState), context.stream),
-                "Enqueue Pearl reset");
-    }
-    return true;
-}
-
-bool execute(const KernelMap &kernels, const KernelLaunchContext &context) {
-    auto &state = *static_cast<State *>(context.algo_data);
-    const auto shape = state.shape;
-    const auto capacity = state.capacity;
-    if (context.block_size != 256 || context.batch_size != 1) {
-        throw std::runtime_error("Pearl launch contract");
-    }
-    auto a = state.slot ? state.alternate_a.data() : state.a.data();
-    auto b = state.preparation[state.current_identity.is_dev]->b_operand.data();
-    auto d = state.d.data();
-    auto key = state.preparation[state.current_identity.is_dev]->a[state.slot].seed.data();
-    auto target = state.target.data();
-    unsigned m = shape.m, n = shape.n, k = shape.k;
-    unsigned lda = m, ldb = k, ldd = m;
-    uint32_t *diagnostic = nullptr;
-    DeviceResults results{reinterpret_cast<DeviceWinner *>(state.winners.data()),
-                          reinterpret_cast<DeviceState *>(state.result.data()), capacity};
-    void *arguments[] = {&a,   &b,   &d,   &m,      &n,       &k,         &lda,
-                         &ldb, &ldd, &key, &target, &results, &diagnostic};
-    ++state.launches;
-    state.previous_job = state.current_identity.job_id;
-    checked(oroModuleLaunchKernel(kernels.at("pearl_iris_fused"), (shape.m / 128) * (shape.n / 256),
-                                  1, 1, 256, 1, 1, 0, context.stream, arguments, nullptr),
-            "Launch Pearl fused");
-    return true;
-}
-
-void collect(const KernelLaunchContext &context, BatchResult &batch) {
-    const auto collect_begin = Clock::now();
-    auto &state = *static_cast<State *>(context.algo_data);
-    const auto shape = state.shape;
-    const auto capacity = state.capacity;
-    if (context.elapsed_ms > 250)
-        throw std::runtime_error("Pearl kernel exceeded 250 ms; stopped");
-    if (context.completion_host_ms > 250)
-        throw std::runtime_error("Pearl GPU completion exceeded 250 ms; stopped");
-    if (state.validation) {
-        auto &preparation = *state.preparation[state.current_identity.is_dev];
-        auto &operand = state.slot ? state.alternate_a : state.a;
-        preparation.verify(preparation.b, preparation.b_operand, state.attempt->bt_tree,
-                           state.attempt->b_seed, state.attempt->bt);
-        preparation.verify(preparation.a[state.slot], operand, state.attempt->a_tree,
-                           state.attempt->a_seed, state.attempt->a);
-        TNN_LOG_DEBUG("[PEARL-PREP-VERIFIED] all bytes/levels/seeds match after GEMM\n");
-    }
-    if (state.validation || state.launches % 128 == 0) {
-        for (const auto *buffer : {&state.a, &state.d, &state.target,
-                                   &state.winners, &state.result})
-            buffer->check_guards();
-        state.alternate_a.check_guards();
-    }
-    DeviceState result{};
-    std::memcpy(&result, state.host_transfer + 32, sizeof(result));
-    if (result.overflow || result.total_hits > capacity) {
-        throw std::runtime_error("Pearl winner capacity exceeded; increase pool difficulty (no "
-                                 "target tightening or silent candidate drops)");
-    }
-    std::vector<DeviceWinner> winners(result.total_hits);
-    if (!winners.empty()) {
-        checked(oro_safe_memcpy(winners.data(), state.winners.data(),
-                                winners.size() * sizeof(DeviceWinner), oroMemcpyDeviceToHost),
-                "Read Pearl winners");
-    }
-    auto evidence = std::make_shared<Evidence>();
-    evidence->attempt = state.attempt;
-    evidence->identity = state.current_identity;
-    evidence->shape = shape;
-    std::set<std::pair<uint32_t, uint32_t>> positions;
-    for (const auto &source : winners) {
-        if (source.row >= shape.m - 1 || source.row % 2 || source.col >= shape.n - 238 ||
-            (source.col & 238) || !positions.emplace(source.row, source.col).second) {
-            throw std::runtime_error("Invalid/duplicate Pearl winner coordinates");
-        }
-        native::Winner winner{source.row, source.col, {}};
-        std::memcpy(winner.digest.data(), source.digest, 32);
-        if (!native::meets_target(winner.digest, state.current_identity.target_le)) {
-            throw std::runtime_error("Pearl GPU returned a winner above target");
-        }
-        evidence->winners.push_back(winner);
-    }
-    if (!evidence->winners.empty()) {
-        auto &preparation = *state.preparation[state.current_identity.is_dev];
-        auto &a = preparation.a[state.slot];
-        auto &b = preparation.b;
-        const auto copy = [](const uint8_t *device, size_t size) {
-            std::vector<uint8_t> bytes(size);
-            checked(oro_safe_memcpy(bytes.data(), device, size, oroMemcpyDeviceToHost),
-                    "Copy owned proof evidence");
-            return bytes;
-        };
-        evidence->a_tree = copy(a.tree.data(), a.tree.size);
-        evidence->b_tree = copy(b.tree.data(), b.tree.size);
-        const size_t count = evidence->winners.size();
-        for (size_t index = 0; index < count; ++index) {
-            const auto &winner = evidence->winners[index];
-            Evidence::Samples samples;
-            samples.a_rows = {winner.row, winner.row + 1};
-            for (uint32_t col = 0; col < 64; ++col)
-                samples.b_rows.push_back(winner.col + col / 8 * 32 + col % 8 * 2);
-            const auto gather = [&](PreparedMatrix &matrix, const std::vector<uint32_t> &rows) {
-                checked(oro_safe_memcpy(matrix.sample_rows.data(), rows.data(), rows.size() * 4,
-                                        oroMemcpyHostToDevice),
-                        "Upload sample rows");
-                preparation.launch("pearl_prepare_gather", uint32_t(rows.size()) * shape.k,
-                                   context.stream, matrix.base.data(), matrix.sample_rows.data(),
-                                   matrix.sampled.data(), uint32_t(rows.size()), shape.k);
-                checked(oroStreamSynchronize(context.stream), "Complete sample gather");
-                return copy(matrix.sampled.data(), rows.size() * shape.k);
-            };
-            samples.a_bytes = gather(a, samples.a_rows);
-            samples.b_bytes = gather(b, samples.b_rows);
-            evidence->samples.push_back(std::move(samples));
-        }
-    }
-    batch.count = 1;
-    ++state.completed;
-    state.prepare_host_ms += context.prepare_host_ms;
-    state.completion_host_ms += context.completion_host_ms;
-    state.collect_host_ms +=
-        std::chrono::duration<double, std::milli>(Clock::now() - collect_begin).count();
-    state.last_work = Clock::now();
-    batch.work_multiplier = shape.macs();
-    batch.evidence = std::move(evidence);
-    if (state.validation || state.launches % 128 == 0 || result.total_hits)
-        TNN_LOG_DEBUG(
-            "[PEARL-WALL-BATCH] launch=%u job=%s winners=%u completion_ms=%.3f MACs=%llu\n",
-            state.launches, state.previous_job.c_str(), result.total_hits,
-            context.completion_host_ms, static_cast<unsigned long long>(shape.macs()));
-}
+#include "pearl_batch.inc"
 
 } // namespace
 
 AlgoConfig pearl_gpu_config(ExecutionOptions options) {
+    options.shape.layout = native::CandidateLayout::native_4x32;
     options.shape.validate();
+    if (!options.batch_size || options.batch_size > 32)
+        throw std::invalid_argument("Pearl batch must contain 1 through 32 attempts");
     if (!options.winner_capacity)
         throw std::invalid_argument("Pearl winner capacity is zero");
     AlgoConfig config{};
     config.rate_unit = RateUnit::MultiplyAccumulates;
     config.name = "pearl";
     config.algo_id = ALGO_PEARL_POUW;
-    config.source_path = "src/tnn_hip/crypto/iris/gemm/qualified/rtc.hip";
+    config.source_path = "src/tnn_hip/crypto/iris/gemm/native128/rtc.hip";
     config.source =
-        hip_pearl_iris_qualified_source::SRC_TNN_HIP_CRYPTO_IRIS_GEMM_QUALIFIED_RTC_HIP_SOURCE;
+        hip_pearl_iris_qualified_source::SRC_TNN_HIP_CRYPTO_IRIS_GEMM_NATIVE128_RTC_HIP_SOURCE;
     config.kernel_names = {"pearl_iris_fused", "pearl_iris_raw", "pearl_iris_diagnostic"};
     config.rtc_headers =
-        build_rtc_headers(hip_embedded::COMMON_HEADERS, hip_embedded::PEARL_HEADERS,
-                          hip_embedded::PEARL_IRIS_QUALIFIED_HEADERS);
+        build_rtc_headers(hip_embedded::COMMON_HEADERS, hip_embedded::IRIS_HEADERS,
+                          hip_embedded::PEARL_HEADERS, hip_embedded::PEARL_IRIS_QUALIFIED_HEADERS);
     // HIPRTC virtual includes need the same suffix aliases used by the
     // compile-only qualification (api.hpp, hiprtc_types.hip.h, etc.).
     const size_t header_count = config.rtc_headers.size();
@@ -537,14 +310,14 @@ AlgoConfig pearl_gpu_config(ExecutionOptions options) {
     config.allocate_scratch_buffer = false;
     config.owns_work_and_result_buffers = true;
     config.host_timing_only = true;
-    config.preferred_block_size = 256;
+    config.preferred_block_size = 128;
     config.enable_autotune = false;
     config.enable_reg_tuning = false;
     config.skip_cached_tune_validation = true;
     TuningResult fixed{};
-    fixed.block_size = 256;
-    fixed.num_blocks = (options.shape.m / 128) * (options.shape.n / 256);
-    fixed.batch_size = 1;
+    fixed.block_size = 128;
+    fixed.num_blocks = (options.shape.m / 128) * (options.shape.n / 128);
+    fixed.batch_size = options.batch_size;
     fixed.valid = true;
     config.fixed_launch = fixed;
     config.pre_tune_fn = [options](const KernelMap &, const oroDeviceProp_t &props, int device,
@@ -559,7 +332,7 @@ AlgoConfig pearl_gpu_config(ExecutionOptions options) {
             checked(oroEventCreateWithFlags(&state->readback_done, oroEventBlockingSync),
                     "Pearl readback event");
             checked(oroHostMalloc(reinterpret_cast<void **>(&state->host_transfer),
-                                  32 + sizeof(DeviceState), 0),
+                                  32 + options.batch_size * sizeof(DeviceState), 0),
                     "Pearl pinned staging");
         }
         const auto shape = state->shape;
@@ -568,14 +341,18 @@ AlgoConfig pearl_gpu_config(ExecutionOptions options) {
         std::random_device random;
         for (auto &byte : state->session_seed)
             byte = uint8_t(random());
-        // Full-size buffers stay below 800 MiB, including both channel caches.
-        state->a.allocate(size_t(shape.m) * shape.k);
-        state->d.allocate(size_t(shape.m) * shape.n * 4);
+        state->a.allocate(size_t(options.batch_size) * shape.m * shape.k);
+        unsigned levels = 1;
+        for (unsigned nodes = shape.m * shape.k / 1024; nodes > 1; nodes = (nodes + 1) / 2)
+            ++levels;
+        state->patches.allocate(options.batch_size * 32);
+        state->paths.allocate(size_t(options.batch_size) * levels * 32);
+        state->seeds.allocate(options.batch_size * 32);
+        state->pairs.allocate(size_t(options.batch_size) * shape.k * 8);
         state->target.allocate(32);
-        state->winners.allocate(capacity * sizeof(DeviceWinner));
-        state->result.allocate(sizeof(DeviceState));
+        state->winners.allocate(size_t(options.batch_size) * capacity * sizeof(DeviceWinner));
+        state->result.allocate(options.batch_size * sizeof(DeviceState));
         {
-            state->alternate_a.allocate(size_t(shape.m) * shape.k);
             for (auto &channel : state->preparation) {
                 channel = std::make_unique<Preparation>();
                 channel->initialize(shape, device);
@@ -591,10 +368,10 @@ AlgoConfig pearl_gpu_config(ExecutionOptions options) {
                 std::chrono::duration<double>(state->last_work - state->first_work).count();
             const double macs = double(state->completed) * state->shape.macs();
             TNN_LOG_DEBUG(
-                "[PEARL-WALL-SUMMARY] completed=%u active_wall_s=%.6f active_wall_TMACs=%.3f "
+                "[PEARL-WALL-SUMMARY] completed=%llu active_wall_s=%.6f active_wall_TMACs=%.3f "
                 "prepare_host_ms=%.3f completion_host_ms=%.3f collect_host_ms=%.3f\n",
-                state->completed, seconds, macs / (seconds * 1e12), state->prepare_host_ms,
-                state->completion_host_ms, state->collect_host_ms);
+                static_cast<unsigned long long>(state->completed), seconds, macs / (seconds * 1e12),
+                state->prepare_host_ms, state->completion_host_ms, state->collect_host_ms);
         }
         delete state;
     };
@@ -607,8 +384,8 @@ AlgoConfig pearl_gpu_config(ExecutionOptions options) {
         };
         config.finish_batch_fn = [](const KernelLaunchContext &context) {
             auto &state = *static_cast<State *>(context.algo_data);
-            checked(oroMemcpyAsync(state.host_transfer + 32, state.result.data(),
-                                   sizeof(DeviceState), oroMemcpyDeviceToHost, context.stream),
+            checked(oroMemcpyAsync(state.host_transfer + 32, state.result.data(), state.result.size,
+                                   oroMemcpyDeviceToHost, context.stream),
                     "Enqueue Pearl result header");
             checked(oroEventRecord(state.readback_done, context.stream), "Record Pearl readback");
             checked(oroEventSynchronize(state.readback_done), "Complete Pearl readback");
@@ -625,7 +402,8 @@ static std::vector<GPUSubmitEntry> build_one(const std::shared_ptr<const Evidenc
         attempt.identity.connection_generation != job.connection_generation ||
         attempt.identity.is_dev != job.is_dev ||
         attempt.identity.wire_target_le != job.raw_target ||
-        attempt.identity.target_le != native::jackpot_target(job.raw_target, attempt.shape.k) ||
+        attempt.identity.target_le !=
+            native::jackpot_target(job.raw_target, attempt.shape.k, attempt.shape.layout) ||
         attempt.identity.cert_version != job.pearl_cert_version ||
         !std::equal(attempt.identity.header.begin(), attempt.identity.header.end(),
                     job.work_template.begin(), job.work_template.end())) {
@@ -781,6 +559,16 @@ void pearl_stop_proofs() {
 
 size_t pearl_validate_batch(const BatchResult &batch, bool verify_all_positions) {
     const auto evidence = std::dynamic_pointer_cast<const Evidence>(batch.evidence);
+    if (evidence && !evidence->children.empty()) {
+        size_t found = 0;
+        for (const auto &child : evidence->children) {
+            auto member = batch;
+            member.count = 1;
+            member.evidence = child;
+            found += pearl_validate_batch(member, verify_all_positions);
+        }
+        return found;
+    }
     if (!evidence || !evidence->attempt)
         throw std::runtime_error("Missing validation reference");
     const auto &reference = *evidence->attempt;
@@ -791,9 +579,11 @@ size_t pearl_validate_batch(const BatchResult &batch, bool verify_all_positions)
         found.emplace(winner.row, winner.col);
     }
     if (verify_all_positions) {
-        for (uint32_t row = 0; row < reference.shape.m; row += 2) {
-            for (uint32_t col = 0; col + 238 < reference.shape.n; ++col) {
-                if (col & 238)
+        for (uint32_t row = 0; row + 96 < reference.shape.m; ++row) {
+            if (row % 128 >= 32)
+                continue;
+            for (uint32_t col = 0; col + 59 < reference.shape.n; ++col) {
+                if (col % 64 != 0 && col % 64 != 4)
                     continue;
                 const bool expected = native::meets_target(reference.winner_digest(row, col),
                                                            reference.identity.target_le);
@@ -825,6 +615,15 @@ size_t pearl_validate_batch(const BatchResult &batch, bool verify_all_positions)
 std::vector<GPUSubmitEntry> pearl_build_batch(const BatchResult &batch, int device,
                                               const JobSnapshot &job) {
     auto evidence = std::dynamic_pointer_cast<const Evidence>(batch.evidence);
+    if (evidence && !evidence->children.empty()) {
+        for (const auto &child : evidence->children) {
+            auto member = batch;
+            member.count = 1;
+            member.evidence = child;
+            pearl_build_batch(member, device, job);
+        }
+        return {};
+    }
     if (!evidence || evidence->winners.empty())
         return {};
     struct PendingWinners {

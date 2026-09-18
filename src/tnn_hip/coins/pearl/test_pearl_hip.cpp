@@ -40,12 +40,14 @@ void require(bool condition, const char *message) {
 int test_pearl_hip() {
     try {
         TNN_LOG_INFO("\n[PEARL-HIP-TEST] Production preparation, jackpots and proofs (offline)\n");
-        const ExecutionOptions options{ExecutionMode::Validation, {256, 256, 2048}, 512};
+        // Two independent A operands exercise batch isolation without turning
+        // the exhaustive CPU proof check into a full mining-size workload.
+        const ExecutionOptions options{ExecutionMode::Validation, {256, 256, 2048}, 512, 2};
         GPUAlgorithm algorithm(pearl_gpu_config(options));
         require(algorithm.initialize(0), "Pearl validation initialization failed");
         auto job = offline_job(options.shape, true);
         for (unsigned attempt = 0; attempt < 4; ++attempt) {
-            // Exercise both owned operand slots, a target update and dev cache.
+            // Exercise independent attempts, a target update and the dev cache.
             if (attempt == 2) {
                 job.raw_target[29] /= 2;
                 job.job_id_str = "offline-retarget";
@@ -57,16 +59,34 @@ int test_pearl_hip() {
                 job.job_id_str = "offline-dev";
             }
             algorithm.set_job_snapshot(job);
-            const auto batch = algorithm.mine_batch(attempt, 1);
-            require(batch.count == 1 && batch.work_multiplier == options.shape.macs(),
+            const auto batch = algorithm.mine_batch(attempt, options.batch_size);
+            require(batch.count == options.batch_size &&
+                        batch.work_multiplier == options.shape.macs(),
                     "Incorrect work accounting");
             const auto winners = pearl_validate_batch(batch, true);
             require(winners > 0, "Validation fixture found no winners");
-            TNN_LOG_INFO("[PEARL-HIP-TEST] attempt=%u candidates=512 winners=%zu CPU/GPU/proof "
+            TNN_LOG_INFO("[PEARL-HIP-TEST] batch=%u candidates=1024 winners=%zu CPU/GPU/proof "
                          "checks passed\n",
                          attempt, winners);
         }
         algorithm.cleanup();
+
+        // Cover the production K and a non-power-of-two Merkle tree. Both
+        // certificate versions must agree with the independent CPU reference.
+        for (unsigned version : {2u, 3u}) {
+            const ExecutionOptions rectangular{ExecutionMode::Validation, {384, 256, 4096}, 768, 1};
+            GPUAlgorithm check(pearl_gpu_config(rectangular));
+            require(check.initialize(0), "Pearl rectangular initialization failed");
+
+            auto rectangular_job = offline_job(rectangular.shape, true);
+            rectangular_job.pearl_cert_version = version;
+            check.set_job_snapshot(rectangular_job);
+
+            const auto batch = check.mine_batch(0, rectangular.batch_size);
+            require(pearl_validate_batch(batch, true) == 768,
+                    "Incomplete rectangular candidate coverage");
+            TNN_LOG_INFO("[PEARL-HIP-TEST] 384x256x4096 cert=%u candidates=768 passed\n", version);
+        }
 
         // Same production collector must fail explicitly when capacity is exceeded.
         auto overflow_options = options;
@@ -76,7 +96,7 @@ int test_pearl_hip() {
         overflow.set_job_snapshot(offline_job(options.shape, true));
         bool rejected = false;
         try {
-            (void)overflow.mine_batch(0, 1);
+            (void)overflow.mine_batch(0, options.batch_size);
         } catch (const std::exception &error) {
             rejected =
                 std::string(error.what()).find("winner capacity exceeded") != std::string::npos;
@@ -92,8 +112,10 @@ int test_pearl_hip() {
     }
 }
 
-int bench_pearl_hip(uint32_t m, uint32_t n, uint32_t k) {
+int bench_pearl_hip(uint32_t m, uint32_t n, uint32_t k, uint32_t seconds_requested) {
     try {
+        require(seconds_requested >= 1 && seconds_requested <= 600,
+                "Pearl benchmark duration must be between 1 and 600 seconds");
         const ExecutionOptions options{ExecutionMode::Benchmark, {m, n, k}, 256};
         options.shape.validate();
         TNN_LOG_INFO("\n[PEARL-HIP-BENCH] %ux%ux%u production preparation + fused jackpot + "
@@ -103,16 +125,16 @@ int bench_pearl_hip(uint32_t m, uint32_t n, uint32_t k) {
         require(algorithm.initialize(0), "Pearl benchmark initialization failed");
         algorithm.set_job_snapshot(offline_job(options.shape, false));
         for (unsigned i = 0; i < 3; ++i)
-            (void)algorithm.mine_batch(i, 1);
+            (void)algorithm.mine_batch(i, options.batch_size);
 
         using Clock = std::chrono::steady_clock;
         uint64_t completed = 0;
         const auto started = Clock::now();
         do {
-            const auto batch = algorithm.mine_batch(completed + 3, 1);
-            require(batch.count == 1, "Incomplete Pearl benchmark batch");
-            ++completed;
-        } while (Clock::now() - started < std::chrono::seconds(5));
+            const auto batch = algorithm.mine_batch(completed + 3, options.batch_size);
+            require(batch.count == options.batch_size, "Incomplete Pearl benchmark batch");
+            completed += batch.count;
+        } while (Clock::now() - started < std::chrono::seconds(seconds_requested));
         const double seconds = std::chrono::duration<double>(Clock::now() - started).count();
         const double macs = double(completed) * options.shape.macs();
         TNN_LOG_INFO("[PEARL-HIP-BENCH] completed=%llu wall_s=%.6f TMAC/s=%.3f (network/proof "
