@@ -47,3 +47,24 @@ certificate versions 2/3, all three supported K values, and a rectangular Merkle
 The benchmark uses the production batch callbacks with fresh preparation and
 readback. Its wall rate excludes initial job preparation, network and proof
 submission; live-pool rates include those effects. Run GPU checks serially.
+
+## Shape tuning
+
+Mining uses a validated cached shape, or performs an offline startup sweep when
+no usable cache exists. `--tune-pearl` runs that selection without connecting to
+a pool; `--gpu-retune` forces a new sweep. `--gpu-no-tune` bypasses both timed
+tuning and the cache, using 8192x8192x4096 with 16 GEMMs per batch.
+
+The tuner tests at most 32 distinct shapes: 24 coarse candidates spanning M/N
+through 16384 and K=2048/4096/8192, then eight local refinements on the 1024 grid.
+Every candidate must pass captured-winner CPU/proof checks before timing.
+Timing includes fresh A preparation, fused GEMMs and readback, but excludes
+initial job setup and proof submission. The default and two screening leaders
+receive three alternating confirmation rounds. A replacement must improve the
+median by at least 1% and beat the default in at least two rounds.
+
+Iris owns computational shape limits; Pearl intersects them with its proof
+contract. This is a bounded adaptive search, not an exhaustive Cartesian sweep.
+Cache validation checks backend/version, dimensions, launch geometry, batch,
+measurement fields and available memory. Only a completed, applied tune is saved.
+No additional architecture is qualified by this tuner.

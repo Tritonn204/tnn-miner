@@ -998,6 +998,16 @@ int tnn_main(int argc, char **argv)
 #endif
   }
 
+  if (vm.count("tune-pearl"))
+  {
+#if defined(TNN_HIP) && defined(TNN_PEARL)
+    return tnn::pearl::tune_pearl_hip();
+#else
+    TNN_LOG_ERROR("[PEARL-TUNE] --tune-pearl requires HIP and WITH_PEARL=ON\n");
+    return 1;
+#endif
+  }
+
   if (vm.count("bench-pearl"))
   {
 #if defined(TNN_HIP) && defined(TNN_PEARL)

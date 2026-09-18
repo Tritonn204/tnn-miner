@@ -396,6 +396,8 @@ AlgoConfig pearl_gpu_config(ExecutionOptions options) {
             checked(oroEventSynchronize(state.readback_done), "Complete Pearl readback");
         };
     }
+    if (options.mode == ExecutionMode::Mining)
+        pearl_configure_tuning(config, options);
     return config;
 }
 
@@ -573,6 +575,25 @@ size_t pearl_validate_batch(const BatchResult &batch, bool verify_all_positions)
             found += pearl_validate_batch(member, verify_all_positions);
         }
         return found;
+    }
+    if (evidence && !evidence->attempt && !verify_all_positions) {
+        // Tune qualification checks real captured winners without materializing
+        // entire matrices on the CPU. The snapshot importer authenticates the
+        // Merkle paths; winner_digest regenerates the prescribed noise.
+        const auto key = native::job_key(evidence->identity.header, evidence->shape);
+        for (size_t i = 0; i < evidence->winners.size(); ++i) {
+            const auto& samples = evidence->samples.at(i);
+            native::Attempt reference(evidence->identity, evidence->shape,
+                native::MatrixTree::from_snapshot(evidence->shape.m, evidence->shape.k,
+                    samples.a_rows, samples.a_bytes, evidence->a_tree, key),
+                native::MatrixTree::from_snapshot(evidence->shape.n, evidence->shape.k,
+                    samples.b_rows, samples.b_bytes, evidence->b_tree, key));
+            const auto& winner = evidence->winners[i];
+            if (winner.digest != reference.winner_digest(winner.row, winner.col))
+                throw std::runtime_error("Pearl tune winner differs from CPU reference");
+            (void)reference.proof(winner);
+        }
+        return evidence->winners.size();
     }
     if (!evidence || !evidence->attempt)
         throw std::runtime_error("Missing validation reference");

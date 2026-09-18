@@ -51,6 +51,7 @@ if (WITH_PEARL)
   list(APPEND TNN_HIP_SOURCES
     src/tnn_hip/crypto/pearl/pearl_native.cpp
     src/tnn_hip/coins/pearl/pearl_gpu.cpp
+    src/tnn_hip/coins/pearl/pearl_tuning.cpp
     src/tnn_hip/coins/pearl/mine_pearl.hip.cpp
     src/tnn_hip/coins/pearl/test_pearl_hip.cpp
   )

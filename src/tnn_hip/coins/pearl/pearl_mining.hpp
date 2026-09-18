@@ -29,6 +29,7 @@ inline void configure_mining() {
 }
 
 AlgoConfig pearl_gpu_config(ExecutionOptions options = {});
+void pearl_configure_tuning(AlgoConfig& config, ExecutionOptions options);
 void pearl_start_proofs();
 void pearl_stop_proofs();
 std::vector<GPUSubmitEntry> pearl_build_batch(const BatchResult &, int device, const JobSnapshot &);

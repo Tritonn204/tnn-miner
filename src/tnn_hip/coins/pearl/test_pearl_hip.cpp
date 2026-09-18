@@ -1,5 +1,6 @@
 #include "test_pearl_hip.h"
 #include "pearl_mining.hpp"
+#include "pearl_tuning.hpp"
 #include <tnn_hip/common/gpu_algo_impl.hpp>
 #include <tnn_log.hpp>
 #include <chrono>
@@ -35,16 +36,62 @@ void require(bool condition, const char *message) {
         throw std::runtime_error(message);
 }
 
+void test_tune_cache_contract() {
+    oroDeviceProp_t properties{};
+    require(oroGetDeviceProperties(&properties, tnn_get_device(0)) == oroSuccess,
+            "Cannot query tune validation device");
+    const auto config = pearl_gpu_config();
+    TuningResult valid{};
+    valid.valid = true;
+    valid.block_size = 128;
+    valid.batch_size = ExecutionOptions{}.batch_size;
+    valid.num_blocks = 4096;
+    valid.hashrate = 52e12;
+    valid.batch_time_ms = 84;
+    valid.tune_keys = {{"m", 8192}, {"n", 8192}, {"k", 4096},
+                       {"pearl_version", tuning::version}, {"pearl_backend", 1100}};
+    require(config.custom_tune_validate_fn(valid, properties, 0), "Valid tune rejected");
+
+    // Exercise the production validator without editing the user's tune cache
+    // or launching any sweep. Each corruption must independently fail closed.
+    auto rejected = [&](auto corrupt) {
+        auto result = valid;
+        corrupt(result);
+        require(!config.custom_tune_validate_fn(result, properties, 0),
+                "Invalid cached tune accepted");
+    };
+    rejected([](auto& result) { result.batch_size = 32; });
+    rejected([](auto& result) { result.tune_keys["pearl_version"] = tuning::version - 1; });
+    rejected([](auto& result) { result.tune_keys["pearl_backend"] = 1200; });
+    rejected([](auto& result) { result.tune_keys["k"] = 16384; });
+    rejected([](auto& result) { result.tune_keys.erase("m"); });
+    rejected([](auto& result) { result.num_blocks = 1; });
+    rejected([](auto& result) { result.hashrate = -1; });
+    TNN_LOG_INFO("[PEARL-HIP-TEST] Cached tune validation passed\n");
+}
+
 } // namespace
 
 int test_pearl_hip() {
     try {
         TNN_LOG_INFO("\n[PEARL-HIP-TEST] Production preparation, jackpots and proofs (offline)\n");
+        const auto candidates = tuning::coarse();
+        require(candidates.size() == 24, "Incorrect coarse tuning coverage");
+        for (const auto shape : candidates)
+            require(tuning::supported(shape) && shape.m % 1024 == 0 && shape.n % 1024 == 0,
+                    "Invalid tuning grid");
+        const auto refinement = tuning::refine({tuning::default_shape});
+        require(std::any_of(refinement.begin(), refinement.end(),
+                            [](auto shape) { return shape.m == 6144 || shape.n == 6144; }),
+                "Refinement lost intermediate shapes");
+        require(!tuning::supported({8192, 8192, 16384, native::CandidateLayout::native_4x32}),
+                "Unqualified K accepted by tuner");
         // Two independent A operands exercise batch isolation without turning
         // the exhaustive CPU proof check into a full mining-size workload.
         const ExecutionOptions options{ExecutionMode::Validation, {256, 256, 2048}, 512, 2};
         GPUAlgorithm algorithm(pearl_gpu_config(options));
         require(algorithm.initialize(0), "Pearl validation initialization failed");
+        test_tune_cache_contract();
         auto job = offline_job(options.shape, true);
         for (unsigned attempt = 0; attempt < 4; ++attempt) {
             // Exercise independent attempts, a target update and the dev cache.
@@ -110,6 +157,25 @@ int test_pearl_hip() {
     } catch (const std::exception &error) {
         fflush(stdout);
         TNN_LOG_ERROR("\n[PEARL-HIP-TEST] %s\n", error.what());
+        return 1;
+    }
+}
+
+int tune_pearl_hip() {
+    try {
+        GPUAlgorithm algorithm(pearl_gpu_config());
+        require(algorithm.initialize(0), "Pearl tuning initialization failed");
+        const auto tune = algorithm.get_tuning_result();
+        native::Shape shape{uint32_t(tune.tune_keys.at("m")), uint32_t(tune.tune_keys.at("n")),
+                            uint32_t(tune.tune_keys.at("k")), native::CandidateLayout::native_4x32};
+        algorithm.set_job_snapshot(offline_job(shape, false));
+        const auto batch = algorithm.mine_batch(0, tune.batch_size);
+        require(batch.count == tune.batch_size && batch.work_multiplier == shape.macs(),
+                "Selected tuning result was not applied to the mining adapter");
+        TNN_LOG_INFO("[PEARL-TUNE] PASS: selected configuration applied; no network connection\n");
+        return 0;
+    } catch (const std::exception& error) {
+        TNN_LOG_ERROR("[PEARL-TUNE] %s\n", error.what());
         return 1;
     }
 }
