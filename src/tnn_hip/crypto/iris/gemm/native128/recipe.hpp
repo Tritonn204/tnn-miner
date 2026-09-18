@@ -42,25 +42,12 @@ template <bool Pipelined, unsigned Mapping = 4> struct Vendor128Schedule {
     static constexpr unsigned lds_bytes = (Pipelined ? bank_stride : 0) + a_bytes + b_bytes;
 };
 
-// Each lane owns one 4x32 candidate. Checkpoint reduction stays local to
-// that lane; its sixteen transcript words occupy the gaps between LDS banks.
-struct NativeCheckpoint {
-    static constexpr bool checkpoints = true;
-    static constexpr unsigned rank = 128;
-    static constexpr unsigned rows = 4;
-    static constexpr unsigned columns = 32;
-};
-
 struct GroupedLoads;
-template <class Architecture, class Scheduling, class Checkpoint = NativeCheckpoint,
-          class Loading = GroupedLoads>
+template <class Architecture, class Scheduling, class Loading = GroupedLoads>
 struct Recipe {
     using Arch = Architecture;
     using Schedule = Scheduling;
-    using Pearl = Checkpoint;
     using Loads = Loading;
-    static_assert(Checkpoint::rank == 128 && Checkpoint::rows == 4 && Checkpoint::columns == 32,
-                  "The fixed-register schedule requires native 4x32 checkpoints");
     static_assert(Scheduling::threads == 128 && Scheduling::tile_m == 128 &&
                   Scheduling::tile_n == 128);
 };

@@ -21,10 +21,11 @@ if (WITH_PEARL)
       SOURCES
           "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/native128/recipe.hpp"
           "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/native128/asm_templates.hpp"
-          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/native128/layout.hpp"
-          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/native128/slots.hpp"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/pearl/native128/layout.hpp"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/pearl/native128/slots.hpp"
           "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/native128/raw_slots.hpp"
-          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/experimental/gfx1100_buffer_inputs.hpp"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/native128/raw_kernel.hpp"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/native128/buffer_inputs.hpp"
           "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/bounded_buffer_load.hpp"
           "${PROJECT_SOURCE_DIR}/src/tnn_hip/iris/rt/gemm_schedule.hpp"
       MANIFEST_NAME PEARL_IRIS_QUALIFIED_HEADERS
@@ -33,7 +34,7 @@ if (WITH_PEARL)
   embed_hip_sources(
       OUTPUT_FILE "${PROJECT_BINARY_DIR}/generated/pearl_iris_qualified_kernel.hpp"
       SOURCES
-          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/native128/rtc.hip"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/pearl/native128/rtc.hip"
       NO_MANIFEST
       NAMESPACE hip_pearl_iris_qualified_source
   )

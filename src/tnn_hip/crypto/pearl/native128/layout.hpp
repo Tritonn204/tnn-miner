@@ -1,6 +1,6 @@
 #pragma once
 
-// Architectural ownership, not a universal Pearl shape restriction.
+// Pearl candidate ownership for the qualified gfx1100 recipe.
 struct NativeCandidate {
     static constexpr unsigned rows = 4;
     static constexpr unsigned columns = 32;

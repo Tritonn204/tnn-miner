@@ -86,7 +86,7 @@ struct Buffer {
 };
 
 struct PreparedMatrix {
-    Buffer descriptor, base, tree, seed, dense, pairs, sample_rows, sampled;
+    Buffer base, tree, seed, dense, pairs, sample_rows, sampled;
     std::vector<size_t> offsets;
     uint32_t rows = 0, k = 0;
 
@@ -100,7 +100,6 @@ struct PreparedMatrix {
             if (count == 1)
                 break;
         }
-        descriptor.allocate(sizeof(native::BaseOutput));
         base.allocate(size_t(rows) * k);
         tree.allocate(bytes);
         seed.allocate(32);
@@ -141,7 +140,7 @@ struct Preparation {
              "-DPEARL_BASE_VALUE=" + std::to_string(native::mining_base_value)}, device);
         module = compiled.module;
         for (const auto *name :
-             {"pearl_prepare_base", "pearl_prepare_leaves", "pearl_prepare_parents",
+             {"pearl_prepare_leaves", "pearl_prepare_parents",
               "pearl_prepare_seed", "pearl_prepare_dense", "pearl_prepare_sparse",
               "pearl_prepare_materialize", "pearl_prepare_gather", "pearl_batch_paths",
               "pearl_batch_sparse", "pearl_batch_materialize"}) {
@@ -210,7 +209,7 @@ struct Preparation {
         }
         compare(matrix.seed.data(), seed.data(), 32);
         compare(operand.data(), materialized.data(), materialized.size());
-        for (const auto *buffer : {&matrix.descriptor, &matrix.base, &matrix.tree, &matrix.seed,
+        for (const auto *buffer : {&matrix.base, &matrix.tree, &matrix.seed,
                                    &matrix.dense, &matrix.pairs})
             buffer->check_guards();
     }
@@ -285,9 +284,9 @@ AlgoConfig pearl_gpu_config(ExecutionOptions options) {
     config.rate_unit = RateUnit::MultiplyAccumulates;
     config.name = "pearl";
     config.algo_id = ALGO_PEARL_POUW;
-    config.source_path = "src/tnn_hip/crypto/iris/gemm/native128/rtc.hip";
+    config.source_path = "src/tnn_hip/crypto/pearl/native128/rtc.hip";
     config.source =
-        hip_pearl_iris_qualified_source::SRC_TNN_HIP_CRYPTO_IRIS_GEMM_NATIVE128_RTC_HIP_SOURCE;
+        hip_pearl_iris_qualified_source::SRC_TNN_HIP_CRYPTO_PEARL_NATIVE128_RTC_HIP_SOURCE;
     config.kernel_names = {"pearl_iris_fused", "pearl_iris_raw", "pearl_iris_diagnostic"};
     config.rtc_headers =
         build_rtc_headers(hip_embedded::COMMON_HEADERS, hip_embedded::IRIS_HEADERS,

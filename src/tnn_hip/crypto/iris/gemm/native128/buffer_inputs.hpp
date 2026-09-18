@@ -2,7 +2,7 @@
 
 #include "../../../../iris/rt/bounded_buffer_load.hpp"
 
-namespace tnn::hip::iris::gemm::experimental {
+namespace tnn::hip::iris::gemm::native128 {
 
 // Packed A[M,K], B[K,N], 128x128x32 tile, four wave32s. This input mapping
 // belongs to the recipe, not the architecture-neutral buffer primitive.

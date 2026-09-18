@@ -1,4 +1,4 @@
-#include "asm_templates.hpp"
+#include "src/tnn_hip/crypto/iris/gemm/native128/asm_templates.hpp"
 
 // Keep waits, LDS handoffs, and register constraints in this single asm block.
 // The templates only remove repetition; they do not reschedule instructions.
