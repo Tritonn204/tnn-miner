@@ -90,16 +90,22 @@ Measurement measure(native::Shape shape, ExecutionOptions options, int device,
     return {shape, double(completed) * shape.macs() / elapsed, elapsed * 1000 / batches};
 }
 
-void result_for(const Measurement& winner, unsigned batch, TuningResult& out) {
+void result_for(const Measurement& winner, const ExecutionOptions& options, TuningResult& out) {
     out = {};
     out.valid = true;
     out.block_size = 128;
-    out.batch_size = batch;
+    out.batch_size = options.batch_size;
     out.num_blocks = int((winner.shape.m / 128) * (winner.shape.n / 128));
     out.hashrate = winner.rate;
     out.batch_time_ms = winner.batch_ms;
-    out.tune_keys = {{"pearl_version", tuning::version}, {"pearl_backend", 1100},
+    const bool retained = options.architecture == "gfx1100";
+    out.tune_keys = {{"pearl_version", retained ? tuning::version : tuning::multiarch_version},
+                    {"pearl_backend", tuning::architecture_code(options)},
                     {"m", winner.shape.m}, {"n", winner.shape.n}, {"k", winner.shape.k}};
+    if (!retained) {
+        out.tune_keys["pearl_recipe"] = options.recipe;
+        out.tune_keys["pearl_engine"] = options.backend == Backend::Rdna3 ? 3 : 4;
+    }
 }
 
 native::Shape shape_from(const TuningResult& result) {
@@ -113,8 +119,9 @@ native::Shape shape_from(const TuningResult& result) {
 }
 
 bool tune(ExecutionOptions options, int device, bool enabled, TuningResult& out) {
+    const auto baseline_shape = tuning::baseline(options, [&](auto shape) { return fits(shape, options); });
     if (!enabled) {
-        result_for({tuning::default_shape}, options.batch_size, out);
+        result_for({baseline_shape}, options, out);
         return true;
     }
     TNN_LOG_INFO("[PEARL-TUNE] Up to %u shapes; fresh prep + fused jackpots + readback, batch=%u\n",
@@ -136,8 +143,7 @@ bool tune(ExecutionOptions options, int device, bool enabled, TuningResult& out)
                      results.size(), tuning::candidate_budget, shape.m, shape.n, shape.k,
                      sample.rate / 1e12, sample.batch_ms);
     };
-    if (!fits(tuning::default_shape, options))
-        throw std::runtime_error("Pearl default batch cannot fit with the required memory reserve");
+    screen(baseline_shape);
     for (auto shape : tuning::coarse())
         screen(shape);
     auto rank = [&] {
@@ -158,9 +164,9 @@ bool tune(ExecutionOptions options, int device, bool enabled, TuningResult& out)
             screen(shape);
     rank();
 
-    std::vector<native::Shape> finalists{tuning::default_shape};
+    std::vector<native::Shape> finalists{baseline_shape};
     for (auto sample : results) {
-        if (!tuning::same(sample.shape, tuning::default_shape))
+        if (!tuning::same(sample.shape, baseline_shape))
             finalists.push_back(sample.shape);
         if (finalists.size() == 3)
             break;
@@ -190,7 +196,7 @@ bool tune(ExecutionOptions options, int device, bool enabled, TuningResult& out)
             winner = candidate;
     }
     check_cancelled();
-    result_for(winner, options.batch_size, out);
+    result_for(winner, options, out);
     return true;
 }
 
@@ -203,22 +209,18 @@ void pearl_configure_tuning(AlgoConfig& config, ExecutionOptions options) {
     config.fixed_launch.reset();
     config.custom_tune_fn = [options](const KernelMap&, const oroDeviceProp_t& props, int device,
                                      bool enabled, TuningResult& result) {
-        if (!tnn_is_amd_device(device) || parse_gfx_number(props.gcnArchName) != 1100)
-            throw std::runtime_error("Pearl tuning requires a qualified gfx1100 backend");
+        if (!tnn_is_amd_device(device) || architecture_name(props.gcnArchName) != options.architecture)
+            throw std::runtime_error("Pearl tuning backend/device mismatch");
+        (void)tuning::architecture_code(options);
         return tune(options, device, enabled, result);
     };
     config.custom_tune_validate_fn = [options](const TuningResult& result,
                                                const oroDeviceProp_t& props, int device) {
         const auto shape = shape_from(result);
-        auto matches = [&](const char* key, int64_t value) {
-            const auto it = result.tune_keys.find(key);
-            return it != result.tune_keys.end() && it->second == value;
-        };
-        return tnn_is_amd_device(device) && parse_gfx_number(props.gcnArchName) == 1100 &&
+        return tnn_is_amd_device(device) && architecture_name(props.gcnArchName) == options.architecture &&
                result.valid && result.block_size == 128 && result.batch_size == options.batch_size &&
                tuning::valid_measurement(result.hashrate, result.batch_time_ms) &&
-               tuning::supported(shape) && matches("pearl_version", tuning::version) &&
-               matches("pearl_backend", 1100) &&
+               tuning::supported(shape) && tuning::matches_identity(result, options) &&
                result.num_blocks == int((shape.m / 128) * (shape.n / 128)) && fits(shape, options);
     };
     config.custom_tune_apply_fn = [options](const TuningResult& result,

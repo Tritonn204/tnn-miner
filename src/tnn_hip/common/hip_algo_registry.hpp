@@ -2914,12 +2914,12 @@ public:
     return inst;
   }
 
-  std::unique_ptr<IGPUAlgorithm> create(const std::string &name)
+  std::unique_ptr<IGPUAlgorithm> create(const std::string &name, int device = 0)
   {
 #ifdef TNN_PEARL
     if (name == "pearl")
     {
-      return std::make_unique<GPUAlgorithm>(tnn::pearl::pearl_gpu_config());
+      return std::make_unique<GPUAlgorithm>(tnn::pearl::pearl_mining_config(device));
     }
 #endif
     if (name == "xelis_v3")

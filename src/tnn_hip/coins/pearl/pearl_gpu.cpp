@@ -1,5 +1,8 @@
 #include "pearl_mining.hpp"
 #include "pearl_share_audit.hpp"
+#include "pearl_validation.hpp"
+#include "pearl_arch.hpp"
+#include "test_pearl_hip.h"
 #include <tnn_hip/common/gpu_algo.hpp>
 #include <tnn_hip/common/gpu_submit_queue.hpp>
 #include <tnn_hip/crypto/pearl/pearl_native.hpp>
@@ -30,6 +33,11 @@ namespace {
 
 using Clock = std::chrono::steady_clock;
 static_assert(std::endian::native == std::endian::little);
+
+// Process-local qualification only: no stale disk receipt can enable mining
+// after a driver, executable or kernel change. Normal gfx1100 bypasses this.
+std::mutex qualification_mutex;
+std::set<std::tuple<int, std::string, Backend, unsigned>> qualified_devices;
 
 void checked(oroError_t error, const char *operation) {
     if (error != oroSuccess) {
@@ -238,12 +246,14 @@ struct State {
     }
     explicit State(const ExecutionOptions &options)
         : shape(options.shape), capacity(options.winner_capacity),
-          validation(options.mode == ExecutionMode::Validation), batch_size(options.batch_size) {
+          validation(options.mode == ExecutionMode::Validation), batch_size(options.batch_size),
+          backend(options.backend) {
     }
     const native::Shape shape;
     const uint32_t capacity;
     const bool validation;
     const unsigned batch_size;
+    const Backend backend;
     int device = 0;
     uint64_t launches = 0;
     uint64_t completed = 0;
@@ -277,14 +287,11 @@ struct Evidence : GPUBatchEvidence {
 } // namespace
 
 AlgoConfig pearl_gpu_config(ExecutionOptions options) {
-    const bool rdna4 = options.backend == Backend::ExperimentalGfx1201;
-    if (options.recipe >= 8 || (!rdna4 && options.recipe != 0))
+    const bool rdna4 = options.backend == Backend::Rdna4;
+    const bool portable = options.backend == Backend::PortableSimt;
+    const bool cdna = options.backend == Backend::Cdna;
+    if (portable ? (options.recipe != 0 && options.recipe != 2) : options.recipe != 0)
         throw std::invalid_argument("Invalid Pearl backend recipe");
-    if (rdna4 && options.mode == ExecutionMode::Mining)
-        throw std::invalid_argument("gfx1201 is offline-test-only until hardware qualification");
-    if (options.test_workload != TestWorkload::FreshFused &&
-        (!rdna4 || options.mode != ExecutionMode::Benchmark))
-        throw std::invalid_argument("Prepared-operand controls are experimental benchmarks only");
     options.shape.layout = native::CandidateLayout::native_4x32;
     options.shape.validate();
     if (!options.batch_size || options.batch_size > 32)
@@ -299,18 +306,29 @@ AlgoConfig pearl_gpu_config(ExecutionOptions options) {
     config.source =
         hip_pearl_iris_qualified_source::SRC_TNN_HIP_CRYPTO_PEARL_NATIVE128_RTC_HIP_SOURCE;
     config.kernel_names = {"pearl_iris_fused", "pearl_iris_raw", "pearl_iris_diagnostic"};
+    if (options.backend == Backend::Rdna3 && options.mode == ExecutionMode::Validation) {
+        config.kernel_names.push_back("pearl_iris_validation_raw");
+        config.source_transform_fn = [](const std::string& source, int) {
+            return "#define PEARL_VALIDATION_OUTPUT 1\n" + source;
+        };
+    }
     config.rtc_headers =
         build_rtc_headers(hip_embedded::COMMON_HEADERS, hip_embedded::IRIS_HEADERS,
                           hip_embedded::PEARL_HEADERS, hip_embedded::PEARL_IRIS_QUALIFIED_HEADERS);
-    if (rdna4) {
-        config.name = "pearl-gfx1201-r" + std::to_string(options.recipe);
+    if (rdna4 || portable || cdna) {
+        config.name = "pearl-rdna4-r" + std::to_string(options.recipe);
         config.source_path = "src/tnn_hip/crypto/pearl/rdna4/rtc.hip";
         config.source = hip_pearl_rdna4_source::SRC_TNN_HIP_CRYPTO_PEARL_RDNA4_RTC_HIP_SOURCE;
         config.rtc_headers = build_rtc_headers(hip_embedded::COMMON_HEADERS,
             hip_embedded::PEARL_HEADERS, hip_embedded::PEARL_RDNA4_HEADERS);
-        config.source_transform_fn = [recipe = options.recipe](const std::string& source, int) {
-            return "#define PEARL_GFX12_RECIPE " + std::to_string(recipe) + "\n" + source;
+        config.source_transform_fn = [recipe = options.recipe, portable, cdna](const std::string& source, int) {
+            return (cdna ? "#define PEARL_CDNA_MFMA 1\n" : portable ? "#define PEARL_PORTABLE_SIMT 1\n" : "") +
+                   std::string("#define PEARL_GFX12_RECIPE ") + std::to_string(recipe) + "\n" + source;
         };
+        if (portable) {
+            config.name = "pearl-portable-simt-r" + std::to_string(options.recipe);
+        }
+        if (cdna) config.name = "pearl-cdna-mfma";
     }
     // HIPRTC virtual includes need the same suffix aliases used by the
     // compile-only qualification (api.hpp, hiprtc_types.hip.h, etc.).
@@ -342,9 +360,24 @@ AlgoConfig pearl_gpu_config(ExecutionOptions options) {
     config.fixed_launch = fixed;
     config.pre_tune_fn = [options](const KernelMap &, const oroDeviceProp_t &props, int device,
                                    void **output) {
-        const int required = options.backend == Backend::ExperimentalGfx1201 ? 1201 : 1100;
-        if (!tnn_is_amd_device(device) || parse_gfx_number(props.gcnArchName) != required) {
+        const int actual = parse_gfx_number(props.gcnArchName);
+        const std::string architecture(architecture_name(props.gcnArchName));
+        const bool matches_backend =
+            options.backend == Backend::Rdna3 ? rdna3_target(architecture) :
+            options.backend == Backend::Rdna4 ? rdna4_target(architecture) :
+            options.backend == Backend::Cdna ? cdna_target(architecture) : portable_target(actual);
+        if (!tnn_is_amd_device(device) || !matches_backend || architecture != options.architecture)
             throw std::runtime_error("Pearl backend/device mismatch; refusing launch");
+        if (options.backend == Backend::PortableSimt &&
+            (options.recipe & 2) && !portable_dot_target(actual))
+            throw std::runtime_error("Pearl packed-dot recipe is unsupported on this target");
+
+        // Explicit benchmark adapters are also used when applying cached tunes:
+        // changing the execution mode must never bypass qualification.
+        if (options.mode != ExecutionMode::Validation && architecture != "gfx1100") {
+            std::scoped_lock lock(qualification_mutex);
+            if (!qualified_devices.contains({device, architecture, options.backend, options.recipe}))
+                throw std::runtime_error("Pearl requires successful device qualification before mining or benchmarking");
         }
         size_t free_bytes = 0, total_bytes = 0;
         checked(oroMemGetInfo(&free_bytes, &total_bytes), "Pearl allocation budget");
@@ -404,36 +437,10 @@ AlgoConfig pearl_gpu_config(ExecutionOptions options) {
     };
     config.prepare_batch_fn = prepare;
     config.execute_fn = execute;
-    if (rdna4 && options.mode == ExecutionMode::Validation) {
+    if (options.mode == ExecutionMode::Validation) {
         config.execute_fn = [](const KernelMap& kernels, const KernelLaunchContext& context) {
-            check_rdna4(kernels, context);
+            check_rdna4_suite(kernels, context);
             return execute(kernels, context);
-        };
-    }
-    if (options.test_workload != TestWorkload::FreshFused) {
-        config.prepare_batch_fn = [ready = false](const KernelLaunchContext& context) mutable {
-            if (!ready) { ready = prepare(context); return ready; }
-            auto& state = *static_cast<State*>(context.algo_data);
-            checked(oroMemsetAsync(state.result.data(), 0, state.result.size, context.stream),
-                    "Reset prepared-operand control");
-            return true;
-        };
-    }
-    if (options.test_workload == TestWorkload::PreparedRaw) {
-        config.execute_fn = [](const KernelMap& kernels, const KernelLaunchContext& context) {
-            auto& state = *static_cast<State*>(context.algo_data);
-            unsigned m = state.shape.m, n = state.shape.n, k = state.shape.k;
-            auto* b = state.preparation[state.current_identity.is_dev]->b_operand.data();
-            int32_t* d = nullptr;
-            for (unsigned slot = 0; slot < state.batch_size; ++slot) {
-                auto* a = state.a.data() + size_t(slot) * m * k;
-                void* args[] = {&a, &b, &d, &m, &n, &k, &m, &k, &m};
-                checked(oroModuleLaunchKernel(kernels.at("pearl_iris_raw"),
-                    m / 128 * (n / 128), 1, 1, 128, 1, 1, 0, context.stream, args, nullptr),
-                    "Launch D-free raw control");
-                ++state.launches;
-            }
-            return true;
         };
     }
     config.collect_batch_fn = collect;
@@ -450,9 +457,62 @@ AlgoConfig pearl_gpu_config(ExecutionOptions options) {
             checked(oroEventSynchronize(state.readback_done), "Complete Pearl readback");
         };
     }
-    if (options.mode == ExecutionMode::Mining)
+    if (options.mode == ExecutionMode::Mining && !portable && !cdna)
         pearl_configure_tuning(config, options);
     return config;
+}
+
+int pearl_selected_device() {
+    int count = 0, selected = -1;
+    checked(oroGetDeviceCount(&count), "Pearl device enumeration");
+    for (int device = 0; device < count; ++device) {
+        if (!shouldUseDevice(device)) continue;
+        if (selected != -1) throw std::runtime_error("Pearl requires exactly one selected GPU");
+        selected = device;
+    }
+    if (selected < 0) throw std::runtime_error("Pearl requires a selected GPU");
+    return selected;
+}
+
+ExecutionOptions pearl_device_options(int device) {
+    oroDeviceProp_t props{};
+    checked(oroGetDeviceProperties(&props, tnn_get_device(device)), "Pearl device selection");
+    if (!tnn_is_amd_device(device))
+        throw std::runtime_error("Pearl requires an AMD GPU");
+    ExecutionOptions options;
+    options.architecture = architecture_name(props.gcnArchName);
+    const int gfx = parse_gfx_number(props.gcnArchName);
+    if (rdna3_target(options.architecture)) options.backend = Backend::Rdna3;
+    else if (rdna4_target(options.architecture)) options.backend = Backend::Rdna4;
+    else if (cdna_target(options.architecture)) options.backend = Backend::Cdna;
+    else if (legacy_mining_target(gfx)) {
+        options.backend = Backend::PortableSimt;
+        options.recipe = portable_recipe(gfx);
+    } else throw std::runtime_error("Pearl has no enabled backend for this exact architecture");
+    if (options.backend == Backend::PortableSimt || options.backend == Backend::Cdna) {
+        options.shape = {2048, 2048, 2048};
+        options.batch_size = 2;
+    }
+    return options;
+}
+
+AlgoConfig pearl_mining_config(int device) {
+    return pearl_gpu_config(pearl_device_options(device));
+}
+
+void pearl_qualify_mining_device(int device) {
+    const auto options = pearl_device_options(device);
+    if (options.architecture == "gfx1100") return;
+    {
+        std::scoped_lock lock(qualification_mutex);
+        if (qualified_devices.contains({device, options.architecture, options.backend, options.recipe})) return;
+    }
+    TNN_LOG_INFO("\n[PEARL] Qualifying %s with the offline CPU/proof oracle\n", options.architecture.c_str());
+    if (test_pearl_device(device) != 0)
+        throw std::runtime_error("Pearl device qualification failed; no mining enabled");
+    std::scoped_lock lock(qualification_mutex);
+    qualified_devices.emplace(device, options.architecture, options.backend, options.recipe);
+    TNN_LOG_INFO("[PEARL] Device qualification passed: %s\n", options.architecture.c_str());
 }
 
 static std::vector<GPUSubmitEntry> build_one(const std::shared_ptr<const Evidence> &evidence,

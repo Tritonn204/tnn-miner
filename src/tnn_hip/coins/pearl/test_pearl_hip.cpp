@@ -1,6 +1,7 @@
 #include "test_pearl_hip.h"
 #include "pearl_mining.hpp"
 #include "pearl_tuning.hpp"
+#include "pearl_arch.hpp"
 #include <tnn_hip/common/gpu_algo_impl.hpp>
 #include <tnn_log.hpp>
 #include <chrono>
@@ -36,7 +37,7 @@ void require(bool condition, const char *message) {
         throw std::runtime_error(message);
 }
 
-void test_tune_cache_contract() {
+void test_tune_cache_contract(int device) {
     auto rejected_configuration = [](ExecutionOptions options) {
         bool rejected = false;
         try { (void)pearl_gpu_config(options); }
@@ -44,17 +45,13 @@ void test_tune_cache_contract() {
         require(rejected, "Unqualified experimental configuration accepted");
     };
     ExecutionOptions experimental;
-    experimental.backend = Backend::ExperimentalGfx1201;
-    rejected_configuration(experimental); // No foreign production mining.
-    experimental.mode = ExecutionMode::Benchmark;
+    experimental.backend = Backend::Rdna4;
     experimental.recipe = 8;
+    experimental.mode = ExecutionMode::Benchmark;
     rejected_configuration(experimental);
-    ExecutionOptions prepared;
-    prepared.test_workload = TestWorkload::PreparedRaw;
-    rejected_configuration(prepared); // Reused inputs cannot become mining work.
 
     oroDeviceProp_t properties{};
-    require(oroGetDeviceProperties(&properties, tnn_get_device(0)) == oroSuccess,
+    require(oroGetDeviceProperties(&properties, tnn_get_device(device)) == oroSuccess,
             "Cannot query tune validation device");
     const auto config = pearl_gpu_config();
     TuningResult valid{};
@@ -66,14 +63,14 @@ void test_tune_cache_contract() {
     valid.batch_time_ms = 84;
     valid.tune_keys = {{"m", 8192}, {"n", 8192}, {"k", 4096},
                        {"pearl_version", tuning::version}, {"pearl_backend", 1100}};
-    require(config.custom_tune_validate_fn(valid, properties, 0), "Valid tune rejected");
+    require(config.custom_tune_validate_fn(valid, properties, device), "Valid tune rejected");
 
     // Exercise the production validator without editing the user's tune cache
     // or launching any sweep. Each corruption must independently fail closed.
     auto rejected = [&](auto corrupt) {
         auto result = valid;
         corrupt(result);
-        require(!config.custom_tune_validate_fn(result, properties, 0),
+        require(!config.custom_tune_validate_fn(result, properties, device),
                 "Invalid cached tune accepted");
     };
     rejected([](auto& result) { result.batch_size = 32; });
@@ -88,14 +85,19 @@ void test_tune_cache_contract() {
 
 } // namespace
 
-int test_pearl_hip(bool experimental_gfx12, unsigned recipe) {
+int test_pearl_hip() {
+    try { return test_pearl_device(pearl_selected_device()); }
+    catch (const std::exception& error) {
+        TNN_LOG_ERROR("\n[PEARL-HIP-TEST] %s\n", error.what());
+        return 1;
+    }
+}
+
+int test_pearl_device(int device) {
     try {
-        if (experimental_gfx12) {
-            oroDeviceProp_t props{};
-            require(oroGetDeviceProperties(&props, tnn_get_device(0)) == oroSuccess &&
-                    tnn_is_amd_device(0) && parse_gfx_number(props.gcnArchName) == 1201,
-                    "Experimental test requires gfx1201; no kernels launched");
-        }
+        const auto selected = pearl_device_options(device);
+        const auto backend = selected.backend;
+        const auto recipe = selected.recipe;
         TNN_LOG_INFO("\n[PEARL-HIP-TEST] Production preparation, jackpots and proofs (offline)\n");
         const auto candidates = tuning::coarse();
         require(candidates.size() == 24, "Incorrect coarse tuning coverage");
@@ -111,11 +113,12 @@ int test_pearl_hip(bool experimental_gfx12, unsigned recipe) {
         // Two independent A operands exercise batch isolation without turning
         // the exhaustive CPU proof check into a full mining-size workload.
         ExecutionOptions options{ExecutionMode::Validation, {256, 256, 2048}, 512, 2};
-        options.backend = experimental_gfx12 ? Backend::ExperimentalGfx1201 : Backend::QualifiedGfx1100;
+        options.backend = backend;
         options.recipe = recipe;
+        options.architecture = selected.architecture;
         GPUAlgorithm algorithm(pearl_gpu_config(options));
-        require(algorithm.initialize(0), "Pearl validation initialization failed");
-        if (!experimental_gfx12) test_tune_cache_contract();
+        require(algorithm.initialize(device), "Pearl validation initialization failed");
+        if (selected.architecture == "gfx1100") test_tune_cache_contract(device);
         auto job = offline_job(options.shape, true);
         for (unsigned attempt = 0; attempt < 4; ++attempt) {
             // Exercise independent attempts, a target update and the dev cache.
@@ -149,8 +152,9 @@ int test_pearl_hip(bool experimental_gfx12, unsigned recipe) {
             ExecutionOptions rectangular{ExecutionMode::Validation, {384, 256, depth}, 768, 1};
             rectangular.backend = options.backend;
             rectangular.recipe = recipe;
+            rectangular.architecture = selected.architecture;
             GPUAlgorithm check(pearl_gpu_config(rectangular));
-            require(check.initialize(0), "Pearl rectangular initialization failed");
+            require(check.initialize(device), "Pearl rectangular initialization failed");
 
             auto rectangular_job = offline_job(rectangular.shape, true);
             rectangular_job.pearl_cert_version = version;
@@ -163,11 +167,25 @@ int test_pearl_hip(bool experimental_gfx12, unsigned recipe) {
           }
         }
 
+        // Six tile columns exercise the native grouped traversal's final strip.
+        {
+            auto strip = options;
+            strip.shape = {256, 768, 2048};
+            strip.batch_size = 1;
+            strip.winner_capacity = 1536;
+            GPUAlgorithm check(pearl_gpu_config(strip));
+            require(check.initialize(device), "Pearl strip initialization failed");
+            check.set_job_snapshot(offline_job(strip.shape, true));
+            require(pearl_validate_batch(check.mine_batch(0, 1), true) == 1536,
+                    "Incomplete grouped-strip candidate coverage");
+            TNN_LOG_INFO("[PEARL-HIP-TEST] 256x768x2048 grouped-strip coverage passed\n");
+        }
+
         // Same production collector must fail explicitly when capacity is exceeded.
         auto overflow_options = options;
         overflow_options.winner_capacity = 7;
         GPUAlgorithm overflow(pearl_gpu_config(overflow_options));
-        require(overflow.initialize(0), "Pearl overflow initialization failed");
+        require(overflow.initialize(device), "Pearl overflow initialization failed");
         overflow.set_job_snapshot(offline_job(options.shape, true));
         bool rejected = false;
         try {
@@ -189,8 +207,13 @@ int test_pearl_hip(bool experimental_gfx12, unsigned recipe) {
 
 int tune_pearl_hip() {
     try {
-        GPUAlgorithm algorithm(pearl_gpu_config());
-        require(algorithm.initialize(0), "Pearl tuning initialization failed");
+        const int device = pearl_selected_device();
+        const auto options = pearl_device_options(device);
+        require(rdna3_target(options.architecture) || rdna4_target(options.architecture),
+                "Pearl shape tuning currently supports RDNA3/RDNA4");
+        pearl_qualify_mining_device(device);
+        GPUAlgorithm algorithm(pearl_mining_config(device));
+        require(algorithm.initialize(device), "Pearl tuning initialization failed");
         const auto tune = algorithm.get_tuning_result();
         native::Shape shape{uint32_t(tune.tune_keys.at("m")), uint32_t(tune.tune_keys.at("n")),
                             uint32_t(tune.tune_keys.at("k")), native::CandidateLayout::native_4x32};
@@ -206,56 +229,39 @@ int tune_pearl_hip() {
     }
 }
 
-int bench_pearl_hip(uint32_t m, uint32_t n, uint32_t k, uint32_t seconds_requested,
-                    bool experimental_gfx12, unsigned recipe, unsigned workload) {
+int bench_pearl_hip(uint32_t m, uint32_t n, uint32_t k, uint32_t seconds_requested) {
     try {
-        if (experimental_gfx12) {
-            oroDeviceProp_t props{};
-            require(oroGetDeviceProperties(&props, tnn_get_device(0)) == oroSuccess &&
-                    tnn_is_amd_device(0) && parse_gfx_number(props.gcnArchName) == 1201,
-                    "Experimental benchmark requires gfx1201; no kernels launched");
-        }
-        require(workload < 3, "Invalid tester workload");
+        const int device = pearl_selected_device();
+        auto options = pearl_device_options(device);
         require(seconds_requested >= 1 && seconds_requested <= 600,
                 "Pearl benchmark duration must be between 1 and 600 seconds");
-        ExecutionOptions options{ExecutionMode::Benchmark, {m, n, k}, 256};
-        options.backend = experimental_gfx12 ? Backend::ExperimentalGfx1201 : Backend::QualifiedGfx1100;
-        options.recipe = recipe;
-        options.test_workload = static_cast<TestWorkload>(workload);
+        pearl_qualify_mining_device(device);
+        options.mode = ExecutionMode::Benchmark;
+        options.shape = {m, n, k};
+        options.winner_capacity = 256;
         options.shape.validate();
-        if (experimental_gfx12) {
-            auto qualification = options;
-            qualification.test_workload = TestWorkload::FreshFused;
-            GPUAlgorithm check(pearl_gpu_config(qualification));
-            require(check.initialize(0), "Shape qualification initialization failed");
-            auto job = offline_job(options.shape, false);
-            // Keep proof collection bounded: expect about eight winners per
-            // batch regardless of shape, and verify them before any timing.
-            const uint64_t candidates = uint64_t(m) * n / 128 * options.batch_size;
-            const uint64_t divisor = native::jackpot_work(k, native::CandidateLayout::native_4x32) *
-                                     std::max<uint64_t>(1, candidates / 8);
-            uint64_t remainder = 0;
-            for (int i = 31; i >= 0; --i) {
-                const uint64_t digit = remainder * 256 + 255;
-                job.raw_target[i] = uint8_t(digit / divisor);
-                remainder = digit % divisor;
-            }
-            check.set_job_snapshot(job);
-            size_t winners = 0;
-            for (unsigned attempt = 0; attempt < 4 && !winners; ++attempt)
-                winners = pearl_validate_batch(check.mine_batch(attempt, options.batch_size), false);
-            require(winners > 0, "Shape qualification found no checkable winners");
-            TNN_LOG_INFO("[PEARL-GFX12] Shape proof qualification passed (%zu winners)\n", winners);
-        }
-        TNN_LOG_INFO("[PEARL-HIP-BENCH] backend=%s recipe=%u workload=%u batch=%u\n",
-                     experimental_gfx12 ? "gfx1201-experimental" : "gfx1100", recipe,
-                     workload, options.batch_size);
-        const char* labels[] = {"fresh preparation + fused jackpots + readback",
-                                "prepared operands + fused jackpots + readback",
-                                "prepared operands + D-free raw GEMM + readback"};
-        TNN_LOG_INFO("\n[PEARL-HIP-BENCH] %ux%ux%u %s; offline\n", m, n, k, labels[workload]);
+        TNN_LOG_INFO("\n[PEARL-HIP-BENCH] %s %ux%ux%u batch=%u fresh preparation + fused jackpots + readback\n",
+                     options.architecture.c_str(), m, n, k, options.batch_size);
         GPUAlgorithm algorithm(pearl_gpu_config(options));
-        require(algorithm.initialize(0), "Pearl benchmark initialization failed");
+        require(algorithm.initialize(device), "Pearl benchmark initialization failed");
+
+        // Validate actual captured proofs at this requested shape before timing.
+        // Keep expected hits small even at 16K: no all-winner host traffic.
+        auto qualification = offline_job(options.shape, false);
+        const uint64_t candidates = uint64_t(m) * n / 128 * options.batch_size;
+        const uint64_t divisor = native::jackpot_work(k) * std::max<uint64_t>(1, candidates / 8);
+        uint64_t remainder = 0;
+        for (int i = 31; i >= 0; --i) {
+            const uint64_t digit = remainder * 256 + 255;
+            qualification.raw_target[i] = uint8_t(digit / divisor);
+            remainder = digit % divisor;
+        }
+        algorithm.set_job_snapshot(qualification);
+        size_t verified = 0;
+        for (unsigned i = 0; i < 4 && !verified; ++i)
+            verified = pearl_validate_batch(algorithm.mine_batch(i, options.batch_size), false);
+        require(verified != 0, "Pearl benchmark found no checkable qualification winners");
+
         algorithm.set_job_snapshot(offline_job(options.shape, false));
         for (unsigned i = 0; i < 3; ++i)
             (void)algorithm.mine_batch(i, options.batch_size);

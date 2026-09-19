@@ -13,13 +13,21 @@ target_compile_features(pearl_difficulty PRIVATE cxx_std_20)
 target_include_directories(pearl_difficulty PRIVATE ../../src ${Boost_INCLUDE_DIRS})
 add_test(NAME pearl_difficulty COMMAND pearl_difficulty)
 
-foreach(test contract sha_startup coverage submit_queue target rdna4)
+foreach(test contract sha_startup coverage submit_queue target rdna4 cdna validation)
     add_executable(pearl_${test} test_${test}.cpp)
     target_compile_features(pearl_${test} PRIVATE cxx_std_20)
     target_compile_options(pearl_${test} PRIVATE -UNDEBUG)
     target_include_directories(pearl_${test} PRIVATE ../../include ../../src ${Boost_INCLUDE_DIRS})
     add_test(NAME pearl_${test} COMMAND pearl_${test})
 endforeach()
+
+# A normal failure exit, not an abort/signal: verifies checks survive Release.
+add_test(NAME pearl_validation_negative COMMAND pearl_validation --deliberate-failure)
+set_tests_properties(pearl_validation_negative PROPERTIES WILL_FAIL TRUE)
+
+add_executable(iris_rdna4_schedule ../iris/test_rdna4_schedule.cpp)
+target_compile_features(iris_rdna4_schedule PRIVATE cxx_std_20)
+add_test(NAME iris_rdna4_schedule COMMAND iris_rdna4_schedule)
 
 set(PEARL_BLAKE3_LIBRARY "" CACHE FILEPATH "Built TNN BLAKE3 library for CPU preparation tests")
 if(PEARL_BLAKE3_LIBRARY)

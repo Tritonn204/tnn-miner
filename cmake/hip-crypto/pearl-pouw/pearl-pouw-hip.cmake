@@ -21,6 +21,10 @@ if (WITH_PEARL)
       SOURCES
           "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/rdna4/contract.hpp"
           "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/rdna4/kernel.hpp"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/simt/kernel.hpp"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/cdna/contract.hpp"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/iris/gemm/cdna/kernel.hpp"
+          "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/pearl/cdna/ownership.hpp"
           "${PROJECT_SOURCE_DIR}/src/tnn_hip/crypto/pearl/rdna4/ownership.hpp"
       MANIFEST_NAME PEARL_RDNA4_HEADERS
   )

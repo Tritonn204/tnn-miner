@@ -3,7 +3,7 @@
 namespace tnn::hip::iris::gemm::native128 {
 using I8 = int __attribute__((ext_vector_type(8)));
 #include "src/tnn_hip/crypto/iris/gemm/native128/raw_slots.hpp"
-template <class Configuration, class LoadPolicy, bool Partial>
+template <class Configuration, class LoadPolicy, bool Partial, bool StoreOutput = false>
 __device__ __forceinline__ void raw_body(const int8_t *a, const int8_t *b, int32_t *d, unsigned m,
                                          unsigned n, unsigned k, unsigned lda, unsigned ldb,
                                          unsigned ldd) {
@@ -35,6 +35,18 @@ __device__ __forceinline__ void raw_body(const int8_t *a, const int8_t *b, int32
     const unsigned store_a = base + (lane % 8) * 16 + (wave * 8 + lane / 8) * 128;
     const unsigned store_b = base + 4096 + Arch::b_offset(wave * 32 + lane / 2, (lane % 2) * 16);
     slot_raw(accumulators, loads, k / 32, m * 32, read_a, read_b, store_a, store_b);
+    if constexpr (StoreOutput) {
+        // Validation-only instantiation. The retained D-free entrypoint has
+        // StoreOutput=false, so its instruction stream is unaffected.
+#pragma unroll
+        for (unsigned i = 0; i < 4; ++i)
+#pragma unroll
+            for (unsigned j = 0; j < 4; ++j)
+#pragma unroll
+                for (unsigned e = 0; e < 8; ++e)
+                    d[bm + Arch::a_row(wave, lane, i) +
+                      size_t(bn + Arch::output_col(wave, lane, j, e)) * m] = accumulators[j * 4 + i][e];
+    }
 }
 
 

@@ -142,4 +142,13 @@ extern "C" __global__ __launch_bounds__(128) void pearl_iris_raw(const int8_t *a
              tnn::hip::iris::gemm::native128::Gfx1100BufferInputs128<>, true>(a, b, d, m, n, k,
                                                                                  lda, ldb, ldd);
 }
+#ifdef PEARL_VALIDATION_OUTPUT
+extern "C" __global__ __launch_bounds__(128) void pearl_iris_validation_raw(
+    const int8_t* a, const int8_t* b, int32_t* d, unsigned m, unsigned n,
+    unsigned k, unsigned lda, unsigned ldb, unsigned ldd) {
+    raw_body<InfrastructureRecipe<2, ::iris::hip::LinearK>,
+             tnn::hip::iris::gemm::native128::Gfx1100BufferInputs128<>, true, true>(
+        a, b, d, m, n, k, lda, ldb, ldd);
+}
+#endif
 } // namespace tnn::pearl::gpu::native128

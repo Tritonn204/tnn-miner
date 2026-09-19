@@ -4,6 +4,10 @@
 #include <cassert>
 #include <cstdint>
 
+#ifdef NDEBUG
+#error "RDNA4 correctness assertions must remain enabled in Release builds"
+#endif
+
 namespace gemm = tnn::hip::iris::gemm::rdna4;
 using Ticket = tnn::pearl::gpu::rdna4::Ticket;
 
@@ -29,14 +33,19 @@ int main() {
     // Feed actual cumulative signed GEMM values into an independent simulation
     // of the wave reduction. Compare with direct ticket-coordinate ownership.
     std::array<int32_t, 128 * 128> matrix{};
-    for (unsigned pattern = 0; pattern < 3; ++pattern) {
+    bool lane_mutation_detected = false;
+    for (unsigned pattern = 0; pattern < 4; ++pattern) {
         matrix.fill(0);
         for (unsigned checkpoint = 0; checkpoint < 3; ++checkpoint) {
             for (unsigned row = 0; row < 128; ++row)
                 for (unsigned col = 0; col < 128; ++col)
                     for (unsigned kk = checkpoint * 128; kk < (checkpoint + 1) * 128; ++kk) {
-                        const int a = pattern == 0 ? 0 : pattern == 1 ? -128 : int((row * 17 + kk * 11) % 256) - 128;
-                        const int b = pattern == 0 ? 0 : pattern == 1 ? 127 : int((col * 13 + kk * 7) % 256) - 128;
+                        const int a = pattern == 0 ? 0 : pattern == 1 ? -128 :
+                                      pattern == 3 ? (row == 17 && kk == 129 ? -127 : 0) :
+                                      int((row * 17 + kk * 11) % 256) - 128;
+                        const int b = pattern == 0 ? 0 : pattern == 1 ? 127 :
+                                      pattern == 3 ? (col == 31 && kk == 129 ? 113 : 0) :
+                                      int((col * 13 + kk * 7) % 256) - 128;
                         matrix[row * 128 + col] += a * b;
                     }
             for (unsigned wave = 0; wave < 4; ++wave) {
@@ -61,10 +70,15 @@ int main() {
                             expected ^= uint32_t(matrix[(Ticket::row(wave, lane) + r * 32) * 128 +
                                                        Ticket::col(wave, lane) + c / 4 * 8 + c % 4]);
                     assert(values[Ticket::source_lane(lane)][Ticket::source_element(lane)] == expected);
+                    lane_mutation_detected |=
+                        values[Ticket::source_lane(lane)][(Ticket::source_element(lane) + 1) % 8] != expected;
                 }
             }
         }
     }
+    assert(lane_mutation_detected);
+    // Signedness mutation in the sparse case must not agree with the oracle.
+    assert(int(int8_t(-127)) * 113 != int(uint8_t(-127)) * 113);
     static_assert(gemm::Recipe<32, 1, 8>::lds_bytes == 8192);
     static_assert(gemm::Recipe<64, 2, 16>::lds_bytes + 8192 <= 65536);
 }

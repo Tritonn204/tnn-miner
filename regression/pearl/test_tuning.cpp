@@ -5,10 +5,37 @@
 #include <limits>
 #include <set>
 #include <tuple>
+#include <map>
 
 using namespace tnn::pearl;
 
 int main() {
+    struct Result { std::map<std::string, int64_t> tune_keys; };
+    for (const char* arch : {"gfx1101", "gfx1102", "gfx1200", "gfx1201"}) {
+        ExecutionOptions options;
+        options.architecture = arch;
+        options.backend = rdna3_target(arch) ? Backend::Rdna3 : Backend::Rdna4;
+        Result result{{{"pearl_version", tuning::multiarch_version},
+                       {"pearl_backend", tuning::architecture_code(options)},
+                       {"pearl_engine", options.backend == Backend::Rdna3 ? 3 : 4}, {"pearl_recipe", 0}}};
+        assert(tuning::matches_identity(result, options));
+        for (auto key : {"pearl_version", "pearl_backend", "pearl_engine", "pearl_recipe"}) {
+            auto bad = result;
+            ++bad.tune_keys[key];
+            assert(!tuning::matches_identity(bad, options));
+            bad.tune_keys.erase(key);
+            assert(!tuning::matches_identity(bad, options));
+        }
+        assert(tuning::baseline(options, [](auto s) { return s.m <= 4096; }).m == 4096);
+        assert(tuning::baseline(options, [](auto s) { return s.m <= 2048; }).k == 2048);
+        bool failed = false;
+        try { (void)tuning::baseline(options, [](auto) { return false; }); }
+        catch (const std::runtime_error&) { failed = true; }
+        assert(failed);
+    }
+    ExecutionOptions retained;
+    Result old{{{"pearl_version", 3}, {"pearl_backend", 1100}}};
+    assert(tuning::matches_identity(old, retained));
     const auto initial = tuning::coarse();
     assert(initial.size() == 24 && tuning::same(initial.front(), tuning::default_shape));
     std::vector<native::Shape> combined = initial;

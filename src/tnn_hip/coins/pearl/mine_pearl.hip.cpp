@@ -41,6 +41,7 @@ void minePearl_hip(int tid) {
             selected = device;
         }
         if (selected == -1) throw std::runtime_error("Pearl requires a selected GPU");
+        pearl_qualify_mining_device(selected);
         miner = std::make_unique<GPUMiner>("pearl", selected);
         if (!miner->initialize()) throw std::runtime_error("Pearl GPU initialization failed");
         miner->set_dev_fee(devFee);

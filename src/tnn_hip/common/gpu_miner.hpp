@@ -31,7 +31,7 @@ public:
 
         TNN_LOG_TRACE("[TRACE] GPUMiner: Constructor for algo='%s', device=%d\n", algo_name.c_str(), device_id);
 
-        algo_ = AlgoRegistry::instance().create(algo_name);
+        algo_ = AlgoRegistry::instance().create(algo_name, device_id);
         if (!algo_) {
             throw std::runtime_error("Unknown algorithm: " + algo_name);
         }

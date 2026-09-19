@@ -2,6 +2,7 @@
 
 #include <tnn_hip/crypto/pearl/pearl_native.hpp>
 #include <atomic>
+#include <string>
 #include <vector>
 
 struct AlgoConfig;
@@ -12,18 +13,16 @@ struct GPUSubmitEntry;
 namespace tnn::pearl {
 
 enum class ExecutionMode { Mining, Validation, Benchmark };
-enum class Backend { QualifiedGfx1100, ExperimentalGfx1201 };
-enum class TestWorkload { FreshFused, PreparedFused, PreparedRaw };
-
+enum class Backend { Rdna3, Rdna4, PortableSimt, Cdna };
 // Passed into the algorithm factory; test settings never mutate a live worker.
 struct ExecutionOptions {
     ExecutionMode mode = ExecutionMode::Mining;
     native::Shape shape{8192, 8192, 4096};
     uint32_t winner_capacity = 4096;
     uint32_t batch_size = 16;
-    Backend backend = Backend::QualifiedGfx1100;
-    unsigned recipe = 0; // Experimental gfx12 only; never changes the gfx1100 ISA.
-    TestWorkload test_workload = TestWorkload::FreshFused;
+    Backend backend = Backend::Rdna3;
+    unsigned recipe = 0; // Backend-specific; never changes the retained gfx1100 ISA.
+    std::string architecture = "gfx1100";
 };
 
 inline bool mining_enabled = false;
@@ -34,6 +33,10 @@ inline void configure_mining() {
 }
 
 AlgoConfig pearl_gpu_config(ExecutionOptions options = {});
+ExecutionOptions pearl_device_options(int device);
+int pearl_selected_device();
+AlgoConfig pearl_mining_config(int device);
+void pearl_qualify_mining_device(int device);
 void pearl_configure_tuning(AlgoConfig& config, ExecutionOptions options);
 void pearl_start_proofs();
 void pearl_stop_proofs();

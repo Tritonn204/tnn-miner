@@ -1,24 +1,27 @@
-# Experimental gfx1201 Pearl adapter
+# RDNA4 Pearl adapter
 
-This is an offline tester backend, **not a qualified mining backend**. Normal
-mining must reject it until device correctness and accepted proofs are recorded.
+Automatically selected for gfx1200 and gfx1201. Mining, benchmark and shape
+tuning require a successful process-local CPU/proof qualification on the
+selected device. Compilation alone is not hardware qualification.
 
 Iris owns the RDNA4 WMMA and tiled GEMM implementation. This directory owns
 Pearl's native 4x32 ticket mapping, rank-128 checkpoints, transcript storage,
 keyed BLAKE3 and winner collection. The proof configuration is unchanged.
 
-The tester's recipe index selects K-step 32/64, one/two LDS banks, and 8/16-byte
-input loads. It is deliberately not a generic production tuning-cache entry.
-Compile/CPU checks do not establish performance or GPU synchronization safety.
+Production uses recipe 0. Other K-step, LDS-bank and load-width combinations
+remain compile-time study variants, not public CLI switches or production
+tuning choices. Shape tuning uses the existing Pearl tuner: up to 32 shapes,
+batch 16, M/N on a 1024 grid through 16384 and K=2048/4096/8192.
 
-Offline CLI (gfx1201 as device 0):
+Use normal device selection and the same commands as other Pearl backends:
 
 ```powershell
-.\tnn-miner.exe --hip-test-pearl-gfx12 --pearl-test-recipe 0
-.\tnn-miner.exe --bench-pearl-gfx12 --pearl-test-recipe 0 --pearl-test-workload 0
+.\tnn-miner.exe --hip-test-pearl --no-cpu
+.\tnn-miner.exe --bench-pearl --no-cpu
+.\tnn-miner.exe --tune-pearl --no-cpu
 ```
 
-Only benchmark after correctness passes. Workloads are 0=fresh prep+fused,
-1=prepared fused, 2=prepared D-free raw. Prepared controls cannot be used in
-mining mode. All benchmark shapes verify captured proofs before measurement.
-Diagnostic D/transcript writes are absent from the timed entry points.
+Benchmarking validates captured CPU proofs at the requested shape before
+timing fresh preparation, fused jackpots and readback. Diagnostic D/transcript
+writes are absent from timed entry points. Full mining uses the normal --prl
+command and pool settings. No architecture override or AOT-loading hook exists.

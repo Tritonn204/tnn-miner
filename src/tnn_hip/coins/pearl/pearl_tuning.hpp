@@ -1,6 +1,7 @@
 #pragma once
 
 #include "pearl_mining.hpp"
+#include "pearl_arch.hpp"
 #include <tnn_hip/crypto/iris/gemm/shape_domain.hpp>
 #include <algorithm>
 #include <array>
@@ -12,12 +13,43 @@
 namespace tnn::pearl::tuning {
 
 inline constexpr int64_t version = 3;
+inline constexpr int64_t multiarch_version = 4;
 inline constexpr unsigned candidate_budget = 32;
 inline constexpr unsigned grid = 1024;
 inline constexpr native::Shape default_shape{8192, 8192, 4096,
                                              native::CandidateLayout::native_4x32};
 using Domain = tnn::hip::iris::gemm::ShapeDomain;
 inline constexpr Domain backend = tnn::hip::iris::gemm::native128_domain;
+
+inline int architecture_code(const ExecutionOptions& options) {
+    if (!rdna3_target(options.architecture) && !rdna4_target(options.architecture))
+        throw std::invalid_argument("Pearl shape tuning requires an RDNA3/RDNA4 target");
+    int code = 0;
+    for (char digit : architecture_name(options.architecture).substr(3)) code = code * 10 + digit - '0';
+    return code;
+}
+
+template<class Fits>
+native::Shape baseline(const ExecutionOptions& options, Fits fits) {
+    if (fits(default_shape)) return default_shape;
+    if (options.architecture != "gfx1100")
+        for (native::Shape shape : {native::Shape{4096, 4096, 4096}, native::Shape{2048, 2048, 2048}})
+            if (fits(shape)) return shape;
+    throw std::runtime_error("Pearl default batch cannot fit with the required memory reserve");
+}
+
+template<class Result>
+bool matches_identity(const Result& result, const ExecutionOptions& options) {
+    auto matches = [&](const char* key, int64_t value) {
+        auto it = result.tune_keys.find(key);
+        return it != result.tune_keys.end() && it->second == value;
+    };
+    const bool retained = options.architecture == "gfx1100";
+    return matches("pearl_backend", architecture_code(options)) &&
+           matches("pearl_version", retained ? version : multiarch_version) &&
+           (retained || (matches("pearl_recipe", options.recipe) &&
+                         matches("pearl_engine", options.backend == Backend::Rdna3 ? 3 : 4)));
+}
 
 inline bool supported(native::Shape s, Domain domain = backend) {
     return domain.contains(s.m, s.n, s.k) &&
