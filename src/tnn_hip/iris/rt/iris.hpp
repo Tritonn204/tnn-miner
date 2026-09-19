@@ -23,3 +23,4 @@
 #include "tile_window.hpp"
 #include "sweep_tile.hpp"
 #include "lds_view.hpp"
+#include "gemm_schedule.hpp"
