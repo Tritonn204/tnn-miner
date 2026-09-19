@@ -10,6 +10,7 @@ namespace tnn::hip::iris::gemm::rdna4 {
 
 using I2 = int __attribute__((ext_vector_type(2)));
 using I8 = int __attribute__((ext_vector_type(8)));
+using Accumulator = I8[4][4];
 using U4 = unsigned __attribute__((ext_vector_type(4)));
 
 __device__ __forceinline__ I8 mma(I2 a, I2 b, I8 c) {
