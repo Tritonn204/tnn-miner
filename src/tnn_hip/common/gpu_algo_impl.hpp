@@ -701,6 +701,9 @@ private:
                 if (device_props_.gcnArchName[0] != '\0') {
                     options.push_back(std::string("--gpu-architecture=") + device_props_.gcnArchName);
                 }
+                // Honor algorithm-specific options in the actual compile path,
+                // not merely in its configuration or cache label.
+                options.insert(options.end(), config_.compiler_opts_amd.begin(), config_.compiler_opts_amd.end());
             } else if (tnn_is_nvidia_device(device_id_)) {
                 options = {"--dopt=on", "--use_fast_math"};
 
@@ -732,6 +735,7 @@ private:
 
                 // Per-device module key (NVIDIA modules are bound to a CUDA context)
                 options.push_back("-DDEVICE_ID=" + std::to_string(device_id_));
+                options.insert(options.end(), config_.compiler_opts_nvidia.begin(), config_.compiler_opts_nvidia.end());
             }
 
             // Compile module once
