@@ -15,6 +15,7 @@
 #include <functional>
 #include <optional>
 #include "tnn_log.hpp"
+#include "rtc_header_names.hpp"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -59,17 +60,17 @@ public:
             throw std::runtime_error("include_name cannot be empty for add_header_source");
         }
 
-        // Idempotent: if already registered, do nothing.
-        for (const auto& h : headers_) {
-            if (h.name == include_name) {
-                return;
+        // Register aliases centrally, including direct DAG/JIT callers that
+        // do not use build_rtc_headers. Preserve first-registration precedence.
+        tnn::gpu::for_each_rtc_header_name(include_name, [&](std::string_view name) {
+            for (const auto& h : headers_) {
+                if (h.name == name) return;
             }
-        }
-
-        Header h;
-        h.name   = include_name;
-        h.source = header_source;
-        headers_.push_back(std::move(h));
+            Header h;
+            h.name = std::string(name);
+            h.source = header_source;
+            headers_.push_back(std::move(h));
+        });
     }
 
     // ---------------------------------------------------------------------

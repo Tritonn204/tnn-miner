@@ -330,16 +330,7 @@ AlgoConfig pearl_gpu_config(ExecutionOptions options) {
         }
         if (cdna) config.name = "pearl-cdna-mfma";
     }
-    // HIPRTC virtual includes need the same suffix aliases used by the
-    // compile-only qualification (api.hpp, hiprtc_types.hip.h, etc.).
-    const size_t header_count = config.rtc_headers.size();
-    for (size_t i = 0; i < header_count; ++i) {
-        const auto header = config.rtc_headers[i];
-        for (size_t slash = header.name.find('/'); slash != std::string_view::npos;
-             slash = header.name.find('/', slash + 1)) {
-            config.rtc_headers.push_back({header.name.substr(slash + 1), header.source});
-        }
-    }
+    // RTCCompiler registers path suffixes and basenames for every algorithm.
     config.template_size = 76;
     config.hash_size = 32;
     config.nonce_size = 0;

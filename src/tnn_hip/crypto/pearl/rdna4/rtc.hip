@@ -1,4 +1,9 @@
+#if defined(__HIPCC_RTC__)
+// HIPRTC supplies device builtins; do not require an installed HIP SDK.
+#include "hiprtc_types.hip.h"
+#else
 #include <hip/hip_runtime.h>
+#endif
 #if defined(PEARL_CDNA_MFMA)
 #include "src/tnn_hip/crypto/iris/gemm/cdna/kernel.hpp"
 #include "src/tnn_hip/crypto/pearl/cdna/ownership.hpp"
