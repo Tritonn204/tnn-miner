@@ -1,6 +1,7 @@
 #pragma once
 #include "hip_algo_registry.hpp"
 #include "gpu_submit_queue.hpp"
+#include "gpu_job_mailbox.hpp"
 #include "tnn_log.hpp"
 #include "../../coins/miners.hpp"
 #include <atomic>
@@ -17,14 +18,20 @@ using SolutionBuilder = std::function<
     std::optional<GPUSubmitEntry>(const uint8_t* hash, uint64_t nonce, int gpu_id, const JobSnapshot& job_snapshot)
 >;
 
+using BatchSolutionBuilder = std::function<std::vector<GPUSubmitEntry>(
+    const BatchResult&, int gpu_id, const JobSnapshot&)>;
+
 class GPUMiner {
 public:
+    void set_completed_observer(std::function<void(uint64_t, double)> observer) {
+        completed_observer_ = std::move(observer); // Set before start().
+    }
     GPUMiner(const std::string& algo_name, int device_id = 0)
         : device_id_(device_id), running_(false) {
 
         TNN_LOG_TRACE("[TRACE] GPUMiner: Constructor for algo='%s', device=%d\n", algo_name.c_str(), device_id);
 
-        algo_ = AlgoRegistry::instance().create(algo_name);
+        algo_ = AlgoRegistry::instance().create(algo_name, device_id);
         if (!algo_) {
             throw std::runtime_error("Unknown algorithm: " + algo_name);
         }
@@ -62,6 +69,22 @@ public:
                 fflush(stdout);
             }
             logged_template = true;
+        }
+    }
+
+    // Publish after start(). The worker copies all fields under one lock.
+    // Do not mix this API with the legacy piecemeal setters for the same job.
+    void publish_job(JobSnapshot snapshot) {
+        if (snapshot.work_template.size() != algo_->get_config().template_size ||
+            snapshot.algo_id != algo_->get_config().algo_id) {
+            throw std::invalid_argument("Job snapshot does not match GPU algorithm");
+        }
+        const bool is_dev = snapshot.is_dev;
+        published_jobs_.publish(std::move(snapshot));
+        if (is_dev) {
+            dev_work_valid_.store(true, std::memory_order_release);
+        } else {
+            work_updated_.store(true, std::memory_order_release);
         }
     }
 
@@ -121,11 +144,12 @@ public:
     // and returns a GPUSubmitEntry to queue, or nullopt to skip.
     // Solutions are pushed to GPUSubmitQueue — the GPU thread never blocks on I/O.
     // Safe to call multiple times — stops any existing thread first.
-    void start(SolutionBuilder builder) {
+    void start(SolutionBuilder builder, BatchSolutionBuilder batch_builder = {}) {
         stop();  // no-op if not running
         TNN_LOG_TRACE("[TRACE] Miner %d starting\n", device_id_);
         running_ = true;
         solution_builder_ = std::move(builder);
+        batch_solution_builder_ = std::move(batch_builder);
         miner_thread_ = std::thread([this]() {
             TNN_LOG_TRACE("[TRACE] Miner %d thread started\n", device_id_);
             mine_loop();
@@ -134,12 +158,14 @@ public:
 
     void stop() {
         running_ = false;
+        mt_cv_.notify_all();
         if (miner_thread_.joinable()) {
             miner_thread_.join();
         }
         // Reset work flags so a subsequent start() waits for fresh work
         work_updated_.store(false, std::memory_order_relaxed);
         dev_work_valid_.store(false, std::memory_order_relaxed);
+        published_jobs_.clear();
     }
 
     double get_hashrate() const {
@@ -151,6 +177,8 @@ public:
     }
 
     int get_device_id() const { return device_id_; }
+    TuningResult get_tuning_result() const { return algo_->get_tuning_result(); }
+    bool is_running() const { return running_.load(); }
 
     void set_solution_builder(SolutionBuilder builder) {
         solution_builder_ = std::move(builder);
@@ -252,6 +280,7 @@ private:
 
         while (running_) {
             try {
+                const auto iteration_begin = std::chrono::steady_clock::now();
                 work_updated_.store(false, std::memory_order_relaxed);
 
                 bool is_dev_batch;
@@ -280,63 +309,75 @@ private:
                                     && fee_dist(rng) < dev_fee_);
                 }
 
-                // Load the appropriate template into the algo
-                const size_t tmpl_size = algo_->get_config().template_size;
-                uint8_t local_work[512];  // large enough for any template
-                {
-                    std::lock_guard<std::mutex> lock(work_mutex_);
-                    if (is_dev_batch)
-                        memcpy(local_work, dev_work_, tmpl_size);
-                    else
-                        memcpy(local_work, current_work_, tmpl_size);
+                JobSnapshot job_snapshot;
+                auto published = published_jobs_.read(is_dev_batch);
+                if (published) {
+                    job_snapshot = std::move(*published);
+                    algo_->set_work(job_snapshot.work_template.data(), job_snapshot.difficulty);
+                    algo_->set_raw_target(job_snapshot.raw_target.data());
+                    algo_->use_dev_deps(job_snapshot.is_dev);
+                } else {
+                    // Load the appropriate template into the algo
+                    const size_t tmpl_size = algo_->get_config().template_size;
+                    uint8_t local_work[512];  // large enough for any template
+                    {
+                        std::lock_guard<std::mutex> lock(work_mutex_);
+                        if (is_dev_batch)
+                            memcpy(local_work, dev_work_, tmpl_size);
+                        else
+                            memcpy(local_work, current_work_, tmpl_size);
+                    }
+
+                    uint64_t batch_diff = is_dev_batch
+                        ? dev_difficulty_.load(std::memory_order_acquire)
+                        : current_difficulty_.load(std::memory_order_acquire);
+
+                    algo_->set_work(local_work, batch_diff);
+
+                    // Select correct dep set (regular vs dev) for this batch
+                    algo_->use_dev_deps(is_dev_batch);
+
+                    // Capture the raw target used for this batch too
+                    std::array<uint8_t, 32> batch_raw_target{};
+                    bool have_batch_raw_target = false;
+
+                    if (is_dev_batch && dev_raw_target_valid_.load(std::memory_order_acquire)) {
+                        algo_->set_raw_target(dev_raw_target_);
+                        memcpy(batch_raw_target.data(), dev_raw_target_, 32);
+                        have_batch_raw_target = true;
+                    } else if (!is_dev_batch && raw_target_valid_.load(std::memory_order_acquire)) {
+                        algo_->set_raw_target(raw_target_);
+                        memcpy(batch_raw_target.data(), raw_target_, 32);
+                        have_batch_raw_target = true;
+                    }
+
+                    // Capture complete job state BEFORE mining exec
+                    const uint8_t* template_ptr = algo_->get_current_work_template();
+                    std::string id_str;
+                    {
+                        std::lock_guard<std::mutex> lock(job_str_mutex_);
+                        id_str = is_dev_batch ? dev_job_id_str_ : current_job_id_str_;
+                    }
+                    int64_t snap_job_id = is_dev_batch
+                        ? dev_job_id_.load(std::memory_order_acquire)
+                        : current_job_id_.load(std::memory_order_acquire);
+
+                    job_snapshot = JobSnapshot(
+                        template_ptr,
+                        tmpl_size,
+                        snap_job_id,
+                        batch_diff,
+                        algo_->get_config().algo_id,
+                        id_str,
+                        is_dev_batch
+                    );
+
+                    if (have_batch_raw_target) {
+                        job_snapshot.raw_target = batch_raw_target;
+                    }
                 }
-
-                uint64_t batch_diff = is_dev_batch
-                    ? dev_difficulty_.load(std::memory_order_acquire)
-                    : current_difficulty_.load(std::memory_order_acquire);
-
-                algo_->set_work(local_work, batch_diff);
-
-                // Select correct dep set (regular vs dev) for this batch
-                algo_->use_dev_deps(is_dev_batch);
-
-                // Capture the raw target used for this batch too
-                std::array<uint8_t, 32> batch_raw_target{};
-                bool have_batch_raw_target = false;
-
-                if (is_dev_batch && dev_raw_target_valid_.load(std::memory_order_acquire)) {
-                    algo_->set_raw_target(dev_raw_target_);
-                    memcpy(batch_raw_target.data(), dev_raw_target_, 32);
-                    have_batch_raw_target = true;
-                } else if (!is_dev_batch && raw_target_valid_.load(std::memory_order_acquire)) {
-                    algo_->set_raw_target(raw_target_);
-                    memcpy(batch_raw_target.data(), raw_target_, 32);
-                    have_batch_raw_target = true;
-                }
-
-                // Capture complete job state BEFORE mining exec
-                const uint8_t* template_ptr = algo_->get_current_work_template();
-                std::string id_str;
-                {
-                    std::lock_guard<std::mutex> lock(job_str_mutex_);
-                    id_str = is_dev_batch ? dev_job_id_str_ : current_job_id_str_;
-                }
-                int64_t snap_job_id = is_dev_batch
-                    ? dev_job_id_.load(std::memory_order_acquire)
-                    : current_job_id_.load(std::memory_order_acquire);
-
-                JobSnapshot job_snapshot(
-                    template_ptr,
-                    tmpl_size,
-                    snap_job_id,
-                    batch_diff,
-                    algo_->get_config().algo_id,
-                    id_str,
-                    is_dev_batch
-                );
-
-                if (have_batch_raw_target) {
-                    job_snapshot.raw_target = batch_raw_target;
+                if (algo_->get_config().prepare_batch_fn || algo_->get_config().collect_batch_fn) {
+                    algo_->set_job_snapshot(job_snapshot);
                 }
 
                 TNN_LOG_TRACE("[TRACE] GPU%d calling mine_batch: nonce=0x%016llx (dev=%llu, rand=%llu, ctr=%llu)\n",
@@ -395,12 +436,23 @@ private:
                     }
                 }
 
-                total_hashes_ += result.count;
+                if (result.evidence && batch_solution_builder_) {
+                    auto entries = batch_solution_builder_(result, device_id_, job_snapshot);
+                    for (auto& entry : entries) {
+                        has_share = true;
+                        GPUSubmitQueue::instance().push(std::move(entry));
+                    }
+                }
+
+                const uint64_t work = completed_work(result.count, result.work_multiplier);
+                add_completed_work(total_hashes_, work);
                 uint64_t counter_loc = nonce & 0xFFFFFFFFFFFFULL;
                 counter_loc += batch_size;
                 nonce = (nonce & 0xFFFF000000000000ULL) | (counter_loc & 0xFFFFFFFFFFFFULL);
 
-                HIP_counters[device_id_].fetch_add(result.count);
+                add_completed_work(HIP_counters[device_id_], work);
+                if (work && completed_observer_) completed_observer_(work,
+                    std::chrono::duration<double>(std::chrono::steady_clock::now() - iteration_begin).count());
 
             } catch (const std::exception& e) {
                 TNN_LOG_ERROR("GPU mining error on device %d: %s\n", device_id_, e.what());
@@ -425,6 +477,7 @@ private:
     std::unique_ptr<IGPUAlgorithm> algo_;
 
     std::atomic<bool> running_;
+    std::function<void(uint64_t, double)> completed_observer_;
     std::atomic<uint64_t> total_hashes_{0};
 
     // User work
@@ -433,6 +486,7 @@ private:
     std::atomic<bool> work_updated_{false};
     uint8_t current_work_[512] = {};
     mutable std::mutex work_mutex_;
+    GPUJobMailbox<JobSnapshot> published_jobs_;
 
     // Dev work
     std::atomic<uint64_t> dev_difficulty_{0};
@@ -457,6 +511,7 @@ private:
 
     std::thread miner_thread_;
     SolutionBuilder solution_builder_;
+    BatchSolutionBuilder batch_solution_builder_;
 
     // Main-thread work signaling
     mutable std::mutex mt_mutex_;

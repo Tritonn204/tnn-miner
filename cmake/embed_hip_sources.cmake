@@ -91,18 +91,13 @@ function(embed_hip_sources)
         set(EMBEDDED_CONTENT "${EMBEDDED_CONTENT}\n)EMBEDSRC\";\n\n")
 
         # Store the path for runtime reference
-        # For header files (.inc, .h, .hip.h), use just the basename so #include "file" works in RTC
-        # For .hip source files, use the full path
-        string(REGEX MATCH "\\.(inc|h|hip\\.h)$" IS_HEADER_FILE "${REL_PATH}")
-
-        if(IS_HEADER_FILE)
-            get_filename_component(FILE_BASENAME "${REL_PATH}" NAME)
-            set(EMBEDDED_CONTENT "${EMBEDDED_CONTENT}constexpr std::string_view ${VAR_NAME}_PATH = \"${FILE_BASENAME}\";\n\n")
-            message(STATUS "  -> Using basename for HIPRTC header: ${FILE_BASENAME}")
-        else()
-            set(EMBEDDED_CONTENT "${EMBEDDED_CONTENT}constexpr std::string_view ${VAR_NAME}_PATH = \"${REL_PATH}\";\n\n")
-            message(STATUS "  -> Using full path for source: ${REL_PATH}")
-        endif()
+        # For all files (both headers and .hip sources), store the relative path.
+        # Headers used to store only the basename, but that broke path-based includes
+        # like #include "internal/accessors.hpp". The C++ registration code generates
+        # both the full path and all parent-path-prefix aliases, so consumers can
+        # include by basename or any relative path.
+        set(EMBEDDED_CONTENT "${EMBEDDED_CONTENT}constexpr std::string_view ${VAR_NAME}_PATH = \"${REL_PATH}\";\n\n")
+        message(STATUS "  -> Using path for source: ${REL_PATH}")
 
         message(STATUS "Embedding HIP source: ${REL_PATH} -> ${VAR_NAME}")
     endforeach()

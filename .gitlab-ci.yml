@@ -7,7 +7,8 @@ stages:
 variables:
   RUNNER_SCRIPT_TIMEOUT: 40m
   DOCKER_TLS_CERTDIR: "/certs"
-  TNN_BUILD_MAC: true
+  # No macOS runner currently available. Mac builds are opt-in, even on tags.
+  TNN_BUILD_MAC: "false"
   TNN_BUILD_WIN: true
   PACKAGE_VERSION: "0.0.1"
   CMAKE_ARGS: "-DWITH_HIP=OFF"
@@ -341,7 +342,7 @@ build-macos-aarch64:
     - .macos_saas_runners
   stage: build
   rules:
-    - if: $CI_COMMIT_TAG || $TNN_BUILD_MAC == "true" 
+    - if: $TNN_BUILD_MAC == "true"
   variables:
     TARGZ_FILE: "${MACOS_ARM64_TGZ}"
   script:
@@ -407,7 +408,7 @@ test-macos-aarch64:
     - .macos_saas_runners
   stage: test
   rules:
-    - if: $CI_COMMIT_TAG || $TNN_BUILD_MAC == "true"
+    - if: $TNN_BUILD_MAC == "true"
   needs:
     - job: build-macos-aarch64
       artifacts: true
@@ -514,8 +515,10 @@ release_job:
       artifacts: true
     - job: build-linux-aarch64
       artifacts: true
+    # Wait for Mac artifacts only when the opt-in Mac job exists.
     - job: build-macos-aarch64
       artifacts: true
+      optional: true
     - job: build-hiveos-mmpos
       artifacts: true
     - job: build-windows
@@ -571,9 +574,10 @@ release_job:
         - name: "${WIN_AMD64_ZIP}"
           url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${WIN_BUILD_JOB_ID}/artifacts/raw/${WIN_AMD64_ZIP}"
           filepath: "/${WIN_AMD64_ZIP}"
-        - name: "${MACOS_ARM64_TGZ}"
-          url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${MACOS_BUILD_JOB_ID}/artifacts/raw/${MACOS_ARM64_TGZ}"
-          filepath: "/${MACOS_ARM64_TGZ}"
+        # Restore this link when TNN_BUILD_MAC is enabled for releases again.
+        # - name: "${MACOS_ARM64_TGZ}"
+        #   url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${MACOS_BUILD_JOB_ID}/artifacts/raw/${MACOS_ARM64_TGZ}"
+        #   filepath: "/${MACOS_ARM64_TGZ}"
         # - name: "${LINUX_HIP_AMD_TGZ}"
         #   url: "https://gitlab.com/${CI_PROJECT_PATH}/-/jobs/${LINUX_HIP_AMD_BUILD_JOB_ID}/artifacts/raw/${LINUX_HIP_AMD_TGZ}"
         #   filepath: "/${LINUX_HIP_AMD_TGZ}"

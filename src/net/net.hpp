@@ -547,6 +547,22 @@ inline void do_session_v2(
         break;
 #endif
 
+#ifdef TNN_PEARL
+    case ALGO_PEARL_POUW:
+        switch (miningProf->protocol)
+        {
+        case PROTO_PEARL_SOLO:
+            tnn::pearl::pearl_session(miningProf->host, miningProf->port, miningProf->wallet,
+                          miningProf->workerName, ioc, yield, miningProf->isDev);
+            break;
+        case PROTO_PEARL_STRATUM:
+            tnn::pearl::pearl_stratum_session(miningProf->host, miningProf->port, miningProf->wallet,
+                          miningProf->workerName, ioc, ctx, yield, miningProf->isDev, use_ssl);
+            break;
+        }
+        break;
+#endif
+
 #ifdef TNN_RINHASH
     case ALGO_RINHASH:
         switch (miningProf->protocol)
@@ -557,6 +573,23 @@ inline void do_session_v2(
                                     miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
             } else {
                 btc_stratum_session_nossl(miningProf->host, miningProf->port, miningProf->wallet, 
+                                          miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
+            }
+            break;
+        }
+        break;
+#endif
+
+#ifdef TNN_QHASH
+    case ALGO_QHASH:
+        switch (miningProf->protocol)
+        {
+        case PROTO_BTC_STRATUM:
+            if (use_ssl) {
+                btc_stratum_session(miningProf->host, miningProf->port, miningProf->wallet,
+                                    miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
+            } else {
+                btc_stratum_session_nossl(miningProf->host, miningProf->port, miningProf->wallet,
                                           miningProf->workerName, ioc, ctx, yield, miningProf->isDev);
             }
             break;

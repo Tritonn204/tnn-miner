@@ -15,13 +15,15 @@
 #include <crypto/xelis-hash/xelis-hash.hpp>
 #include <thread>
 
+static std::atomic<uint64_t> xelis_checked{0}, xelis_mismatched{0};
+
 // ============================================================================
 // Xelis solution builder — called from GPU thread, must be non-blocking.
 // Does CPU verification + payload construction, returns entry for queue.
 // ============================================================================
 static std::optional<GPUSubmitEntry> xelis_build_solution(
     const uint8_t *hash, uint64_t nonce, int gpu_id,
-    const JobSnapshot& job_snapshot, bool devMine)
+    const JobSnapshot& job_snapshot, bool devMine, const std::string& launch_description)
 {
     // Build the complete work template with the winning nonce
     byte finalWork[XELIS_TEMPLATE_SIZE];
@@ -44,28 +46,29 @@ static std::optional<GPUSubmitEntry> xelis_build_solution(
 
       byte cpu_hash[32];
       xelis_blake3_v3((uint8_t*)cpu_scratch, cpu_hash);
+      const auto checked_count = ++xelis_checked;
 
       if (memcmp(cpu_hash, hash, 32) != 0) {
-        printf("\033[31m[ERROR] GPU/CPU hash mismatch! Same input, different output.\033[0m\n");
+        const auto mismatch_count = ++xelis_mismatched;
+        oroDeviceProp_t props{};
+        (void)oroGetDeviceProperties(&props, tnn_get_device(gpu_id));
+        TNN_LOG_ERROR("\nXelis verification: GPU #%d arch=%s checked=%llu mismatched=%llu dev=%d job=%s\n"
+                      "  Launch: %s\n  Full input (%zu bytes): %s\n",
+                      gpu_id, props.gcnArchName, (unsigned long long)checked_count,
+                      (unsigned long long)mismatch_count, int(devMine), job_snapshot.job_id_str.c_str(),
+                      launch_description.c_str(), sizeof(finalWork), hexStr(finalWork, sizeof(finalWork)).c_str());
         uint64_t device_id_extracted = (nonce >> 59) & 0x1F;
         uint64_t random_extracted = (nonce >> 48) & 0x7FF;
         uint64_t counter_extracted = nonce & 0xFFFFFFFFFFFFULL;
-        printf("  GPU %d, Nonce: 0x%016llx (device=%llu, random=%llu, counter=%llu)\n",
+        TNN_LOG_ERROR("GPU/CPU hash mismatch! Same input, different output.\n"
+               "  GPU %d, Nonce: 0x%016llx (device=%llu, random=%llu, counter=%llu)\n"
+               "  GPU hash: %s\n  CPU hash: %s\n"
+               "  NOT SUBMITTING - hash computation error!\n",
                gpu_id, (unsigned long long)nonce,
                (unsigned long long)device_id_extracted,
                (unsigned long long)random_extracted,
-               (unsigned long long)counter_extracted);
-        printf("  Work template (first 48 bytes):\n    ");
-        for (int i = 0; i < 48; i++) {
-          printf("%02x", finalWork[i]);
-          if ((i+1) % 32 == 0) printf("\n    ");
-        }
-        printf("\n  Nonce at bytes 40-47: ");
-        for (int i = 40; i < 48; i++) printf("%02x", finalWork[i]);
-        printf("\n  GPU hash: %s\n", hexStr(hash, 32).c_str());
-        printf("  CPU hash: %s\n", hexStr(cpu_hash, 32).c_str());
-        printf("  \033[31mNOT SUBMITTING - hash computation error!\033[0m\n");
-        fflush(stdout);
+               (unsigned long long)counter_extracted,
+               hexStr(hash, 32).c_str(), hexStr(cpu_hash, 32).c_str());
         return std::nullopt;
       }
     }
@@ -227,9 +230,8 @@ waitForJob:
         return job_id >= (current - 2) && job_id <= current;
       }
   );
-  while (!isConnected)
+  while (!isConnected && !ABORT_MINER)
   {
-    CHECK_CLOSE;
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
@@ -301,7 +303,9 @@ waitForJob:
           for (auto &miner : miners)
           {
             miner->set_dev_fee(devFee);
-            miner->start([&](const uint8_t *hash, uint64_t nonce, int gpu_id, const JobSnapshot& job_snapshot)
+            const auto launch_description = miner->get_tuning_result().describe();
+            TNN_LOG_INFO("GPU #%d Xelis launch: %s\n", miner->get_device_id(), launch_description.c_str());
+            miner->start([&, launch_description](const uint8_t *hash, uint64_t nonce, int gpu_id, const JobSnapshot& job_snapshot)
                 -> std::optional<GPUSubmitEntry>
             {
                 printf("\n");
@@ -315,7 +319,7 @@ waitForJob:
                 fflush(stdout);
                 setcolor(BRIGHT_WHITE);
 
-                return xelis_build_solution(hash, nonce, gpu_id, job_snapshot, job_snapshot.is_dev);
+                return xelis_build_solution(hash, nonce, gpu_id, job_snapshot, job_snapshot.is_dev, launch_description);
             });
           }
 
@@ -400,8 +404,12 @@ waitForJob:
     miner->stop();
   }
   GPUSubmitQueue::instance().stop();
+  TNN_LOG_INFO("\nXelis verification: checked=%llu matched=%llu mismatched=%llu (candidate counts)\n",
+               (unsigned long long)xelis_checked.load(),
+               (unsigned long long)(xelis_checked.load() - xelis_mismatched.load()),
+               (unsigned long long)xelis_mismatched.load());
 
-  if (!isConnected)
+  if (!isConnected && !ABORT_MINER)
   {
     miners_started = false;
     localOurHeight = 0;
