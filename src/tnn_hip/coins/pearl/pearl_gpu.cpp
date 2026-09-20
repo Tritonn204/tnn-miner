@@ -2,6 +2,7 @@
 #include "pearl_share_audit.hpp"
 #include "pearl_validation.hpp"
 #include "pearl_arch.hpp"
+#include "pearl_logging.hpp"
 #include "test_pearl_hip.h"
 #include <tnn_hip/common/gpu_algo.hpp>
 #include <tnn_hip/common/gpu_submit_queue.hpp>
@@ -790,6 +791,7 @@ std::vector<GPUSubmitEntry> pearl_build_batch(const BatchResult &batch, int devi
                                                       owned->b_tree, key));
                 const auto &winner = owned->winners[index];
                 for (auto &entry : build_one(owned, device, job, winner)) {
+                    log_found(job.is_dev, device, owned->identity.attempt_id, winner.row, winner.col);
                     if (!proofs.submit(std::move(entry)))
                         return;
                     --pending->remaining;

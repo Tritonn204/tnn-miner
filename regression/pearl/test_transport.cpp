@@ -25,12 +25,15 @@ int main(int argc, char** argv) {
     if (std::string(argv[1]) == "--logging") {
         using namespace tnn::pearl;
         std::printf("STATUS >> ");
+        log_found(false, 3, 42, 16, 32);
         log_share(false, 3, true, "");
         log_share(false, 3, false, "bad target");
+        log_found(true, 3, 43, 48, 64);
         log_share(true, 3, true, "");
         log_share(true, 3, false, "stale");
         tnn_set_log_level(TnnLogLevel::Off);
         std::printf("QUIET");
+        log_found(false, 3, 44, 0, 0);
         log_share(false, 3, true, "");
         std::printf("END");
         log_stratum_error("test error");

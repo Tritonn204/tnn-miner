@@ -32,11 +32,13 @@ def main():
     logging = subprocess.run([str(executable), "--logging"], capture_output=True, text=True, timeout=5)
     logging.check_returncode()
     clean = re.sub(r"\x1b\[[0-9;]*m", "", logging.stdout)
-    assert clean == ("STATUS >> \n[PEARL-STRATUM] GPU 3 share accepted\n"
-                     "\n[PEARL-STRATUM] GPU 3 share rejected: bad target\n"
-                     "\nDEV | [PEARL-STRATUM] GPU 3 share accepted\n"
-                     "\nDEV | [PEARL-STRATUM] GPU 3 share rejected: stale\nQUIETEND")
-    assert logging.stderr == "\n[PEARL-STRATUM] test error\n"
+    assert clean == ("STATUS >> \nGPU #3 found a solution: attempt 42, row 16, col 32\n"
+                     "\nStratum: share accepted\n"
+                     "\nStratum: share rejected: bad target\n"
+                     "\nDEV | GPU #3 found a solution: attempt 43, row 48, col 64\n"
+                     "\nDEV | Stratum: share accepted\n"
+                     "\nDEV | Stratum: share rejected: stale\nQUIETEND")
+    assert logging.stderr == "\nStratum: test error\n"
     errors = []
     packets = []
     with socket.socket() as listener:
