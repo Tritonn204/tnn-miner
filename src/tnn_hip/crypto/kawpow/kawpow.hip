@@ -71,8 +71,10 @@
 // Same as __shfl_xor_sync(..., 8, 16) on NVIDIA.
 #define PROGPOW_SHUFFLE_XOR8(val) __builtin_amdgcn_ds_swizzle((val), 0x201F)
 #else
-#define PROGPOW_BPERMUTE(src, val) __shfl_sync(0xFFFFFFFF, (val), (src), 16)
-#define PROGPOW_SHUFFLE_XOR8(val)  __shfl_xor_sync(0xFFFFFFFF, (val), 8, 16)
+// N-way tail batches can diverge between adjacent 16-lane hash groups.
+#define PROGPOW_GROUP_MASK (0xFFFFu << (threadIdx.x & 16u))
+#define PROGPOW_BPERMUTE(src, val) __shfl_sync(PROGPOW_GROUP_MASK, (val), (src), 16)
+#define PROGPOW_SHUFFLE_XOR8(val)  __shfl_xor_sync(PROGPOW_GROUP_MASK, (val), 8, 16)
 #endif
 
 #define KAWPOW_DAG_AUX 0x01
@@ -576,8 +578,8 @@ __device__ __forceinline__ void progpow_main_loop_4way(
     PROGPOW_BODY(m3, _dd1);
 }
 
-__device__ __forceinline__ void progpow_reduce(
-    const uint32_t* mix, uint32_t* digest)
+__device__ __forceinline__ void progpow_reduce_distributed(
+    const uint32_t* mix, uint32_t* digest, uint32_t lane_id)
 {
     uint32_t lane_result = FNV_OFFSET_BASIS;
     #pragma unroll
@@ -586,16 +588,16 @@ __device__ __forceinline__ void progpow_reduce(
 
     uint32_t n = PROGPOW_SHUFFLE_XOR8(lane_result);
 
-    uint32_t lid = __lane_id() & 15u;
+    uint32_t lid = lane_id & 15u;
     if (lid < 8)
         digest[lid] = fnv1a(fnv1a(FNV_OFFSET_BASIS, lane_result), n);
 }
 
-__device__ __forceinline__ void progpow_reduce_2way(
+__device__ __forceinline__ void progpow_reduce_distributed_2way(
     const uint32_t* mix0,
     const uint32_t* mix1,
     uint32_t* digest0,
-    uint32_t* digest1)
+    uint32_t* digest1, uint32_t lane_id)
 {
     uint32_t lane_result0 = FNV_OFFSET_BASIS;
     uint32_t lane_result1 = FNV_OFFSET_BASIS;
@@ -611,12 +613,25 @@ __device__ __forceinline__ void progpow_reduce_2way(
     uint32_t n0 = PROGPOW_SHUFFLE_XOR8(lane_result0);
     uint32_t n1 = PROGPOW_SHUFFLE_XOR8(lane_result1);
 
-    uint32_t lid = __lane_id() & 15u;
+    uint32_t lid = lane_id & 15u;
     if (lid < 8) {
         // lane i has local=R_i and swizzled=R_{i+8} → correct FNV order
         digest0[lid] = fnv1a(fnv1a(FNV_OFFSET_BASIS, lane_result0), n0);
         digest1[lid] = fnv1a(fnv1a(FNV_OFFSET_BASIS, lane_result1), n1);
     }
+}
+
+// Full-digest consumers must gather before branching to lane 0. All 16 lanes
+// participate; upper lanes contribute a defined placeholder, never an unread
+// element of their private digest array.
+__device__ __forceinline__ void progpow_reduce_full(
+    const uint32_t* mix, uint32_t* digest, uint32_t lane_id)
+{
+    progpow_reduce_distributed(mix, digest, lane_id);
+    const uint32_t word = lane_id < 8u ? digest[lane_id] : 0u;
+    #pragma unroll
+    for (uint32_t i = 0; i < 8; ++i)
+        digest[i] = PROGPOW_BPERMUTE((threadIdx.x & ~15u) | i, word);
 }
 
 // ===========================================================================
@@ -800,7 +815,7 @@ void kawpow_hash_kernel(
     progpow_main_loop(mix, l1_cache, d_dag, lane_id);
 
     uint32_t digest[8];
-    progpow_reduce(mix, digest);
+    progpow_reduce_full(mix, digest, lane_id);
 
     if (lane_id == 0)
         kawpow_final_keccak_lane0(
@@ -1001,7 +1016,7 @@ void kawpow_progpow_kernel(
     progpow_main_loop(mix, l1_cache, d_dag, lane_id);
 
     uint32_t digest[8];
-    progpow_reduce(mix, digest);
+    progpow_reduce_full(mix, digest, lane_id);
 
     if (lane_id == 0) {
         store_nt_u32x8(d_intermediate + base + 8, digest);
@@ -1037,7 +1052,7 @@ void kawpow_progpow_global_kernel(
     progpow_main_loop(mix, d_l1_cache, d_dag, lane_id);
 
     uint32_t digest[8];
-    progpow_reduce(mix, digest);
+    progpow_reduce_full(mix, digest, lane_id);
 
     // Write digest to intermediate buffer (lane 0 only — all lanes computed same digest)
     if (lane_id == 0) {
@@ -1117,9 +1132,9 @@ void kawpow_progpow_kernel_2way(
     {
         uint32_t digest0[8], digest1[8];
         if (have_h1) {
-            progpow_reduce_2way(m0, m1, digest0, digest1);
+            progpow_reduce_distributed_2way(m0, m1, digest0, digest1, lane_id);
         } else {
-            progpow_reduce(m0, digest0);
+            progpow_reduce_distributed(m0, digest0, lane_id);
         }
 
         store_digest_coop_16x8_u32(
@@ -1244,9 +1259,9 @@ void kawpow_progpow_kernel_2way_seed64_digest(
     {
         uint32_t digest0[8], digest1[8];
         if (have_h1)
-            progpow_reduce_2way(m0, m1, digest0, digest1);
+            progpow_reduce_distributed_2way(m0, m1, digest0, digest1, lane_id);
         else
-            progpow_reduce(m0, digest0);
+            progpow_reduce_distributed(m0, digest0, lane_id);
 
         store_digest_coop_16x8_u32(
             d_seed_digest + hash_id_0 * 8u,
@@ -1351,21 +1366,21 @@ void kawpow_progpow_kernel_4way(
     // Reduce and write all hashes
     {
         uint32_t digest0[8];
-        progpow_reduce(m0, digest0);
+        progpow_reduce_distributed(m0, digest0, lane_id);
 
         uint32_t digest1[8];
         if (num_hashes >= 2) {
-            progpow_reduce(m1, digest1);
+            progpow_reduce_distributed(m1, digest1, lane_id);
         }
 
         uint32_t digest2[8];
         if (num_hashes >= 3) {
-            progpow_reduce(m2, digest2);
+            progpow_reduce_distributed(m2, digest2, lane_id);
         }
 
         uint32_t digest3[8];
         if (num_hashes >= 4) {
-            progpow_reduce(m3, digest3);
+            progpow_reduce_distributed(m3, digest3, lane_id);
         }
 
         store_digest_coop_16x8_u32(
