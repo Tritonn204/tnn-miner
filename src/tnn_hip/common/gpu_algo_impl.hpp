@@ -987,6 +987,17 @@ private:
             if (g_autotune_stop.load(std::memory_order_relaxed) ||
                 !config_.custom_tune_validate_fn(tuning_result_, device_props_, device_id_))
                 return false;
+            if (config_.custom_tune_source_fn &&
+                config_.custom_tune_source_fn(tuning_result_, config_)) {
+                if (algo_data_)
+                    throw std::runtime_error("Cannot specialize a kernel after allocating algorithm buffers");
+                if (!bind_context("custom tune kernel selection")) return false;
+                // RTCCompiler owns cached modules. Drop our function handles,
+                // not the shared module; compile_kernel binds the selected one.
+                kernels_.clear();
+                module_ = nullptr;
+                if (!compile_kernel()) return false;
+            }
             if (!config_.custom_tune_apply_fn(tuning_result_, device_props_, device_id_, &algo_data_))
                 return false;
             if (g_autotune_stop.load(std::memory_order_relaxed))

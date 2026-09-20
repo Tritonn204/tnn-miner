@@ -22,4 +22,13 @@ struct ShapeDomain {
 inline constexpr ShapeDomain native128_domain{128, 16384, 128, 128, 16384, 128,
                                                32, 8192, 32};
 
+// Portable/CDNA domains are explicit even where they currently intersect
+// Pearl's grid identically. Do not infer their limits from a WMMA engine.
+inline constexpr ShapeDomain simt128_domain{128, 16384, 128, 128, 16384, 128,
+                                             32, 8192, 32};
+inline constexpr ShapeDomain simt64_domain{128, 16384, 128, 64, 16384, 64,
+                                            32, 8192, 32};
+inline constexpr ShapeDomain cdna128_domain{128, 16384, 128, 128, 16384, 128,
+                                             32, 8192, 32};
+
 } // namespace tnn::hip::iris::gemm

@@ -11,6 +11,40 @@ using namespace tnn::pearl;
 
 int main() {
     struct Result { std::map<std::string, int64_t> tune_keys; };
+    for (const char* arch : {"gfx900", "gfx906", "gfx1010", "gfx1011", "gfx1012",
+                            "gfx1030", "gfx1031", "gfx1032", "gfx1033", "gfx1034",
+                            "gfx908", "gfx90a", "gfx942"}) {
+        ExecutionOptions options;
+        options.architecture = arch;
+        options.backend = cdna_target(arch) ? Backend::Cdna : Backend::PortableSimt;
+        Result result{{{"pearl_version", tuning::portable_version},
+                       {"pearl_backend", tuning::architecture_code(options)},
+                       {"pearl_engine", tuning::engine_code(options)}, {"pearl_recipe", 0}}};
+        assert(tuning::matches_identity(result, options));
+        ++result.tune_keys["pearl_engine"];
+        assert(!tuning::matches_identity(result, options));
+        const auto baseline = tuning::baseline(options, [](auto) { return true; });
+        assert(baseline.m == 2048 && baseline.n == 2048 && baseline.k == 2048);
+        assert(tuning::supported({6144, 3072, 4096, native::CandidateLayout::native_4x32}));
+        assert(tuning::supported(baseline));
+        const auto candidates = tuning::coarse(options);
+        assert(candidates.size() == 24);
+        for (unsigned k : native::qualified_depths) {
+            assert(std::any_of(candidates.begin(), candidates.end(), [k](auto s) {
+                return s.m == 16384 && s.n == 16384 && s.k == k;
+            }));
+        }
+        assert(tuning::refine({baseline}).size() > 0);
+        if (options.backend == Backend::PortableSimt) {
+            const bool rdna1 = std::string_view(arch).starts_with("gfx101");
+            assert(tuning::recipes(options).size() == (rdna1 ? 5 : 6));
+            assert(tuning::selectable_recipe(options, 116));
+            assert(!tuning::selectable_recipe(options, 117));
+            options.recipe = 116;
+            assert(pearl_tile_n(options) == 64);
+        }
+        assert(tuning::projected_batch_ms(baseline, {4096, 4096, 2048}, 10) == 40);
+    }
     for (const char* arch : {"gfx1101", "gfx1102", "gfx1200", "gfx1201"}) {
         ExecutionOptions options;
         options.architecture = arch;

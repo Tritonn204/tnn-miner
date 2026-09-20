@@ -62,7 +62,7 @@ void check_rdna4_operands(const KernelMap& kernels, const KernelLaunchContext& c
                         &k, &m,
                         &k, &m};
     const char* raw_symbol = state.backend == Backend::Rdna3 ? "pearl_iris_validation_raw" : "pearl_iris_raw";
-    checked(oroModuleLaunchKernel(kernels.at(raw_symbol), m / 128 * (n / 128), 1, 1,
+    checked(oroModuleLaunchKernel(kernels.at(raw_symbol), m / 128 * (n / state.tile_n), 1, 1,
                                   128, 1, 1, 0, context.stream, raw_args, nullptr), "RDNA4 raw check");
     checked(oroMemsetAsync(counters.data(), 0, counters.size, context.stream), "Clear diagnostic counters");
     auto* diag = diagnostics.data();
@@ -72,7 +72,7 @@ void check_rdna4_operands(const KernelMap& kernels, const KernelLaunchContext& c
     void* args[] = {&a, &b, &d, &m, &n,
                     &k, &m, &k,
                     &m, &key, &target, &win, &count, &capacity, &diag};
-    checked(oroModuleLaunchKernel(kernels.at("pearl_iris_diagnostic"), m / 128 * (n / 128), 1, 1,
+    checked(oroModuleLaunchKernel(kernels.at("pearl_iris_diagnostic"), m / 128 * (n / state.tile_n), 1, 1,
                                   128, 1, 1, 0, context.stream, args, nullptr), "RDNA4 checkpoint check");
     checked(oroStreamSynchronize(context.stream), "Finish RDNA4 diagnostics");
 
@@ -185,7 +185,7 @@ void check_rdna4_operands(const KernelMap& kernels, const KernelLaunchContext& c
             for (const char* symbol : {"pearl_iris_diagnostic", "pearl_iris_fused"}) {
                 checked(oroMemsetAsync(count, 0, counters.size, context.stream), "Clear oracle counters");
                 checked(oroMemsetAsync(win, 0xa5, winners.size, context.stream), "Poison oracle winners");
-                checked(oroModuleLaunchKernel(kernels.at(symbol), m / 128 * (n / 128), 1, 1,
+                checked(oroModuleLaunchKernel(kernels.at(symbol), m / 128 * (n / state.tile_n), 1, 1,
                                              128, 1, 1, 0, context.stream, lean_args, nullptr), "Winner coverage check");
                 checked(oroStreamSynchronize(context.stream), "Finish winner coverage check");
                 verify(bound, limit);

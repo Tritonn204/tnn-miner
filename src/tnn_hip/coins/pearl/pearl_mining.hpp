@@ -25,6 +25,10 @@ struct ExecutionOptions {
     std::string architecture = "gfx1100";
 };
 
+inline unsigned pearl_tile_n(const ExecutionOptions& options) {
+    return options.backend == Backend::PortableSimt && (options.recipe & 64) ? 64 : 128;
+}
+
 inline bool mining_enabled = false;
 inline unsigned cert_version_fallback = 0;
 inline std::atomic<bool> worker_failed{false};
@@ -37,6 +41,7 @@ ExecutionOptions pearl_device_options(int device);
 int pearl_selected_device();
 AlgoConfig pearl_mining_config(int device);
 void pearl_qualify_mining_device(int device);
+void pearl_qualify_recipe(int device, const ExecutionOptions& options);
 void pearl_configure_tuning(AlgoConfig& config, ExecutionOptions options);
 void pearl_start_proofs();
 void pearl_stop_proofs();

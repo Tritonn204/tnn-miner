@@ -247,13 +247,14 @@ struct State {
     explicit State(const ExecutionOptions &options)
         : shape(options.shape), capacity(options.winner_capacity),
           validation(options.mode == ExecutionMode::Validation), batch_size(options.batch_size),
-          backend(options.backend) {
+          backend(options.backend), tile_n(pearl_tile_n(options)) {
     }
     const native::Shape shape;
     const uint32_t capacity;
     const bool validation;
     const unsigned batch_size;
     const Backend backend;
+    const unsigned tile_n;
     int device = 0;
     uint64_t launches = 0;
     uint64_t completed = 0;
@@ -290,7 +291,8 @@ AlgoConfig pearl_gpu_config(ExecutionOptions options) {
     const bool rdna4 = options.backend == Backend::Rdna4;
     const bool portable = options.backend == Backend::PortableSimt;
     const bool cdna = options.backend == Backend::Cdna;
-    if (portable ? (options.recipe != 0 && options.recipe != 2) : options.recipe != 0)
+    if (portable ? (options.recipe >= 128 || (options.recipe & 1) ||
+                    ((options.recipe & 24) == 24)) : options.recipe != 0)
         throw std::invalid_argument("Invalid Pearl backend recipe");
     options.shape.layout = native::CandidateLayout::native_4x32;
     options.shape.validate();
@@ -345,7 +347,7 @@ AlgoConfig pearl_gpu_config(ExecutionOptions options) {
     config.skip_cached_tune_validation = true;
     TuningResult fixed{};
     fixed.block_size = 128;
-    fixed.num_blocks = (options.shape.m / 128) * (options.shape.n / 128);
+    fixed.num_blocks = (options.shape.m / 128) * (options.shape.n / pearl_tile_n(options));
     fixed.batch_size = options.batch_size;
     fixed.valid = true;
     config.fixed_launch = fixed;
@@ -448,7 +450,7 @@ AlgoConfig pearl_gpu_config(ExecutionOptions options) {
             checked(oroEventSynchronize(state.readback_done), "Complete Pearl readback");
         };
     }
-    if (options.mode == ExecutionMode::Mining && !portable && !cdna)
+    if (options.mode == ExecutionMode::Mining)
         pearl_configure_tuning(config, options);
     return config;
 }
@@ -494,12 +496,17 @@ AlgoConfig pearl_mining_config(int device) {
 void pearl_qualify_mining_device(int device) {
     const auto options = pearl_device_options(device);
     if (options.architecture == "gfx1100") return;
+    pearl_qualify_recipe(device, options);
+}
+
+void pearl_qualify_recipe(int device, const ExecutionOptions& options) {
     {
         std::scoped_lock lock(qualification_mutex);
         if (qualified_devices.contains({device, options.architecture, options.backend, options.recipe})) return;
     }
-    TNN_LOG_INFO("\n[PEARL] Qualifying %s with the offline CPU/proof oracle\n", options.architecture.c_str());
-    if (test_pearl_device(device) != 0)
+    TNN_LOG_INFO("\n[PEARL] Qualifying %s recipe %u with the offline CPU/proof oracle\n",
+                 options.architecture.c_str(), options.recipe);
+    if (test_pearl_device(device, options) != 0)
         throw std::runtime_error("Pearl device qualification failed; no mining enabled");
     std::scoped_lock lock(qualification_mutex);
     qualified_devices.emplace(device, options.architecture, options.backend, options.recipe);

@@ -447,9 +447,14 @@ struct AlgoConfig {
                                                     const oroDeviceProp_t&, int)>;
     using CustomTuneApplyFn = std::function<bool(const TuningResult&,
                                                  const oroDeviceProp_t&, int, void**)>;
+    // Optional kernel specialization after selection, before buffers exist.
+    // Return true after updating source/compiler settings to request a reload.
+    // Keep the algorithm/cache name and lifecycle callbacks stable.
+    using CustomTuneSourceFn = std::function<bool(const TuningResult&, AlgoConfig&)>;
     CustomTuneFn custom_tune_fn = nullptr;
     CustomTuneValidateFn custom_tune_validate_fn = nullptr;
     CustomTuneApplyFn custom_tune_apply_fn = nullptr;
+    CustomTuneSourceFn custom_tune_source_fn = nullptr;
 
     // Source transformation — called before RTC compile to modify kernel source.
     // Used by KawPow to inject the random program + coin padding.

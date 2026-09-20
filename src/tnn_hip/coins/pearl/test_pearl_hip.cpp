@@ -80,6 +80,31 @@ void test_tune_cache_contract(int device) {
     rejected([](auto& result) { result.tune_keys.erase("m"); });
     rejected([](auto& result) { result.num_blocks = 1; });
     rejected([](auto& result) { result.hashrate = -1; });
+
+    // Selecting a recipe must specialize the worker source, not only change
+    // buffer dimensions. Keep the cache name stable across that handoff.
+    ExecutionOptions simt;
+    simt.backend = Backend::PortableSimt;
+    simt.batch_size = 2;
+    simt.recipe = 2;
+    auto worker = pearl_gpu_config(simt);
+    const auto cache_name = worker.name;
+    auto narrow = valid;
+    narrow.batch_size = 2;
+    narrow.num_blocks *= 2;
+    narrow.tune_keys["pearl_version"] = tuning::portable_version;
+    narrow.tune_keys["pearl_engine"] = tuning::engine_code(simt);
+    narrow.tune_keys["pearl_recipe"] = 118;
+    require(worker.custom_tune_validate_fn(narrow, properties, device), "Narrow SIMT tune rejected");
+    require(worker.custom_tune_source_fn(narrow, worker), "Selected recipe did not request reload");
+    require(worker.source_transform_fn("", device).find("#define PEARL_GFX12_RECIPE 118\n") != std::string::npos,
+            "Selected recipe missing from worker source");
+    require(worker.name == cache_name, "Recipe selection changed the tuning cache namespace");
+    require(!worker.custom_tune_source_fn(narrow, worker), "Unchanged recipe requested reload");
+    narrow.tune_keys["pearl_recipe"] = 2;
+    require(worker.custom_tune_source_fn(narrow, worker), "Baseline recipe was not restored");
+    require(worker.source_transform_fn("", device).find("#define PEARL_GFX12_RECIPE 2\n") != std::string::npos,
+            "Baseline source was not restored");
     TNN_LOG_INFO("[PEARL-HIP-TEST] Cached tune validation passed\n");
 }
 
@@ -94,8 +119,12 @@ int test_pearl_hip() {
 }
 
 int test_pearl_device(int device) {
+    return test_pearl_device(device, pearl_device_options(device));
+}
+
+int test_pearl_device(int device, const ExecutionOptions& selected) {
     try {
-        const auto selected = pearl_device_options(device);
+        require(!g_autotune_stop.load(std::memory_order_relaxed), "Pearl qualification cancelled");
         const auto backend = selected.backend;
         const auto recipe = selected.recipe;
         TNN_LOG_INFO("\n[PEARL-HIP-TEST] Production preparation, jackpots and proofs (offline)\n");
@@ -118,9 +147,10 @@ int test_pearl_device(int device) {
         options.architecture = selected.architecture;
         GPUAlgorithm algorithm(pearl_gpu_config(options));
         require(algorithm.initialize(device), "Pearl validation initialization failed");
-        if (selected.architecture == "gfx1100") test_tune_cache_contract(device);
+        if (selected.architecture == "gfx1100" && backend == Backend::Rdna3) test_tune_cache_contract(device);
         auto job = offline_job(options.shape, true);
         for (unsigned attempt = 0; attempt < 4; ++attempt) {
+            require(!g_autotune_stop.load(std::memory_order_relaxed), "Pearl qualification cancelled");
             // Exercise independent attempts, a target update and the dev cache.
             if (attempt == 2) {
                 job.raw_target[29] /= 2;
@@ -149,6 +179,7 @@ int test_pearl_device(int device) {
         // certificate versions must agree with the independent CPU reference.
         for (unsigned depth : {4096u, 8192u}) {
           for (unsigned version : {2u, 3u}) {
+            require(!g_autotune_stop.load(std::memory_order_relaxed), "Pearl qualification cancelled");
             ExecutionOptions rectangular{ExecutionMode::Validation, {384, 256, depth}, 768, 1};
             rectangular.backend = options.backend;
             rectangular.recipe = recipe;
@@ -209,8 +240,7 @@ int tune_pearl_hip() {
     try {
         const int device = pearl_selected_device();
         const auto options = pearl_device_options(device);
-        require(rdna3_target(options.architecture) || rdna4_target(options.architecture),
-                "Pearl shape tuning currently supports RDNA3/RDNA4");
+        (void)tuning::architecture_code(options);
         pearl_qualify_mining_device(device);
         GPUAlgorithm algorithm(pearl_mining_config(device));
         require(algorithm.initialize(device), "Pearl tuning initialization failed");

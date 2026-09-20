@@ -121,7 +121,7 @@ bool execute(const KernelMap &kernels, const KernelLaunchContext &context) {
         auto result = state.result.data() + slot * sizeof(DeviceState);
         void *args[] = {&a, &b,   &d,      &m,       &n,      &k,        &m,         &k,
                         &m, &key, &target, &winners, &result, &capacity, &diagnostic};
-        checked(oroModuleLaunchKernel(kernels.at("pearl_iris_fused"), (m / 128) * (n / 128), 1, 1,
+        checked(oroModuleLaunchKernel(kernels.at("pearl_iris_fused"), (m / 128) * (n / state.tile_n), 1, 1,
                                       128, 1, 1, 0, context.stream, args, nullptr),
                 "Launch Pearl Iris batch member");
         ++state.launches;

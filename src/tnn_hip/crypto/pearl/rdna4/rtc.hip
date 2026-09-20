@@ -18,7 +18,11 @@
 #ifndef PEARL_GFX12_RECIPE
 #define PEARL_GFX12_RECIPE 0
 #endif
+#ifdef PEARL_PORTABLE_SIMT
+static_assert(PEARL_GFX12_RECIPE >= 0 && PEARL_GFX12_RECIPE < 128);
+#else
 static_assert(PEARL_GFX12_RECIPE >= 0 && PEARL_GFX12_RECIPE < 8);
+#endif
 
 #if defined(__HIP_DEVICE_COMPILE__) && defined(PEARL_PORTABLE_SIMT) && (PEARL_GFX12_RECIPE & 1)
 static_assert(__AMDGCN_WAVEFRONT_SIZE == 64, "Requested wave64 validation compiled with a different wave size");
@@ -33,7 +37,13 @@ namespace gemm = tnn::hip::iris::gemm::simt;
 namespace gemm = tnn::hip::iris::gemm::rdna4;
 #endif
 #ifdef PEARL_PORTABLE_SIMT
-using R = gemm::Recipe<32, 1, 8, (PEARL_GFX12_RECIPE & 2) != 0>;
+// Bits 0/1 preserve the existing wave64/dot validation recipes. Higher
+// bits describe staging independently; recipe 0/2 retains byte staging.
+using R = gemm::Recipe<(PEARL_GFX12_RECIPE & 4) ? 64 : 32,
+                       (PEARL_GFX12_RECIPE & 32) ? 2 : 1,
+                       (PEARL_GFX12_RECIPE & 16) ? 16 : (PEARL_GFX12_RECIPE & 8) ? 8 : 1,
+                       (PEARL_GFX12_RECIPE & 2) != 0,
+                       (PEARL_GFX12_RECIPE & 64) ? 64 : 128>;
 #else
 using R = gemm::Recipe<(PEARL_GFX12_RECIPE & 4) ? 64 : 32,
                        (PEARL_GFX12_RECIPE & 2) ? 2 : 1,
@@ -42,6 +52,12 @@ using R = gemm::Recipe<(PEARL_GFX12_RECIPE & 4) ? 64 : 32,
 
 struct Winner { unsigned row, col, digest[8]; };
 
+#if defined(PEARL_PORTABLE_SIMT) && (PEARL_GFX12_RECIPE & 64)
+using SelectedTicket = NarrowTicket;
+#else
+using SelectedTicket = Ticket;
+#endif
+
 template<bool Diagnostic> struct Pearl {
     unsigned* transcript;
     unsigned n;
@@ -49,7 +65,8 @@ template<bool Diagnostic> struct Pearl {
     Winner* winners;
     unsigned *state, capacity, *diagnostic;
 
-    __device__ void checkpoint(gemm::Accumulator& acc, unsigned end, unsigned lane, unsigned) {
+    template<class Acc>
+    __device__ void checkpoint(Acc& acc, unsigned end, unsigned lane, unsigned) {
         if (end % 128) return;
         unsigned reduction = 0;
 #ifdef PEARL_CDNA_MFMA
@@ -75,7 +92,7 @@ template<bool Diagnostic> struct Pearl {
             }
 #else
 #pragma unroll
-        for (unsigned e = 0; e < 8; ++e) {
+        for (unsigned e = 0; e < sizeof(acc[0][0]) / sizeof(int); ++e) {
             unsigned value = 0;
 #pragma unroll
             for (unsigned i = 0; i < 4; ++i)
@@ -87,8 +104,8 @@ template<bool Diagnostic> struct Pearl {
             value ^= __shfl_xor(value, 1, 32);
             value ^= __shfl_xor(value, 2, 32);
             value ^= __shfl_xor(value, 8, 32);
-            value = __shfl(value, Ticket::source_lane(lane), 32);
-            if (e == Ticket::source_element(lane)) reduction = value;
+            value = __shfl(value, SelectedTicket::source_lane(lane), 32);
+            if (e == SelectedTicket::source_element(lane)) reduction = value;
         }
 #endif
         const unsigned slot = ((end / 128 - 1) % 16) * 128 + threadIdx.x;
@@ -96,8 +113,12 @@ template<bool Diagnostic> struct Pearl {
         transcript[slot] = ((previous << 13) | (previous >> 19)) ^ reduction;
     }
 
-    __device__ void finish(gemm::Accumulator&, unsigned bm, unsigned bn,
+    template<class Acc>
+    __device__ void finish(Acc&, unsigned bm, unsigned bn,
                            unsigned lane, unsigned wave) {
+#if defined(PEARL_PORTABLE_SIMT) && (PEARL_GFX12_RECIPE & 64)
+        if (!NarrowTicket::active(lane)) return;
+#endif
 #ifdef PEARL_CDNA_MFMA
         // The wire/proof ticket ordering is independent of hardware wave size.
         lane = threadIdx.x % 32;
@@ -110,11 +131,14 @@ template<bool Diagnostic> struct Pearl {
         for (unsigned i = 0; i < 8; ++i) digest[i] = key[i];
         blake3_compress_in_place(digest, reinterpret_cast<const uint8_t*>(words), 64, 0,
                                  CHUNK_START | CHUNK_END | ROOT | (1 << 4));
-        const unsigned row = bm + Ticket::row(wave, lane);
-        const unsigned col = bn + Ticket::col(wave, lane);
+        const unsigned row = bm + SelectedTicket::row(wave, lane);
+        const unsigned col = bn + SelectedTicket::col(wave, lane);
         if constexpr (Diagnostic) {
             // Tile-major diagnostic ABI, explicitly separate from proof coordinates.
-            const unsigned position = blockIdx.x * 128 + threadIdx.x;
+            // Canonical 128-square diagnostic order, even for narrow tiles.
+            const unsigned position = (row / 128 * (n / 128) + col / 128) * 128 +
+                                      (row % 128) / 16 * 32 + (col % 128) / 64 * 64 +
+                                      (col % 64) / 4 * 16 + row % 16;
 #pragma unroll
             for (unsigned i = 0; i < 16; ++i) diagnostic[position * 24 + i] = words[i];
 #pragma unroll
@@ -154,18 +178,42 @@ __device__ void fused(const signed char* a, const signed char* b, unsigned m, un
 struct Raw {
     int* d;
     unsigned m;
-    __device__ void checkpoint(gemm::Accumulator&, unsigned, unsigned, unsigned) {}
-    __device__ void finish(gemm::Accumulator& acc, unsigned bm, unsigned bn,
+    template<class Acc>
+    __device__ void checkpoint(Acc&, unsigned, unsigned, unsigned) {}
+    template<class Acc>
+    __device__ void finish(Acc& acc, unsigned bm, unsigned bn,
                            unsigned lane, unsigned wave) {
-        if (!d) return; // Timed D-free control; volatile WMMA keeps compute live.
+        if (!d) {
+#ifdef PEARL_PORTABLE_SIMT
+            // Integer arithmetic has no side effects. Unlike volatile WMMA,
+            // a null-D SIMT run needs an explicit observable compiler sink.
+            unsigned checksum = 0;
+#pragma unroll
+            for (unsigned i = 0; i < 4; ++i)
+#pragma unroll
+                for (unsigned j = 0; j < 4; ++j)
+#pragma unroll
+                    for (unsigned e = 0; e < sizeof(acc[0][0]) / sizeof(int); ++e)
+                        checksum ^= unsigned(acc[i][j][e]);
+            asm volatile("" : : "v"(checksum) : "memory");
+#endif
+            return;
+        }
 #pragma unroll
         for (unsigned i = 0; i < sizeof(acc) / sizeof(acc[0]); ++i)
 #pragma unroll
             for (unsigned j = 0; j < 4; ++j)
 #pragma unroll
                 for (unsigned e = 0; e < sizeof(acc[0][0]) / sizeof(int); ++e)
-                    d[bm + gemm::Tile128::row(wave, i, lane, e) +
-                      size_t(bn + gemm::Tile128::col(wave, j, lane)) * m] = acc[i][j][e];
+                    {
+#ifdef PEARL_PORTABLE_SIMT
+                        using Tile = gemm::Tile<R>;
+#else
+                        using Tile = gemm::Tile128;
+#endif
+                        d[bm + Tile::row(wave, i, lane, e) +
+                          size_t(bn + Tile::col(wave, j, lane)) * m] = acc[i][j][e];
+                    }
     }
 };
 } // namespace tnn::pearl::gpu::rdna4

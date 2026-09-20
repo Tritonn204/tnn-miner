@@ -8,12 +8,14 @@
 #include <bit>
 #include <cmath>
 #include <numeric>
+#include <utility>
 #include <vector>
 
 namespace tnn::pearl::tuning {
 
 inline constexpr int64_t version = 3;
 inline constexpr int64_t multiarch_version = 4;
+inline constexpr int64_t portable_version = 5;
 inline constexpr unsigned candidate_budget = 32;
 inline constexpr unsigned grid = 1024;
 inline constexpr native::Shape default_shape{8192, 8192, 4096,
@@ -21,20 +23,88 @@ inline constexpr native::Shape default_shape{8192, 8192, 4096,
 using Domain = tnn::hip::iris::gemm::ShapeDomain;
 inline constexpr Domain backend = tnn::hip::iris::gemm::native128_domain;
 
+inline Domain domain_for(const ExecutionOptions& options) {
+    using namespace tnn::hip::iris::gemm;
+    if (options.backend == Backend::Cdna) return cdna128_domain;
+    if (options.backend == Backend::PortableSimt) {
+        auto domain = pearl_tile_n(options) == 64 ? simt64_domain : simt128_domain;
+        domain.minimum_k = domain.alignment_k = (options.recipe & 4) ? 64 : 32;
+        return domain;
+    }
+    return native128_domain;
+}
+
+inline bool bringup_backend(const ExecutionOptions& options) {
+    return options.backend == Backend::PortableSimt || options.backend == Backend::Cdna;
+}
+
+inline int engine_code(const ExecutionOptions& options) {
+    switch (options.backend) {
+    case Backend::Rdna3: return 3;
+    case Backend::Rdna4: return 4;
+    case Backend::PortableSimt: return 1;
+    case Backend::Cdna: return 2;
+    }
+    throw std::invalid_argument("Unknown Pearl engine");
+}
+
+inline int64_t cache_version(const ExecutionOptions& options) {
+    return bringup_backend(options) ? portable_version :
+           options.architecture == "gfx1100" ? version : multiarch_version;
+}
+
+inline std::vector<unsigned> recipes(const ExecutionOptions& options) {
+    if (options.backend != Backend::PortableSimt) return {options.recipe};
+    const unsigned arithmetic = options.recipe & 2;
+    std::vector<unsigned> result{arithmetic, arithmetic | 8, arithmetic | 4 | 16};
+    // HIP 6.4 full-body audits find scratch in the wide, double-bank scalar
+    // recipe on RDNA1. Keep it available to studies, not automatic mining.
+    const auto arch = architecture_name(options.architecture);
+    if (arch != "gfx1010" && arch != "gfx1011" && arch != "gfx1012")
+        result.push_back(arithmetic | 4 | 16 | 32);
+    result.push_back(arithmetic | 4 | 16 | 64);
+    result.push_back(arithmetic | 4 | 16 | 32 | 64);
+    return result;
+}
+
+inline bool selectable_recipe(const ExecutionOptions& options, unsigned recipe) {
+    const auto allowed = recipes(options);
+    return std::find(allowed.begin(), allowed.end(), recipe) != allowed.end();
+}
+
 inline int architecture_code(const ExecutionOptions& options) {
-    if (!rdna3_target(options.architecture) && !rdna4_target(options.architecture))
-        throw std::invalid_argument("Pearl shape tuning requires an RDNA3/RDNA4 target");
+    const auto name = architecture_name(options.architecture);
+    if (name == "gfx90a" && options.backend == Backend::Cdna) return 0x90a;
+    if (name.size() < 4 || name.size() > 7 || name.substr(0, 3) != "gfx")
+        throw std::invalid_argument("Invalid Pearl tuning architecture");
     int code = 0;
-    for (char digit : architecture_name(options.architecture).substr(3)) code = code * 10 + digit - '0';
+    for (char digit : name.substr(3)) {
+        if (digit < '0' || digit > '9')
+            throw std::invalid_argument("Unknown Pearl tuning architecture");
+        code = code * 10 + digit - '0';
+    }
+    const bool supported = options.backend == Backend::PortableSimt ? portable_target(code) :
+        options.backend == Backend::Cdna ? cdna_target(name) :
+        options.backend == Backend::Rdna3 ? rdna3_target(name) : rdna4_target(name);
+    if (!supported) throw std::invalid_argument("Pearl tuning architecture/engine mismatch");
     return code;
 }
 
 template<class Fits>
 native::Shape baseline(const ExecutionOptions& options, Fits fits) {
+    if (bringup_backend(options)) {
+        for (native::Shape shape : {native::Shape{2048, 2048, 2048}, native::Shape{1024, 1024, 2048}}) {
+            shape.layout = native::CandidateLayout::native_4x32;
+            if (fits(shape)) return shape;
+        }
+        throw std::runtime_error("Pearl baseline cannot fit with the required memory reserve");
+    }
     if (fits(default_shape)) return default_shape;
     if (options.architecture != "gfx1100")
-        for (native::Shape shape : {native::Shape{4096, 4096, 4096}, native::Shape{2048, 2048, 2048}})
+        for (native::Shape shape : {native::Shape{4096, 4096, 4096}, native::Shape{2048, 2048, 2048}}) {
+            shape.layout = native::CandidateLayout::native_4x32;
             if (fits(shape)) return shape;
+        }
     throw std::runtime_error("Pearl default batch cannot fit with the required memory reserve");
 }
 
@@ -44,11 +114,11 @@ bool matches_identity(const Result& result, const ExecutionOptions& options) {
         auto it = result.tune_keys.find(key);
         return it != result.tune_keys.end() && it->second == value;
     };
-    const bool retained = options.architecture == "gfx1100";
+    const bool retained = options.architecture == "gfx1100" && options.backend == Backend::Rdna3;
     return matches("pearl_backend", architecture_code(options)) &&
-           matches("pearl_version", retained ? version : multiarch_version) &&
+           matches("pearl_version", cache_version(options)) &&
            (retained || (matches("pearl_recipe", options.recipe) &&
-                         matches("pearl_engine", options.backend == Backend::Rdna3 ? 3 : 4)));
+                         matches("pearl_engine", engine_code(options))));
 }
 
 inline bool supported(native::Shape s, Domain domain = backend) {
@@ -60,6 +130,15 @@ inline bool supported(native::Shape s, Domain domain = backend) {
 
 inline bool same(native::Shape a, native::Shape b) {
     return a.m == b.m && a.n == b.n && a.k == b.k && a.layout == b.layout;
+}
+
+// This is a conservative extrapolation, not a device watchdog guarantee.
+// Include operand traffic as well as arithmetic: thin shapes can be memory-bound.
+inline double projected_batch_ms(native::Shape previous, native::Shape next, double ms) {
+    const double work = double(next.macs()) / previous.macs();
+    const double bytes = (double(next.m) + next.n) * next.k /
+                         ((double(previous.m) + previous.n) * previous.k);
+    return ms * std::max(work, bytes);
 }
 
 inline void append(std::vector<native::Shape>& out, native::Shape shape, Domain domain = backend) {
@@ -99,6 +178,22 @@ inline std::vector<native::Shape> coarse(Domain domain = backend) {
             for (unsigned k : native::qualified_depths)
                 append(result, {rows[i], columns[j], k}, domain);
         }
+    return result;
+}
+
+inline std::vector<native::Shape> coarse(const ExecutionOptions& options) {
+    if (!bringup_backend(options)) return coarse();
+    std::vector<native::Shape> result;
+    // Twenty-four slots cover small, square and strongly rectangular cases at
+    // every supported K. Eight remain for local 1024-grid refinement.
+    for (auto axes : {std::pair{2048u, 2048u}, {4096u, 4096u},
+                      {2048u, 8192u}, {8192u, 2048u}, {8192u, 8192u},
+                      {4096u, 16384u}, {16384u, 4096u}, {16384u, 16384u}})
+        for (unsigned k : native::qualified_depths)
+            append(result, {axes.first, axes.second, k}, domain_for(options));
+    std::stable_sort(result.begin(), result.end(), [](auto a, auto b) {
+        return a.macs() < b.macs();
+    });
     return result;
 }
 

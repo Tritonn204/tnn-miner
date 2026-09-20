@@ -95,16 +95,16 @@ void result_for(const Measurement& winner, const ExecutionOptions& options, Tuni
     out.valid = true;
     out.block_size = 128;
     out.batch_size = options.batch_size;
-    out.num_blocks = int((winner.shape.m / 128) * (winner.shape.n / 128));
+    out.num_blocks = int((winner.shape.m / 128) * (winner.shape.n / pearl_tile_n(options)));
     out.hashrate = winner.rate;
     out.batch_time_ms = winner.batch_ms;
-    const bool retained = options.architecture == "gfx1100";
-    out.tune_keys = {{"pearl_version", retained ? tuning::version : tuning::multiarch_version},
+    const bool retained = options.architecture == "gfx1100" && options.backend == Backend::Rdna3;
+    out.tune_keys = {{"pearl_version", tuning::cache_version(options)},
                     {"pearl_backend", tuning::architecture_code(options)},
                     {"m", winner.shape.m}, {"n", winner.shape.n}, {"k", winner.shape.k}};
     if (!retained) {
         out.tune_keys["pearl_recipe"] = options.recipe;
-        out.tune_keys["pearl_engine"] = options.backend == Backend::Rdna3 ? 3 : 4;
+        out.tune_keys["pearl_engine"] = tuning::engine_code(options);
     }
 }
 
@@ -124,6 +124,41 @@ bool tune(ExecutionOptions options, int device, bool enabled, TuningResult& out)
         result_for({baseline_shape}, options, out);
         return true;
     }
+    if (options.backend == Backend::PortableSimt) {
+        TNN_LOG_INFO("[PEARL-TUNE] Screening %zu SIMT recipes, then up to %u shapes; batch=%u\n",
+                     tuning::recipes(options).size(), tuning::candidate_budget, options.batch_size);
+        // Recipe screening is separate from the 32 unique matrix shapes.
+        // Every optional kernel earns a process-local proof qualification.
+        (void)measure(baseline_shape, options, device, 2.0, true);
+        auto selected = options;
+        for (unsigned recipe : tuning::recipes(options)) {
+            if (recipe == options.recipe) continue;
+            check_cancelled();
+            auto trial = options;
+            trial.recipe = recipe;
+            try {
+                pearl_qualify_recipe(device, trial);
+            } catch (const std::exception& error) {
+                check_cancelled();
+                TNN_LOG_INFO("[PEARL-TUNE] Recipe %u unavailable: %s\n", recipe, error.what());
+                // A device error is not a recoverable candidate rejection.
+                if (oroDeviceSynchronize() != oroSuccess) throw;
+                continue;
+            }
+            const auto sample = measure(baseline_shape, trial, device, 2.0, true);
+            TNN_LOG_INFO("[PEARL-TUNE] Recipe %u: %.3f TMAC/s, %.1f ms/batch\n",
+                         recipe, sample.rate / 1e12, sample.batch_ms);
+            // Confirm against a fresh incumbent measurement, not a cold
+            // baseline from before several CPU-heavy qualification suites.
+            const auto control = measure(baseline_shape, selected, device, 2.0, false);
+            const auto repeat = measure(baseline_shape, trial, device, 2.0, false);
+            if (sample.rate > control.rate * 1.01 && repeat.rate > control.rate * 1.01) {
+                selected = trial;
+            }
+        }
+        options = selected;
+        TNN_LOG_INFO("[PEARL-TUNE] Using recipe %u for shape screening\n", options.recipe);
+    }
     TNN_LOG_INFO("[PEARL-TUNE] Up to %u shapes; fresh prep + fused jackpots + readback, batch=%u\n",
                  tuning::candidate_budget, options.batch_size);
     std::vector<Measurement> results;
@@ -137,6 +172,19 @@ bool tune(ExecutionOptions options, int device, bool enabled, TuningResult& out)
             TNN_LOG_INFO("[PEARL-TUNE] Skip %ux%ux%u: memory reserve\n", shape.m, shape.n, shape.k);
             return;
         }
+        if (tuning::bringup_backend(options) && !results.empty()) {
+            double projected = 0;
+            for (const auto& prior : results)
+                projected = std::max(projected, tuning::projected_batch_ms(
+                    prior.shape, shape, prior.batch_ms));
+            // Bound *growth* using measured fresh-prep batches. Never pretend
+            // a host timeout can preempt a submitted GPU kernel.
+            if (projected * 2 > 500) {
+                TNN_LOG_INFO("[PEARL-TUNE] Skip %ux%ux%u: conservative batch estimate %.1f ms\n",
+                             shape.m, shape.n, shape.k, projected * 2);
+                return;
+            }
+        }
         auto sample = measure(shape, options, device, 2.0, true);
         results.push_back(sample);
         TNN_LOG_INFO("[PEARL-TUNE] %zu/%u %ux%ux%u %.3f TMAC/s, %.1f ms/batch\n",
@@ -144,8 +192,11 @@ bool tune(ExecutionOptions options, int device, bool enabled, TuningResult& out)
                      sample.rate / 1e12, sample.batch_ms);
     };
     screen(baseline_shape);
-    for (auto shape : tuning::coarse())
+    const auto coarse = tuning::coarse(options);
+    for (auto shape : coarse) {
+        if (tuning::bringup_backend(options) && results.size() >= 24) break;
         screen(shape);
+    }
     auto rank = [&] {
         std::stable_sort(results.begin(), results.end(),
                          [](auto a, auto b) { return a.rate > b.rate; });
@@ -154,13 +205,13 @@ bool tune(ExecutionOptions options, int device, bool enabled, TuningResult& out)
     std::vector<native::Shape> leaders;
     for (size_t i = 0; i < std::min<size_t>(2, results.size()); ++i)
         leaders.push_back(results[i].shape);
-    for (auto shape : tuning::refine(leaders))
+    for (auto shape : tuning::refine(leaders, tuning::domain_for(options)))
         screen(shape);
     // Boundary clipping/deduplication can leave refinement slots unfilled.
     // Continue around ranked coarse runners-up rather than remeasure a shape.
     const auto ranked = results;
     for (auto sample : ranked)
-        for (auto shape : tuning::refine({sample.shape}))
+        for (auto shape : tuning::refine({sample.shape}, tuning::domain_for(options)))
             screen(shape);
     rank();
 
@@ -207,6 +258,23 @@ void pearl_configure_tuning(AlgoConfig& config, ExecutionOptions options) {
     // adapters and releases each before trying the next candidate.
     config.pre_tune_fn = nullptr;
     config.fixed_launch.reset();
+    if (options.backend == Backend::PortableSimt) {
+        config.custom_tune_source_fn = [options, active_recipe = options.recipe]
+            (const TuningResult& result, AlgoConfig& worker) mutable {
+            const auto selected = unsigned(result.tune_keys.at("pearl_recipe"));
+            if (!tuning::selectable_recipe(options, selected))
+                throw std::runtime_error("Invalid selected Pearl recipe");
+            if (selected == active_recipe) return false;
+            auto explicit_options = options;
+            explicit_options.recipe = selected;
+            explicit_options.mode = ExecutionMode::Benchmark;
+            const auto specialized = pearl_gpu_config(explicit_options);
+            worker.source_transform_fn = specialized.source_transform_fn;
+            worker.compiler_opts_amd = specialized.compiler_opts_amd;
+            active_recipe = selected;
+            return true;
+        };
+    }
     config.custom_tune_fn = [options](const KernelMap&, const oroDeviceProp_t& props, int device,
                                      bool enabled, TuningResult& result) {
         if (!tnn_is_amd_device(device) || architecture_name(props.gcnArchName) != options.architecture)
@@ -217,16 +285,33 @@ void pearl_configure_tuning(AlgoConfig& config, ExecutionOptions options) {
     config.custom_tune_validate_fn = [options](const TuningResult& result,
                                                const oroDeviceProp_t& props, int device) {
         const auto shape = shape_from(result);
+        auto identity = options;
+        if (tuning::bringup_backend(options)) {
+            const auto found = result.tune_keys.find("pearl_recipe");
+            if (found == result.tune_keys.end() || found->second < 0 || found->second > 127 ||
+                !tuning::selectable_recipe(options, unsigned(found->second))) return false;
+            identity.recipe = unsigned(found->second);
+        }
         return tnn_is_amd_device(device) && architecture_name(props.gcnArchName) == options.architecture &&
                result.valid && result.block_size == 128 && result.batch_size == options.batch_size &&
                tuning::valid_measurement(result.hashrate, result.batch_time_ms) &&
-               tuning::supported(shape) && tuning::matches_identity(result, options) &&
-               result.num_blocks == int((shape.m / 128) * (shape.n / 128)) && fits(shape, options);
+               tuning::supported(shape, tuning::domain_for(identity)) && tuning::matches_identity(result, identity) &&
+               result.num_blocks == int((shape.m / 128) * (shape.n / pearl_tile_n(identity))) && fits(shape, options);
     };
     config.custom_tune_apply_fn = [options](const TuningResult& result,
                                            const oroDeviceProp_t& props, int device, void** data) mutable {
         if (*data)
             throw std::runtime_error("Pearl shape cannot change while a worker owns buffers");
+        if (tuning::bringup_backend(options)) {
+            options.recipe = unsigned(result.tune_keys.at("pearl_recipe"));
+            pearl_qualify_recipe(device, options);
+        }
+        if (options.backend == Backend::PortableSimt) {
+            TNN_LOG_INFO("[PEARL-TUNE] SIMT recipe=%u tile=128x%u K-step=%u LDS banks=%u load=%uB\n",
+                         options.recipe, pearl_tile_n(options), (options.recipe & 4) ? 64u : 32u,
+                         (options.recipe & 32) ? 2u : 1u,
+                         (options.recipe & 16) ? 16u : (options.recipe & 8) ? 8u : 1u);
+        }
         options.shape = shape_from(result);
         options.mode = ExecutionMode::Benchmark;
         const auto explicit_config = pearl_gpu_config(options);
