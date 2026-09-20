@@ -225,7 +225,7 @@ static inline bool xelis_launch_blake3(
 
   // Try cooperative blake3 first (global-CV: no smem, higher occupancy)
   // Launch: <<<batch_size, XELIS_B3_COOP_TPB>>> — 1 block per hash
-  // CV workspace lives at end of scratch allocation (scratch_per_hash includes 8512B)
+  // CV workspace includes separate input/output tree levels (266 + 133 CVs).
   auto it_wc = kernels.find("xelis_blake3_warp_coop_batch");
   if (it_wc != kernels.end())
   {
@@ -1242,7 +1242,8 @@ inline AlgoConfig XELIS_V3_CONFIG = {
     .template_size = 112,
     .hash_size = 32,
     .nonce_size = 8,
-    .scratch_per_hash = (531 * 128 + 1) * sizeof(uint64_t) + 8512, // +1 for nonce storage, +8512 for blake3 global-CV workspace
+    // +1 nonce slot; match XELIS_B3_CV_WORDS_PER_HASH in the device source.
+    .scratch_per_hash = (531 * 128 + 1) * sizeof(uint64_t) + (266 + 133) * 8 * sizeof(uint32_t),
     .preferred_block_size = 32,
     .algo_id = ALGO_XELISV3,
     .calc_shared_mem = xelis_v3_shared_mem,

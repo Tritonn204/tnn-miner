@@ -177,6 +177,7 @@ public:
     }
 
     int get_device_id() const { return device_id_; }
+    TuningResult get_tuning_result() const { return algo_->get_tuning_result(); }
     bool is_running() const { return running_.load(); }
 
     void set_solution_builder(SolutionBuilder builder) {

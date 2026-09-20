@@ -1851,10 +1851,10 @@ Mining:
   // #endif
 
   g_start_time = std::chrono::steady_clock::now();
-#if defined(TNN_HIP) && defined(TNN_PEARL)
-  // Pearl must finish GPU/proof cleanup before process teardown.
+#if defined(TNN_HIP)
+  // Pearl and Xelis must finish GPU/proof cleanup before process teardown.
   // Other algorithms retain their existing detached-worker behavior.
-  std::thread pearl_gpu_worker;
+  std::thread joined_gpu_worker;
 #endif
   if (gpuMine)
   {
@@ -1863,12 +1863,14 @@ Mining:
     auto gpuFunc = getMiningFunc(miningProfile.coin.miningAlgo, true);
     std::thread t([gpuFunc]()
                   { gpuFunc(0); });
+    bool join_worker = miningProfile.coin.miningAlgo == ALGO_XELISV3;
 #ifdef TNN_PEARL
-    if (miningProfile.coin.miningAlgo == ALGO_PEARL_POUW)
-      pearl_gpu_worker = std::move(t);
-    else
+    join_worker = join_worker || miningProfile.coin.miningAlgo == ALGO_PEARL_POUW;
 #endif
-    t.detach();
+    if (join_worker)
+      joined_gpu_worker = std::move(t);
+    else
+      t.detach();
 #else
     printf("Please use a GPU TNN Miner binary...\n");
     return -1;
@@ -1989,8 +1991,8 @@ Mining:
   // ioc.reset();
   // GETWORK/DEVWORK are detached std::threads — they exit via ABORT_MINER flag
   std::cout << "Interrupting all threads...\n";
-#if defined(TNN_HIP) && defined(TNN_PEARL)
-  if (pearl_gpu_worker.joinable()) pearl_gpu_worker.join();
+#if defined(TNN_HIP)
+  if (joined_gpu_worker.joinable()) joined_gpu_worker.join();
 #endif
   for (unsigned i = 0; i < threads; ++i)
   {
