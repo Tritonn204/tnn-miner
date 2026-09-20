@@ -17,13 +17,14 @@ extern bool beQuiet;
 
 int update_handler(const boost::system::error_code& error)
 {
+    const auto rateUnit = algo_rate_info(miningProfile.coin.miningAlgo).unit;
     CHECK_CLOSE_RET(0);
     if (error == boost::asio::error::operation_aborted) {
         return 1;
     }
 
     using clock = std::chrono::steady_clock;
-    static clock::time_point next_tick = clock::now() + std::chrono::seconds(1);
+    static clock::time_point next_tick = clock::now();
     next_tick += std::chrono::seconds(1);
     update_timer.expires_at(next_tick);
     update_timer.async_wait(update_handler);
@@ -62,8 +63,7 @@ int update_handler(const boost::system::error_code& error)
 
         for (int i = 0; i < HIP_deviceCount; i++) {
             if (!shouldUseDevice(i)) continue;
-            uint64_t currentHashesG = HIP_counters[i].load();
-            HIP_counters[i].store(0);
+            uint64_t currentHashesG = HIP_counters[i].exchange(0);
 
             if (currentHashesG > 0) {
                 any_gpu_hashing = true;
@@ -82,7 +82,7 @@ int update_handler(const boost::system::error_code& error)
                 HIP_rates1min[i].push_back((int64_t)(currentHashesG * ratioG));
             }
 
-            double hashrateG = (double)std::accumulate(HIP_rates1min[i].begin(), HIP_rates1min[i].end(), 0LL) /
+            double hashrateG = (double)std::accumulate(HIP_rates1min[i].begin(), HIP_rates1min[i].end(), 0.0L) /
                                (double)HIP_rates1min[i].size();
 
             int unitIdxG = 0;
@@ -100,8 +100,7 @@ int update_handler(const boost::system::error_code& error)
     // =========================================================================
     // Accumulate CPU stats (always, even before mining_started)
     // =========================================================================
-    uint64_t currentHashes = cpu_counter.load();
-    cpu_counter.store(0);
+    uint64_t currentHashes = cpu_counter.exchange(0);
 
     if (currentHashes > 0) {
         any_gpu_hashing = true;  // Reuse flag for CPU too
@@ -126,7 +125,7 @@ int update_handler(const boost::system::error_code& error)
     }
 
     double hashrate =
-        (double)std::accumulate(rate30sec.begin(), rate30sec.end(), 0LL) /
+        (double)std::accumulate(rate30sec.begin(), rate30sec.end(), 0.0L) /
         (double)rate30sec.size();
 
     int unitIdx = 0;
@@ -186,18 +185,18 @@ int update_handler(const boost::system::error_code& error)
                         int effUnit = 0;
                         while (eff >= 1000 && effUnit < 5) { effUnit++; eff /= 1000.0; }
 
-                        printf("\n[ GPU #%d | PCIe ID: %s | %s | %lf%sH/s | %.1fW | %.2f%sH/W | A:%d R:%d ]",
+                        printf("\n[ GPU #%d | PCIe ID: %s | %s | %lf%s%s | %.1fW | %.2f%s%s | A:%d R:%d ]",
                             i, HIP_pcieID[i].c_str(), HIP_names[i].c_str(),
-                            gpu_hashrates[i], units[gpu_unit_indices[i]].c_str(),
-                            watts, eff, units[effUnit].c_str(),
+                            gpu_hashrates[i], units[gpu_unit_indices[i]].c_str(), rate_suffix(rateUnit),
+                            watts, eff, units[effUnit].c_str(), efficiency_suffix(rateUnit),
                             a, r);
                         continue;
                     }
                 }
 
-                printf("\n[ GPU #%d | PCIe ID: %s | %s | %lf%sH/s | A:%d R:%d ]",
+                printf("\n[ GPU #%d | PCIe ID: %s | %s | %lf%s%s | A:%d R:%d ]",
                     i, HIP_pcieID[i].c_str(), HIP_names[i].c_str(),
-                    gpu_hashrates[i], units[gpu_unit_indices[i]].c_str(),
+                    gpu_hashrates[i], units[gpu_unit_indices[i]].c_str(), rate_suffix(rateUnit),
                     a, r);
             }
 
@@ -212,8 +211,8 @@ int update_handler(const boost::system::error_code& error)
             int cpuA = deviceAccepted[DEVICE_SHARE_CPU].load(std::memory_order_relaxed);
             int cpuR = deviceRejected[DEVICE_SHARE_CPU].load(std::memory_order_relaxed);
             setcolor(BRIGHT_CYAN);
-            printf("\n[ CPU | %lf%sH/s | A:%d R:%d ]",
-                hashrate, units[unitIdx].c_str(), cpuA, cpuR);
+            printf("\n[ CPU | %lf%s%s | A:%d R:%d ]",
+                hashrate, units[unitIdx].c_str(), rate_suffix(rateUnit), cpuA, cpuR);
             fflush(stdout);
             setcolor(BRIGHT_WHITE);
         }
@@ -266,7 +265,7 @@ int update_handler(const boost::system::error_code& error)
         std::cout << std::setw(2) << std::setfill('0') << consoleLine << versionString << " " << std::flush;
         setcolor(CYAN);
         std::cout << std::setw(2) << std::setprecision(3)
-                  << "HASHRATE " << agg_hashrate << units[agg_unitIdx] << "H/s" << " | " << std::flush;
+                  << "HASHRATE " << agg_hashrate << units[agg_unitIdx] << rate_suffix(rateUnit) << " | " << std::flush;
 
         std::string uptime =
             std::to_string(daysUp) + "d-" +

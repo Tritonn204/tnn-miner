@@ -1,5 +1,7 @@
 #pragma once
 
+#include "work_rate.hpp"
+
 // Each new blockchain has 10 reserved net protocol slots
 // AstroBWTv3
 #define PROTO_DERO_SOLO 0
@@ -30,6 +32,14 @@
 
 // KawPow family
 #define PROTO_KAWPOW_STRATUM 80
+
+// QHash family
+#define PROTO_QUBIT_SOLO 90
+#define PROTO_QUBIT_STRATUM 91
+
+// Pearl PoUW family
+#define PROTO_PEARL_SOLO 100
+#define PROTO_PEARL_STRATUM 101
 
 #define COIN_UNKNOWN -1
 #define COIN_DERO 0
@@ -62,8 +72,10 @@
 #define COIN_RVN 27      // Ravencoin (KawPow)
 #define COIN_QUAI 28     // Quai Network (KawPow)
 #define COIN_KAWPOW 29   // For generic/arbitrary
+#define COIN_QUBIT 30     // QubitCoin (QHash)
+#define COIN_PEARL 31     // Pearl PoUW
 
-#define COIN_COUNT 30
+#define COIN_COUNT 32
 
 // Corresponding to the ALGO_POW[] array in miners.hpp
 // Also used in coins[COIN_COUNT] from tnn-common.hpp
@@ -82,6 +94,14 @@
 #define ALGO_YESPOWER 110
 #define ALGO_RINHASH 120
 #define ALGO_KAWPOW 130
+#define ALGO_QHASH 140
+#define ALGO_PEARL_POUW 150
+
+inline constexpr RateInfo algo_rate_info(int algo) {
+  return algo == ALGO_PEARL_POUW
+      ? RateInfo{RateUnit::MultiplyAccumulates}
+      : RateInfo{};
+}
 
 inline const char* algoName(int algo) {
   switch(algo) {
@@ -111,6 +131,10 @@ inline const char* algoName(int algo) {
       return "RinHash";
     case ALGO_KAWPOW:
       return "KawPow";
+    case ALGO_QHASH:
+      return "QHash";
+    case ALGO_PEARL_POUW:
+      return "PearlPoUW";
     default:
       return "Unknown";
   }

@@ -4,6 +4,7 @@
 #include <condition_variable>
 #include <thread>
 #include <atomic>
+#include <chrono>
 #include <functional>
 #include <boost/json.hpp>
 #include "tnn_log.hpp"
@@ -22,6 +23,8 @@ struct GPUSubmitEntry {
     int64_t job_id;   // for stale check at drain time
 };
 
+enum class SubmitDisposition { HandedOff, Stale, Timeout, Shutdown };
+
 class GPUSubmitQueue {
 public:
     static GPUSubmitQueue& instance() {
@@ -38,7 +41,11 @@ public:
         bool* submitting_dev_ptr,
         bool* data_ready_ptr,
         std::condition_variable* cv_ptr,
-        std::function<bool(int64_t job_id, bool is_dev)> stale_check)
+        std::function<bool(int64_t job_id, bool is_dev)> stale_check,
+        std::mutex* slot_mutex = nullptr,
+        std::function<void(const GPUSubmitEntry&, SubmitDisposition)> disposition = {},
+        bool retain_valid_on_timeout = false,
+        std::chrono::milliseconds slot_wait_timeout = std::chrono::seconds(5))
     {
         stop();  // clean up any previous drain thread
 
@@ -50,6 +57,10 @@ public:
         data_ready_ptr_ = data_ready_ptr;
         cv_ptr_ = cv_ptr;
         stale_check_ = std::move(stale_check);
+        slot_mutex_ = slot_mutex;
+        disposition_ = std::move(disposition);
+        retain_valid_on_timeout_ = retain_valid_on_timeout;
+        slot_wait_timeout_ = slot_wait_timeout;
 
         drain_thread_ = std::thread([this]() { drain_loop(); });
     }
@@ -58,6 +69,11 @@ public:
         if (!running_.exchange(false)) return;
         queue_cv_.notify_all();
         if (drain_thread_.joinable()) drain_thread_.join();
+        std::lock_guard<std::mutex> lock(queue_mutex_);
+        while (!queue_.empty()) {
+            report(queue_.front(), SubmitDisposition::Shutdown);
+            queue_.pop();
+        }
     }
 
     // Push a submit entry (non-blocking, called from GPU threads)
@@ -75,6 +91,9 @@ public:
     }
 
 private:
+    void report(const GPUSubmitEntry& entry, SubmitDisposition outcome) {
+        if (disposition_) disposition_(entry, outcome);
+    }
     GPUSubmitQueue() = default;
     ~GPUSubmitQueue() { stop(); }
 
@@ -96,29 +115,61 @@ private:
             if (stale_check_ && !stale_check_(entry.job_id, entry.is_dev)) {
                 TNN_LOG_DEBUG("[DEBUG] Submit queue: dropping stale solution (job_id=%ld, dev=%d)\n",
                     (long)entry.job_id, entry.is_dev);
+                report(entry, SubmitDisposition::Stale);
                 continue;
             }
 
             // Wait for the single-slot submit mechanism to be free
             bool* flag = entry.is_dev ? submitting_dev_ptr_ : submitting_ptr_;
-            int wait_ms = 0;
-            while (*flag && running_.load()) {
+            bool discarded = false;
+            auto deadline = std::chrono::steady_clock::now() + slot_wait_timeout_;
+            auto slot_busy = [&] {
+                std::unique_lock<std::mutex> lock;
+                if (slot_mutex_) lock = std::unique_lock<std::mutex>(*slot_mutex_);
+                return *flag;
+            };
+            while (slot_busy() && running_.load()) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                if (++wait_ms > 5000) {
+                if (std::chrono::steady_clock::now() >= deadline) {
+                    if (retain_valid_on_timeout_) {
+                        deadline = std::chrono::steady_clock::now() + slot_wait_timeout_;
+                        TNN_LOG_DEBUG("[DEBUG] Submit queue: retaining valid solution under backpressure\n");
+                        continue;
+                    }
                     TNN_LOG_ERROR("[WARN] Submit queue: timeout waiting for slot, dropping solution\n");
+                    report(entry, SubmitDisposition::Timeout);
+                    discarded = true;
                     break;
                 }
                 // Re-check staleness while waiting
                 if (stale_check_ && !stale_check_(entry.job_id, entry.is_dev)) {
                     TNN_LOG_DEBUG("[DEBUG] Submit queue: solution went stale during wait\n");
-                    wait_ms = -1; // sentinel
+                    report(entry, SubmitDisposition::Stale);
+                    discarded = true;
                     break;
                 }
             }
-            if (wait_ms >= 5000 || wait_ms == -1) continue;
-            if (!running_.load()) break;
+            if (discarded) continue;
+            if (!running_.load()) {
+                report(entry, SubmitDisposition::Shutdown);
+                break;
+            }
+            if (stale_check_ && !stale_check_(entry.job_id, entry.is_dev)) {
+                report(entry, SubmitDisposition::Stale);
+                continue;
+            }
 
             // Write to the shared slot and signal
+            std::unique_lock<std::mutex> slot_lock;
+            if (slot_mutex_) slot_lock = std::unique_lock<std::mutex>(*slot_mutex_);
+            if (*flag) {
+                // Another producer filled the slot after our unlocked check.
+                // Keep this candidate; never silently discard it.
+                std::lock_guard queue_lock(queue_mutex_);
+                queue_.push(std::move(entry));
+                continue;
+            }
+            report(entry, SubmitDisposition::HandedOff);
             *flag = true;
             if (entry.is_dev)
                 *dev_share_ptr_ = std::move(entry.payload);
@@ -144,4 +195,8 @@ private:
     bool* data_ready_ptr_ = nullptr;
     std::condition_variable* cv_ptr_ = nullptr;
     std::function<bool(int64_t, bool)> stale_check_;
+    std::mutex* slot_mutex_ = nullptr;
+    std::function<void(const GPUSubmitEntry&, SubmitDisposition)> disposition_;
+    bool retain_valid_on_timeout_ = false;
+    std::chrono::milliseconds slot_wait_timeout_{5000};
 };

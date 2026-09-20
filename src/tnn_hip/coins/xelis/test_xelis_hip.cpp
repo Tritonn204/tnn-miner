@@ -65,6 +65,69 @@ static uint64_t compute_checksum(const uint64_t *data, size_t count) {
     return checksum;
 }
 
+// Check both production cooperative reducers against the CPU oracle. The
+// serial end-to-end tests below do not exercise their inter-wave tree merges.
+static int test_cooperative_blake3(oroModule_t module) {
+    uint32_t batch = 16;
+    uint32_t offset = 0;
+    uint64_t nonce = 0;
+    const size_t words = size_t(batch) * XELIS_MEMORY_SIZE_V3;
+    const size_t scratch_bytes = words * sizeof(uint64_t);
+    const size_t workspace_bytes = size_t(batch) * (266 + 133) * 8 * sizeof(uint32_t);
+
+    std::vector<uint64_t> scratch(words);
+    uint64_t state = 1307;
+    for (auto &word : scratch) {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        word = state;
+    }
+
+    std::vector<uint8_t> expected(batch * 32), actual(batch * 32);
+    for (uint32_t i = 0; i < batch; ++i) {
+        xelis_blake3_v3(reinterpret_cast<uint8_t*>(scratch.data() + size_t(i) * XELIS_MEMORY_SIZE_V3),
+                       expected.data() + i * 32);
+    }
+
+    struct Buffers {
+        uint64_t *scratch = nullptr;
+        uint8_t *output = nullptr;
+        ~Buffers() {
+            if (output) (void)oroFree(output);
+            if (scratch) (void)oroFree(scratch);
+        }
+    } gpu;
+    HIP_CHECK(oroMalloc((oroDeviceptr*)&gpu.scratch, scratch_bytes + workspace_bytes));
+    HIP_CHECK(oroMalloc((oroDeviceptr*)&gpu.output, actual.size()));
+    HIP_CHECK(oroMemcpy(gpu.scratch, scratch.data(), scratch_bytes, oroMemcpyHostToDevice));
+
+    uint64_t *no_target = nullptr, *no_solutions = nullptr;
+    void *args[] = {&gpu.scratch, &gpu.output, &batch, &offset,
+                    &no_target, &no_solutions, &nonce};
+    int failures = 0;
+
+    for (const char *name : {"xelis_blake3_warp_coop_batch", "xelis_blake3_smem_batch"}) {
+        oroFunction_t kernel = nullptr;
+        HIP_CHECK(oroModuleGetFunction(&kernel, module, name));
+        for (unsigned tpb : {32u, 64u, 96u, 128u, 192u, 256u}) {
+            unsigned mismatches = 0;
+            for (unsigned repeat = 0; repeat < 4; ++repeat) {
+                HIP_CHECK(oroModuleLaunchKernel(kernel, batch, 1, 1, tpb, 1, 1,
+                                               0, nullptr, args, nullptr));
+                HIP_CHECK(oroDeviceSynchronize());
+                HIP_CHECK(oroMemcpy(actual.data(), gpu.output, actual.size(), oroMemcpyDeviceToHost));
+                for (uint32_t i = 0; i < batch; ++i)
+                    mismatches += memcmp(actual.data() + i * 32, expected.data() + i * 32, 32) != 0;
+            }
+            printf("[TEST] %s TPB=%u: %u/64 mismatches\n", name, tpb, mismatches);
+            failures += mismatches != 0;
+        }
+    }
+
+    return failures != 0;
+}
+
 // Run a single test case: serial stage1, production stage3, serial blake3
 static int run_test_case(
     const char *test_name,
@@ -356,7 +419,7 @@ static int test_xelis_hip_impl() {
     printf("========================================\n");
     fflush(stdout);
 
-    int failures = 0;
+    int failures = test_cooperative_blake3(module_kernel.module);
 
     // Test 1: Single hash (baseline)
     failures += run_test_case(
@@ -386,7 +449,7 @@ static int test_xelis_hip_impl() {
     // Final summary
     printf("\n========================================\n");
     printf("[TEST] === FINAL SUMMARY ===\n");
-    printf("[TEST] Total tests run: 4\n");
+    printf("[TEST] Total test groups: 5 (including cooperative BLAKE3)\n");
     printf("[TEST] Failures: %d\n", failures);
     printf("[TEST] Overall: %s\n", (failures == 0) ? "\033[32mPASS\033[0m" : "\033[31mFAIL\033[0m");
     printf("========================================\n\n");

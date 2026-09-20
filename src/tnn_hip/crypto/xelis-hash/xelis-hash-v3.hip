@@ -1801,16 +1801,17 @@ __global__ void xelis_blake3_opt_batch(
 // ============================================================================
 // Blake3 warp-cooperative — CVs in global memory (L1-cached), no smem
 //
-// Uses global memory for the 266-entry CV merge tree instead of shared memory.
-// 8.5KB of CVs per block fits easily in L1 cache (192KB on NVIDIA, 16KB on AMD).
+// Uses global memory for 266 input CVs and 133 temporary CVs, not shared memory.
+// Separate levels are essential: waves need not read their children in lockstep.
 // Removes the smem/LDS bottleneck that limited occupancy to ~5 blocks/SM.
 //
 // CV workspace is stored at the end of the scratch allocation:
 //   cv_base = scratch_memory + batch_size * XELIS_MEMORY_SIZE_V3
 // Requires scratch_per_hash to include XELIS_B3_CV_BYTES_PER_HASH extra bytes.
 // ============================================================================
-constexpr size_t XELIS_B3_CV_WORDS_PER_HASH = 266 * 8;  // 266 CVs × 8 uint32_t
-constexpr size_t XELIS_B3_CV_BYTES_PER_HASH = XELIS_B3_CV_WORDS_PER_HASH * sizeof(uint32_t);  // 8512
+// Keep the registry's scratch_per_hash workspace allowance in sync.
+constexpr size_t XELIS_B3_CV_WORDS_PER_HASH = (266 + 133) * 8;
+constexpr size_t XELIS_B3_CV_BYTES_PER_HASH = XELIS_B3_CV_WORDS_PER_HASH * sizeof(uint32_t);
 
 extern "C"
 __global__ void xelis_blake3_warp_coop_batch(
@@ -1876,6 +1877,10 @@ __global__ void xelis_blake3_warp_coop_batch(
   __syncthreads();
 
   // Phase 2: Merge tree via global memory (L1-cached within block)
+  // Ping-pong levels. An in-place write to CV p can clobber a child that a
+  // different wave (or a later loop iteration) has not read yet.
+  uint32_t *read_cvs = my_cvs;
+  uint32_t *write_cvs = my_cvs + 266 * 8;
   uint32_t n = 266;
   while (n > 1) {
     uint32_t pairs = n / 2;
@@ -1886,21 +1891,24 @@ __global__ void xelis_blake3_warp_coop_batch(
       uint32_t left[8], right[8], result[8];
       #pragma unroll
       for (int i = 0; i < 8; i++) {
-        left[i]  = my_cvs[(p * 2) * 8 + i];
-        right[i] = my_cvs[(p * 2 + 1) * 8 + i];
+        left[i]  = read_cvs[(p * 2) * 8 + i];
+        right[i] = read_cvs[(p * 2 + 1) * 8 + i];
       }
       blake3_hash_parent_u32(left, right, result, is_root);
       #pragma unroll
-      for (int i = 0; i < 8; i++) my_cvs[p * 8 + i] = result[i];
+      for (int i = 0; i < 8; i++) write_cvs[p * 8 + i] = result[i];
     }
-    __syncthreads();
 
     if (odd && lane == 0) {
       #pragma unroll
       for (int j = 0; j < 8; j++)
-        my_cvs[pairs * 8 + j] = my_cvs[(n - 1) * 8 + j];
+        write_cvs[pairs * 8 + j] = read_cvs[(n - 1) * 8 + j];
     }
-    if (odd) __syncthreads();
+    __syncthreads();
+
+    uint32_t *previous = read_cvs;
+    read_cvs = write_cvs;
+    write_cvs = previous;
 
     n = pairs + odd;
   }
@@ -1909,7 +1917,7 @@ __global__ void xelis_blake3_warp_coop_batch(
   if (lane == 0) {
     #pragma unroll
     for (int i = 0; i < 8; i++)
-      blake3_store32(my_output + i * 4, my_cvs[i]);
+      blake3_store32(my_output + i * 4, read_cvs[i]);
 
     if (difficulty_target && solutions && check_difficulty_gpu(my_output, difficulty_target))
     {

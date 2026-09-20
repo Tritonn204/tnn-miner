@@ -6,77 +6,26 @@
 
 #if defined(_WIN32)
 
-#include <windows.h>
-
 #ifdef __x86_64__
-#include <immintrin.h>
+#include <cpuid.h>
 #endif
 
 static inline int has_sha_ni_support(void)
 {
 #if defined(__x86_64__)
-  int supported = 0;
-
-  HANDLE read_pipe, write_pipe;
-  SECURITY_ATTRIBUTES sa = {sizeof(sa), NULL, TRUE};
-  if (!CreatePipe(&read_pipe, &write_pipe, &sa, 0)) return 0;
-
-  char exe_path[MAX_PATH];
-  if (!GetModuleFileNameA(NULL, exe_path, MAX_PATH)) return 0;
-
-  STARTUPINFOA si = {sizeof(si)};
-  PROCESS_INFORMATION pi;
-  memset(&pi, 0, sizeof(pi));
-
-  si.dwFlags |= STARTF_USESTDHANDLES;
-  si.hStdOutput = write_pipe;
-  si.hStdError  = GetStdHandle(STD_ERROR_HANDLE);
-  si.hStdInput  = GetStdHandle(STD_INPUT_HANDLE);
-
-  if (!CreateProcessA(NULL, exe_path, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) {
-    CloseHandle(read_pipe);
-    CloseHandle(write_pipe);
-    return 0;
-  }
-
-  CloseHandle(write_pipe);
-  WaitForSingleObject(pi.hProcess, INFINITE);
-
-  char buf[1] = {0};
-  DWORD read = 0;
-  if (ReadFile(read_pipe, buf, 1, &read, NULL) && read == 1 && buf[0] == '1')
-    supported = 1;
-
-  CloseHandle(read_pipe);
-  CloseHandle(pi.hProcess);
-  CloseHandle(pi.hThread);
-
-  return supported;
+  // Redirected output is normal for services, benchmarks and captured logs.
+  // Never infer a probe-child role from console handles: that used to exit
+  // every redirected Windows miner before main(). SHA-NI uses XMM registers,
+  // whose OS support is mandatory on Windows x64; no AVX/XGETBV gate is needed.
+  unsigned int eax, ebx, ecx, edx;
+  if (!__get_cpuid(1, &eax, &ebx, &ecx, &edx)) return 0;
+  if ((ecx & (1u << 19)) == 0) return 0; // SSE4.1, used by the SHA path.
+  if (!__get_cpuid_count(7, 0, &eax, &ebx, &ecx, &edx)) return 0;
+  return (ebx & (1u << 29)) != 0; // SHA extensions.
 #else
   return 0; // Not x86_64
 #endif
 }
-
-#ifdef __x86_64__
-__attribute__((constructor, target("sha,sse4.1"))) static void sha_probe_child_windows(void)
-{
-  HANDLE hStdout = GetStdHandle(STD_OUTPUT_HANDLE);
-  if (hStdout == INVALID_HANDLE_VALUE) return;
-
-  DWORD mode;
-  if (!GetConsoleMode(hStdout, &mode)) {
-    __m128i a = _mm_setzero_si128();
-    __m128i b = _mm_setzero_si128();
-    __m128i c = _mm_setzero_si128();
-    __m128i r = _mm_sha256rnds2_epu32(a, b, c);
-    volatile uint32_t dummy = _mm_extract_epi32(r, 0);
-    (void)dummy;
-    DWORD written;
-    WriteFile(hStdout, "1", 1, &written, NULL);
-    ExitProcess(0);
-  }
-}
-#endif
 
 #elif defined(__unix__) || defined(__APPLE__)
 

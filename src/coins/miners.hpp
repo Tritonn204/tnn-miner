@@ -25,6 +25,10 @@ inline Num ConvertDifficultyToBig(Num d, int algo)
       return oneLsh256 / (d+1);
     case ALGO_KAWPOW:
       return maxU256 / d;
+    case ALGO_QHASH:
+      return maxU256 / d;
+    case ALGO_PEARL_POUW:
+      return maxU256 / d;
     default:
       return 0;
   }
@@ -128,6 +132,10 @@ void mineHoosat_unified(int tid);
 void mineWaglayla_unified(int tid);
 #endif
 
+#if defined(TNN_QHASH) && (!defined(TNN_HIP) || defined(WITH_OROCHI))
+void mineQubit_unified(int tid);
+#endif
+
 void mineShai(int tid);
 
 void mineYespower(int tid);
@@ -139,6 +147,8 @@ void mineNexellia_hip(int tid);
 void mineWaglayla_hip(int tid);
 void mineXelis_hip(int tid);
 void mineKawPow_hip(int tid);
+void mineQubit_hip(int tid);
+void minePearl_hip(int tid);
 
 typedef void (*mineFunc)(int);
 inline mineFunc getMiningFunc(int algoNum, bool gpu) {
@@ -172,6 +182,18 @@ inline mineFunc getMiningFunc(int algoNum, bool gpu) {
         return mineKawPow_hip;
         break;
 #endif
+#ifdef TNN_QHASH
+      case ALGO_QHASH:
+        return mineQubit_hip;
+        break;
+#endif
+      case ALGO_PEARL_POUW:
+#ifdef TNN_PEARL
+        return minePearl_hip;
+#else
+        return unsupportedGpu;
+#endif
+        break;
       default:
         return unsupportedGpu;
         break;
@@ -228,6 +250,14 @@ inline mineFunc getMiningFunc(int algoNum, bool gpu) {
       break;
     case ALGO_RINHASH:
       return mineRinhash;
+      break;
+#if defined(TNN_QHASH) && (!defined(TNN_HIP) || defined(WITH_OROCHI))
+    case ALGO_QHASH:
+      return mineQubit_unified;
+      break;
+#endif
+    case ALGO_PEARL_POUW:
+      return unsupportedCPU;
       break;
     default:
       return unsupportedCPU;

@@ -331,6 +331,37 @@ waitForJob:
                         break;
                     }
 
+                    case PROTO_BTC_STRATUM:
+                    {
+                        auto* jobId = jobData.as_object().if_contains("jobId");
+                        if (jobId && jobId->is_string()) {
+                            std::string extraNonce2Hex = "00000000";
+                            std::string nTimeHex = "00000000";
+                            auto* en2 = jobData.as_object().if_contains("extraNonce2");
+                            auto* nTime = jobData.as_object().if_contains("nTime");
+                            if (nTime && nTime->is_string()) nTimeHex = nTime->as_string().c_str();
+                            if (en2 && en2->is_int64()) {
+                                uint32_t val = (uint32_t)en2->as_int64();
+                                extraNonce2Hex = hexStr((byte*)&val, 4);
+                            }
+                            shareTarget = {{
+                                {"id", BTCStratum::submit.id},
+                                {"method", BTCStratum::submit.method},
+                                {"params", {
+                                    workerNameStr,
+                                    jobId->as_string().c_str(),
+                                    extraNonce2Hex.c_str(),
+                                    nTimeHex.c_str(),
+                                    hexStr((byte*)&found_nonce, 4).c_str()
+                                }}
+                            }};
+                        } else {
+                            submittingFlag = false;
+                            continue;
+                        }
+                        break;
+                    }
+
                     default:
                         // Generic share format
                         shareTarget = {{"block_template", hexStr(work_output.data(), config.template_size).c_str()}};

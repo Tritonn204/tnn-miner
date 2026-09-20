@@ -5,6 +5,7 @@
 #include "tnn_log.hpp"
 #include <coins/miners.hpp>
 #include <chrono>
+#include <cmath>
 #include <algorithm>
 #include <fstream>
 #include <filesystem>
@@ -175,6 +176,11 @@ public:
 
     bool initialize(int device_id = 0) override
     {
+        if (config_.owns_work_and_result_buffers &&
+            (!config_.prepare_batch_fn || !config_.execute_fn || !config_.collect_batch_fn)) {
+            TNN_LOG_ERROR("[ERROR] Custom buffer ownership requires all batch callbacks\n");
+            return false;
+        }
         TNN_LOG_TRACE("[TRACE] GPUAlgorithm::initialize: Entry for device %d\n", device_id);
 
         device_id_ = device_id;
@@ -217,7 +223,8 @@ public:
         // Validate cached tune with trial launches (catches stale caches after recompile).
         // Skip for KawPow: trial launches with bench-epoch DAG constants poison GPU
         // state, causing subsequent DAG gen kernel launches to silently fail (0.00s).
-        if (tuning_result_.valid && config_.algo_id != ALGO_KAWPOW && !validate_cached_tune()) {
+        if (tuning_result_.valid && !config_.skip_cached_tune_validation &&
+            config_.algo_id != ALGO_KAWPOW && !validate_cached_tune()) {
             TNN_LOG_INFO("[AUTOTUNE] GPU %d: Cached tune invalid, triggering retune\n", device_id_);
             cleanup_batch_buffers();
 
@@ -267,6 +274,8 @@ public:
         h_work_template_.resize(config_.template_size);
         memcpy(h_work_template_.data(), work_template, config_.template_size);
 
+        if (config_.owns_work_and_result_buffers) return;
+
         oroError_t e1 = oro_safe_memcpy(d_input_, work_template, config_.template_size, oroMemcpyHostToDevice);
         if (e1 != oroSuccess)
             TNN_LOG_ERROR("[ERROR] GPU %d: set_work memcpy(d_input_) failed: %s\n",
@@ -283,6 +292,7 @@ public:
     // Used by algos like KawPow where the pool sends a 256-bit target.
     void set_raw_target(const uint8_t* target_32bytes) override
     {
+        if (config_.owns_work_and_result_buffers) return;
         if (!bind_context("set_raw_target")) return;
 
         oroError_t err = oro_safe_memcpy(d_difficulty_target_, target_32bytes, 32, oroMemcpyHostToDevice);
@@ -493,11 +503,15 @@ public:
             }
         }
 
-        oroError_t merr = oro_safe_memset(d_solutions_, 0, 24);
-        if (merr != oroSuccess)
-            TNN_LOG_ERROR("[ERROR] GPU %d: mine_batch oroMemset(d_solutions_) failed: %s\n",
-                          device_id_, tnn_error_string(merr));
-        clear_solution_flag();
+        auto require_gpu_success = [](oroError_t error, const char* operation) {
+            if (error != oroSuccess) {
+                throw std::runtime_error(std::string(operation) + ": " + tnn_error_string(error));
+            }
+        };
+        if (!config_.owns_work_and_result_buffers) {
+            require_gpu_success(oro_safe_memset(d_solutions_, 0, 24), "Reset solutions");
+            clear_solution_flag();
+        }
 
         // Build launch context
         KernelLaunchContext ctx;
@@ -515,11 +529,20 @@ public:
         ctx.algo_data = algo_data_;
         ctx.tune_keys = &tuning_result_.tune_keys;
         ctx.config = &config_;
-        ctx.stream = nullptr;  // Default stream
+        ctx.stream = config_.batch_stream_fn ? config_.batch_stream_fn(algo_data_) : nullptr;
         ctx.module = module_;
         ctx.is_dev = batch_is_dev;
 
-        (void)oro_safe_event_record(start_event_, 0);
+        ctx.job_snapshot = job_snapshot_ ? &*job_snapshot_ : nullptr;
+        const auto prepare_begin = std::chrono::steady_clock::now();
+        if (config_.prepare_batch_fn && !config_.prepare_batch_fn(ctx)) {
+            return BatchResult{};
+        }
+        const auto execute_begin = std::chrono::steady_clock::now();
+        ctx.prepare_host_ms = std::chrono::duration<double, std::milli>(execute_begin - prepare_begin).count();
+
+        if (!config_.host_timing_only)
+            require_gpu_success(oro_safe_event_record(start_event_, ctx.stream), "Record batch start");
 
         // Execute using strategy (custom or default)
         bool success;
@@ -529,7 +552,8 @@ public:
             success = default_monolithic_execute(kernels_, ctx);
         }
 
-        (void)oro_safe_event_record(stop_event_, 0);
+        require_gpu_success(oro_safe_event_record(stop_event_, ctx.stream), "Record batch stop");
+        if (success && config_.finish_batch_fn) config_.finish_batch_fn(ctx);
         oroError_t sync_err = oro_safe_event_sync(stop_event_);
 
         // Check for async kernel errors (illegal memory access, stack overflow, etc.)
@@ -547,17 +571,39 @@ public:
                     device_id_, tnn_error_string(last_err));
         }
 
-        float ms;
-        (void)oro_safe_event_elapsed(&ms, start_event_, stop_event_);
-        last_hashrate_ = (count * 1000.0) / ms;
+        // GPUMiner stops on exceptions. Never extract stale solutions or
+        // credit work after a failed launch/synchronization.
+        if (!success || sync_err != oroSuccess || last_err != oroSuccess) {
+            last_hashrate_ = 0;
+            throw std::runtime_error("GPU batch failed; worker stopped without work credit");
+        }
+
+        float ms = 0;
+        ctx.completion_host_ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - execute_begin).count();
+        ctx.gpu_timing_valid = !config_.host_timing_only;
+        if (ctx.gpu_timing_valid) {
+            require_gpu_success(oro_safe_event_elapsed(&ms, start_event_, stop_event_), "Read batch time");
+            if (!std::isfinite(ms) || ms <= 0) throw std::runtime_error("Invalid GPU batch time");
+        }
 
         // Rest unchanged - extract solutions
         BatchResult result;
         result.nonce_start = nonce_start;
         result.count = count;
 
+        if (config_.collect_batch_fn) {
+            ctx.elapsed_ms = ms;
+            config_.collect_batch_fn(ctx, result);
+            const double rate_ms = config_.host_timing_only ? std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - prepare_begin).count() : ms;
+            last_hashrate_ = (completed_work(result.count, result.work_multiplier) * 1000.0) / rate_ms;
+            return result;
+        }
+
         uint64_t solution_count = 0;
-        (void)oro_safe_memcpy(&solution_count, d_solutions_, sizeof(uint64_t), oroMemcpyDeviceToHost);
+        require_gpu_success(oro_safe_memcpy(&solution_count, d_solutions_, sizeof(uint64_t),
+                                           oroMemcpyDeviceToHost), "Read solution count");
 
         if (solution_count > count) solution_count = 0;
         if (solution_count > 1024) solution_count = 1024;
@@ -568,7 +614,8 @@ public:
             size_t solution_bytes = solution_count * 40;
             std::vector<uint64_t> raw_solutions(solution_count * 5);
 
-            (void)oro_safe_memcpy(raw_solutions.data(), d_solutions_ + 1, solution_bytes, oroMemcpyDeviceToHost);
+            require_gpu_success(oro_safe_memcpy(raw_solutions.data(), d_solutions_ + 1,
+                                               solution_bytes, oroMemcpyDeviceToHost), "Read solutions");
 
             result.valid_nonces.reserve(solution_count);
             result.valid_hashes.resize(solution_count * config_.hash_size);
@@ -581,7 +628,12 @@ public:
         }
 
         result.hashes.clear();
+        last_hashrate_ = (completed_work(result.count, result.work_multiplier) * 1000.0) / ms;
         return result;
+    }
+
+    void set_job_snapshot(const JobSnapshot& snapshot) override {
+        job_snapshot_ = snapshot;
     }
 
     uint32_t get_batch_size() const override { return batch_size_; }
@@ -649,6 +701,9 @@ private:
                 if (device_props_.gcnArchName[0] != '\0') {
                     options.push_back(std::string("--gpu-architecture=") + device_props_.gcnArchName);
                 }
+                // Honor algorithm-specific options in the actual compile path,
+                // not merely in its configuration or cache label.
+                options.insert(options.end(), config_.compiler_opts_amd.begin(), config_.compiler_opts_amd.end());
             } else if (tnn_is_nvidia_device(device_id_)) {
                 options = {"--dopt=on", "--use_fast_math"};
 
@@ -680,6 +735,7 @@ private:
 
                 // Per-device module key (NVIDIA modules are bound to a CUDA context)
                 options.push_back("-DDEVICE_ID=" + std::to_string(device_id_));
+                options.insert(options.end(), config_.compiler_opts_nvidia.begin(), config_.compiler_opts_nvidia.end());
             }
 
             // Compile module once
@@ -905,6 +961,72 @@ private:
     bool configure_batch() {
         auto batch_override = g_tuning_overrides.get_batch_override(device_id_);
         auto block_override = g_tuning_overrides.get_block_override(device_id_);
+
+        if (config_.custom_tune_fn) {
+            if (batch_override || block_override)
+                throw std::invalid_argument("Custom-launch algorithm rejects batch/block overrides");
+            if (!config_.custom_tune_validate_fn || !config_.custom_tune_apply_fn)
+                throw std::invalid_argument("Custom tuning requires validation and application hooks");
+
+            // Serialize custom probes, then recheck the cache under the lock.
+            // This also prevents identical devices from duplicating a fresh sweep.
+            static std::timed_mutex custom_tune_mutex;
+            std::unique_lock<std::timed_mutex> lock(custom_tune_mutex, std::defer_lock);
+            if (!acquire_gpu_tune_lock(lock, g_autotune_stop))
+                return false;
+            const bool enabled = !g_tuning_overrides.disable_autotune;
+            bool cached = enabled && !g_tuning_overrides.should_retune(device_id_) &&
+                          load_cached_tune() &&
+                          config_.custom_tune_validate_fn(tuning_result_, device_props_, device_id_);
+            if (!cached) {
+                tuning_result_ = {};
+                if (!config_.custom_tune_fn(kernels_, device_props_, device_id_, enabled,
+                                            tuning_result_))
+                    return false;
+            }
+            if (g_autotune_stop.load(std::memory_order_relaxed) ||
+                !config_.custom_tune_validate_fn(tuning_result_, device_props_, device_id_))
+                return false;
+            if (config_.custom_tune_source_fn &&
+                config_.custom_tune_source_fn(tuning_result_, config_)) {
+                if (algo_data_)
+                    throw std::runtime_error("Cannot specialize a kernel after allocating algorithm buffers");
+                if (!bind_context("custom tune kernel selection")) return false;
+                // RTCCompiler owns cached modules. Drop our function handles,
+                // not the shared module; compile_kernel binds the selected one.
+                kernels_.clear();
+                module_ = nullptr;
+                if (!compile_kernel()) return false;
+            }
+            if (!config_.custom_tune_apply_fn(tuning_result_, device_props_, device_id_, &algo_data_))
+                return false;
+            if (g_autotune_stop.load(std::memory_order_relaxed))
+                return false;
+
+            block_size_ = tuning_result_.block_size;
+            batch_size_ = tuning_result_.batch_size;
+            num_blocks_ = tuning_result_.num_blocks;
+            if (!cached && enabled)
+                save_tune_cache();
+            TNN_LOG_INFO("[AUTOTUNE] GPU %d: %s %s configuration\n", device_id_,
+                         config_.name.c_str(), cached ? "cached" : enabled ? "measured" : "default");
+            return true;
+        }
+
+        if (config_.fixed_launch) {
+            if (batch_override || block_override) {
+                throw std::invalid_argument("Fixed-launch algorithm rejects tuning overrides");
+            }
+            tuning_result_ = *config_.fixed_launch;
+            if (!tuning_result_.valid || tuning_result_.block_size <= 0 ||
+                tuning_result_.num_blocks <= 0 || tuning_result_.batch_size == 0) {
+                throw std::invalid_argument("Invalid fixed launch configuration");
+            }
+            block_size_ = tuning_result_.block_size;
+            batch_size_ = tuning_result_.batch_size;
+            num_blocks_ = tuning_result_.num_blocks;
+            return true;
+        }
         
         if (batch_override.has_value()) {
             block_size_ = block_override.value_or(config_.preferred_block_size);
@@ -2036,6 +2158,7 @@ private:
     // ========================================================================
     
     AlgoConfig config_;
+    std::optional<JobSnapshot> job_snapshot_;
     bool initialized_ = false;
     int device_id_ = 0;
     oroCtx ctx_ = nullptr;

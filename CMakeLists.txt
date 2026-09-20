@@ -191,6 +191,8 @@ option(WITH_SHAIHIVE        "Enable ShaiHive algorithms family" ON)
 option(WITH_YESPOWER        "Enable YesPower algorithms family" ON)
 option(WITH_KAWPOW          "Enable KawPow (Ravencoin) algorithms family" ON)
 option(WITH_RINHASH        "Enable RinHash algorithms family" ON)
+option(WITH_QHASH          "Enable QHash (QubitCoin) algorithms family" OFF)
+option(WITH_PEARL          "Enable Pearl PoUW scaffolding and HIP tests" ON)
 # option(WITH_ARGON2          "Enable Argon2 algorithms family" ON)
 # option(WITH_KAWPOW          "Enable KawPow algorithms family" ON)
 # option(WITH_GHOSTRIDER      "Enable GhostRider algorithm" ON)
@@ -877,11 +879,12 @@ if (NOT WITH_HIP OR WITH_OROCHI)
        ${SOURCES_CORE_ARGON2})
 endif()
 
-file(GLOB SOURCES_NET
+file(GLOB SOURCES_NET CONFIGURE_DEPENDS
   "${PROJECT_SOURCE_DIR}/src/net/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/net/*.c"
   "${PROJECT_SOURCE_DIR}/src/net/kas/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/net/xelis/*.cpp"
+  "${PROJECT_SOURCE_DIR}/src/net/pearl/*.cpp"
 )
 
 include(cmake/spsa.cmake)
@@ -889,6 +892,9 @@ include(cmake/xelis-hash.cmake)
 include(cmake/astrix-hash.cmake)
 include(cmake/nxl-hash.cmake)
 include(cmake/wala-hash.cmake)
+if (WITH_QHASH)
+  include(cmake/qhash.cmake)
+endif()
 include(cmake/chacha20.cmake)
 
 if (WITH_OROCHI)
