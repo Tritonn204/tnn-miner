@@ -426,6 +426,8 @@ test-hiveos-integration:
     - linux
     - amd64
   needs:
+    - job: test-wrappers
+      artifacts: false
     - job: build-linux-amd64
       artifacts: true
     - job: build-hiveos-mmpos
