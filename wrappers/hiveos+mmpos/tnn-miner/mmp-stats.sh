@@ -1,13 +1,28 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2034 # DEVICE_COUNT and LOG_FILE are part of the mmpOS interface
-DEVICE_COUNT=$1
-LOG_FILE=$2
+# DEVICE_COUNT and LOG_FILE are agent arguments. Device selection comes from
+# the miner; do not pad/truncate its arrays to the agent's inventory count.
+set -euo pipefail
 
-MINER_API_PORT=8989
-stats_json=$(curl --silent --insecure --header 'Accept: application/json' "http://127.0.0.1:${MINER_API_PORT}/mmpos")
-
-if [[ $? -ne 0 || -z $stats_json ]]; then
-    echo -e "Miner API connection failed"
-else
-    echo "$stats_json"
+if ! stats_json=$(curl --fail --silent --show-error --connect-timeout 1 --max-time 3 \
+    --header 'Accept: application/json' 'http://127.0.0.1:8989/mmpos'); then
+    echo 'Miner API connection failed' >&2
+    exit 1
 fi
+
+if ! jq -e '
+    . as $s | (.hash | length) as $count |
+    type == "object" and
+    (.busid | type == "array") and (.hash | type == "array") and
+    ((.busid | length) == $count) and
+    all(.busid[]; . == "cpu" or type == "number") and
+    all(.hash[]; type == "number" and . >= 0) and
+    (.units == "hs") and
+    (.air | type == "array" and length == 3 and all(.[]; type == "number" and . >= 0)) and
+    (.miner_name | type == "string") and (.miner_version | type == "string") and
+    all($s.shares.accepted, $s.shares.rejected, $s.shares.invalid;
+        type == "array" and length == $count and all(.[]; type == "number" and . >= 0))
+' <<< "$stats_json" >/dev/null 2>&1; then
+    echo 'Miner API returned invalid mmpOS statistics' >&2
+    exit 1
+fi
+printf '%s\n' "$stats_json"

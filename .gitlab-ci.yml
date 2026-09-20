@@ -10,7 +10,7 @@ variables:
   # No macOS runner currently available. Mac builds are opt-in, even on tags.
   TNN_BUILD_MAC: "false"
   TNN_BUILD_WIN: true
-  PACKAGE_VERSION: "0.0.1"
+  PACKAGE_VERSION: "0.9.1"
   CMAKE_ARGS: "-DWITH_HIP=OFF"
   LINUX_AMD64_TGZ: "Tnn-miner-amd64-${PACKAGE_VERSION}.tar.gz"
   LINUX_ARM64_TGZ: "Tnn-miner-arm64-${PACKAGE_VERSION}.tar.gz"
@@ -418,6 +418,44 @@ test-macos-aarch64:
     - ./tnn-miner --test-spectre --quiet
     - ./tnn-miner --test-xelis --quiet
 
+# Execute the exact candidate release package, without GPUs or external pools.
+test-hiveos-integration:
+  stage: test
+  image: docker:28
+  tags:
+    - linux
+    - amd64
+  needs:
+    - job: build-linux-amd64
+      artifacts: true
+    - job: build-hiveos-mmpos
+      artifacts: true
+  services:
+    - name: docker:24.0.5-dind
+  before_script:
+    - until docker info; do sleep 1; done
+    - apk add --no-cache bash coreutils
+  script:
+    - bash regression/hiveos/ci.sh "$HIVEOS_MMPOS_AMD64_TGZ" "$LINUX_AMD64_TGZ"
+  artifacts:
+    when: always
+    paths:
+      - build/hiveos-results/
+    reports:
+      junit: build/hiveos-results/junit.xml
+  timeout: 15m
+
+test-mmpos-integration:
+  extends: test-hiveos-integration
+  script:
+    - bash regression/hiveos/ci.sh "$HIVEOS_MMPOS_AMD64_TGZ" "$LINUX_AMD64_TGZ" build/mmpos-results mmpos
+  artifacts:
+    when: always
+    paths:
+      - build/mmpos-results/
+    reports:
+      junit: build/mmpos-results/junit.xml
+
 # shellcheck + structural validation for mining OS wrappers
 test-wrappers:
   stage: test
@@ -430,7 +468,7 @@ test-wrappers:
     - apk add --no-cache bash shellcheck
   script:
     - echo "=== Shellcheck ==="
-    - shellcheck -s bash wrappers/hiveos+mmpos/tnn-miner/*.sh
+    - shellcheck -s bash wrappers/hiveos+mmpos/tnn-miner/*.sh regression/hiveos/ci.sh
     # - shellcheck -s bash wrappers/hiveos+mmpos-amd/tnn-miner-rocm/*.sh
     # - shellcheck -s bash wrappers/hiveos+mmpos-nvidia/tnn-miner-cuda/*.sh
     - echo "=== Structure checks ==="
@@ -511,6 +549,12 @@ release_job:
   stage: release
   image: registry.gitlab.com/gitlab-org/release-cli:latest
   needs:
+    - job: test-hiveos-integration
+      artifacts: false
+    - job: test-mmpos-integration
+      artifacts: false
+    - job: test-wrappers
+      artifacts: false
     - job: build-linux-amd64
       artifacts: true
     - job: build-linux-aarch64

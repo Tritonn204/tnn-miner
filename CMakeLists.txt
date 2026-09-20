@@ -163,7 +163,7 @@ set(CFLAGS "${CFLAGS} -fdiagnostics-color=always")
 set(CXXFLAGS "${CXXFLAGS} -fdiagnostics-color=always")
 
 # This looks weird, but we prefer the -D variable over the ENV var
-string(TIMESTAMP VERSION_DEF "%Y.%m.%d.%H-dev")
+set(VERSION_DEF "0.9.1")
 set(INTERNAL_TNN_VERSION ${VERSION_DEF})
 if(DEFINED ENV{TNN_VERSION})
   set(INTERNAL_TNN_VERSION $ENV{TNN_VERSION})

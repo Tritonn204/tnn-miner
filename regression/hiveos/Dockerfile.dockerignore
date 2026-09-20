@@ -1,0 +1,13 @@
+**
+!include/
+!include/**
+!src/
+!src/broadcast/
+!src/broadcast/**
+!src/tnn_hip/
+!src/tnn_hip/common/
+!src/tnn_hip/common/gpu_device_filter.hpp
+!regression/
+!regression/hiveos/
+!regression/hiveos/**
+**/__pycache__/

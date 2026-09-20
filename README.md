@@ -324,7 +324,10 @@ tnn-miner ships with a custom miner wrapper for [mmpOS](https://app.mmpos.eu/). 
 - **Pool**: `pool_host:port` or `stratum+tcp://pool_host:port`
 - **Wallet**: your wallet address
 - **Password**: optional, defaults to `x`
-- **Algorithm**: the wrapper defaults to Xelis (`--XEL`) if no algorithm is provided. To mine a different coin, add the coin flag in extra arguments.
+- **Algorithm**: the wrapper defaults to Xelis (`--XEL`) when no supported coin or algorithm is selected. mmpOS `--coin` selects the corresponding TNN coin; an explicit coin flag in extra arguments takes precedence. The legacy `--algo --prl` form is also supported.
+- **Protocol**: the mmpOS `tcp`/`tls` placeholder selects `stratum+tcp`/`stratum+ssl` for a pool without a scheme. An explicit pool scheme is preserved.
+- **API port**: configure **8989** in mmpOS. The wrapper consumes `--api-port` but cannot change TNN's fixed API port; another value produces a warning.
+- **Threads**: normal miner defaults apply unless you supply `--threads`; the wrapper does not add a competing thread count.
 
 ### Features
 

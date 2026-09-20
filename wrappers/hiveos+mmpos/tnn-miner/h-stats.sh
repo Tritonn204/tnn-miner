@@ -1,13 +1,20 @@
 #!/usr/bin/env bash
+# The agent sources this repeatedly: never leave a previous sample on failure.
+khs=0
+stats=null
 # shellcheck disable=SC1091 # h-manifest.conf is provided at runtime by HiveOS
-source /hive/miners/custom/tnn-miner/h-manifest.sh
+source /hive/miners/custom/tnn-miner/h-manifest.conf || return 1
 
 uptime=$(get_miner_uptime)
 # shellcheck disable=SC2154 # log_name and log_head_name are set by HiveOS
 [[ $uptime -lt 60 ]] && head -n 50 "$log_name" > "$log_head_name"
 
-DATA=$(curl -s http://localhost:8989/stats)
-[[ -z "$DATA" ]] && echo "No stats from miner API" && return
+DATA=$(curl --fail --silent --show-error --connect-timeout 1 --max-time 3 http://localhost:8989/stats) || return 1
+if ! jq -e 'type == "object" and (.hashrate | type == "number" and . >= 0)
+    and ((.gpus // []) | type == "array")' <<< "$DATA" >/dev/null; then
+  echo "Invalid stats from miner API" >&2
+  return 1
+fi
 
 gpu_count=$(jq '.gpus | length // 0' <<< "$DATA")
 cpu_hr=$(jq '.cpu_hashrate // 0' <<< "$DATA")
@@ -55,9 +62,19 @@ if [[ "$gpu_count" -gt 0 ]]; then
       bus_numbers+=("$i")
     fi
 
-    # Per-GPU temp and fan from system gpu-stats (indexed by position)
-    t=$(echo "$gpu_temps" | jq ".[$i] // 0" 2>/dev/null || echo 0)
-    f=$(echo "$gpu_fans" | jq ".[$i] // 0" 2>/dev/null || echo 0)
+    # API arrays may be filtered or reordered. Prefer PCI identity in Hive's
+    # inventory; the API device ID is the fallback, never the filtered position.
+    device_id=$(jq -r ".gpus[$i].id // $i" <<< "$DATA")
+    telemetry_index=$device_id
+    if [[ -n "$pcie_id" && -f /run/hive/gpu-stats.json ]]; then
+      matched=$(jq -r --arg pci "$pcie_id" '
+        def bus: ascii_downcase | split(":") | .[-2];
+        (.busids // []) | map(bus) | index($pci | bus) // empty
+      ' /run/hive/gpu-stats.json 2>/dev/null)
+      [[ -n "$matched" ]] && telemetry_index=$matched
+    fi
+    t=$(jq --argjson i "$telemetry_index" '.[$i] // 0' <<< "$gpu_temps" 2>/dev/null || echo 0)
+    f=$(jq --argjson i "$telemetry_index" '.[$i] // 0' <<< "$gpu_fans" 2>/dev/null || echo 0)
     temps+=("$t")
     fans+=("$f")
   done
@@ -79,13 +96,17 @@ total_hs=0
 for h in "${hs[@]}"; do
   total_hs=$(echo "$total_hs + $h" | bc)
 done
-khs=$(echo "scale=2; $total_hs / 1000" | bc)
+# bc emits .50 rather than 0.50 below 1 kH/s; use valid JSON number syntax.
+khs=$(LC_ALL=C printf '%.2f' "$(echo "scale=2; $total_hs / 1000" | bc)")
 
 ac=$(jq '.accepted // 0' <<< "$DATA")
 rj=$(jq '.rejected // 0' <<< "$DATA")
 uptime=$(jq '.uptime // 0' <<< "$DATA")
 ver=$(jq -r '.version // "unknown"' <<< "$DATA")
 algo=$(jq -r '.algo // "UNKNOWN"' <<< "$DATA")
+rate_unit=$(jq -r '.rate_unit // "H/s"' <<< "$DATA")
+# Hive's hs_units denotes decimal scaling, not physical work. MAC/s therefore
+# remains unscaled in hs, with its physical unit retained as additive metadata.
 
 # Build JSON arrays — null values need special handling
 hs_json=$(printf '%s\n' "${hs[@]}" | jq -cs '.')
@@ -99,12 +120,13 @@ stats=$(jq -nc \
         --argjson hs "$hs_json" \
         --argjson temp "$temp_json" \
         --argjson fan "$fan_json" \
-        --arg uptime "$uptime" \
+        --argjson uptime "$uptime" \
         --arg ver "$ver" \
         --argjson ac "$ac" --argjson rj "$rj" \
         --arg algo "$algo" \
+        --arg rate_unit "$rate_unit" \
         --argjson bus_numbers "$bus_json" \
-        '{$khs, $hs_units, $hs, $temp, $fan, $uptime, $ver, ar: [$ac, $rj], $algo, $bus_numbers}')
+        '{$khs, $hs_units, $hs, $temp, $fan, $uptime, $ver, ar: [$ac, $rj], $algo, $bus_numbers, $rate_unit}')
 
 echo "khs: $khs"
 echo "stats: $stats"

@@ -117,13 +117,22 @@ namespace BroadcastServer
       // busid + hash arrays
       json_b::array busid_arr;
       json_b::array hash_arr;
+      json_b::array accepted_arr, rejected_arr, invalid_arr;
+
+      // Populate every per-device array together, after applying the filter.
+      auto appendShares = [&](int device) {
+        accepted_arr.push_back(deviceAccepted[device].load(std::memory_order_relaxed));
+        rejected_arr.push_back(deviceRejected[device].load(std::memory_order_relaxed));
+        invalid_arr.push_back(0);
+      };
 
       // CPU entry (listed first, like xmrig convention)
       if (cpu_mining) {
-        busid_arr.push_back(nullptr);  // null bus ID for CPU
+        busid_arr.push_back("cpu");
+        appendShares(DEVICE_SHARE_CPU);
         double hr = 0.0;
         if (rate30sec_ptr && !rate30sec_ptr->empty())
-          hr = (double)std::accumulate(rate30sec_ptr->begin(), rate30sec_ptr->end(), 0LL) / (double)rate30sec_ptr->size();
+          hr = static_cast<double>(std::accumulate(rate30sec_ptr->begin(), rate30sec_ptr->end(), 0.0L) / rate30sec_ptr->size());
         hash_arr.push_back(hr);
       }
 
@@ -136,10 +145,13 @@ namespace BroadcastServer
           // PCI bus ID as decimal, or fall back to device index
           if (gpu_pcie_ids_ptr && !gpu_pcie_ids_ptr[i].empty()) {
             const std::string &pcie = gpu_pcie_ids_ptr[i];
-            unsigned int domain = 0, busNum = 0;
-            if (std::sscanf(pcie.c_str(), "%x:%x:", &domain, &busNum) == 2) {
+            unsigned int domain = 0, busNum = 0, device = 0, function = 0;
+            int consumed = 0;
+            if (std::sscanf(pcie.c_str(), "%x:%x:%x.%x%n", &domain, &busNum, &device, &function, &consumed) == 4 &&
+                consumed == static_cast<int>(pcie.size()) && busNum <= 255) {
               busid_arr.push_back(static_cast<int64_t>(busNum));
-            } else if (std::sscanf(pcie.c_str(), "%x:", &busNum) == 1) {
+            } else if (std::sscanf(pcie.c_str(), "%x:%x.%x%n", &busNum, &device, &function, &consumed) == 3 &&
+                       consumed == static_cast<int>(pcie.size()) && busNum <= 255) {
               busid_arr.push_back(static_cast<int64_t>(busNum));
             } else {
               busid_arr.push_back(static_cast<int64_t>(i));
@@ -151,8 +163,9 @@ namespace BroadcastServer
           auto& rates = (*gpu_rates1min_ptr)[i];
           double hr = 0.0;
           if (!rates.empty())
-            hr = (double)std::accumulate(rates.begin(), rates.end(), 0LL) / (double)rates.size();
+            hr = static_cast<double>(std::accumulate(rates.begin(), rates.end(), 0.0L) / rates.size());
           hash_arr.push_back(hr);
+          appendShares(i);
         }
       }
 
@@ -167,37 +180,11 @@ namespace BroadcastServer
       air.push_back(*rejected_ptr);
       jsonData["air"] = air;
 
-      // Per-device shares: { "busid": [accepted, rejected, invalid], ... }
+      // mmpOS expects aligned arrays, not an object indexed by PCI bus.
       json_b::object shares_obj;
-      if (cpu_mining) {
-        json_b::array cpu_shares;
-        cpu_shares.push_back(deviceAccepted[DEVICE_SHARE_CPU].load(std::memory_order_relaxed));
-        cpu_shares.push_back(deviceRejected[DEVICE_SHARE_CPU].load(std::memory_order_relaxed));
-        cpu_shares.push_back(0);
-        shares_obj["cpu"] = cpu_shares;
-      }
-      if (gpu_count > 0 && gpu_pcie_ids_ptr) {
-        for (int i = 0; i < gpu_count; i++) {
-#ifdef TNN_HIP
-          if (!shouldUseDevice(i)) continue;
-#endif
-          std::string key;
-          const std::string &pcie = gpu_pcie_ids_ptr[i];
-          unsigned int domain = 0, busNum = 0;
-          if (!pcie.empty() && std::sscanf(pcie.c_str(), "%x:%x:", &domain, &busNum) == 2) {
-            key = std::to_string(busNum);
-          } else if (!pcie.empty() && std::sscanf(pcie.c_str(), "%x:", &busNum) == 1) {
-            key = std::to_string(busNum);
-          } else {
-            key = std::to_string(i);
-          }
-          json_b::array dev_shares;
-          dev_shares.push_back(deviceAccepted[i].load(std::memory_order_relaxed));
-          dev_shares.push_back(deviceRejected[i].load(std::memory_order_relaxed));
-          dev_shares.push_back(0); // invalid
-          shares_obj[key] = dev_shares;
-        }
-      }
+      shares_obj["accepted"] = accepted_arr;
+      shares_obj["rejected"] = rejected_arr;
+      shares_obj["invalid"] = invalid_arr;
       jsonData["shares"] = shares_obj;
 
       jsonData["miner_name"] = "tnn-miner";
