@@ -72,8 +72,7 @@ build-linux-amd64:
   image: docker:28
   stage: build
   tags:
-    - linux
-    - amd64
+    - saas-linux-small-amd64
   variables:
     CMAKE_ARGS: "${CMAKE_ARGS}"
     TARGZ_FILE: "${LINUX_AMD64_TGZ}"
@@ -311,8 +310,7 @@ build-linux-aarch64:
   image: docker:28
   stage: build
   tags:
-    - linux
-    - aarch64
+    - saas-linux-small-arm64
   variables:
     CMAKE_ARGS: "${CMAKE_ARGS}"
     TARGZ_FILE: "${LINUX_ARM64_TGZ}"
@@ -373,8 +371,7 @@ test-linux-amd64:
     - job: build-linux-amd64
       artifacts: true
   tags:
-    - linux
-    - amd64
+    - saas-linux-small-amd64
   before_script:
     - ls -la ./
   script:
@@ -392,8 +389,7 @@ test-linux-aarch64:
     - job: build-linux-aarch64
       artifacts: true
   tags:
-    - linux
-    - aarch64
+    - saas-linux-small-arm64
   before_script:
     - ls -la ./
   script:
@@ -423,8 +419,7 @@ test-hiveos-integration:
   stage: test
   image: docker:28
   tags:
-    - linux
-    - amd64
+    - saas-linux-small-amd64
   needs:
     - job: test-wrappers
       artifacts: false
@@ -463,8 +458,7 @@ test-wrappers:
   stage: test
   needs: []
   tags:
-    - linux
-    - amd64
+    - saas-linux-small-amd64
   image: docker:28
   before_script:
     - apk add --no-cache bash shellcheck
